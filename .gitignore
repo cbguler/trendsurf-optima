@@ -1,0 +1,32 @@
+# Veritabanı
+trendsurf.db
+
+# Hassas konfigürasyon
+email_config.json
+
+# Cache klasörleri
+halka_arz_cache/
+tefas_cache/
+__pycache__/
+
+# Veri dosyaları (büyük, her çalıştırmada yenileniyor)
+optimized_universe.csv
+
+# Geçici dosyalar
+*.migrated
+login_session.txt
+portfolio.json
+portfolio_db.csv
+users.csv
+kap_endeks.html
+kap_endeks_check.txt
+
+# Python
+*.pyc
+*.pyo
+.env
+venv/
+
+# Windows
+Thumbs.db
+desktop.ini
