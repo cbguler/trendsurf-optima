@@ -138,7 +138,33 @@ def render_auth_gate():
         except: st.markdown("## TrendSurf Optima")
         st.caption("Finansal Varlik Takip ve Sinyal Terminali")
         st.divider()
-        tab_login, tab_register = st.tabs(["Giris Yap", "Kayit Ol"])
+        # Şifre sıfırlama token'ı URL'de varsa önce onu göster
+        _reset_token = st.query_params.get("reset_token", "")
+        if _reset_token:
+            st.subheader("Yeni Şifre Belirle")
+            from auth_reset import verify_reset_token, reset_password
+            _verify = verify_reset_token(_reset_token)
+            if not _verify["ok"]:
+                st.error(_verify["msg"])
+            else:
+                st.info(f"Hesap: {_verify['email']}")
+                _np1 = st.text_input("Yeni Şifre", type="password", key="rp_new1", placeholder="En az 8 karakter")
+                _np2 = st.text_input("Yeni Şifre (Tekrar)", type="password", key="rp_new2")
+                if st.button("Şifremi Güncelle", use_container_width=True, key="btn_rp"):
+                    if not _np1 or not _np2:
+                        st.warning("Lütfen her iki alanı doldurun.")
+                    elif _np1 != _np2:
+                        st.error("Şifreler eşleşmiyor.")
+                    else:
+                        _res = reset_password(_reset_token, _np1)
+                        if _res["ok"]:
+                            st.success(_res["msg"])
+                            st.query_params.clear()
+                        else:
+                            st.error(_res["msg"])
+            st.stop()
+
+        tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
             email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com")
@@ -150,8 +176,6 @@ def render_auth_gate():
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
                         if remember:
-                            # Token'i session_state'e ek olarak local storage yerine
-                            # Streamlit'in kalici session'ina yaziyoruz
                             st.session_state["remember_token"] = res["token"]
                         st.rerun()
                     else:
@@ -175,6 +199,23 @@ def render_auth_gate():
                     res = register_user(email_r, pass_r, full_name)
                     if res["ok"]: st.success(res["msg"])
                     else:         st.error(res["msg"])
+
+        with tab_reset:
+            st.markdown("E-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.")
+            reset_email = st.text_input("E-posta", key="rst_email", placeholder="ornek@gmail.com")
+            if st.button("Sıfırlama Bağlantısı Gönder", use_container_width=True, key="btn_reset"):
+                if not reset_email:
+                    st.warning("Lütfen e-posta adresinizi girin.")
+                else:
+                    try:
+                        from auth_reset import generate_reset_token
+                        res = generate_reset_token(reset_email)
+                        if res["ok"]:
+                            st.success(res["msg"])
+                        else:
+                            st.error(res["msg"])
+                    except Exception as _re:
+                        st.error(f"Hata: {_re}")
 
 # Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
