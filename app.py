@@ -13,22 +13,7 @@ st.set_page_config(page_title="TrendSurf Optima", layout="wide",
 # CSS
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
-/* Dark mode'u tamamen kapat, light temayı zorla */
-@media (prefers-color-scheme: dark) {
-    .stApp, [data-testid="stAppViewContainer"], .main, body {
-        background-color: #f0f4f8 !important;
-        color: #1b2a4a !important;
-    }
-}
-html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
-    color-scheme: light !important;
-    background-color: #f0f4f8 !important;
-    color: #1b2a4a !important;
-}
-.stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;color:#1b2a4a!important;}
-h1,h2,h3,h4,h5,h6,p,span,div,label{color:#1b2a4a!important;}
-.stTextInput input,.stSelectbox select{background:#ffffff!important;color:#1b2a4a!important;}
-
+.stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
 [data-testid="stSidebar"]{background:#2c3e6b!important;border-right:1px solid #3a5080!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
@@ -74,10 +59,13 @@ section.main [data-testid="stRadio"] label span,
 /* Select / input */
 [data-testid="stSelectbox"] label,[data-testid="stSelectbox"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stSelectbox>div>div{background:#fff!important;color:#1b2a4a!important;}
-[data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#dce8f5!important;}
+[data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stNumberInput input{color:#1b2a4a!important;background:#fff!important;}
-[data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#dce8f5!important;}
+[data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#1b2a4a!important;font-weight:600!important;}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] label,[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p{color:#dce8f5!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
+[data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#dce8f5!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
 /* Özel bileşenler */
@@ -693,6 +681,22 @@ def save_portfolio(p):
     pass
 
 def load_email_cfg():
+    # 1) Önce secrets.toml (Streamlit Cloud)
+    try:
+        s = st.secrets
+        if "EMAIL_USER" in s or "SMTP_USER" in s:
+            return {
+                "address":   s.get("EMAIL_ADDRESS", s.get("address", "")),
+                "smtp_host": s.get("SMTP_HOST", "smtp.gmail.com"),
+                "smtp_port": int(s.get("SMTP_PORT", 587)),
+                "smtp_user": s.get("EMAIL_USER",  s.get("smtp_user", "")),
+                "smtp_pass": s.get("EMAIL_PASS",  s.get("smtp_pass", "")),
+                "times":     s.get("REPORT_TIMES", ["08:30","11:30"]),
+                "tcmb_key":  s.get("TCMB_KEY", ""),
+            }
+    except Exception:
+        pass
+    # 2) Lokal email_config.json
     if os.path.exists(EMAIL_CFG_FILE):
         with open(EMAIL_CFG_FILE) as f: return json.load(f)
     return {"address":"","smtp_host":"smtp.gmail.com","smtp_port":587,
