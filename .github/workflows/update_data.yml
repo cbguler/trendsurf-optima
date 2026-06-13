@@ -8,7 +8,7 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60     # Maksimum 60 dakika
+    timeout-minutes: 10
 
     steps:
       - name: Kodu indir
@@ -16,45 +16,19 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Python kur
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Bağımlılıkları yükle
+      - name: CSV varlık kontrolü
         run: |
-          pip install --upgrade pip
-          pip install streamlit pandas numpy yfinance plotly openpyxl requests pytefas beautifulsoup4 bcrypt
+          if [ -f "optimized_universe.csv" ]; then
+            ROWS=$(wc -l < optimized_universe.csv)
+            echo "CSV mevcut: $ROWS satır"
+          else
+            echo "UYARI: optimized_universe.csv bulunamadı!"
+            exit 1
+          fi
 
-      - name: Ortam değişkenlerini ayarla
-        run: |
-          mkdir -p ~/.streamlit
-          cat > ~/.streamlit/secrets.toml << EOF2
-          ADMIN_EMAIL = "${{ secrets.ADMIN_EMAIL }}"
-          ADMIN_PASS  = "${{ secrets.ADMIN_PASS }}"
-          ADMIN_NAME  = "${{ secrets.ADMIN_NAME }}"
-          APP_URL     = "${{ secrets.APP_URL }}"
-          EOF2
-          cat > email_config.json << EOF2
-          {
-            "address":   "${{ secrets.EMAIL_ADDRESS }}",
-            "smtp_host": "smtp.gmail.com",
-            "smtp_port": 587,
-            "smtp_user": "${{ secrets.EMAIL_USER }}",
-            "smtp_pass": "${{ secrets.EMAIL_PASS }}",
-            "times":     ["09:00", "21:00"],
-            "tcmb_key":  "${{ secrets.TCMB_KEY }}"
-          }
-          EOF2
-
-      - name: Worker çalıştır
-        run: python worker.py
-        timeout-minutes: 50
-
-      - name: CSV'yi GitHub'a push et
+      - name: Streamlit Cloud yenileme trigger
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f optimized_universe.csv
-          git diff --cached --quiet || git commit -m "otomatik veri guncelleme $(date +'%Y-%m-%d %H:%M')"
+          git commit --allow-empty -m "streamlit refresh $(date +'%Y-%m-%d %H:%M')"
           git push
