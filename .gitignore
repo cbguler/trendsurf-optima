@@ -10,7 +10,6 @@ tefas_cache/
 __pycache__/
 
 # Veri dosyaları (büyük, her çalıştırmada yenileniyor)
-optimized_universe.csv
 
 # Geçici dosyalar
 *.migrated

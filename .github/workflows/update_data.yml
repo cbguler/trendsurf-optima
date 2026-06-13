@@ -29,13 +29,13 @@ jobs:
       - name: Ortam değişkenlerini ayarla
         run: |
           mkdir -p ~/.streamlit
-          cat > ~/.streamlit/secrets.toml << EOF
+          cat > ~/.streamlit/secrets.toml << EOF2
           ADMIN_EMAIL = "${{ secrets.ADMIN_EMAIL }}"
           ADMIN_PASS  = "${{ secrets.ADMIN_PASS }}"
           ADMIN_NAME  = "${{ secrets.ADMIN_NAME }}"
           APP_URL     = "${{ secrets.APP_URL }}"
-          EOF
-          cat > email_config.json << EOF
+          EOF2
+          cat > email_config.json << EOF2
           {
             "address":   "${{ secrets.EMAIL_ADDRESS }}",
             "smtp_host": "smtp.gmail.com",
@@ -45,7 +45,7 @@ jobs:
             "times":     ["09:00", "21:00"],
             "tcmb_key":  "${{ secrets.TCMB_KEY }}"
           }
-          EOF
+          EOF2
 
       - name: Worker çalıştır
         run: python worker.py
@@ -55,6 +55,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add optimized_universe.csv
+          git add -f optimized_universe.csv
           git diff --cached --quiet || git commit -m "otomatik veri guncelleme $(date +'%Y-%m-%d %H:%M')"
           git push
