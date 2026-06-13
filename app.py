@@ -1157,16 +1157,40 @@ elif page=="Portföyüm":
                 pt        = tickers_list[idx_sel]
                 pt_cat    = cats_list[idx_sel]
             with p_c2:
-                pa = st.number_input("Adet / Lot", min_value=0.0,
-                                     value=1.0, step=1.0, key="pf_adet")
+                pa_str = st.text_input("Adet / Lot", value="1", key="pf_adet",
+                                       placeholder="Örn: 5,06")
+                try:
+                    pa = float(pa_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pa = 0.0
             with p_c3:
-                pm = st.number_input("Alış Maliyeti (birim, TL)",
-                                     min_value=0.0, value=0.0, key="pf_maliyet")
-            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                    placeholder="Örn: uzun vadeli, temettü")
+                pm_str = st.text_input("Alış Maliyeti (birim, TL)", value="0", key="pf_maliyet",
+                                       placeholder="Örn: 6.480,00")
+                try:
+                    pm = float(pm_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pm = 0.0
+            p_c4, p_c5 = st.columns(2)
+            with p_c4:
+                pm_kurum_str = st.text_input(
+                    "Kurumun Güncel Alış Fiyatı (TL) — K/Z için",
+                    value="0", key="pf_kurum_alis",
+                    placeholder="Örn: 6.027,19",
+                    help="Varlığı bugün satsanız kurumun size ödeyeceği fiyat"
+                )
+                try:
+                    pm_kurum = float(pm_kurum_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pm_kurum = 0.0
+            with p_c5:
+                pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
+                                        placeholder="Örn: ING Bank, uzun vadeli")
             if st.button("EKLE", use_container_width=True, key="pf_ekle"):
                 if pa > 0:
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note)
+                    note_full = pf_note
+                    if pm_kurum > 0:
+                        note_full = f"kurum_alis:{pm_kurum:.4f}" + (f"|{pf_note}" if pf_note else "")
+                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=note_full)
                     st.success(f"{pt} portföye eklendi.")
                     st.rerun()
                 else:
