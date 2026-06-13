@@ -735,13 +735,14 @@ with st.sidebar:
         </style>""", unsafe_allow_html=True)
         ecfg=load_email_cfg()
         e_addr=st.text_input("Alıcı E-posta",value=ecfg.get("address",""))
-        e_user=st.text_input("SMTP Kullanıcı",value=ecfg.get("smtp_user",""))
-        e_pass=st.text_input("SMTP Şifre",type="password",value=ecfg.get("smtp_pass",""))
         e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["08:30"])[0])
         e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["08:30","11:30"])[-1])
         if st.button("Ayarları Kaydet",key="ecfg_save"):
             save_email_cfg({"address":e_addr,"smtp_host":"smtp.gmail.com","smtp_port":587,
-                             "smtp_user":e_user,"smtp_pass":e_pass,"times":[e_t1,e_t2]})
+                             "smtp_user":ecfg.get("smtp_user",""),
+                             "smtp_pass":ecfg.get("smtp_pass",""),
+                             "times":[e_t1,e_t2],
+                             "tcmb_key":ecfg.get("tcmb_key","")})
             st.success("Kaydedildi!")
         if st.button("Şimdi Gönder",key="send_now"):
             try:

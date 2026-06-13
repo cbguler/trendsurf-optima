@@ -770,6 +770,24 @@ def build():
     except Exception as _tcmb_ex:
         print(f"  [TCMB] Atlanıyor: {_tcmb_ex}")
 
+    # ── Bigpara yedek: maden ve kripto için TL bazlı fiyat ──────
+    try:
+        from bigpara_client import fetch_all_bigpara, enrich_worker_maden, enrich_worker_kripto
+        _usdtry_rows = [r for r in all_rows if r.get("Ticker") == "USDTRY"]
+        _usdtry = float(_usdtry_rows[-1]["Son_Fiyat"]) if _usdtry_rows else 38.0
+        bp_data = fetch_all_bigpara()
+        _maden_0  = sum(1 for r in all_rows if r.get("Kategori") == "MADEN"  and float(r.get("Son_Fiyat", 0)) == 0)
+        _kripto_0 = sum(1 for r in all_rows if r.get("Kategori") == "KRIPTO" and float(r.get("Son_Fiyat", 0)) == 0)
+        if _maden_0 > 0:
+            all_rows = enrich_worker_maden(all_rows, bp_data, _usdtry)
+        if _kripto_0 > 0:
+            all_rows = enrich_worker_kripto(all_rows, bp_data, _usdtry)
+        _bp_ok = sum(1 for r in all_rows if r.get("_bigpara"))
+        if _bp_ok:
+            print(f"  [Bigpara] {_bp_ok} varlik Bigpara ile tamamlandi.")
+    except Exception as _bp_ex:
+        print(f"  [Bigpara] Atlanıyor: {_bp_ex}")
+
     # ── Kaydet ────────────────────────────────────────────────
     df = pd.DataFrame(all_rows)
     for col in ["RSI", "Ret1M"]:

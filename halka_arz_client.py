@@ -116,26 +116,29 @@ def _fetch_from_kap_rsc() -> list:
                 break
 
         if xharz_pos >= 0:
-            # Sadece XHARZ bölümündeki ticker'ları al
             text_after = text[xharz_pos:]
             matches = re.findall(pattern, text_after)
-            # Bir sonraki endeks başlığına kadar al (genellikle 50 üye)
-            # Güvenli üst sınır: 200 match
+            if not matches:
+                matches = [(m[0], m[1], "") for m in re.findall(
+                    r'"stockCode"\s*:\s*"([A-Z0-9]+)"\s*,\s*"title"\s*:\s*"([^"]+)"',
+                    text_after)]
             matches = matches[:200]
         else:
             matches = all_matches[:200]
 
         rows = []
         seen = set()
-        for code, title in matches:
+        for match_item in matches:
+            code  = match_item[0]
+            title = match_item[1]
+            mkk_id = match_item[2] if len(match_item) > 2 else ""
             if code in seen or len(code) > 8:
                 continue
             seen.add(code)
-            mkk_id  = mkk if len(all_matches[0]) > 2 else ""
             kap_url = (f"https://www.kap.org.tr/tr/sirket-bilgileri/ozet/{mkk_id}"
                        if mkk_id else f"https://www.kap.org.tr/tr/Sirketler/{code}")
             rows.append({
-                "Şirket":         _fix_encoding(title),
+                "Şirket":         _fix_encoding(title if isinstance(title, str) else match_item[1]),
                 "Ticker":         code,
                 "Sektör":         "—",
                 "Aracı_Kurum":    "—",
