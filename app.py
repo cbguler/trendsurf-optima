@@ -1731,3 +1731,4 @@ elif page=="Temettü":
         file_name=f"xtmtu_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
+

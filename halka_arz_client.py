@@ -286,3 +286,4 @@ def get_ipo_summary(df: pd.DataFrame) -> dict:
         "yaklasan":   0,
         "tamamlanan": 0,
     }
+
