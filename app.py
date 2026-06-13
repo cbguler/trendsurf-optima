@@ -33,6 +33,8 @@ h1,h2,h3,h4,h5,h6,p,span,div,label{color:#1b2a4a!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] small{color:#ffffff!important;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{color:#dce8f5!important;}
+[data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#dce8f5!important;}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3{color:#ffffff!important;}
 [data-testid="stSidebar"] hr{border-color:#3a5080!important;}
