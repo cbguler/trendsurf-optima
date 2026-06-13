@@ -35,24 +35,9 @@ _COL_W = {
 # ── Yardımcı ──────────────────────────────────────────────────────────────────
 
 def _logo_b64():
-    """Logo dosyasını okur, maksimum 120x40 px'e küçültür, base64 döner."""
-    import io
+    """Logo dosyasını olduğu gibi base64'e çevirir."""
     for p in ["logo.png", "Logo.png", "LOGO.PNG"]:
-        if not os.path.exists(p):
-            continue
-        try:
-            from PIL import Image
-            img = Image.open(p).convert("RGBA")
-            MAX_W, MAX_H = 120, 40
-            ratio = min(MAX_W / img.width, MAX_H / img.height)
-            if ratio < 1:
-                new_size = (int(img.width * ratio), int(img.height * ratio))
-                img = img.resize(new_size, Image.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            return base64.b64encode(buf.getvalue()).decode()
-        except Exception:
-            # Pillow yoksa orijinal dosyayı döndür
+        if os.path.exists(p):
             with open(p, "rb") as f:
                 return base64.b64encode(f.read()).decode()
     return None
@@ -351,12 +336,10 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     logo_b64 = _logo_b64()
 
     if logo_b64:
-        w, h = 120, 40
         logo_tag = (
             f'<img src="data:image/png;base64,{logo_b64}" '
-            f'width="{w}" height="{h}" '
-            f'style="display:block;width:{w}px;height:{h}px;'
-            f'object-fit:contain;border:0;" alt="TrendSurf Optima">'
+            f'style="display:block;max-height:36px;max-width:160px;'
+            f'height:auto;width:auto;border:0;" alt="TrendSurf Optima">'
         )
     else:
         logo_tag = ('<span style="font-size:16px;font-weight:800;'
