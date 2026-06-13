@@ -6,6 +6,8 @@ KAP_SLUG_MAP'ten alinan 771 BIST hissesi + tam listeler
 import pandas as pd, numpy as np, os, glob, sys, warnings
 warnings.filterwarnings("ignore")
 
+CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "optimized_universe.csv")
+
 # ─── 771 BIST (KAP_SLUG_MAP tam listesi) ────────────────────
 BIST_TICKERS = [
     "ACSEL","ADEL","ADESE","ADLVY","ADGYO","AFYON","AGHOL","AGESA","AGROT","AAGYO",
