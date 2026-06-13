@@ -14,7 +14,7 @@ st.set_page_config(page_title="TrendSurf Optima", layout="wide",
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
-[data-testid="stSidebar"]{background:#a8c4f5!important;border-right:1px solid #bdd4f8!important;}
+[data-testid="stSidebar"]{background:#d0e4ff!important;border-right:1px solid #e0eeff!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] small{color:#1b2a4a!important;}
@@ -22,8 +22,8 @@ st.markdown("""<style>
 [data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#1b2a4a!important;}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3{color:#1b2a4a!important;}
-[data-testid="stSidebar"] hr{border-color:#bdd4f8!important;}
-[data-testid="stSidebar"] input{background:#c8dcf8!important;color:#1b2a4a!important;border:1px solid #a8c4f5!important;}
+[data-testid="stSidebar"] hr{border-color:#e0eeff!important;}
+[data-testid="stSidebar"] input{background:#e0eeff!important;color:#1b2a4a!important;border:1px solid #d0e4ff!important;}
 [data-testid="stSidebar"] .stButton>button{background:#2c74d0!important;color:#fff!important;font-weight:700!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
@@ -138,16 +138,11 @@ def render_auth_gate():
     [data-testid="stCheckbox"] label p { color:#1b2a4a!important; }
     </style>""", unsafe_allow_html=True)
 
-    _,col,_ = st.columns([1,1.2,1])
-    with col:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        try: st.image("logo.png", width=160)
-        except: st.markdown("## TrendSurf Optima")
-        st.caption("Finansal Varlik Takip ve Sinyal Terminali")
-        st.divider()
-        # Şifre sıfırlama token'ı URL'de varsa önce onu göster
-        _reset_token = st.query_params.get("reset_token", "")
-        if _reset_token:
+    # Şifre sıfırlama token'ı URL'de varsa önce onu göster
+    _reset_token = st.query_params.get("reset_token", "")
+    if _reset_token:
+        _,col,_ = st.columns([1,1.2,1])
+        with col:
             st.subheader("Yeni Şifre Belirle")
             from auth_reset import verify_reset_token, reset_password
             _verify = verify_reset_token(_reset_token)
@@ -169,8 +164,24 @@ def render_auth_gate():
                             st.query_params.clear()
                         else:
                             st.error(_res["msg"])
-            st.stop()
+        st.stop()
 
+    # ── Giriş ekranı: sol logo, sağ form ────────────────────
+    col_logo, col_form = st.columns([1, 1.4])
+
+    with col_logo:
+        st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
+        try: st.image("logo.png", width=200)
+        except: st.markdown("## TrendSurf Optima")
+        st.markdown(
+            "<p style='color:#6c7a9c;font-size:13px;margin-top:8px'>"
+            "Finansal Varlık Takip<br>ve Sinyal Terminali</p>",
+            unsafe_allow_html=True
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_form:
+        st.markdown("<div style='padding-top:30px'>", unsafe_allow_html=True)
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
@@ -223,6 +234,7 @@ def render_auth_gate():
                             st.error(res["msg"])
                     except Exception as _re:
                         st.error(f"Hata: {_re}")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
