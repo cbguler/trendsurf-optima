@@ -14,7 +14,7 @@ st.set_page_config(page_title="TrendSurf Optima", layout="wide",
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
-[data-testid="stSidebar"]{background:#3a5285!important;border-right:1px solid #4a6295!important;}
+[data-testid="stSidebar"]{background:#5b7fd4!important;border-right:1px solid #6e90e0!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] small{color:#ffffff!important;}
@@ -22,9 +22,9 @@ st.markdown("""<style>
 [data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#dce8f5!important;}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3{color:#ffffff!important;}
-[data-testid="stSidebar"] hr{border-color:#3a5080!important;}
-[data-testid="stSidebar"] input{background:#3a5080!important;color:#fff!important;border:1px solid #5070a8!important;}
-[data-testid="stSidebar"] .stButton>button{background:#3b9eff!important;color:#fff!important;font-weight:700!important;}
+[data-testid="stSidebar"] hr{border-color:#7090d0!important;}
+[data-testid="stSidebar"] input{background:#4a6db8!important;color:#fff!important;border:1px solid #7090d0!important;}
+[data-testid="stSidebar"] .stButton>button{background:#2c74d0!important;color:#fff!important;font-weight:700!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
