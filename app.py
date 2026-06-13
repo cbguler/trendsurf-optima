@@ -14,7 +14,7 @@ st.set_page_config(page_title="TrendSurf Optima", layout="wide",
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
-[data-testid="stSidebar"]{background:#2c3e6b!important;border-right:1px solid #3a5080!important;}
+[data-testid="stSidebar"]{background:#3a5285!important;border-right:1px solid #4a6295!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] small{color:#ffffff!important;}
@@ -63,7 +63,9 @@ section.main [data-testid="stRadio"] label span,
 .stNumberInput input{color:#1b2a4a!important;background:#fff!important;}
 [data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#1b2a4a!important;font-weight:600!important;}
 [data-testid="stSidebar"] [data-testid="stNumberInput"] label,[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#dce8f5!important;}
-[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p,[data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stMarkdownContainer"] p,[data-testid="stSidebar"] .stSlider p,[data-testid="stSidebar"] .stSlider span{color:#ffffff!important;font-weight:600!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMin"],[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMax"]{color:#c8d8f0!important;}
+[data-testid="stSidebar"] [role="slider"]{background:#5b8dee!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
 [data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#dce8f5!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
@@ -684,14 +686,21 @@ def load_email_cfg():
     # 1) Önce secrets.toml (Streamlit Cloud)
     try:
         s = st.secrets
-        if "EMAIL_USER" in s or "SMTP_USER" in s:
+        # GitHub Secrets key adlarından herhangi biri varsa kullan
+        email_user = (s.get("EMAIL_USER") or s.get("SMTP_USER")
+                      or s.get("smtp_user") or "")
+        email_pass = (s.get("EMAIL_PASS") or s.get("SMTP_PASS")
+                      or s.get("smtp_pass") or "")
+        email_addr = (s.get("EMAIL_ADDRESS") or s.get("address")
+                      or s.get("ADMIN_EMAIL") or "")
+        if email_user and email_pass:
             return {
-                "address":   s.get("EMAIL_ADDRESS", s.get("address", "")),
+                "address":   email_addr,
                 "smtp_host": s.get("SMTP_HOST", "smtp.gmail.com"),
                 "smtp_port": int(s.get("SMTP_PORT", 587)),
-                "smtp_user": s.get("EMAIL_USER",  s.get("smtp_user", "")),
-                "smtp_pass": s.get("EMAIL_PASS",  s.get("smtp_pass", "")),
-                "times":     s.get("REPORT_TIMES", ["08:30","11:30"]),
+                "smtp_user": email_user,
+                "smtp_pass": email_pass,
+                "times":     list(s.get("REPORT_TIMES", ["08:30","11:30"])),
                 "tcmb_key":  s.get("TCMB_KEY", ""),
             }
     except Exception:
