@@ -1,0 +1,60 @@
+name: Veri Güncelle
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # Her gün 02:00 UTC = 05:00 TR (yaz saati)
+  workflow_dispatch:        # Manuel tetikleme butonu
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60     # Maksimum 60 dakika
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Bağımlılıkları yükle
+        run: |
+          pip install --upgrade pip
+          pip install streamlit pandas numpy yfinance plotly openpyxl requests pytefas beautifulsoup4 bcrypt
+
+      - name: Ortam değişkenlerini ayarla
+        run: |
+          mkdir -p ~/.streamlit
+          cat > ~/.streamlit/secrets.toml << EOF
+          ADMIN_EMAIL = "${{ secrets.ADMIN_EMAIL }}"
+          ADMIN_PASS  = "${{ secrets.ADMIN_PASS }}"
+          ADMIN_NAME  = "${{ secrets.ADMIN_NAME }}"
+          APP_URL     = "${{ secrets.APP_URL }}"
+          EOF
+          cat > email_config.json << EOF
+          {
+            "address":   "${{ secrets.EMAIL_ADDRESS }}",
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 587,
+            "smtp_user": "${{ secrets.EMAIL_USER }}",
+            "smtp_pass": "${{ secrets.EMAIL_PASS }}",
+            "times":     ["09:00", "21:00"],
+            "tcmb_key":  "${{ secrets.TCMB_KEY }}"
+          }
+          EOF
+
+      - name: Worker çalıştır
+        run: python worker.py
+        timeout-minutes: 50
+
+      - name: CSV'yi GitHub'a push et
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add optimized_universe.csv
+          git diff --cached --quiet || git commit -m "otomatik veri guncelleme $(date +'%Y-%m-%d %H:%M')"
+          git push
