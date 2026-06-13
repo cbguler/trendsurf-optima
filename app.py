@@ -57,9 +57,15 @@ section.main [data-testid="stRadio"] label span,
 /* Select / input */
 [data-testid="stSelectbox"] label,[data-testid="stSelectbox"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stSelectbox>div>div{background:#fff!important;color:#1b2a4a!important;}
-[data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] label,
+[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#dce8f5!important;}
 .stNumberInput input{color:#1b2a4a!important;background:#fff!important;}
-[data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] label,
+[data-testid="stSidebar"] [data-testid="stSlider"] p{color:#dce8f5!important;}
+.main [data-testid="stNumberInput"] label,
+.main [data-testid="stNumberInput"] p{color:#1b2a4a!important;}
+.main [data-testid="stSlider"] label,
+.main [data-testid="stSlider"] p{color:#1b2a4a!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
@@ -1146,24 +1152,12 @@ elif page=="Portföyüm":
                                      value=1.0, step=1.0, key="pf_adet")
             with p_c3:
                 pm = st.number_input("Alış Maliyeti (birim, TL)",
-                                     min_value=0.0, value=0.0, step=0.01, key="pf_maliyet")
-            p_c4, p_c5 = st.columns(2)
-            with p_c4:
-                pm_kurum = st.number_input(
-                    "Kurumun Güncel Alış Fiyatı (TL) — K/Z için",
-                    min_value=0.0, value=0.0, step=0.01, key="pf_kurum_alis",
-                    help="Varlığı bugün satsanız kurumun size ödeyeceği fiyat"
-                )
-            with p_c5:
-                pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                        placeholder="Örn: ING Bank, uzun vadeli")
+                                     min_value=0.0, value=0.0, key="pf_maliyet")
+            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
+                                    placeholder="Örn: uzun vadeli, temettü")
             if st.button("EKLE", use_container_width=True, key="pf_ekle"):
                 if pa > 0:
-                    # Kurum alış fiyatını note'a göm
-                    note_full = pf_note
-                    if pm_kurum > 0:
-                        note_full = f"kurum_alis:{pm_kurum:.4f}" + (f"|{pf_note}" if pf_note else "")
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=note_full)
+                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note)
                     st.success(f"{pt} portföye eklendi.")
                     st.rerun()
                 else:
@@ -1174,26 +1168,6 @@ elif page=="Portföyüm":
         st.stop()
 
     # ── Özet ve gelir hesabı ────────────────────────────────────
-    # Kurum alış fiyatını note'dan parse et
-    def _parse_kurum_alis(note: str) -> float:
-        if not note:
-            return 0.0
-        try:
-            if note.startswith("kurum_alis:"):
-                val = note.split("|")[0].replace("kurum_alis:", "")
-                return float(val)
-        except Exception:
-            pass
-        return 0.0
-
-    def _parse_user_note(note: str) -> str:
-        if not note:
-            return ""
-        if note.startswith("kurum_alis:"):
-            parts = note.split("|", 1)
-            return parts[1] if len(parts) > 1 else ""
-        return note
-
     # dividend_engine için eski format (ticker/adet/maliyet)
     pf_legacy = [
         {"ticker": r["ticker"], "adet": r["quantity"], "maliyet": r["avg_cost"]}
@@ -1205,25 +1179,12 @@ elif page=="Portföyüm":
         with st.spinner("Temettü ve gelir hesaplanıyor..."):
             df_income = calc_portfolio_income(pf_legacy, df_uni)
         if not df_income.empty:
-            # Kurum alış fiyatından gerçek K/Z hesapla
-            for i, pos in enumerate(portfolio):
-                kurum_alis = _parse_kurum_alis(pos.get("note", ""))
-                if kurum_alis > 0 and i < len(df_income):
-                    cur_p = float(df_income.iloc[i].get("Güncel Fiyat", 0))
-                    adet  = float(df_income.iloc[i].get("Adet", 0))
-                    maliyet = float(pos.get("avg_cost", 0))
-                    # K/Z = (kurum_alis - maliyet) / maliyet * 100
-                    kz = round((kurum_alis - maliyet) / maliyet * 100, 2) if maliyet > 0 else 0.0
-                    df_income.at[df_income.index[i], "K/Z (%)"] = kz
-                    df_income.at[df_income.index[i], "Likidite Değeri (₺)"] = round(kurum_alis * adet, 2)
-
             summary = portfolio_income_summary(df_income)
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Toplam Değer",
-                      f"{summary.get('toplam_deger',0):_.2f} ₺".replace("_", ".").replace(".", ",", 1) if False
-                      else f"₺ {summary.get('toplam_deger',0):,.0f}".replace(",", "."))
+                      f"{summary.get('toplam_deger',0):,.2f} ₺")
             m2.metric("Yıllık Temettü + Staking",
-                      f"₺ {summary.get('yillik_gelir_try',0):,.0f}".replace(",", "."))
+                      f"{summary.get('yillik_gelir_try',0):,.2f} ₺")
             m3.metric("Ort. Pasif Gelir %",
                       f"{summary.get('ortalama_gelir_pct',0):.2f}%")
             m4.metric("En Yüksek Gelirli",
@@ -1234,39 +1195,29 @@ elif page=="Portföyüm":
                 st.subheader("Gelir Kaynakları")
                 g1, g2, g3 = st.columns(3)
                 g1.metric("Temettü (BIST)",
-                          f"₺ {summary.get('temettu_try',0):,.0f}".replace(",", ".") + "/yıl")
+                          f"{summary.get('temettu_try',0):,.2f} ₺/yıl")
                 g2.metric("Staking (Kripto)",
-                          f"₺ {summary.get('staking_try',0):,.0f}".replace(",", ".") + "/yıl")
+                          f"{summary.get('staking_try',0):,.2f} $/yıl")
                 g3.metric("Fon Getirisi (TEFAS)",
-                          f"₺ {summary.get('fon_getiri_try',0):,.0f}".replace(",", ".") + "/yıl")
+                          f"{summary.get('fon_getiri_try',0):,.2f} ₺/yıl")
 
             st.divider()
             st.subheader("Pozisyon Detayı")
-            # Gösterilecek sütunlar
-            show_cols = ["Ticker","Kategori","Adet","Güncel Fiyat",
-                         "Toplam Değer (₺)","Gelir Türü",
-                         "Yıllık Gelir (₺)","Gelir Oranı (%)","K/Z (%)","Toplam Getiri (%)"]
-            if "Likidite Değeri (₺)" in df_income.columns:
-                show_cols.insert(5, "Likidite Değeri (₺)")
-            show_df = df_income[[c for c in show_cols if c in df_income.columns]]
             st.dataframe(
-                show_df,
+                df_income,
                 use_container_width=True, hide_index=True,
                 column_config={
-                    "Güncel Fiyat":         st.column_config.NumberColumn(format="%.4f ₺"),
-                    "Toplam Değer (₺)":     st.column_config.NumberColumn(format="%.2f ₺"),
-                    "Likidite Değeri (₺)":  st.column_config.NumberColumn(format="%.2f ₺"),
-                    "Yıllık Gelir/Birim":   st.column_config.NumberColumn(format="%.4f"),
-                    "Yıllık Gelir (₺)":     st.column_config.NumberColumn(format="%.2f ₺"),
-                    "Gelir Oranı (%)":      st.column_config.NumberColumn(format="%.2f%%"),
-                    "K/Z (%)":              st.column_config.NumberColumn(format="%.2f%%"),
-                    "Toplam Getiri (%)":    st.column_config.NumberColumn(format="%.2f%%"),
+                    "Güncel Fiyat":       st.column_config.NumberColumn(format="%.4f"),
+                    "Toplam Değer (₺)":   st.column_config.NumberColumn(format="%.2f"),
+                    "Yıllık Gelir/Birim": st.column_config.NumberColumn(format="%.4f"),
+                    "Yıllık Gelir (₺)":   st.column_config.NumberColumn(format="%.2f"),
+                    "Gelir Oranı (%)":    st.column_config.NumberColumn(format="%.2f"),
+                    "K/Z (%)":            st.column_config.NumberColumn(format="%.2f"),
+                    "Toplam Getiri (%)":  st.column_config.NumberColumn(format="%.2f"),
                 }
             )
             st.caption(
-                "Güncel Fiyat: piyasa fiyatı. "
-                "Likidite Değeri: kurumun alış fiyatı × adet (girilmişse). "
-                "K/Z: kurum alış fiyatı üzerinden hesaplanır. "
+                "Toplam Getiri = K/Z (%) + Pasif Gelir Oranı (%). "
                 "BIST: temettü | Kripto: staking APY | TEFAS: fon getirisi."
             )
         else:
@@ -1281,13 +1232,10 @@ elif page=="Portföyüm":
 
     # Tek tek silme
     for pos in portfolio:
-        kurum_alis = _parse_kurum_alis(pos.get("note", ""))
-        user_note  = _parse_user_note(pos.get("note", ""))
-        col_t, col_q, col_c, col_k, col_btn = st.columns([3, 2, 2, 2, 1])
+        col_t, col_q, col_c, col_btn = st.columns([3, 2, 2, 1])
         col_t.markdown(
             f"**{pos['ticker']}** "
-            f"<span style='color:#6c7a9c;font-size:12px'>{pos['asset_type']}</span>"
-            + (f"<br><span style='color:#8a9ab8;font-size:11px'>{user_note}</span>" if user_note else ""),
+            f"<span style='color:#6c7a9c;font-size:12px'>{pos['asset_type']}</span>",
             unsafe_allow_html=True
         )
         col_q.markdown(
@@ -1295,11 +1243,7 @@ elif page=="Portföyüm":
             unsafe_allow_html=True
         )
         col_c.markdown(
-            f"<span style='color:#1b2a4a'>Alış: {pos['avg_cost']:,.2f} TL</span>".replace(",", "X").replace(".", ",").replace("X", "."),
-            unsafe_allow_html=True
-        )
-        col_k.markdown(
-            f"<span style='color:#1b2a4a'>Kur. Alış: {kurum_alis:,.2f} TL</span>".replace(",", "X").replace(".", ",").replace("X", ".") if kurum_alis > 0 else "<span style='color:#aaa;font-size:11px'>—</span>",
+            f"<span style='color:#1b2a4a'>Alış: {pos['avg_cost']:,.4f} TL</span>",
             unsafe_allow_html=True
         )
         if col_btn.button("Sil", key=f"del_{pos['id']}"):
