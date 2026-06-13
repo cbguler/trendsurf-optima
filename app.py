@@ -14,16 +14,16 @@ st.set_page_config(page_title="TrendSurf Optima", layout="wide",
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
-[data-testid="stSidebar"]{background:#7b9de8!important;border-right:1px solid #8fb0f0!important;}
+[data-testid="stSidebar"]{background:#a8c4f5!important;border-right:1px solid #bdd4f8!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] small{color:#ffffff!important;}
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{color:#dce8f5!important;}
-[data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] small{color:#1b2a4a!important;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{color:#2c3e6b!important;}
+[data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#1b2a4a!important;}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3{color:#ffffff!important;}
-[data-testid="stSidebar"] hr{border-color:#8faae8!important;}
-[data-testid="stSidebar"] input{background:#6888d8!important;color:#fff!important;border:1px solid #8faae8!important;}
+[data-testid="stSidebar"] h3{color:#1b2a4a!important;}
+[data-testid="stSidebar"] hr{border-color:#bdd4f8!important;}
+[data-testid="stSidebar"] input{background:#c8dcf8!important;color:#1b2a4a!important;border:1px solid #a8c4f5!important;}
 [data-testid="stSidebar"] .stButton>button{background:#2c74d0!important;color:#fff!important;font-weight:700!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
@@ -55,19 +55,19 @@ section.main [data-testid="stRadio"] label span,
 /* Sidebar radio */
 [data-testid="stSidebar"] [data-testid="stRadio"] label,
 [data-testid="stSidebar"] [data-testid="stRadio"] label p,
-[data-testid="stSidebar"] [data-testid="stRadio"] label span{color:#dce8f5!important;font-size:14px!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label span{color:#1b2a4a!important;font-size:14px!important;}
 /* Select / input */
 [data-testid="stSelectbox"] label,[data-testid="stSelectbox"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stSelectbox>div>div{background:#fff!important;color:#1b2a4a!important;}
 [data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stNumberInput input{color:#1b2a4a!important;background:#fff!important;}
 [data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#1b2a4a!important;font-weight:600!important;}
-[data-testid="stSidebar"] [data-testid="stNumberInput"] label,[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#dce8f5!important;}
-[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p,[data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stMarkdownContainer"] p,[data-testid="stSidebar"] .stSlider p,[data-testid="stSidebar"] .stSlider span{color:#ffffff!important;font-weight:600!important;}
-[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMin"],[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMax"]{color:#c8d8f0!important;}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] label,[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#1b2a4a!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p,[data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stMarkdownContainer"] p,[data-testid="stSidebar"] .stSlider p,[data-testid="stSidebar"] .stSlider span{color:#1b2a4a!important;font-weight:600!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMin"],[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMax"]{color:#2c3e6b!important;}
 [data-testid="stSidebar"] [role="slider"]{background:#5b8dee!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
-[data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#dce8f5!important;}
+[data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#2c3e6b!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
 /* Özel bileşenler */
@@ -760,7 +760,7 @@ with st.sidebar:
         [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
         [data-testid="stSidebar"] [data-testid="stExpander"] p,
         [data-testid="stSidebar"] [data-testid="stExpander"] label p {
-            color:#ffffff!important;font-weight:600!important;
+            color:#1b2a4a!important;font-weight:600!important;
         }
         </style>""", unsafe_allow_html=True)
         ecfg=load_email_cfg()

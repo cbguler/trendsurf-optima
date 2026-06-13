@@ -189,6 +189,9 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
                 selected.append({"cat": cat, "row": row, "price": price,
                                   "lot": lot, "gercek": gercek, "skor": skor})
 
+    # Skora göre azalan sırala — en iyi varlık her zaman en üstte
+    selected.sort(key=lambda x: x["skor"], reverse=True)
+
     rows_html   = ""
     grand_total = 0.0
 
@@ -335,15 +338,20 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     now      = datetime.now().strftime("%d.%m.%Y  %H:%M")
     logo_b64 = _logo_b64()
 
-    if logo_b64:
-        logo_tag = (
-            f'<img src="data:image/png;base64,{logo_b64}" '
-            f'style="display:block;max-height:36px;max-width:160px;'
-            f'height:auto;width:auto;border:0;" alt="TrendSurf Optima">'
-        )
-    else:
-        logo_tag = ('<span style="font-size:16px;font-weight:800;'
-                    'color:#1b2a4a;letter-spacing:1px;">TrendSurf Optima</span>')
+    # Metin logo — tüm e-posta client'larında güvenilir çalışır
+    _ = logo_b64  # değişken kullanılıyor (lint uyarısı önlemi)
+    logo_tag = (
+        '<table cellpadding="0" cellspacing="0" border="0"><tr>'
+        '<td style="font-family:Arial,Helvetica,sans-serif;">'
+        '<span style="font-size:22px;font-weight:900;color:#1b2a4a;'
+        'letter-spacing:-0.5px;">TREND</span>'
+        '<span style="font-size:22px;font-weight:900;color:#2ecc71;'
+        'letter-spacing:-0.5px;">SURF</span>'
+        '<br><span style="font-size:9px;font-weight:700;color:#fff;'
+        'background:#2c3e6b;padding:1px 6px;border-radius:3px;'
+        'letter-spacing:2px;">O P T I M A</span>'
+        '</td></tr></table>'
+    )
 
     opt_section = _build_opt_section(df_uni, budget, risk, max_assets)
     pf_section  = _build_portfolio_section(portfolio, df_uni)
