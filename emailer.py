@@ -1,7 +1,5 @@
 """
 TrendSurf Optima — E-posta Rapor Modülü (emailer.py)
-Kullanim : python emailer.py   (manuel test)
-Otomatik : Windows Gorev Zamanlayici ile her gun 08:30 ve 11:30'da calistir
 """
 import smtplib, json, os, base64
 from email.mime.multipart import MIMEMultipart
@@ -20,6 +18,18 @@ RISK_W = {
     "Orta":      {"TEFAS": .30, "DOVIZ": .10, "MADEN": .15, "BIST": .35, "KRIPTO": .10},
     "Yüksek":    {"TEFAS": .15, "DOVIZ": .08, "MADEN": .12, "BIST": .45, "KRIPTO": .20},
     "Çok Yüksek":{"TEFAS": .05, "DOVIZ": .05, "MADEN": .10, "BIST": .50, "KRIPTO": .30},
+}
+
+# Sütun genişlikleri (px) — toplam ~860px (28px padding her iki taraf)
+_COL_W = {
+    "kat":    "80",   # Kategori
+    "tkr":    "70",   # Ticker
+    "ad":     "220",  # Ad
+    "skor":   "50",   # Skor
+    "fiyat":  "90",   # Fiyat
+    "lot":    "60",   # Lot / Adet
+    "tutar":  "100",  # Tutar / Toplam
+    "sinyal": "110",  # Sinyal / K/Z
 }
 
 # ── Yardımcı ──────────────────────────────────────────────────────────────────
@@ -73,34 +83,43 @@ def _sig_lbl(score: float) -> str:
     return "SAT"
 
 
-def _th(text, align="left"):
-    return (f'<th style="padding:8px 12px;text-align:{align};background:#2c3e6b;'
+def _th(text, align="left", width=None):
+    w = f"width:{width}px;" if width else ""
+    return (f'<th style="{w}padding:8px 10px;text-align:{align};background:#2c3e6b;'
             f'color:#fff;white-space:nowrap;font-size:11px;">{text}</th>')
 
 
 def _td(val, align="left", bold=False, color=None, extra=""):
-    style = f"padding:7px 12px;border-bottom:1px solid #e8edf5;text-align:{align};font-size:12px;"
+    style = (f"padding:7px 10px;border-bottom:1px solid #e8edf5;"
+             f"text-align:{align};font-size:12px;vertical-align:middle;")
     if bold:  style += "font-weight:700;"
     if color: style += f"color:{color};"
     if extra: style += extra
     return f'<td style="{style}">{val}</td>'
 
 
+def _col_group():
+    """<colgroup> ile sütun genişliklerini sabitler."""
+    w = _COL_W
+    return (f'<colgroup>'
+            f'<col style="width:{w["kat"]}px"><col style="width:{w["tkr"]}px">'
+            f'<col style="width:{w["ad"]}px"><col style="width:{w["skor"]}px">'
+            f'<col style="width:{w["fiyat"]}px"><col style="width:{w["lot"]}px">'
+            f'<col style="width:{w["tutar"]}px"><col style="width:{w["sinyal"]}px">'
+            f'</colgroup>')
+
+
 # ── Optimizasyon bölümü ───────────────────────────────────────────────────────
 
 def _build_opt_section(df_uni: pd.DataFrame, budget: float,
                        risk: str, max_assets: int) -> str:
-    """
-    Portföy Optimizasyonu tablosu.
-    Sütunlar: Kategori | Ticker | Ad | Skor | Fiyat | Lot | Tutar | Sinyal
-    (RSI, 1A%, Kat.Pay% e-postadan çıkarıldı)
-    """
     if budget <= 0 or df_uni.empty:
         return ""
 
     w = RISK_W.get(risk, RISK_W["Orta"])
     MIN_SKOR = 60.0
 
+    # Her kategori için havuz oluştur
     cat_pools = {}
     for cat, weight in w.items():
         if weight <= 0:
@@ -123,6 +142,7 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     n_cats      = len(cat_pools)
     max_per_cat = max(1, max_assets // n_cats)
 
+    # Kalite ağırlıklı bütçe dağılımı
     adj_weights = {}
     total_adj   = 0.0
     for cat, weight in w.items():
@@ -135,38 +155,66 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     if total_adj > 0:
         adj_weights = {c: a / total_adj for c, a in adj_weights.items()}
 
-    rows_html   = ""
-    grand_total = 0.0
-    row_count   = 0
-
+    # Seçilen varlıkları topla
+    selected = []
     for cat, weight in adj_weights.items():
         sample  = cat_pools[cat].head(max_per_cat)
         cat_bud = budget * weight
         per     = cat_bud / len(sample)
-
         for _, row in sample.iterrows():
             price  = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
             lot    = int(per / price) if price > 0 else 0
             gercek = round(lot * price, 2)
             skor   = float(row["_skor"])
-            sc     = _sig_color(skor)
-            sl     = _sig_lbl(skor)
-            ad_str = str(row.get("Ad", row["Ticker"]))[:40]
-            grand_total += gercek
-            row_count   += 1
+            selected.append({
+                "cat": cat, "row": row, "price": price,
+                "lot": lot, "gercek": gercek, "skor": skor
+            })
 
-            rows_html += f"""<tr>
-              {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
-              {_td(f"<b>{row['Ticker']}</b>")}
-              {_td(ad_str)}
-              {_td(f"<b>{skor:.0f}</b>", "right")}
-              {_td(f"{price:,.4f}", "right")}
-              {_td(str(lot), "right", bold=True)}
-              {_td(f"{gercek:,.2f} ₺", "right", bold=True)}
-              {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 7px;'
-                   f'border-radius:6px;font-size:10px;font-weight:700;'
-                   f'white-space:nowrap">{sl}</span>', "center")}
-            </tr>"""
+    # max_assets'e tam ulaşmak için eksik yerleri doldur
+    if len(selected) < max_assets:
+        already = {(s["cat"], s["row"]["Ticker"]) for s in selected}
+        for cat in cat_pools:
+            for _, row in cat_pools[cat].iterrows():
+                if len(selected) >= max_assets:
+                    break
+                if (cat, row["Ticker"]) in already:
+                    continue
+                price  = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
+                skor   = float(row["_skor"])
+                per    = budget / max_assets
+                lot    = int(per / price) if price > 0 else 0
+                gercek = round(lot * price, 2)
+                selected.append({"cat": cat, "row": row, "price": price,
+                                  "lot": lot, "gercek": gercek, "skor": skor})
+
+    rows_html   = ""
+    grand_total = 0.0
+
+    for s in selected:
+        row    = s["row"]
+        cat    = s["cat"]
+        price  = s["price"]
+        lot    = s["lot"]
+        gercek = s["gercek"]
+        skor   = s["skor"]
+        sc     = _sig_color(skor)
+        sl     = _sig_lbl(skor)
+        ad_str = str(row.get("Ad", row["Ticker"]))[:38]
+        grand_total += gercek
+
+        rows_html += f"""<tr>
+          {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
+          {_td(f"<b>{row['Ticker']}</b>")}
+          {_td(ad_str)}
+          {_td(f"<b>{skor:.0f}</b>", "right")}
+          {_td(f"{price:,.4f}", "right")}
+          {_td(str(lot), "right", bold=True)}
+          {_td(f"{gercek:,.2f}&nbsp;₺", "right", bold=True)}
+          {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
+               f'border-radius:5px;font-size:10px;font-weight:700;'
+               f'white-space:nowrap">{sl}</span>', "center")}
+        </tr>"""
 
     if not rows_html:
         return ""
@@ -174,31 +222,32 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     return f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
                border-left:4px solid #2c3e6b;padding-left:10px;">
-      Portföy Optimizasyonu &mdash; {budget:,.0f} ₺ &nbsp;|&nbsp; Risk: {risk}
+      Portföy Optimizasyonu &mdash; {budget:,.0f}&nbsp;₺ &nbsp;|&nbsp; Risk: {risk}
     </h2>
-    <table style="width:100%;border-collapse:collapse;background:#fff;font-size:12px;">
+    <table style="width:100%;border-collapse:collapse;background:#fff;
+                  font-size:12px;table-layout:fixed;">
+      {_col_group()}
       <thead><tr>
-        {_th("Kategori")}{_th("Ticker")}{_th("Ad")}
-        {_th("Skor","right")}{_th("Fiyat","right")}
-        {_th("Lot","right")}{_th("Tutar","right")}{_th("Sinyal","center")}
+        {_th("Kategori", "left",   _COL_W["kat"])}
+        {_th("Ticker",   "left",   _COL_W["tkr"])}
+        {_th("Ad",       "left",   _COL_W["ad"])}
+        {_th("Skor",     "right",  _COL_W["skor"])}
+        {_th("Fiyat",    "right",  _COL_W["fiyat"])}
+        {_th("Lot",      "right",  _COL_W["lot"])}
+        {_th("Tutar",    "right",  _COL_W["tutar"])}
+        {_th("Sinyal",   "center", _COL_W["sinyal"])}
       </tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
     <p style="font-size:11px;color:#9aa8c0;margin-top:6px;">
-      Toplam: <b style="color:#1b2a4a">{grand_total:,.2f} ₺</b> &nbsp;|&nbsp;
-      {row_count} varlık önerildi. Yatırım tavsiyesi değildir.
+      Toplam: <b style="color:#1b2a4a">{grand_total:,.2f}&nbsp;₺</b> &nbsp;|&nbsp;
+      {len(selected)} varlık önerildi. Yatırım tavsiyesi değildir.
     </p>"""
 
 
 # ── Portföy bölümü ────────────────────────────────────────────────────────────
 
 def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
-    """
-    Portföy durumu tablosu — Optimizasyon tablosuyla aynı sütun yapısı.
-    Sütunlar: Kategori | Ticker | Ad | Skor | Fiyat (Güncel) | Adet | Toplam | K/Z
-    """
-    rows_html = ""
-
     if not portfolio:
         return """
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
@@ -207,7 +256,7 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
       Henüz portföye pozisyon eklenmemiş.
     </p>"""
 
-
+    rows_html = ""
     pf_total  = 0.0
     pf_pnl    = 0.0
 
@@ -218,15 +267,14 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
 
         match   = df_uni[df_uni["Ticker"] == tkr]
         cur     = float(match["Son_Fiyat"].iloc[0]) if not match.empty else 0.0
-        ad_name = str(match["Ad"].iloc[0])[:40] if (not match.empty and "Ad" in match.columns) else tkr
+        ad_name = str(match["Ad"].iloc[0])[:38] if (not match.empty and "Ad" in match.columns) else tkr
         cat     = str(match["Kategori"].iloc[0]) if not match.empty else str(pos.get("asset_type", "—"))
 
-        # Optima skoru CSV'den al
         skor = 0.0
         if not match.empty:
             skor = _optima_score(match.iloc[0])
-        sc = _sig_color(skor)
-        sl = _sig_lbl(skor) if skor > 0 else "—"
+        sc  = _sig_color(skor)
+        sl  = _sig_lbl(skor) if skor > 0 else "—"
 
         pnl_pct = round((cur / mal - 1) * 100, 2) if mal > 0 and cur > 0 else 0.0
         toplam  = round(cur * adet, 2)
@@ -242,9 +290,10 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
           {_td(f"<b>{skor:.0f}</b>" if skor > 0 else "—", "right")}
           {_td(f"{cur:,.4f}", "right")}
           {_td(f"{adet:,.4f}", "right")}
-          {_td(f"{toplam:,.2f} ₺", "right", bold=True)}
+          {_td(f"{toplam:,.2f}&nbsp;₺", "right", bold=True)}
           {_td(f'<span style="color:{clr};font-weight:700">{pnl_pct:+.2f}%</span><br>'
-               f'<span style="color:{clr};font-size:10px">{pnl_try:+,.2f} ₺</span>', "right")}
+               f'<span style="color:{clr};font-size:10px">{pnl_try:+,.2f}&nbsp;₺</span>',
+               "right")}
         </tr>"""
 
     if not rows_html:
@@ -255,17 +304,24 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
     return f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
                border-left:4px solid #2c3e6b;padding-left:10px;">Portföy Durumu</h2>
-    <table style="width:100%;border-collapse:collapse;background:#fff;font-size:12px;">
+    <table style="width:100%;border-collapse:collapse;background:#fff;
+                  font-size:12px;table-layout:fixed;">
+      {_col_group()}
       <thead><tr>
-        {_th("Kategori")}{_th("Ticker")}{_th("Ad")}
-        {_th("Skor","right")}{_th("Güncel Fiyat","right")}
-        {_th("Adet","right")}{_th("Toplam","right")}{_th("K/Z","right")}
+        {_th("Kategori",     "left",   _COL_W["kat"])}
+        {_th("Ticker",       "left",   _COL_W["tkr"])}
+        {_th("Ad",           "left",   _COL_W["ad"])}
+        {_th("Skor",         "right",  _COL_W["skor"])}
+        {_th("Güncel Fiyat", "right",  _COL_W["fiyat"])}
+        {_th("Adet",         "right",  _COL_W["lot"])}
+        {_th("Toplam",       "right",  _COL_W["tutar"])}
+        {_th("K/Z",          "right",  _COL_W["sinyal"])}
       </tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
     <p style="font-size:12px;margin-top:8px;color:#4a5a7a;">
-      <b>Toplam Değer:</b> {pf_total:,.2f} ₺ &nbsp;|&nbsp;
-      <b style="color:{pf_color}">Kar / Zarar: {pf_pnl:+,.2f} ₺</b>
+      <b>Toplam Değer:</b> {pf_total:,.2f}&nbsp;₺ &nbsp;|&nbsp;
+      <b style="color:{pf_color}">Kar / Zarar: {pf_pnl:+,.2f}&nbsp;₺</b>
     </p>"""
 
 
@@ -278,12 +334,16 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     now      = datetime.now().strftime("%d.%m.%Y  %H:%M")
     logo_b64 = _logo_b64()
 
-    # Logo: varsa küçük, beyaz zemine uygun; yoksa sade metin
     if logo_b64:
-        logo_tag = (f'<img src="data:image/png;base64,{logo_b64}" '
-                    f'style="height:32px;max-width:120px;display:block;" alt="TrendSurf Optima">')
+        logo_tag = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'width="90" height="auto" '
+            f'style="display:block;width:90px;height:auto;max-height:30px;'
+            f'object-fit:contain;" alt="TrendSurf Optima">'
+        )
     else:
-        logo_tag = '<span style="font-size:18px;font-weight:800;color:#1b2a4a;letter-spacing:1px;">TrendSurf Optima</span>'
+        logo_tag = ('<span style="font-size:16px;font-weight:800;'
+                    'color:#1b2a4a;letter-spacing:1px;">TrendSurf Optima</span>')
 
     opt_section = _build_opt_section(df_uni, budget, risk, max_assets)
     pf_section  = _build_portfolio_section(portfolio, df_uni)
@@ -295,21 +355,23 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>TrendSurf Optima Raporu</title>
 </head>
-<body style="margin:0;padding:0;background:#f0f4f8;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;">
+<body style="margin:0;padding:0;background:#f0f4f8;
+             font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"
+       style="background:#f0f4f8;">
 <tr><td align="center" style="padding:20px 10px;">
 <table width="{_EMAIL_WIDTH}" cellpadding="0" cellspacing="0"
        style="max-width:{_EMAIL_WIDTH}px;width:100%;background:#fff;
               border-radius:10px;overflow:hidden;
               box-shadow:0 2px 12px rgba(0,0,0,.10);">
 
-  <!-- HEADER: sade, açık zemin -->
-  <tr><td style="background:#f8faff;padding:18px 28px;
-                 border-bottom:3px solid #2c3e6b;text-align:left;">
+  <!-- HEADER -->
+  <tr><td style="background:#f8faff;padding:14px 28px;
+                 border-bottom:3px solid #2c3e6b;">
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td>{logo_tag}</td>
+      <td style="vertical-align:middle;">{logo_tag}</td>
       <td style="text-align:right;vertical-align:middle;">
-        <span style="font-size:12px;color:#6c7a9c;">Finansal Rapor</span><br>
+        <span style="font-size:11px;color:#6c7a9c;">Finansal Rapor</span><br>
         <span style="font-size:13px;font-weight:700;color:#1b2a4a;">{now}</span>
       </td>
     </tr></table>
@@ -320,9 +382,10 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     {opt_section}
     {pf_section}
     <p style="color:#b0bac8;font-size:10px;margin-top:24px;
-              border-top:1px solid #e8edf5;padding-top:12px;text-align:center;">
-      Bu rapor <b>TrendSurf Optima</b> tarafından otomatik olarak oluşturulmuştur.
-      Yatırım tavsiyesi değildir.
+              border-top:1px solid #e8edf5;padding-top:12px;
+              text-align:center;">
+      Bu rapor <b>TrendSurf Optima</b> tarafından otomatik olarak
+      oluşturulmuştur. Yatırım tavsiyesi değildir.
     </p>
   </td></tr>
 
