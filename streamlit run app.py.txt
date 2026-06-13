@@ -1,2 +1,3 @@
 streamlit run app.py
 python worker.py
+github.com/cbguler/trendsurf-optima
