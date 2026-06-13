@@ -680,55 +680,96 @@ def build():
     except:
         raw_m = pd.DataFrame()
 
-    for t, yf_s in MADEN:
+    # USDTRY kuru — döviz bölümünden al, yoksa yfinance'den çek
+    try:
+        usdtry_rows = [r for r in all_rows if r.get("Ticker") == "USDTRY"]
+        usdtry_rate = float(usdtry_rows[-1]["Son_Fiyat"]) if usdtry_rows else 0.0
+    except Exception:
+        usdtry_rate = 0.0
+    if usdtry_rate <= 0:
         try:
-            if raw_m.empty:
-                raise ValueError("bos")
-            if len(maden_syms) == 1:
-                col = raw_m["Close"].dropna()
-            else:
-                col = raw_m[yf_s]["Close"].dropna() if yf_s in raw_m.columns.get_level_values(0) else pd.Series()
-            if hasattr(col, "squeeze"):
-                col = col.squeeze()
-            if col.empty or len(col) < 2:
-                raise ValueError("yetersiz")
-            p   = round(float(col.iloc[-1]), 4)
-            rsi = calc_rsi(col)
-            ret = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
-            rets_m = col.pct_change().dropna()
-            vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
-        except:
-            p, rsi, ret, vol_v = single_full(yf_s, t)
-            # single_full da başarısız olduysa son CSV'den oku
-            if p == 0.0 and os.path.exists(CSV_PATH):
-                try:
-                    _df_c = pd.read_csv(CSV_PATH)
-                    _row  = _df_c[_df_c["Ticker"] == t]
-                    if not _row.empty:
-                        p     = float(_row["Son_Fiyat"].iloc[0])
-                        rsi   = float(_row["RSI"].iloc[0])
-                        ret   = float(_row["Ret1M"].iloc[0])
-                        vol_v = float(_row.get("Vol", pd.Series([25.0])).iloc[0])
-                        print(f"    [cache] {t} maden fiyati CSV'den alindi.")
-                except Exception:
-                    pass
-        # USD → TRY dönüşümü
-        try:
-            usdtry_rows = [r for r in all_rows if r.get("Ticker") == "USDTRY"]
-            usdtry_rate = float(usdtry_rows[-1]["Son_Fiyat"]) if usdtry_rows else 0.0
+            import yfinance as _yf2
+            _s = _yf2.download("USDTRY=X", period="5d", progress=False, auto_adjust=True)
+            usdtry_rate = float(_s["Close"].dropna().iloc[-1]) if not _s.empty else 38.0
         except Exception:
-            usdtry_rate = 0.0
-        if usdtry_rate <= 0:
-            # USDTRY henüz hesaplanmadıysa tek seferlik çek
+            usdtry_rate = 38.0
+
+    # Bigpara'dan maden TL fiyatlarını çek (birincil kaynak)
+    bp_maden = {}
+    try:
+        from bigpara_client import fetch_all_bigpara
+        bp_maden = fetch_all_bigpara(usdtry=usdtry_rate)
+        bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","BRENT_TRY","PETROL_TRY"] if bp_maden.get(k, 0) > 0)
+        if bp_ok:
+            print(f"  [Bigpara] {bp_ok} maden fiyati Bigpara'dan alindi.")
+    except Exception as _bp_err:
+        print(f"  [Bigpara] Atlanıyor: {_bp_err}")
+
+    # Gram dönüşüm katsayıları (ons → gram veya diğer birimler)
+    # GC=F (Altın): ons/troy ounce → gram: 1 troy oz = 31.1035 gram
+    # SI=F (Gümüş): ons → gram: 1 troy oz = 31.1035 gram
+    # PL=F (Platin), PA=F (Paladyum): ons → gram
+    ONS_TO_GRAM = {"GC=F", "SI=F", "PL=F", "PA=F"}
+
+    for t, yf_s in MADEN:
+        p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0
+
+        # Kademe 1: Bigpara TL fiyatı (gram bazlı, direkt TL)
+        bp_p = bp_maden.get(t, 0.0)
+        if isinstance(bp_p, float) and bp_p > 0:
+            p = bp_p
+            rsi  = 50.0  # Bigpara'dan RSI geçmişi yok, nötr
+            ret  = 0.0
+            vol_v = 25.0
+            print(f"    [Bigpara] {t}: {p:,.4f} TL (birincil)")
+
+        # Kademe 2: yfinance USD fiyatı → TRY dönüşümü
+        if p == 0.0:
             try:
-                import yfinance as _yf2
-                _s = _yf2.download("USDTRY=X", period="5d", progress=False, auto_adjust=True)
-                usdtry_rate = float(_s["Close"].dropna().iloc[-1]) if not _s.empty else 1.0
+                if raw_m.empty:
+                    raise ValueError("bos")
+                if len(maden_syms) == 1:
+                    col = raw_m["Close"].dropna()
+                else:
+                    col = raw_m[yf_s]["Close"].dropna() if yf_s in raw_m.columns.get_level_values(0) else pd.Series()
+                if hasattr(col, "squeeze"):
+                    col = col.squeeze()
+                if col.empty or len(col) < 2:
+                    raise ValueError("yetersiz")
+                p_usd = round(float(col.iloc[-1]), 4)
+                rsi   = calc_rsi(col)
+                ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
+                rets_m = col.pct_change().dropna()
+                vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
+                # USD → TRY dönüşümü + ons → gram (gerekiyorsa)
+                if yf_s in ONS_TO_GRAM:
+                    p = round(p_usd * usdtry_rate / 31.1035, 4)
+                else:
+                    p = round(p_usd * usdtry_rate, 4)
             except Exception:
-                usdtry_rate = 1.0
-        p_try = round(p * usdtry_rate, 4) if p > 0 and usdtry_rate > 0 else p
+                p2, rsi, ret, vol_v = single_full(yf_s, t)
+                if p2 > 0:
+                    if yf_s in ONS_TO_GRAM:
+                        p = round(p2 * usdtry_rate / 31.1035, 4)
+                    else:
+                        p = round(p2 * usdtry_rate, 4)
+
+        # Kademe 3: Son CSV'den tamamla
+        if p == 0.0 and os.path.exists(CSV_PATH):
+            try:
+                _df_c = pd.read_csv(CSV_PATH)
+                _row  = _df_c[_df_c["Ticker"] == t]
+                if not _row.empty:
+                    p     = float(_row["Son_Fiyat"].iloc[0])
+                    rsi   = float(_row["RSI"].iloc[0])
+                    ret   = float(_row["Ret1M"].iloc[0])
+                    vol_v = float(_row.get("Vol", pd.Series([25.0])).iloc[0])
+                    print(f"    [cache] {t} maden fiyati CSV'den alindi.")
+            except Exception:
+                pass
+
         all_rows.append({"Ticker": t, "Ad": MADEN_ADLAR.get(t, t),
-                         "Kategori": "MADEN", "Son_Fiyat": p_try,
+                         "Kategori": "MADEN", "Son_Fiyat": p,
                          "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s})
 
     # Döviz — her parite ayrı çek (=X pariteler toplu download'da sorunlu)
@@ -769,24 +810,6 @@ def build():
             print(f"  [TCMB] {tcmb_ok} kur TCMB ile guncellendi/tamamlandi.")
     except Exception as _tcmb_ex:
         print(f"  [TCMB] Atlanıyor: {_tcmb_ex}")
-
-    # ── Bigpara yedek: maden ve kripto için TL bazlı fiyat ──────
-    try:
-        from bigpara_client import fetch_all_bigpara, enrich_worker_maden, enrich_worker_kripto
-        _usdtry_rows = [r for r in all_rows if r.get("Ticker") == "USDTRY"]
-        _usdtry = float(_usdtry_rows[-1]["Son_Fiyat"]) if _usdtry_rows else 38.0
-        bp_data = fetch_all_bigpara()
-        _maden_0  = sum(1 for r in all_rows if r.get("Kategori") == "MADEN"  and float(r.get("Son_Fiyat", 0)) == 0)
-        _kripto_0 = sum(1 for r in all_rows if r.get("Kategori") == "KRIPTO" and float(r.get("Son_Fiyat", 0)) == 0)
-        if _maden_0 > 0:
-            all_rows = enrich_worker_maden(all_rows, bp_data, _usdtry)
-        if _kripto_0 > 0:
-            all_rows = enrich_worker_kripto(all_rows, bp_data, _usdtry)
-        _bp_ok = sum(1 for r in all_rows if r.get("_bigpara"))
-        if _bp_ok:
-            print(f"  [Bigpara] {_bp_ok} varlik Bigpara ile tamamlandi.")
-    except Exception as _bp_ex:
-        print(f"  [Bigpara] Atlanıyor: {_bp_ex}")
 
     # ── Kaydet ────────────────────────────────────────────────
     df = pd.DataFrame(all_rows)
