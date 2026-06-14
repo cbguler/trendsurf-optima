@@ -24,7 +24,7 @@ st.markdown("""<style>
 [data-testid="stSidebar"] h3{color:#1b2a4a!important;}
 [data-testid="stSidebar"] hr{border-color:#e0eeff!important;}
 [data-testid="stSidebar"] input{background:#e0eeff!important;color:#1b2a4a!important;border:1px solid #d0e4ff!important;}
-[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"]{background:#1b2a4a!important;color:#ffffff!important;font-weight:700!important;border:2px solid #1b2a4a!important;border-radius:6px!important;}
+[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"]{color:#ffffff!important;font-weight:700!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
