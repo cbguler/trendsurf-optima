@@ -433,9 +433,11 @@ def _load_cfg():
 
 
 def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
-                budget: float = 0, risk: str = "Orta", max_assets: int = 10):
+                budget: float = 0, risk: str = "Orta", max_assets: int = 10,
+                cfg: dict = None):
 
-    cfg = _load_cfg()
+    if cfg is None:
+        cfg = _load_cfg()
 
     to_addr   = cfg.get("address",   "")
     smtp_host = cfg.get("smtp_host", "smtp.gmail.com")

@@ -806,7 +806,8 @@ with st.sidebar:
                 from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
-                send_report(df_uni2,pf,budget,risk,max_assets)
+                _app_cfg = load_email_cfg()
+                    send_report(df_uni2,pf,budget,risk,max_assets,cfg=_app_cfg)
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
