@@ -788,12 +788,22 @@ with st.sidebar:
             st.success("Kaydedildi!")
         if st.button("Şimdi Gönder", key="send_now", use_container_width=True):
             try:
-                from emailer import send_report, _load_cfg
-                import json as _j
-                _c = _load_cfg()
-                if _c.get("smtp_user") and _c.get("smtp_pass"):
-                    with open("email_config.json","w",encoding="utf-8") as _ef:
-                        _j.dump(_c, _ef)
+                # Secrets -> email_config.json (Streamlit Cloud)
+                try:
+                    import json as _j, streamlit as _st
+                    _s = _st.secrets
+                    _eu = _s.get("EMAIL_USER") or _s.get("smtp_user") or ""
+                    _ep = _s.get("EMAIL_PASS") or _s.get("smtp_pass") or ""
+                    _ea = _s.get("EMAIL_ADDRESS") or _s.get("address") or _eu
+                    if _eu and _ep:
+                        _cfg = {"address":_ea,"smtp_host":"smtp.gmail.com","smtp_port":587,
+                                "smtp_user":_eu,"smtp_pass":_ep,"times":["08:30","11:30"],
+                                "tcmb_key":_s.get("TCMB_KEY","")}
+                        with open("email_config.json","w",encoding="utf-8") as _ef:
+                            _j.dump(_cfg, _ef)
+                except Exception:
+                    pass
+                from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
                 send_report(df_uni2,pf,budget,risk,max_assets)
