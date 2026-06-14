@@ -788,7 +788,12 @@ with st.sidebar:
             st.success("Kaydedildi!")
         if st.button("Şimdi Gönder", key="send_now", use_container_width=True):
             try:
-                from emailer import send_report
+                from emailer import send_report, _load_cfg
+                import json as _j
+                _c = _load_cfg()
+                if _c.get("smtp_user") and _c.get("smtp_pass"):
+                    with open("email_config.json","w",encoding="utf-8") as _ef:
+                        _j.dump(_c, _ef)
                 df_uni2=load_universe()
                 pf=load_portfolio()
                 send_report(df_uni2,pf,budget,risk,max_assets)
