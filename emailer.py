@@ -405,13 +405,37 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
 
 # ── Gönderici ─────────────────────────────────────────────────────────────────
 
-def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
-                budget: float = 0, risk: str = "Orta", max_assets: int = 10):
-
+def _load_cfg():
+    """Once Streamlit Secrets, sonra email_config.json'dan oku."""
+    try:
+        import streamlit as st
+        s = st.secrets
+        eu = s.get("EMAIL_USER") or s.get("smtp_user") or ""
+        ep = s.get("EMAIL_PASS") or s.get("smtp_pass") or ""
+        ea = s.get("EMAIL_ADDRESS") or s.get("address") or eu
+        if eu and ep:
+            return {
+                "address":   ea,
+                "smtp_host": "smtp.gmail.com",
+                "smtp_port": 587,
+                "smtp_user": eu,
+                "smtp_pass": ep,
+                "times":     ["08:30", "11:30"],
+                "tcmb_key":  s.get("TCMB_KEY", ""),
+            }
+    except Exception:
+        pass
     cfg = {}
     if os.path.exists(CFG_FILE):
         with open(CFG_FILE) as f:
             cfg = json.load(f)
+    return cfg
+
+
+def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
+                budget: float = 0, risk: str = "Orta", max_assets: int = 10):
+
+    cfg = _load_cfg()
 
     to_addr   = cfg.get("address",   "")
     smtp_host = cfg.get("smtp_host", "smtp.gmail.com")
