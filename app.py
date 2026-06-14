@@ -6,7 +6,7 @@ try:
     HAS_PLOTLY = True
 except: HAS_PLOTLY = False
 
-st.set_page_config(page_title="TrendSurf Optima", page_icon="logo2.png", layout="wide",
+st.set_page_config(page_title="TrendSurf Optima", page_icon="📈", layout="wide",
                    initial_sidebar_state="expanded")
 
 # ══════════════════════════════════════════════════════════════
@@ -168,7 +168,7 @@ def render_auth_gate():
         st.stop()
 
     # ── Giriş ekranı: sol logo, sağ form ────────────────────
-    col_logo, col_form = st.columns([1, 1.0])
+    col_logo, col_form = st.columns([1, 0.7])
 
     with col_logo:
         st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
@@ -809,9 +809,13 @@ with st.sidebar:
     with st.expander("E-posta Ayarları"):
         st.markdown("""<style>
         [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
-        [data-testid="stSidebar"] [data-testid="stExpander"] p,
-        [data-testid="stSidebar"] [data-testid="stExpander"] label p {
+        [data-testid="stSidebar"] [data-testid="stExpander"] label p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"] {
             color:#1b2a4a!important;font-weight:600!important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] .stButton button p,
+        [data-testid="stSidebar"] [data-testid="stExpander"] .stButton>button p {
+            color:#ffffff!important;font-weight:700!important;
         }
         </style>""", unsafe_allow_html=True)
         ecfg=load_email_cfg()

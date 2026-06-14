@@ -37,7 +37,7 @@ _COL_W = {
 def _logo_b64():
     """Email banner (logo + metin) veya fallback logo dosyasini base64'e cevirir."""
     # Once email banner'i dene
-    for p in ["logo_email_banner.png", "logo2.png", "logo.png", "Logo.png"]:
+    for p in ["logo_email_clean.png", "logo_email_banner.png", "logo2.png", "logo.png", "Logo.png"]:
         if os.path.exists(p):
             with open(p, "rb") as f:
                 return base64.b64encode(f.read()).decode()
@@ -373,7 +373,7 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
               box-shadow:0 2px 12px rgba(0,0,0,.10);">
 
   <!-- HEADER -->
-  <tr><td style="background:#1b2a4a;padding:14px 28px;
+  <tr><td style="background:#ffffff;padding:14px 28px;
                  border-bottom:3px solid #2c3e6b;">
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align:middle;">{logo_tag}</td>
