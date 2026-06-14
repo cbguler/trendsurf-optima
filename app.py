@@ -100,7 +100,7 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü"]
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler"]
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -1797,4 +1797,43 @@ elif page=="Temettü":
         file_name=f"xtmtu_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
+
+elif page=="Makro Göstergeler":
+    st.title("Makro Göstergeler")
+    st.caption("MKK Veri Analiz Platformu (VAP) — Türkiye sermaye piyasası yatırımcı ve saklama istatistikleri.")
+
+    # Özet metrikler — haftalık güncellenen veriler
+    st.subheader("Piyasa Özeti (MKK / VAP)")
+    st.markdown(
+        "_Aşağıdaki veriler MKK Veri Analiz Platformu'ndan (vap.org.tr) alınmaktadır. "
+        "Haftalık olarak güncellenmektedir._"
+    )
+
+    vap_tabs = st.tabs([
+        "Genel Bakış",
+        "Yatırımcı Analizi",
+        "Yerli / Yabancı",
+        "BIST Endeks Bazlı",
+        "Temettü & Finansallar",
+    ])
+
+    VAP_PAGES = {
+        "Genel Bakış":           "https://www.vap.org.tr/",
+        "Yatırımcı Analizi":     "https://www.vap.org.tr/yas-gruplari-bazinda-yatirimci-sayilari",
+        "Yerli / Yabancı":       "https://www.vap.org.tr/yerli-yabanci-pay-senedi-analizi",
+        "BIST Endeks Bazlı":     "https://www.vap.org.tr/bist-endeksleri-bazinda-portfoy-degerleri",
+        "Temettü & Finansallar": "https://www.vap.org.tr/donemsel-finansal-oranlar",
+    }
+
+    for tab, (tab_name, vap_url) in zip(vap_tabs, VAP_PAGES.items()):
+        with tab:
+            st.markdown(
+                f'''<iframe src="{vap_url}"
+                    width="100%" height="820"
+                    style="border:none;border-radius:8px;"
+                    title="{tab_name}">
+                </iframe>''',
+                unsafe_allow_html=True
+            )
+            st.caption(f"Kaynak: [{vap_url}]({vap_url})")
 
