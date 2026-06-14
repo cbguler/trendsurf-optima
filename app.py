@@ -24,7 +24,7 @@ st.markdown("""<style>
 [data-testid="stSidebar"] h3{color:#1b2a4a!important;}
 [data-testid="stSidebar"] hr{border-color:#e0eeff!important;}
 [data-testid="stSidebar"] input{background:#e0eeff!important;color:#1b2a4a!important;border:1px solid #d0e4ff!important;}
-[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"]{color:#ffffff!important;font-weight:700!important;}
+[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"],[data-testid="stSidebar"] [data-testid="stExpander"] .stButton>button,[data-testid="stSidebar"] [data-testid="stExpander"] .stButton button{color:#ffffff!important;font-weight:700!important;opacity:1!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
@@ -100,8 +100,8 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
-CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler & Emtialar","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
+CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler & Emtialar":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
@@ -131,6 +131,7 @@ def render_auth_gate():
         border:1.5px solid #c8d6e8!important;border-radius:6px!important;
         font-size:15px!important;padding:10px 14px!important;
     }
+    .stTextInput > div > div > input {max-width:380px!important;}
     [data-testid="stTextInput"] label p {
         color:#1b2a4a!important;font-weight:600!important;font-size:14px!important;
     }
@@ -401,11 +402,36 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
             pass
         return pd.DataFrame()
 
+    # Çapraz kur (cross-rate) dövizleri için özel tarihsel hesaplama
+    _CROSS = {
+        "JPYTRY": ("USDJPY=X","USDTRY=X","div"),
+        "CADTRY": ("USDCAD=X","USDTRY=X","div"),
+        "NOKTRY": ("USDNOK=X","USDTRY=X","div"),
+        "SEKTRY": ("USDSEK=X","USDTRY=X","div"),
+        "DKKTRY": ("USDDKK=X","USDTRY=X","div"),
+        "CNYTRY": ("USDCNY=X","USDTRY=X","div"),
+        "AUDTRY": ("AUDUSD=X","USDTRY=X","mul"),
+        "NZDTRY": ("NZDUSD=X","USDTRY=X","mul"),
+    }
+    if category == "DOVIZ" and ticker in _CROSS:
+        try:
+            import yfinance as yf
+            _t1, _t2, _op = _CROSS[ticker]
+            _h1 = yf.Ticker(_t1).history(period=period, auto_adjust=True)["Close"]
+            _h2 = yf.Ticker(_t2).history(period=period, auto_adjust=True)["Close"]
+            _h1, _h2 = _h1.align(_h2, join="inner")
+            if len(_h1) >= 5:
+                _close = (_h2 / _h1) if _op=="div" else (_h1 * _h2)
+                _spread = _close * 0.001
+                _df = pd.DataFrame({"Open":_close-_spread,"High":_close+_spread*2,"Low":_close-_spread*2,"Close":_close})
+                return _df.dropna()
+        except Exception:
+            pass
+        return pd.DataFrame()
+
     # Döviz/Maden/Kripto/BIST için doğru sembol
     from data_pipeline import _format_yf_symbol
-    # _format_yf_symbol her zaman doğru sembolü üretir
     sym = _format_yf_symbol(ticker, category)
-    # Maden futures için CSV'deki =F sembolü varsa onu kullan
     if yf_symbol and yf_symbol.strip() and "=F" in str(yf_symbol):
         sym = yf_symbol.strip()
 
@@ -1326,8 +1352,7 @@ elif page=="Portföyüm":
 # ══════════════════════════════════════════════════════════════
 elif page in CAT:
     cat_code=CAT[page]
-    _page_titles={"Madenler":"Madenler & Emtialar"}
-    st.title(_page_titles.get(page, page))
+    st.title(page)
     if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
@@ -1458,11 +1483,7 @@ elif page in CAT:
         fig=candle_fig(d["hist"],sel)
         if fig: st.plotly_chart(fig,use_container_width=True)
     else:
-        _cr = ['JPYTRY', 'NZDTRY', 'AUDTRY', 'CADTRY', 'DKKTRY', 'NOKTRY', 'SEKTRY', 'CNYTRY']
-        if sel in _cr:
-            st.info(f"{sel} çapraz kur hesabıyla anlık fiyat gösterilir. Yfinance'de doğrudan geçmiş veri bulunmamaktadır.")
-        else:
-            st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
+            st.info(f"{sel} için geçmiş fiyat verisi henüz yüklenemedi.")
 
     # BIST Temel Analiz
     if cat_code=="BIST":
