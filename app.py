@@ -6,38 +6,25 @@ try:
     HAS_PLOTLY = True
 except: HAS_PLOTLY = False
 
-st.set_page_config(page_title="TrendSurf Optima", layout="wide",
+st.set_page_config(page_title="TrendSurf Optima", page_icon="logo2.png", layout="wide",
                    initial_sidebar_state="expanded")
 
 # ══════════════════════════════════════════════════════════════
 # CSS
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
-/* Dark mode'u tamamen kapat, light temayı zorla */
-@media (prefers-color-scheme: dark) {
-    .stApp, [data-testid="stAppViewContainer"], .main, body {
-        background-color: #f0f4f8 !important;
-        color: #1b2a4a !important;
-    }
-}
-html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
-    color-scheme: light !important;
-    background-color: #f0f4f8 !important;
-    color: #1b2a4a !important;
-}
-.stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;color:#1b2a4a!important;}
-h1,h2,h3,h4,h5,h6,p,span,div,label{color:#1b2a4a!important;}
-.stTextInput input,.stSelectbox select{background:#ffffff!important;color:#1b2a4a!important;}
-
-[data-testid="stSidebar"]{background:#2c3e6b!important;border-right:1px solid #3a5080!important;}
+.stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
+[data-testid="stSidebar"]{background:#d0e4ff!important;border-right:1px solid #e0eeff!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] small{color:#ffffff!important;}
+[data-testid="stSidebar"] small{color:#1b2a4a!important;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{color:#2c3e6b!important;}
+[data-testid="stSidebar"] .stSlider [data-testid="stMarkdownContainer"] p{color:#1b2a4a!important;}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3{color:#ffffff!important;}
-[data-testid="stSidebar"] hr{border-color:#3a5080!important;}
-[data-testid="stSidebar"] input{background:#3a5080!important;color:#fff!important;border:1px solid #5070a8!important;}
-[data-testid="stSidebar"] .stButton>button{background:#3b9eff!important;color:#fff!important;font-weight:700!important;}
+[data-testid="stSidebar"] h3{color:#1b2a4a!important;}
+[data-testid="stSidebar"] hr{border-color:#e0eeff!important;}
+[data-testid="stSidebar"] input{background:#e0eeff!important;color:#1b2a4a!important;border:1px solid #d0e4ff!important;}
+[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"]{color:#ffffff!important;font-weight:700!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
@@ -68,14 +55,19 @@ section.main [data-testid="stRadio"] label span,
 /* Sidebar radio */
 [data-testid="stSidebar"] [data-testid="stRadio"] label,
 [data-testid="stSidebar"] [data-testid="stRadio"] label p,
-[data-testid="stSidebar"] [data-testid="stRadio"] label span{color:#dce8f5!important;font-size:14px!important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label span{color:#1b2a4a!important;font-size:14px!important;}
 /* Select / input */
 [data-testid="stSelectbox"] label,[data-testid="stSelectbox"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stSelectbox>div>div{background:#fff!important;color:#1b2a4a!important;}
-[data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#dce8f5!important;}
+[data-testid="stNumberInput"] label,[data-testid="stNumberInput"] p{color:#1b2a4a!important;font-weight:600!important;}
 .stNumberInput input{color:#1b2a4a!important;background:#fff!important;}
-[data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#dce8f5!important;}
+[data-testid="stSlider"] label,[data-testid="stSlider"] p{color:#1b2a4a!important;font-weight:600!important;}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] label,[data-testid="stSidebar"] [data-testid="stNumberInput"] p{color:#1b2a4a!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] label,[data-testid="stSidebar"] [data-testid="stSlider"] p,[data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stMarkdownContainer"] p,[data-testid="stSidebar"] .stSlider p,[data-testid="stSidebar"] .stSlider span{color:#1b2a4a!important;font-weight:600!important;}
+[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMin"],[data-testid="stSidebar"] [data-testid="stSlider"] div[data-testid="stTickBarMax"]{color:#2c3e6b!important;}
+[data-testid="stSidebar"] [role="slider"]{background:#5b8dee!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
+[data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#2c3e6b!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
 /* Özel bileşenler */
@@ -108,7 +100,7 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü"]
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -146,16 +138,11 @@ def render_auth_gate():
     [data-testid="stCheckbox"] label p { color:#1b2a4a!important; }
     </style>""", unsafe_allow_html=True)
 
-    _,col,_ = st.columns([1,1.2,1])
-    with col:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        try: st.image("logo.png", width=160)
-        except: st.markdown("## TrendSurf Optima")
-        st.caption("Finansal Varlik Takip ve Sinyal Terminali")
-        st.divider()
-        # Şifre sıfırlama token'ı URL'de varsa önce onu göster
-        _reset_token = st.query_params.get("reset_token", "")
-        if _reset_token:
+    # Şifre sıfırlama token'ı URL'de varsa önce onu göster
+    _reset_token = st.query_params.get("reset_token", "")
+    if _reset_token:
+        _,col,_ = st.columns([1,1.2,1])
+        with col:
             st.subheader("Yeni Şifre Belirle")
             from auth_reset import verify_reset_token, reset_password
             _verify = verify_reset_token(_reset_token)
@@ -177,8 +164,24 @@ def render_auth_gate():
                             st.query_params.clear()
                         else:
                             st.error(_res["msg"])
-            st.stop()
+        st.stop()
 
+    # ── Giriş ekranı: sol logo, sağ form ────────────────────
+    col_logo, col_form = st.columns([1, 1.4])
+
+    with col_logo:
+        st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
+        try: st.image("logo.png", width=200)
+        except: st.markdown("## TrendSurf Optima")
+        st.markdown(
+            "<p style='color:#6c7a9c;font-size:13px;margin-top:8px'>"
+            "Finansal Varlık Takip<br>ve Sinyal Terminali</p>",
+            unsafe_allow_html=True
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_form:
+        st.markdown("<div style='padding-top:30px'>", unsafe_allow_html=True)
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
@@ -231,6 +234,7 @@ def render_auth_gate():
                             st.error(res["msg"])
                     except Exception as _re:
                         st.error(f"Hata: {_re}")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
@@ -691,6 +695,29 @@ def save_portfolio(p):
     pass
 
 def load_email_cfg():
+    # 1) Önce secrets.toml (Streamlit Cloud)
+    try:
+        s = st.secrets
+        # GitHub Secrets key adlarından herhangi biri varsa kullan
+        email_user = (s.get("EMAIL_USER") or s.get("SMTP_USER")
+                      or s.get("smtp_user") or "")
+        email_pass = (s.get("EMAIL_PASS") or s.get("SMTP_PASS")
+                      or s.get("smtp_pass") or "")
+        email_addr = (s.get("EMAIL_ADDRESS") or s.get("address")
+                      or s.get("ADMIN_EMAIL") or "")
+        if email_user and email_pass:
+            return {
+                "address":   email_addr,
+                "smtp_host": s.get("SMTP_HOST", "smtp.gmail.com"),
+                "smtp_port": int(s.get("SMTP_PORT", 587)),
+                "smtp_user": email_user,
+                "smtp_pass": email_pass,
+                "times":     list(s.get("REPORT_TIMES", ["08:30","11:30"])),
+                "tcmb_key":  s.get("TCMB_KEY", ""),
+            }
+    except Exception:
+        pass
+    # 2) Lokal email_config.json
     if os.path.exists(EMAIL_CFG_FILE):
         with open(EMAIL_CFG_FILE) as f: return json.load(f)
     return {"address":"","smtp_host":"smtp.gmail.com","smtp_port":587,
@@ -745,26 +772,32 @@ with st.sidebar:
         [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
         [data-testid="stSidebar"] [data-testid="stExpander"] p,
         [data-testid="stSidebar"] [data-testid="stExpander"] label p {
-            color:#ffffff!important;font-weight:600!important;
+            color:#1b2a4a!important;font-weight:600!important;
         }
         </style>""", unsafe_allow_html=True)
         ecfg=load_email_cfg()
         e_addr=st.text_input("Alıcı E-posta",value=ecfg.get("address",""))
         e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["08:30"])[0])
         e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["08:30","11:30"])[-1])
-        if st.button("Ayarları Kaydet",key="ecfg_save"):
+        if st.button("Ayarları Kaydet", key="ecfg_save", use_container_width=True):
             save_email_cfg({"address":e_addr,"smtp_host":"smtp.gmail.com","smtp_port":587,
                              "smtp_user":ecfg.get("smtp_user",""),
                              "smtp_pass":ecfg.get("smtp_pass",""),
                              "times":[e_t1,e_t2],
                              "tcmb_key":ecfg.get("tcmb_key","")})
             st.success("Kaydedildi!")
-        if st.button("Şimdi Gönder",key="send_now"):
+        if st.button("Şimdi Gönder", key="send_now", use_container_width=True):
             try:
+                # Streamlit Cloud için: Secrets'dan cfg oku, email_config.json'a yaz
+                import json as _ej
+                _ecfg = load_email_cfg()
+                if _ecfg.get("smtp_user") and _ecfg.get("smtp_pass"):
+                    with open("email_config.json", "w", encoding="utf-8") as _ef:
+                        _ej.dump(_ecfg, _ef)
                 from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
-                send_report(df_uni2,pf,budget,risk,max_assets)
+                send_report(df_uni2,pf,budget,risk,max_assets,cfg=_ecfg)
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
@@ -1157,16 +1190,40 @@ elif page=="Portföyüm":
                 pt        = tickers_list[idx_sel]
                 pt_cat    = cats_list[idx_sel]
             with p_c2:
-                pa = st.number_input("Adet / Lot", min_value=0.0,
-                                     value=1.0, step=1.0, key="pf_adet")
+                pa_str = st.text_input("Adet / Lot", value="1", key="pf_adet",
+                                       placeholder="Örn: 5,06")
+                try:
+                    pa = float(pa_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pa = 0.0
             with p_c3:
-                pm = st.number_input("Alış Maliyeti (birim, TL)",
-                                     min_value=0.0, value=0.0, key="pf_maliyet")
-            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                    placeholder="Örn: uzun vadeli, temettü")
+                pm_str = st.text_input("Alış Maliyeti (birim, TL)", value="0", key="pf_maliyet",
+                                       placeholder="Örn: 6.480,00")
+                try:
+                    pm = float(pm_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pm = 0.0
+            p_c4, p_c5 = st.columns(2)
+            with p_c4:
+                pm_kurum_str = st.text_input(
+                    "Kurumun Güncel Alış Fiyatı (TL) — K/Z için",
+                    value="0", key="pf_kurum_alis",
+                    placeholder="Örn: 6.027,19",
+                    help="Varlığı bugün satsanız kurumun size ödeyeceği fiyat"
+                )
+                try:
+                    pm_kurum = float(pm_kurum_str.replace(".", "").replace(",", "."))
+                except Exception:
+                    pm_kurum = 0.0
+            with p_c5:
+                pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
+                                        placeholder="Örn: ING Bank, uzun vadeli")
             if st.button("EKLE", use_container_width=True, key="pf_ekle"):
                 if pa > 0:
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note)
+                    note_full = pf_note
+                    if pm_kurum > 0:
+                        note_full = f"kurum_alis:{pm_kurum:.4f}" + (f"|{pf_note}" if pf_note else "")
+                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=note_full)
                     st.success(f"{pt} portföye eklendi.")
                     st.rerun()
                 else:
@@ -1269,7 +1326,8 @@ elif page=="Portföyüm":
 # ══════════════════════════════════════════════════════════════
 elif page in CAT:
     cat_code=CAT[page]
-    st.title(page)
+    _page_titles={"Madenler":"Madenler & Emtialar"}
+    st.title(_page_titles.get(page, page))
     if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
@@ -1400,7 +1458,11 @@ elif page in CAT:
         fig=candle_fig(d["hist"],sel)
         if fig: st.plotly_chart(fig,use_container_width=True)
     else:
-        st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
+        _cr = ['JPYTRY', 'NZDTRY', 'AUDTRY', 'CADTRY', 'DKKTRY', 'NOKTRY', 'SEKTRY', 'CNYTRY']
+        if sel in _cr:
+            st.info(f"{sel} çapraz kur hesabıyla anlık fiyat gösterilir. Yfinance'de doğrudan geçmiş veri bulunmamaktadır.")
+        else:
+            st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
 
     # BIST Temel Analiz
     if cat_code=="BIST":
@@ -1746,4 +1808,402 @@ elif page=="Temettü":
         file_name=f"xtmtu_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
+
+
+elif page=="Makro Göstergeler":
+    st.title("Makro Göstergeler")
+    st.caption("MKK Veri Analiz Platformu (VAP) — Türkiye sermaye piyasası yatırımcı ve saklama istatistikleri. Haftalık güncellenir.")
+
+    st.subheader("VAP — Veri Analiz Platformu")
+    st.markdown(
+        "MKK (Merkezi Kayıt Kuruluşu) tarafından yönetilen VAP, Türkiye sermaye piyasasına ait "
+        "yatırımcı sayıları, saklama değerleri, yerli/yabancı analizleri ve endeks bazlı verileri "
+        "haftalık olarak yayınlamaktadır. Aşağıdaki bağlantılardan ilgili sayfaya doğrudan ulaşabilirsiniz."
+    )
+
+    VAP_LINKS = [
+        {
+            "baslik": "Genel Bakış",
+            "aciklama": "Toplam yatırımcı, bakiyeli hesap sayısı ve saklanan menkul kıymet değeri.",
+            "url": "https://www.vap.org.tr/",
+            "ikon": "📊",
+        },
+        {
+            "baslik": "Yaş Grupları Bazında Yatırımcı Sayıları",
+            "aciklama": "Demografik dağılım — yaş grubu ve cinsiyet bazında yatırımcı profili.",
+            "url": "https://www.vap.org.tr/yas-gruplari-bazinda-yatirimci-sayilari",
+            "ikon": "👥",
+        },
+        {
+            "baslik": "Yerli / Yabancı Pay Senedi Analizi",
+            "aciklama": "Yerli ve yabancı yatırımcıların pay senedi portföy dağılımı.",
+            "url": "https://www.vap.org.tr/yerli-yabanci-pay-senedi-analizi",
+            "ikon": "🌍",
+        },
+        {
+            "baslik": "Yabancı Yatırımcı Sayıları (İlk 10 Ülke)",
+            "aciklama": "Ülke bazında yabancı yatırımcı sayıları ve portföy değerleri.",
+            "url": "https://www.vap.org.tr/pay-senedi-yabanci-yatirimci-sayilari-ilk-10-ulke",
+            "ikon": "🗺️",
+        },
+        {
+            "baslik": "BIST Endeksleri Bazında Portföy Değerleri",
+            "aciklama": "9 farklı BIST endeksi için yatırımcı sayısı ve portföy değeri.",
+            "url": "https://www.vap.org.tr/bist-endeksleri-bazinda-portfoy-degerleri",
+            "ikon": "📈",
+        },
+        {
+            "baslik": "Dönemsel Finansal Oranlar",
+            "aciklama": "BIST şirketlerinin F/K, PD/DD, temettü verimi gibi finansal oranları.",
+            "url": "https://www.vap.org.tr/donemsel-finansal-oranlar",
+            "ikon": "🔢",
+        },
+        {
+            "baslik": "REKS — Risk İştahı Endeksi",
+            "aciklama": "Türkiye sermaye piyasası risk iştahı endeksi ve tarihsel trendi.",
+            "url": "https://www.vap.org.tr/reks",
+            "ikon": "⚡",
+        },
+        {
+            "baslik": "MKK Aylık Piyasa Bülteni",
+            "aciklama": "Yatırımcı ve piyasa verilerinin aylık özet raporu (PDF).",
+            "url": "https://www.mkk.com.tr/veri-hizmetleri/mkk-aylik-piyasa-bulteni",
+            "ikon": "📄",
+        },
+    ]
+
+    _makro_cols = st.columns(2)
+    for _mi, _link in enumerate(VAP_LINKS):
+        with _makro_cols[_mi % 2]:
+            st.markdown(
+                f'''<a href="{_link['url']}" target="_blank" style="text-decoration:none;">
+                <div style="background:#fff;border:1.5px solid #c8d6e8;border-radius:10px;
+                            padding:16px 18px;margin-bottom:14px;cursor:pointer;">
+                    <div style="font-size:22px;margin-bottom:6px;">{_link['ikon']}</div>
+                    <div style="font-size:14px;font-weight:700;color:#1b2a4a;
+                                margin-bottom:4px;">{_link['baslik']}</div>
+                    <div style="font-size:12px;color:#6c7a9c;">{_link['aciklama']}</div>
+                </div></a>''',
+                unsafe_allow_html=True
+            )
+
+    st.divider()
+    st.subheader("Güncel Piyasa Verileri (MKK)")
+    st.markdown("_Güncel veriler için yukarıdaki VAP bağlantılarını kullanın._")
+
+    _mkk_cols = st.columns(5)
+    _mkk_data = [
+        ("Saklanan MK Değeri", "35,14 Trilyon ₺"),
+        ("Toplam Yatırımcı",   "38,57 Milyon"),
+        ("Toplam Hesap",       "92,60 Milyon"),
+        ("Bakiyeli Yatırımcı", "10,64 Milyon"),
+        ("Bakiyeli Hesap",     "15,45 Milyon"),
+    ]
+    for _col, (_lbl, _val) in zip(_mkk_cols, _mkk_data):
+        with _col:
+            st.metric(_lbl, _val)
+    st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
+
+elif page=="Yardım":
+    is_admin = _cur_user.get("is_admin", False)
+
+    if is_admin:
+        st.title("Admin El Kitabi")
+        st.caption("TrendSurf Optima — Sistem Yonetici Dokumantasyonu")
+
+        with st.expander("1. Sistem Mimarisi", expanded=False):
+            st.markdown("""
+**Dosya Yapisi** — `C:/Users/bahri/Desktop/TrendSurf_Optima/`
+
+| Dosya | Aciklama |
+|-------|----------|
+| `app.py` | Ana Streamlit uygulamasi |
+| `worker.py` | Veri cekme ve evren olusturma motoru |
+| `db.py` | SQLite veritabani baglantisi |
+| `auth.py` | Kullanici kimlik dogrulama |
+| `auth_reset.py` | Sifre sifirlama |
+| `admin.py` | Admin panel fonksiyonlari |
+| `emailer.py` | E-posta rapor sistemi |
+| `bigpara_client.py` | Bigpara altin/gumus TL fiyat yedek kaynak |
+| `halka_arz_client.py` | KAP XHARZ endeks verileri |
+| `temettu_client.py` | KAP XTMTU + yfinance temettü verileri |
+| `tefas_client.py` | TEFAS fon verileri |
+| `kap_client.py` | KAP temel analiz verileri |
+| `tcmb_client.py` | TCMB doviz kuru yedek kaynak |
+| `signals.py` | Sinyal hesaplama motoru |
+| `optimized_universe.csv` | Worker ciktisi — tum varliklar |
+| `KAP_BIST.xlsx` | BIST hisse sembol/slug esleme (771 hisse) |
+| `Endeksler.xlsx` | Endeks uye listeleri (fallback) |
+
+**Veri Akisi:** `worker.py` → `optimized_universe.csv` → `app.py` → kullanici
+
+**Varlik Sayilari:** BIST 610 | TEFAS 1347 | Kripto 19 | Maden 12 | Doviz 12
+""")
+
+        with st.expander("2. Veri Kaynaklari ve Yedek Mekanizmalari", expanded=False):
+            st.markdown("""
+**BIST Fiyatlari:**
+- Birincil: yfinance (.IS suffix)
+- Yedek: optimized_universe.csv son bilinen fiyat
+
+**TEFAS Fon Verileri:**
+- Birincil: TEFAS Next.js API (`www.tefas.gov.tr/api/funds/`)
+- Yedek: pytefas kutuphanesi
+
+**Maden Fiyatlari (TL bazli):**
+- Birincil: Bigpara HTML scraping (gram altin, gumus)
+- Yedek: yfinance (GC=F) x USDTRY
+
+**Doviz Kurlari:**
+- Birincil: yfinance (=X suffix)
+- Yedek: TCMB XML API — 11/12 kur
+- Son yedek: EVDS API (TCMB_KEY gerekli: 5F0yYjCHDf)
+
+**Kripto:**
+- Birincil: yfinance (BTC-USD vb.)
+- Yedek: Bigpara kripto fiyatlari
+
+**Temel Analiz (BIST):**
+- kap_client.py → kap.org.tr sirket sayfalari
+- yfinance info (P/E, beta, dividendYield)
+
+**Halka Arz / Tetemttu:**
+- KAP RSC endpoint (Next.js) → endeks uyeleri
+- Yedek: Endeksler.xlsx
+""")
+
+        with st.expander("3. GitHub ve Deployment", expanded=False):
+            st.markdown("""
+**GitHub Repo:** `github.com/cbguler/trendsurf-optima` (private)
+
+**Streamlit Cloud:**
+`https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app`
+
+**Streamlit Cloud Secrets** (App Settings → Secrets):
+```
+EMAIL_USER    = "bahriguler@gmail.com"
+EMAIL_PASS    = "xxxx xxxx xxxx xxxx"
+EMAIL_ADDRESS = "bahriguler@gmail.com"
+ADMIN_EMAIL   = "bahriguler@gmail.com"
+ADMIN_PASS    = "..."
+ADMIN_NAME    = "Bahri"
+TCMB_KEY      = "5F0yYjCHDf"
+```
+
+**CSV Manuel Guncelleme:**
+```
+cd C:/Users/bahri/Desktop/TrendSurf_Optima
+python worker.py
+git add -f optimized_universe.csv
+git commit -m "veri guncelleme"
+git push origin main
+```
+
+**Task Scheduler:** Her sabah 08:00 — `guncelle_ve_push.bat`
+""")
+
+        with st.expander("4. Kullanici Yonetimi", expanded=False):
+            st.markdown("""
+**Kullanici Tipleri:**
+
+| Tip | Aciklama |
+|-----|----------|
+| `free` | Sinirli erisim |
+| `pro` | Temel ozellikler |
+| `premium` | Tum ozellikler |
+| `admin` | Sistem yoneticisi |
+
+**Yeni Abone Onaylama:** Admin Paneli → Bekleyen Kullanicilar → Onayla
+
+**Sifre Sifirlama:**
+- `python auth_reset.py` (lokal)
+- Veya Giris ekrani → Sifremi Unuttum
+
+**SQLite Veritabani:** `trendsurf.db`
+- Tablolar: `users`, `sessions`, `portfolio`, `reset_tokens`
+- Streamlit Cloud'da Reboot yaparsan sifirlanir — Reboot yerine F5 kullan
+""")
+
+        with st.expander("5. E-posta Sistemi", expanded=False):
+            st.markdown("""
+**Gonderim Zamanlayici:**
+- Windows Task Scheduler: `emailler.py` — 08:30 ve 11:30
+- Manuel: Sol menu → E-posta Ayarlari → Simdi Gonder
+
+**Gmail App Password Yenileme:**
+1. `myaccount.google.com/apppasswords` adresine git
+2. Yeni App Password olustur (TrendSurf)
+3. Streamlit Cloud Secrets → EMAIL_PASS guncelle
+4. `email_config.json` dosyasini da guncelle
+
+**email_config.json yapisi:**
+```json
+{
+  "address": "bahriguler@gmail.com",
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_user": "bahriguler@gmail.com",
+  "smtp_pass": "uygulama sifresi",
+  "times": ["08:30", "11:30"],
+  "tcmb_key": "5F0yYjCHDf"
+}
+```
+""")
+
+        with st.expander("6. Sik Karsilasilan Sorunlar", expanded=False):
+            st.markdown("""
+| Sorun | Neden | Cozum |
+|-------|-------|-------|
+| BIST 97 hisse geliyor | GitHub Actions yfinance kisiti | worker.py lokalde calistir, push et |
+| Altin fiyati yanlis | yfinance ons/gram karisikligi | Bigpara birincil — otomatik duzelmeli |
+| Turkce karakter bozuk | KAP API encoding | latin-1 UTF-8 fix_encoding'de cozuldu |
+| E-posta gitmiyor | Streamlit Secrets eksik | EMAIL_USER/EMAIL_PASS ekle |
+| Uygulama acilamiyor | Streamlit gizlilik | share.streamlit.io → Settings → Public |
+| Veritabani sifirlanmis | Streamlit Cloud reboot | Beklenen davranis — F5 kullan |
+| CSV push edilemiyor | gitignore sorunu | `git add -f optimized_universe.csv` |
+""")
+
+    else:
+        st.title("Yardim — Kullanim Kilavuzu")
+        st.caption("TrendSurf Optima — Finansal Varlik Takip ve Sinyal Terminali")
+
+        with st.expander("Baslangic — Kayit ve Giris", expanded=True):
+            st.markdown("""
+**Hesap Olusturma:**
+1. Giris ekraninda **Kayit Ol** sekmesine tiklayin
+2. Ad Soyad, e-posta ve sifrenizi girin (en az 8 karakter)
+3. Hesabiniz admin onayindan sonra aktif olur
+
+**Giris Yapma:**
+- E-posta ve sifrenizle giris yapin
+- **Beni Hatirla** kutusunu isaretlerseniz otomatik giris aktif olur
+
+**Sifremi Unuttum:**
+- Giris ekraninda **Sifremi Unuttum** sekmesi → e-posta adresinizi girin
+- Sifirlama baglantisi e-postaniza gelir
+""")
+
+        with st.expander("Ana Sayfa — Portfoy Optimizasyonu", expanded=False):
+            st.markdown("""
+Ana Sayfa, butce ve risk tercihine gore en iyi yatirim firsatlarini listeler.
+
+**Sol Panelden Ayarlar:**
+- **Portfoy Butcesi (TL):** Yatirim dusundugunuz toplam tutar
+- **Risk Toleransi:** Cok Dusuk → Cok Yuksek (5 seviye)
+- **Max Varlik Sayisi:** Portfoyde kac farkli varlik olsun (5-20)
+
+**Oneri Tablosu Sutunlari:**
+
+| Sutun | Aciklama |
+|-------|----------|
+| Kategori | BIST, TEFAS, Doviz, Maden, Kripto |
+| Optima Skoru | 0-100 bileşik puan |
+| Sinyal | Guclu Al / Kademeli Al / Tut Izle / Sat |
+| RSI | Goreceli guc endeksi (30 alti asiri satim, 70 uzeri asiri alim) |
+| 1A Getiri % | Son 1 aylik getiri |
+| Lot | Butcenize gore onerilen alim adedi |
+
+**Optima Skoru:** RSI Zonu (25%) + Momentum (35%) + Volatilite (15%) + Temel Analiz (25%)
+
+> Bu sistem yatirim tavsiyesi vermez. Kararlar tamamen size aittir.
+""")
+
+        with st.expander("Portfoyum — Pozisyon Takibi", expanded=False):
+            st.markdown("""
+**Yeni Pozisyon Ekleme:**
+1. **Yeni Pozisyon Ekle** bolumunu acin
+2. Listeden varlik secin
+3. Adet, Alis Maliyeti (TL) ve isterseniz Not girin
+4. **Pozisyon Ekle** butonuna tiklayin
+
+**Fiyat Girisi:** Ondalik ayirici virgul → `6.480,00`
+
+**Portfoy Tablosu:**
+- Guncel Fiyat: Bigpara / yfinance anlık veri
+- Toplam Deger: Adet × Guncel Fiyat  
+- K/Z: (Guncel - Alis) / Alis × 100
+
+**E-posta Raporu (Sol Menu):**
+1. Alici e-posta adresinizi girin
+2. Gonderim saatlerini belirleyin
+3. **Ayarlari Kaydet** ile saatleri kaydedin
+4. **Simdi Gonder** ile anlik rapor alin
+""")
+
+        with st.expander("BIST — Turk Hisse Senetleri", expanded=False):
+            st.markdown("""
+~610 Borsa Istanbul hissesini Optima Skoru'na gore listeler.
+
+**Filtreleme:** Ticker/sirket adi ara, sinyal turune gore filtrele, RSI araligini sec
+
+**KAP Linki:** Her hissenin **Goruntule** linki KAP sirket sayfasina acar
+
+**Sayfalama:** Tabloda 50 hisse gosterilir, altta sayfa secimi yapabilirsiniz
+""")
+
+        with st.expander("TEFAS — Yatirim Fonlari", expanded=False):
+            st.markdown("""
+~1347 yatirim fonunu listeler.
+
+**Fon Turu Filtresi:** Hisse Senedi Yogun, Karma, Tahvil, Altin, Para Piyasasi vb.
+
+**Getiri Karsilastirmasi:** 1A, 3A, 6A ve 1Y getirilerini yan yana gorun
+
+**TEFAS Linki:** Her fonun linki TEFAS detay sayfasina acar
+""")
+
+        with st.expander("Doviz, Madenler, Kriptolar", expanded=False):
+            st.markdown("""
+**Doviz:** 12 TRY bazli kur — Kaynak: yfinance, yedek: TCMB XML
+
+**Madenler:** 12 emtia (Altin, Gumus, Platin, Petrol vb.)
+- Altin ve Gumus: Bigpara (gercek TL/gram Turkiye fiyati)
+- Diger: yfinance × USDTRY
+
+**Kriptolar:** 19 kripto para — BTC, ETH, BNB, SOL vb.
+- Kaynak: yfinance (USD) × USDTRY
+
+Her sayfada Optima Skoru, RSI, 1A Getiri ve guncel fiyat gosterilir.
+""")
+
+        with st.expander("Halka Arz ve Temettu", expanded=False):
+            st.markdown("""
+**Halka Arz (XHARZ):**
+- BIST Halka Arz Endeksi uyeleri — KAP'tan gunluk cekiliyor
+- Her sirketin KAP sayfasina **Goruntule** linki ile ulasabilirsiniz
+
+**Temettu (XTMTU):**
+- BIST Temettu Endeksi uyeleri + yfinance temettu verileri
+- Temettu/Hisse, Verim (%), Ex-Date, Siklik
+- Ex-Date'e gore sirali (yakin tarih uste)
+
+**CSV Indir:** Her sayfada tabloyu Excel olarak indirebilirsiniz
+""")
+
+        with st.expander("Makro Gostergeler", expanded=False):
+            st.markdown("""
+MKK Veri Analiz Platformu (vap.org.tr) baglantilari ve ozet veriler.
+
+**Kart Baglantilari:**
+- Genel Bakis, Yas Gruplari, Yerli/Yabanci Analizi
+- BIST Endeks Bazli Portfoy, Finansal Oranlar
+- REKS Risk Istahi Endeksi, MKK Aylik Bulteni
+
+Her karta tiklayin — VAP sayfasi yeni sekmede acilir.
+""")
+
+        with st.expander("Sik Sorulan Sorular", expanded=False):
+            st.markdown("""
+**Veriler ne siklikla guncellenir?**
+Her gun sabah 08:00'de otomatik guncellenir. TEFAS/Halka Arz 4 saatlik onbellekten gelir.
+
+**Optima Skoru ne anlama gelir?**
+0-100 arasi bileşik puan. 80+ Guclu Al, 60-80 Kademeli Al, 40-60 Tut Izle, 40- Sat.
+
+**Portfoy verileri kayboldu?**
+Portfoy veritabaninda saklanir. Cikis yapip tekrar giris yapin.
+
+**Uygulama yavash aciliyor?**
+Uzun sure kullanilmayinca uyku moduna giriyor. Ilk acilista 1-2 dakika normaldir.
+""")
 
