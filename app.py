@@ -24,7 +24,7 @@ st.markdown("""<style>
 [data-testid="stSidebar"] h3{color:#1b2a4a!important;}
 [data-testid="stSidebar"] hr{border-color:#e0eeff!important;}
 [data-testid="stSidebar"] input{background:#e0eeff!important;color:#1b2a4a!important;border:1px solid #d0e4ff!important;}
-[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"],[data-testid="stSidebar"] [data-testid="baseButton-secondary"],[data-testid="stSidebar"] [data-testid="baseButton-primary"]{color:#ffffff!important;font-weight:700!important;text-shadow:0 0 0 #fff!important;}
+[data-testid="stSidebar"] .stButton>button,[data-testid="stSidebar"] .stButton button,[data-testid="stSidebar"] button[kind="secondary"],[data-testid="stSidebar"] button[kind="primary"],[data-testid="stSidebar"] [data-testid="baseButton-secondary"],[data-testid="stSidebar"] [data-testid="baseButton-primary"]{color:#ffffff!important;font-weight:700!important;opacity:1!important;filter:none!important;text-shadow:none!important;}[data-testid="stSidebar"] .stButton>button p,[data-testid="stSidebar"] .stButton>button span,[data-testid="stSidebar"] .stButton button p,[data-testid="stSidebar"] .stButton button span{color:#ffffff!important;font-weight:700!important;opacity:1!important;}
 [data-testid="stSidebar"] img{filter:brightness(1.15)!important;}
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
