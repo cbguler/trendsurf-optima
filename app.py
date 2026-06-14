@@ -168,7 +168,7 @@ def render_auth_gate():
         st.stop()
 
     # ── Giriş ekranı: sol logo, sağ form ────────────────────
-    col_logo, col_form = st.columns([1, 1.4])
+    col_logo, col_form = st.columns([1, 1.0])
 
     with col_logo:
         st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
@@ -417,13 +417,26 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
         try:
             import yfinance as yf
             _t1, _t2, _op = _CROSS[ticker]
-            _h1 = yf.Ticker(_t1).history(period=period, auto_adjust=True)["Close"]
-            _h2 = yf.Ticker(_t2).history(period=period, auto_adjust=True)["Close"]
-            _h1, _h2 = _h1.align(_h2, join="inner")
-            if len(_h1) >= 5:
-                _close = (_h2 / _h1) if _op=="div" else (_h1 * _h2)
-                _spread = _close * 0.001
-                _df = pd.DataFrame({"Open":_close-_spread,"High":_close+_spread*2,"Low":_close-_spread*2,"Close":_close})
+            _cols = ["Open","High","Low","Close"]
+            _h1 = yf.Ticker(_t1).history(period=period, auto_adjust=True)[_cols]
+            _h2 = yf.Ticker(_t2).history(period=period, auto_adjust=True)[_cols]
+            _idx = _h1.index.intersection(_h2.index)
+            _h1 = _h1.loc[_idx]; _h2 = _h2.loc[_idx]
+            if len(_idx) >= 5:
+                if _op == "div":  # XXXTRY = USDTRY / USDXXX
+                    _df = pd.DataFrame({
+                        "Open":  _h2["Open"]  / _h1["Open"],
+                        "High":  _h2["High"]  / _h1["Low"],
+                        "Low":   _h2["Low"]   / _h1["High"],
+                        "Close": _h2["Close"] / _h1["Close"],
+                    }, index=_idx)
+                else:  # XXXTRY = XXXUSD * USDTRY
+                    _df = pd.DataFrame({
+                        "Open":  _h1["Open"]  * _h2["Open"],
+                        "High":  _h1["High"]  * _h2["High"],
+                        "Low":   _h1["Low"]   * _h2["Low"],
+                        "Close": _h1["Close"] * _h2["Close"],
+                    }, index=_idx)
                 return _df.dropna()
         except Exception:
             pass
@@ -805,6 +818,7 @@ with st.sidebar:
         e_addr=st.text_input("Alıcı E-posta",value=ecfg.get("address",""))
         e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["08:30"])[0])
         e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["08:30","11:30"])[-1])
+        st.markdown('<style>[data-testid="stSidebar"] button{color:#ffffff!important;font-weight:700!important;opacity:1!important;}</style>', unsafe_allow_html=True)
         if st.button("Ayarları Kaydet", key="ecfg_save", use_container_width=True):
             save_email_cfg({"address":e_addr,"smtp_host":"smtp.gmail.com","smtp_port":587,
                              "smtp_user":ecfg.get("smtp_user",""),
