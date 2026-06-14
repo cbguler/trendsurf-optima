@@ -1900,376 +1900,306 @@ elif page=="Makro Göstergeler":
 
     st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
 
-elif page=="Yardım":
+elif page=="Yardim":
     is_admin = _cur_user.get("is_admin", False)
 
     if is_admin:
-        # ── ADMİN EL KİTABI ─────────────────────────────────
-        st.title("Admin El Kitabı")
-        st.caption("TrendSurf Optima — Sistem Yönetici Dokümantasyonu")
+        st.title("Admin El Kitabi")
+        st.caption("TrendSurf Optima — Sistem Yonetici Dokumantasyonu")
 
         with st.expander("1. Sistem Mimarisi", expanded=False):
             st.markdown("""
-**Dosya Yapısı** (`C:\\Users\\bahri\\Desktop\\TrendSurf_Optima\\`)
+**Dosya Yapisi** — `C:/Users/bahri/Desktop/TrendSurf_Optima/`
 
-| Dosya | Açıklama |
+| Dosya | Aciklama |
 |-------|----------|
-| `app.py` | Ana Streamlit uygulaması |
-| `worker.py` | Veri çekme ve evren oluşturma motoru |
-| `db.py` | SQLite veritabanı bağlantısı |
-| `auth.py` | Kullanıcı kimlik doğrulama |
-| `auth_reset.py` | Şifre sıfırlama |
-| `admin.py` | Admin panel fonksiyonları |
+| `app.py` | Ana Streamlit uygulamasi |
+| `worker.py` | Veri cekme ve evren olusturma motoru |
+| `db.py` | SQLite veritabani baglantisi |
+| `auth.py` | Kullanici kimlik dogrulama |
+| `auth_reset.py` | Sifre sifirlama |
+| `admin.py` | Admin panel fonksiyonlari |
 | `emailer.py` | E-posta rapor sistemi |
-| `bigpara_client.py` | Bigpara altın/gümüş TL fiyat yedek kaynağı |
-| `bigpara_client.py` | Bigpara altın/gümüş TL fiyat yedek kaynağı |
+| `bigpara_client.py` | Bigpara altin/gumus TL fiyat yedek kaynak |
 | `halka_arz_client.py` | KAP XHARZ endeks verileri |
 | `temettu_client.py` | KAP XTMTU + yfinance temettü verileri |
 | `tefas_client.py` | TEFAS fon verileri |
 | `kap_client.py` | KAP temel analiz verileri |
-| `tcmb_client.py` | TCMB döviz kuru yedek kaynağı |
+| `tcmb_client.py` | TCMB doviz kuru yedek kaynak |
 | `signals.py` | Sinyal hesaplama motoru |
-| `optimized_universe.csv` | Worker çıktısı — tüm varlıklar |
-| `KAP_BIST.xlsx` | BIST hisse sembol/slug eşleme tablosu (771 hisse) |
-| `Endeksler.xlsx` | Endeks üye listeleri (fallback) |
+| `optimized_universe.csv` | Worker ciktisi — tum varliklar |
+| `KAP_BIST.xlsx` | BIST hisse sembol/slug esleme (771 hisse) |
+| `Endeksler.xlsx` | Endeks uye listeleri (fallback) |
 
-**Veri Akışı:**
-`worker.py` → `optimized_universe.csv` → `app.py` → kullanıcı arayüzü
+**Veri Akisi:** `worker.py` → `optimized_universe.csv` → `app.py` → kullanici
 
-**Varlık Sayıları:** BIST 610 | TEFAS 1347 | Kripto 19 | Maden 12 | Döviz 12 | Toplam ~2160
+**Varlik Sayilari:** BIST 610 | TEFAS 1347 | Kripto 19 | Maden 12 | Doviz 12
 """)
 
-        with st.expander("2. Veri Kaynakları ve Yedek Mekanizmaları", expanded=False):
+        with st.expander("2. Veri Kaynaklari ve Yedek Mekanizmalari", expanded=False):
             st.markdown("""
-**BIST Fiyatları:**
+**BIST Fiyatlari:**
 - Birincil: yfinance (.IS suffix)
-- Yedek: optimized_universe.csv'den son bilinen fiyat
+- Yedek: optimized_universe.csv son bilinen fiyat
 
 **TEFAS Fon Verileri:**
 - Birincil: TEFAS Next.js API (`www.tefas.gov.tr/api/funds/`)
-- Yedek: pytefas kütüphanesi
+- Yedek: pytefas kutuphanesi
 
-**Maden Fiyatları (TL bazlı):**
-- Birincil: Bigpara HTML scraping (gram altın, gümüş)
-- Yedek: yfinance (GC=F, SI=F) × USDTRY
+**Maden Fiyatlari (TL bazli):**
+- Birincil: Bigpara HTML scraping (gram altin, gumus)
+- Yedek: yfinance (GC=F) x USDTRY
 
-**Döviz Kurları:**
+**Doviz Kurlari:**
 - Birincil: yfinance (=X suffix)
-- Yedek: TCMB XML API (`evds.tcmb.gov.tr`) — 11/12 kur
-- Son yedek: EVDS API (TCMB_KEY gerekli)
+- Yedek: TCMB XML API — 11/12 kur
+- Son yedek: EVDS API (TCMB_KEY gerekli: 5F0yYjCHDf)
 
 **Kripto:**
-- Birincil: yfinance (BTC-USD, ETH-USD vb.)
-- Yedek: Bigpara kripto fiyatları
+- Birincil: yfinance (BTC-USD vb.)
+- Yedek: Bigpara kripto fiyatlari
 
 **Temel Analiz (BIST):**
-- kap_client.py → kap.org.tr şirket sayfaları
+- kap_client.py → kap.org.tr sirket sayfalari
 - yfinance info (P/E, beta, dividendYield)
 
-**Halka Arz:**
-- KAP RSC endpoint (Next.js) → XHARZ endeks üyeleri
+**Halka Arz / Tetemttu:**
+- KAP RSC endpoint (Next.js) → endeks uyeleri
 - Yedek: Endeksler.xlsx
-
-**Temettü:**
-- KAP RSC endpoint → XTMTU üyeleri
-- yfinance dividendRate, exDividendDate
 """)
 
         with st.expander("3. GitHub ve Deployment", expanded=False):
             st.markdown("""
 **GitHub Repo:** `github.com/cbguler/trendsurf-optima` (private)
 
-**Streamlit Cloud URL:**
+**Streamlit Cloud:**
 `https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app`
 
 **Streamlit Cloud Secrets** (App Settings → Secrets):
 ```
 EMAIL_USER    = "bahriguler@gmail.com"
-EMAIL_PASS    = "xxxx xxxx xxxx xxxx"  ← Gmail App Password
+EMAIL_PASS    = "xxxx xxxx xxxx xxxx"
 EMAIL_ADDRESS = "bahriguler@gmail.com"
 ADMIN_EMAIL   = "bahriguler@gmail.com"
 ADMIN_PASS    = "..."
 ADMIN_NAME    = "Bahri"
-APP_URL       = "https://trendsurf-optima-..."
 TCMB_KEY      = "5F0yYjCHDf"
 ```
 
-**GitHub Actions** (`.github/workflows/update_data.yml`):
-- worker.py Streamlit Cloud'da çalışmaz (yfinance kısıtı)
-- Workflow sadece CSV varlığını doğrular
-- Her sabah 02:00 UTC (05:00 TR) tetiklenir
-
-**Lokal Worker Çalıştırma:**
+**CSV Manuel Guncelleme:**
 ```
-cd C:\Users\bahri\Desktop\TrendSurf_Optima
+cd C:/Users/bahri/Desktop/TrendSurf_Optima
 python worker.py
 git add -f optimized_universe.csv
 git commit -m "veri guncelleme"
 git push origin main
 ```
 
-**Task Scheduler** (Windows):
-- Görev: `TrendSurf Optima` — her sabah 08:00
-- Bat dosyası: `guncelle_ve_push.bat`
+**Task Scheduler:** Her sabah 08:00 — `guncelle_ve_push.bat`
 """)
 
-        with st.expander("4. Kullanıcı ve Abone Yönetimi", expanded=False):
+        with st.expander("4. Kullanici Yonetimi", expanded=False):
             st.markdown("""
-**Admin Paneli'ne Erişim:**
-Sol menü → Çıkış Yap üzerindeki "Admin Paneli" butonu
+**Kullanici Tipleri:**
 
-**Kullanıcı Tipleri:**
-| Tip | Açıklama |
+| Tip | Aciklama |
 |-----|----------|
-| `free` | Sınırlı erişim |
-| `pro` | Temel özellikler |
-| `premium` | Tüm özellikler |
-| `admin` | Sistem yöneticisi |
+| `free` | Sinirli erisim |
+| `pro` | Temel ozellikler |
+| `premium` | Tum ozellikler |
+| `admin` | Sistem yoneticisi |
 
-**Yeni Abone Onaylama:**
-Admin Paneli → Bekleyen Kullanıcılar → Onayla
+**Yeni Abone Onaylama:** Admin Paneli → Bekleyen Kullanicilar → Onayla
 
-**Şifre Sıfırlama:**
-```
-cd C:\Users\bahri\Desktop\TrendSurf_Optima
-python auth_reset.py
-```
+**Sifre Sifirlama:**
+- `python auth_reset.py` (lokal)
+- Veya Giris ekrani → Sifremi Unuttum
 
-**SQLite Veritabanı:** `trendsurf.db`
+**SQLite Veritabani:** `trendsurf.db`
 - Tablolar: `users`, `sessions`, `portfolio`, `reset_tokens`
-- Streamlit Cloud'da her reboot'ta sıfırlanır (geçici depolama)
+- Streamlit Cloud'da Reboot yaparsan sifirlanir — Reboot yerine F5 kullan
 """)
 
         with st.expander("5. E-posta Sistemi", expanded=False):
             st.markdown("""
-**Gönderim Zamanlaması:**
-- Windows Task Scheduler: `emailler.py` — 08:30 ve 11:30 (TR)
-- Streamlit'ten manuel: Sol menü → E-posta Ayarları → Şimdi Gönder
+**Gonderim Zamanlayici:**
+- Windows Task Scheduler: `emailler.py` — 08:30 ve 11:30
+- Manuel: Sol menu → E-posta Ayarlari → Simdi Gonder
 
 **Gmail App Password Yenileme:**
 1. `myaccount.google.com/apppasswords` adresine git
-2. Yeni App Password oluştur (TrendSurf)
-3. Streamlit Cloud Secrets'a `EMAIL_PASS` olarak ekle
-4. `email_config.json` dosyasını da güncelle
+2. Yeni App Password olustur (TrendSurf)
+3. Streamlit Cloud Secrets → EMAIL_PASS guncelle
+4. `email_config.json` dosyasini da guncelle
 
-**E-posta Konfigürasyon Dosyası:** `email_config.json`
+**email_config.json yapisi:**
 ```json
 {
   "address": "bahriguler@gmail.com",
   "smtp_host": "smtp.gmail.com",
   "smtp_port": 587,
   "smtp_user": "bahriguler@gmail.com",
-  "smtp_pass": "xxxx xxxx xxxx xxxx",
+  "smtp_pass": "uygulama sifresi",
   "times": ["08:30", "11:30"],
   "tcmb_key": "5F0yYjCHDf"
 }
 ```
 """)
 
-        with st.expander("6. Sık Karşılaşılan Sorunlar", expanded=False):
+        with st.expander("6. Sik Karsilasilan Sorunlar", expanded=False):
             st.markdown("""
-| Sorun | Neden | Çözüm |
+| Sorun | Neden | Cozum |
 |-------|-------|-------|
-| BIST 97 hisse geliyor | GitHub Actions yfinance kısıtı | worker.py lokalde çalıştır, CSV'yi push et |
-| Altın fiyatı yanlış | yfinance ons/gram karışıklığı | Bigpara birincil kaynak — otomatik düzelir |
-| Türkçe karakter bozuk | KAP API encoding | latin-1→UTF-8 fix_encoding'de çözüldü |
-| E-posta gönderilemiyor | Streamlit Secrets eksik | Secrets'a EMAIL_USER/EMAIL_PASS ekle |
-| Uygulama açılmıyor (diğer cihaz) | Streamlit gizlilik ayarı | share.streamlit.io → Settings → Public |
-| Veritabanı sıfırlandı | Streamlit Cloud reboot | Beklenen davranış — Reboot yerine F5 kullan |
-| CSV push edilemiyor | .gitignore sorunu | `git add -f optimized_universe.csv` |
-| TEFAS 0 fiyat | API değişikliği | tefas_client.py endpoint'ini kontrol et |
+| BIST 97 hisse geliyor | GitHub Actions yfinance kisiti | worker.py lokalde calistir, push et |
+| Altin fiyati yanlis | yfinance ons/gram karisikligi | Bigpara birincil — otomatik duzelmeli |
+| Turkce karakter bozuk | KAP API encoding | latin-1 UTF-8 fix_encoding'de cozuldu |
+| E-posta gitmiyor | Streamlit Secrets eksik | EMAIL_USER/EMAIL_PASS ekle |
+| Uygulama acilamiyor | Streamlit gizlilik | share.streamlit.io → Settings → Public |
+| Veritabani sifirlanmis | Streamlit Cloud reboot | Beklenen davranis — F5 kullan |
+| CSV push edilemiyor | gitignore sorunu | `git add -f optimized_universe.csv` |
 """)
 
     else:
-        # ── ABONE EL KİTABI ─────────────────────────────────
-        st.title("Yardım — Kullanım Kılavuzu")
-        st.caption("TrendSurf Optima — Finansal Varlık Takip ve Sinyal Terminali")
+        st.title("Yardim — Kullanim Kilavuzu")
+        st.caption("TrendSurf Optima — Finansal Varlik Takip ve Sinyal Terminali")
 
-        with st.expander("Başlarken — Kayıt ve Giriş", expanded=True):
+        with st.expander("Baslangic — Kayit ve Giris", expanded=True):
             st.markdown("""
-**Hesap Oluşturma:**
-1. Giriş ekranında **Kayıt Ol** sekmesine tıklayın
-2. Ad Soyad, e-posta ve şifrenizi girin (en az 8 karakter)
-3. Hesabınız admin onayından sonra aktif olur, e-posta ile bilgilendirilirsiniz
+**Hesap Olusturma:**
+1. Giris ekraninda **Kayit Ol** sekmesine tiklayin
+2. Ad Soyad, e-posta ve sifrenizi girin (en az 8 karakter)
+3. Hesabiniz admin onayindan sonra aktif olur
 
-**Giriş Yapma:**
-- E-posta ve şifrenizle giriş yapın
-- **Beni Hatırla** kutusunu işaretlerseniz bir sonraki açılışta otomatik giriş yapılır
+**Giris Yapma:**
+- E-posta ve sifrenizle giris yapin
+- **Beni Hatirla** kutusunu isaretlerseniz otomatik giris aktif olur
 
-**Şifremi Unuttum:**
-- Giriş ekranında **Şifremi Unuttum** sekmesine tıklayın
-- E-postanıza sıfırlama bağlantısı gönderilir
+**Sifremi Unuttum:**
+- Giris ekraninda **Sifremi Unuttum** sekmesi → e-posta adresinizi girin
+- Sifirlama baglantisi e-postaniza gelir
 """)
 
-        with st.expander("Ana Sayfa — Portföy Optimizasyonu", expanded=False):
+        with st.expander("Ana Sayfa — Portfoy Optimizasyonu", expanded=False):
             st.markdown("""
-Ana Sayfa, belirlediğiniz bütçe ve risk tercihine göre en iyi yatırım fırsatlarını listeler.
+Ana Sayfa, butce ve risk tercihine gore en iyi yatirim firsatlarini listeler.
 
 **Sol Panelden Ayarlar:**
-- **Portföy Bütçesi (TL):** Yatırım yapmayı düşündüğünüz toplam tutar
-- **Risk Toleransı:** Çok Düşük'ten Çok Yüksek'e kadar 5 seviye
-- **Max Varlık Sayısı:** Portföyde kaç farklı varlık olsun (5–20)
+- **Portfoy Butcesi (TL):** Yatirim dusundugunuz toplam tutar
+- **Risk Toleransi:** Cok Dusuk → Cok Yuksek (5 seviye)
+- **Max Varlik Sayisi:** Portfoyde kac farkli varlik olsun (5-20)
 
-**Öneri Tablosu Sütunları:**
-| Sütun | Açıklama |
+**Oneri Tablosu Sutunlari:**
+
+| Sutun | Aciklama |
 |-------|----------|
-| Kategori | BIST, TEFAS, Döviz, Maden, Kripto |
-| Ticker | Varlık sembolü |
-| Ad | Şirket veya fon adı |
-| Optima Skoru | 0–100 arası bileşik puan |
-| Sinyal | Güçlü Al / Kademeli Al / Tut İzle / Sat |
-| RSI | Göreceli güç endeksi |
-| 1A Getiri % | Son 1 aylık getiri |
-| Emir Fiyatı | Güncel piyasa fiyatı |
-| Lot | Bütçenize göre önerilen alım adedi |
-| Hedef Tutar | Lot × Emir Fiyatı |
+| Kategori | BIST, TEFAS, Doviz, Maden, Kripto |
+| Optima Skoru | 0-100 bileşik puan |
+| Sinyal | Guclu Al / Kademeli Al / Tut Izle / Sat |
+| RSI | Goreceli guc endeksi (30 alti asiri satim, 70 uzeri asiri alim) |
+| 1A Getiri % | Son 1 aylik getiri |
+| Lot | Butcenize gore onerilen alim adedi |
 
-**Optima Skoru Nasıl Hesaplanır?**
-RSI Zonu (%25) + Momentum/Getiri (%35) + Volatilite (%15) + Temel Analiz (%25)
+**Optima Skoru:** RSI Zonu (25%) + Momentum (35%) + Volatilite (15%) + Temel Analiz (25%)
 
-**Not:** Bu sistem bir yatırım tavsiyesi vermez. Kararlar tamamen size aittir.
+> Bu sistem yatirim tavsiyesi vermez. Kararlar tamamen size aittir.
 """)
 
-        with st.expander("Portföyüm — Pozisyon Takibi", expanded=False):
+        with st.expander("Portfoyum — Pozisyon Takibi", expanded=False):
             st.markdown("""
 **Yeni Pozisyon Ekleme:**
-1. **Yeni Pozisyon Ekle** bölümünü açın
-2. Listeden varlık seçin (arama yapabilirsiniz)
-3. Adet/Lot, Alış Maliyeti (birim TL) ve isterseniz Not girin
-4. **Pozisyon Ekle** butonuna tıklayın
+1. **Yeni Pozisyon Ekle** bolumunu acin
+2. Listeden varlik secin
+3. Adet, Alis Maliyeti (TL) ve isterseniz Not girin
+4. **Pozisyon Ekle** butonuna tiklayin
 
-**Fiyat Girişi:**
-- Ondalık ayırıcı olarak **virgül** kullanın: `6.480,00`
-- Binlik ayırıcı nokta: `1.234,56`
+**Fiyat Girisi:** Ondalik ayirici virgul → `6.480,00`
 
-**Portföy Tablosu:**
-- **Güncel Fiyat:** Bigpara/yfinance'den anlık veri
-- **Toplam Değer:** Adet × Güncel Fiyat
-- **K/Z:** (Güncel Fiyat - Alış Maliyeti) / Alış Maliyeti × 100
+**Portfoy Tablosu:**
+- Guncel Fiyat: Bigpara / yfinance anlık veri
+- Toplam Deger: Adet × Guncel Fiyat  
+- K/Z: (Guncel - Alis) / Alis × 100
 
-**Pozisyon Silme:**
-Pozisyon Yönetimi bölümünden ilgili varlığın **Sil** butonuna tıklayın.
-
-**Sol Panelden E-posta Raporu:**
-- Alıcı e-posta adresinizi girin
-- Gönderim saatlerini belirleyin (HH:MM formatında)
-- **Ayarları Kaydet** ile saatleri kaydedin
-- **Şimdi Gönder** ile anlık rapor alın
+**E-posta Raporu (Sol Menu):**
+1. Alici e-posta adresinizi girin
+2. Gonderim saatlerini belirleyin
+3. **Ayarlari Kaydet** ile saatleri kaydedin
+4. **Simdi Gonder** ile anlik rapor alin
 """)
 
-        with st.expander("BIST — Türk Hisse Senetleri", expanded=False):
+        with st.expander("BIST — Turk Hisse Senetleri", expanded=False):
             st.markdown("""
-BIST sayfası, Borsa İstanbul'da işlem gören ~610 hisseyi Optima Skoru'na göre listeler.
+~610 Borsa Istanbul hissesini Optima Skoru'na gore listeler.
 
-**Filtreleme:**
-- Arama kutusuna ticker veya şirket adı yazın
-- Sinyal türüne göre filtreleyin (Güçlü Al, Kademeli Al vb.)
-- RSI aralığı ve getiri filtresi uygulayın
+**Filtreleme:** Ticker/sirket adi ara, sinyal turune gore filtrele, RSI araligini sec
 
-**KAP Linki:**
-Her hissenin yanındaki **Görüntüle** linki, KAP'taki şirket sayfasına açılır.
+**KAP Linki:** Her hissenin **Goruntule** linki KAP sirket sayfasina acar
 
-**Sayfa Seçimi:** Tabloda 50'şer hisse görünür, alt kısımdan sayfa değiştirebilirsiniz.
+**Sayfalama:** Tabloda 50 hisse gosterilir, altta sayfa secimi yapabilirsiniz
 """)
 
-        with st.expander("TEFAS — Yatırım Fonları", expanded=False):
+        with st.expander("TEFAS — Yatirim Fonlari", expanded=False):
             st.markdown("""
-TEFAS sayfası, ~1347 yatırım fonunu listeler.
+~1347 yatirim fonunu listeler.
 
-**Fon Türü Filtresi:**
-Hisse Senedi Yoğun, Karma, Tahvil, Altın, Para Piyasası vb. türlere göre filtreleyin.
+**Fon Turu Filtresi:** Hisse Senedi Yogun, Karma, Tahvil, Altin, Para Piyasasi vb.
 
-**Getiri Karşılaştırması:**
-1A, 3A, 6A ve 1Y getirilerini yan yana görün.
+**Getiri Karsilastirmasi:** 1A, 3A, 6A ve 1Y getirilerini yan yana gorun
 
-**TEFAS Linki:**
-Her fonun yanındaki link, TEFAS'taki fon detay sayfasına açılır.
+**TEFAS Linki:** Her fonun linki TEFAS detay sayfasina acar
 """)
 
-        with st.expander("Döviz, Madenler, Kriptolar", expanded=False):
+        with st.expander("Doviz, Madenler, Kriptolar", expanded=False):
             st.markdown("""
-**Döviz:** 12 TRY bazlı kur (USDTRY, EURTRY, GBPTRY vb.)
-- Kaynak: yfinance, yedek: TCMB XML API
+**Doviz:** 12 TRY bazli kur — Kaynak: yfinance, yedek: TCMB XML
 
-**Madenler:** 12 emtia (Altın, Gümüş, Platin, Petrol vb.)
-- Altın, Gümüş: Bigpara (TL/gram, gerçek Türkiye piyasa fiyatı)
-- Diğerleri: yfinance × USDTRY
+**Madenler:** 12 emtia (Altin, Gumus, Platin, Petrol vb.)
+- Altin ve Gumus: Bigpara (gercek TL/gram Turkiye fiyati)
+- Diger: yfinance × USDTRY
 
-**Kriptolar:** 19 kripto para birimi
-- BTC, ETH, BNB, SOL vb.
+**Kriptolar:** 19 kripto para — BTC, ETH, BNB, SOL vb.
 - Kaynak: yfinance (USD) × USDTRY
 
-Her sayfada Optima Skoru, RSI, 1A Getiri ve güncel fiyat gösterilir.
+Her sayfada Optima Skoru, RSI, 1A Getiri ve guncel fiyat gosterilir.
 """)
 
-        with st.expander("Halka Arz ve Temettü", expanded=False):
+        with st.expander("Halka Arz ve Temettu", expanded=False):
             st.markdown("""
 **Halka Arz (XHARZ):**
-BIST Halka Arz Endeksi üyesi şirketleri listeler. KAP'tan günlük çekilir.
-Her şirketin KAP sayfasına **Görüntüle** linki ile ulaşabilirsiniz.
+- BIST Halka Arz Endeksi uyeleri — KAP'tan gunluk cekiliyor
+- Her sirketin KAP sayfasina **Goruntule** linki ile ulasabilirsiniz
 
-**Temettü (XTMTU):**
-BIST Temettü Endeksi üyesi şirketlerin temettü verilerini gösterir.
-- Temettü/Hisse, Temettü Verimi (%), Ex-Date ve Sıklık (Yıllık/Çeyreklik)
-- Ex-Date'e göre yakın tarihli olanlar üstte listelenir
+**Temettu (XTMTU):**
+- BIST Temettu Endeksi uyeleri + yfinance temettu verileri
+- Temettu/Hisse, Verim (%), Ex-Date, Siklik
+- Ex-Date'e gore sirali (yakin tarih uste)
 
-**CSV İndir:** Her sayfada tabloyu Excel/CSV olarak indirebilirsiniz.
+**CSV Indir:** Her sayfada tabloyu Excel olarak indirebilirsiniz
 """)
 
-        with st.expander("Makro Göstergeler", expanded=False):
+        with st.expander("Makro Gostergeler", expanded=False):
             st.markdown("""
-MKK Veri Analiz Platformu (vap.org.tr) bağlantılarını içerir.
+MKK Veri Analiz Platformu (vap.org.tr) baglantilari ve ozet veriler.
 
-**Mevcut Bölümler:**
-- Genel Bakış — toplam yatırımcı ve saklama değeri
-- Yaş Grupları Bazında Yatırımcı Sayıları
-- Yerli/Yabancı Pay Senedi Analizi
-- BIST Endeksleri Bazında Portföy Değerleri
-- Dönemsel Finansal Oranlar
-- REKS — Risk İştahı Endeksi
-- MKK Aylık Piyasa Bülteni
+**Kart Baglantilari:**
+- Genel Bakis, Yas Gruplari, Yerli/Yabanci Analizi
+- BIST Endeks Bazli Portfoy, Finansal Oranlar
+- REKS Risk Istahi Endeksi, MKK Aylik Bulteni
 
-Her karta tıklayınca ilgili VAP sayfası yeni sekmede açılır.
+Her karta tiklayin — VAP sayfasi yeni sekmede acilir.
 """)
 
-        with st.expander("E-posta Raporu", expanded=False):
+        with st.expander("Sik Sorulan Sorular", expanded=False):
             st.markdown("""
-TrendSurf Optima, portföy optimizasyon önerilerini ve mevcut pozisyonlarınızı
-otomatik olarak e-posta ile gönderebilir.
-
-**Kurulum:**
-1. Sol menüde **E-posta Ayarları** bölümünü açın
-2. **Alıcı E-posta** alanına adresinizi girin
-3. **1. Gönderim** ve **2. Gönderim** saatlerini belirleyin
-4. **Ayarları Kaydet** butonuna tıklayın
-
-**Rapor İçeriği:**
-- Portföy Optimizasyonu tablosu (bütçe, risk ve varlık sayısına göre)
-- Mevcut pozisyonlarınız ve K/Z durumu
-
-**Anlık Gönderim:**
-**Şimdi Gönder** butonuna tıklayarak raporu hemen alabilirsiniz.
-""")
-
-        with st.expander("Sık Sorulan Sorular", expanded=False):
-            st.markdown("""
-**Veriler ne sıklıkla güncellenir?**
-Fiyat ve skor verileri her gün sabah 08:00'de otomatik güncellenir.
-TEFAS ve Halka Arz verileri 4 saatlik önbellekten gelir.
+**Veriler ne siklikla guncellenir?**
+Her gun sabah 08:00'de otomatik guncellenir. TEFAS/Halka Arz 4 saatlik onbellekten gelir.
 
 **Optima Skoru ne anlama gelir?**
-0–100 arası bileşik bir puandır. 80 üzeri Güçlü Al, 60–80 Kademeli Al,
-40–60 Tut İzle, 40 altı Sat sinyali verir.
+0-100 arasi bileşik puan. 80+ Guclu Al, 60-80 Kademeli Al, 40-60 Tut Izle, 40- Sat.
 
-**Portföy verileri kayboldu, ne yapmalıyım?**
-Uygulama yeniden başladığında oturum yenilenir. Giriş yaparak tekrar erişebilirsiniz.
-Portföy verileriniz veritabanında saklanır, silinmez.
+**Portfoy verileri kayboldu?**
+Portfoy veritabaninda saklanir. Cikis yapip tekrar giris yapin.
 
-**Uygulama yavaş açılıyor?**
-Streamlit Cloud'da uygulama uzun süre kullanılmadığında uyku moduna girer.
-İlk açılışta 1–2 dakika beklemeniz normal.
-
-**Bir sorun yaşıyorum, ne yapmalıyım?**
-Sayfayı yenileyin (F5). Sorun devam ederse çıkış yapıp tekrar giriş yapın.
+**Uygulama yavash aciliyor?**
+Uzun sure kullanilmayinca uyku moduna giriyor. Ilk acilista 1-2 dakika normaldir.
 """)
 
