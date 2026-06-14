@@ -75,6 +75,7 @@ def _fetch_from_kap_rsc() -> list:
                     timeout=15
                 )
                 if r.status_code == 200 and "stockCode" in r.text:
+                    r.encoding = "utf-8"
                     text = r.text
                     break
             except Exception:
@@ -85,6 +86,7 @@ def _fetch_from_kap_rsc() -> list:
             try:
                 r = requests.get(KAP_RSC_URL, headers=HEADERS, timeout=15)
                 if r.status_code == 200 and "stockCode" in r.text:
+                    r.encoding = "utf-8"
                     text = r.text
             except Exception:
                 pass
@@ -164,14 +166,39 @@ def _fix_encoding(text: str) -> str:
     import re as _re
     if not text:
         return text
+
+    # 1. latin-1 → UTF-8 dönüşümü dene (KAP'ın en yaygın encoding hatası)
+    try:
+        candidate = text.encode("latin-1").decode("utf-8")
+        # Dönüşüm anlamlıysa (Türkçe harf içeriyorsa) kullan
+        tr_chars = set("ğĞışİöÖüÜçÇşŞ")
+        if any(c in candidate for c in tr_chars):
+            text = candidate
+    except Exception:
+        pass
+
+    # 2. Kalan multi-byte bozuklukları FIX_MAP ile düzelt
     FIX_MAP = {
         "Ä°": "İ", "ÄŸ": "ğ", "Äž": "Ğ", "Ä±": "ı",
         "Ã–": "Ö", "Ã¶": "ö", "Ãœ": "Ü", "Ã¼": "ü",
-        "Ã‡": "Ç", "Ã§": "ç", "Åž": "Ş", "åž": "ş",
-        "â€™": "'", "Â°": "°", "Â": "",
+        "Ã‡": "Ç", "Ã§": "ç",
+        "Åž": "Ş", "Å": "ş", "åž": "ş",
+        "â€™": "'", "Â°": "°", "Â ": " ", "Â": "",
+        # Unicode sahtesi — yanlış decode edilmiş karakterler
+        "Ā°": "İ",    # Ā° → İ
+        "Ā±": "ı",    # Ā± → ı
+        "Ā": "ğ",    # Ā → ğ
+        "Ā": "Ğ",    # Ā → Ğ
+        "Ā": "Ü",    # Ā → Ü
+        "Ā": "Ş",    # Ā → Ş
+        "ā": "ı",
+        "Ş": "Ş",
+        "ş": "ş",
     }
     for bad, good in sorted(FIX_MAP.items(), key=lambda x: -len(x[0])):
         text = text.replace(bad, good)
+
+    # 3. Tekil Ä → İ (son çare)
     text = _re.sub(r"Ä([A-ZÇĞİÖŞÜa-zçğışöşü])", lambda m: "Ğ" + m.group(1), text)
     text = text.replace("Ä", "İ")
     return text
