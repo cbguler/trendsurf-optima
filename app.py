@@ -1900,7 +1900,7 @@ elif page=="Makro Göstergeler":
 
     st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
 
-elif page=="Yardim":
+elif page=="Yardım":
     is_admin = _cur_user.get("is_admin", False)
 
     if is_admin:
