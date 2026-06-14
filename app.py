@@ -1800,40 +1800,103 @@ elif page=="Temettü":
 
 elif page=="Makro Göstergeler":
     st.title("Makro Göstergeler")
-    st.caption("MKK Veri Analiz Platformu (VAP) — Türkiye sermaye piyasası yatırımcı ve saklama istatistikleri.")
+    st.caption("MKK Veri Analiz Platformu (VAP) — Türkiye sermaye piyasası yatırımcı ve saklama istatistikleri. Haftalık güncellenir.")
 
-    # Özet metrikler — haftalık güncellenen veriler
-    st.subheader("Piyasa Özeti (MKK / VAP)")
+    # ── VAP Hızlı Erişim Kartları ────────────────────────────
+    st.subheader("VAP — Veri Analiz Platformu")
     st.markdown(
-        "_Aşağıdaki veriler MKK Veri Analiz Platformu'ndan (vap.org.tr) alınmaktadır. "
-        "Haftalık olarak güncellenmektedir._"
+        "MKK (Merkezi Kayıt Kuruluşu) tarafından yönetilen VAP, Türkiye sermaye piyasasına ait "
+        "yatırımcı sayıları, saklama değerleri, yerli/yabancı analizleri ve endeks bazlı verileri "
+        "haftalık olarak yayınlamaktadır. Aşağıdaki bağlantılardan ilgili sayfaya doğrudan ulaşabilirsiniz."
     )
 
-    vap_tabs = st.tabs([
-        "Genel Bakış",
-        "Yatırımcı Analizi",
-        "Yerli / Yabancı",
-        "BIST Endeks Bazlı",
-        "Temettü & Finansallar",
-    ])
+    VAP_LINKS = [
+        {
+            "baslik": "Genel Bakış",
+            "aciklama": "Toplam yatırımcı, bakiyeli hesap sayısı ve saklanan menkul kıymet değeri.",
+            "url": "https://www.vap.org.tr/",
+            "ikon": "📊",
+        },
+        {
+            "baslik": "Yaş Grupları Bazında Yatırımcı Sayıları",
+            "aciklama": "Demografik dağılım — yaş grubu ve cinsiyet bazında yatırımcı profili.",
+            "url": "https://www.vap.org.tr/yas-gruplari-bazinda-yatirimci-sayilari",
+            "ikon": "👥",
+        },
+        {
+            "baslik": "Yerli / Yabancı Pay Senedi Analizi",
+            "aciklama": "Yerli ve yabancı yatırımcıların pay senedi portföy dağılımı.",
+            "url": "https://www.vap.org.tr/yerli-yabanci-pay-senedi-analizi",
+            "ikon": "🌍",
+        },
+        {
+            "baslik": "Yabancı Yatırımcı Sayıları (İlk 10 Ülke)",
+            "aciklama": "Ülke bazında yabancı yatırımcı sayıları ve portföy değerleri.",
+            "url": "https://www.vap.org.tr/pay-senedi-yabanci-yatirimci-sayilari-ilk-10-ulke",
+            "ikon": "🗺️",
+        },
+        {
+            "baslik": "BIST Endeksleri Bazında Portföy Değerleri",
+            "aciklama": "9 farklı BIST endeksi için yatırımcı sayısı ve portföy değeri.",
+            "url": "https://www.vap.org.tr/bist-endeksleri-bazinda-portfoy-degerleri",
+            "ikon": "📈",
+        },
+        {
+            "baslik": "Dönemsel Finansal Oranlar",
+            "aciklama": "BIST şirketlerinin F/K, PD/DD, temettü verimi gibi finansal oranları.",
+            "url": "https://www.vap.org.tr/donemsel-finansal-oranlar",
+            "ikon": "🔢",
+        },
+        {
+            "baslik": "REKS — Risk İştahı Endeksi",
+            "aciklama": "Türkiye sermaye piyasası risk iştahı endeksi ve tarihsel trendi.",
+            "url": "https://www.vap.org.tr/reks",
+            "ikon": "⚡",
+        },
+        {
+            "baslik": "MKK Aylık Piyasa Bülteni",
+            "aciklama": "Yatırımcı ve piyasa verilerinin aylık özet raporu (PDF).",
+            "url": "https://www.mkk.com.tr/veri-hizmetleri/mkk-aylik-piyasa-bulteni",
+            "ikon": "📄",
+        },
+    ]
 
-    VAP_PAGES = {
-        "Genel Bakış":           "https://www.vap.org.tr/",
-        "Yatırımcı Analizi":     "https://www.vap.org.tr/yas-gruplari-bazinda-yatirimci-sayilari",
-        "Yerli / Yabancı":       "https://www.vap.org.tr/yerli-yabanci-pay-senedi-analizi",
-        "BIST Endeks Bazlı":     "https://www.vap.org.tr/bist-endeksleri-bazinda-portfoy-degerleri",
-        "Temettü & Finansallar": "https://www.vap.org.tr/donemsel-finansal-oranlar",
-    }
-
-    for tab, (tab_name, vap_url) in zip(vap_tabs, VAP_PAGES.items()):
-        with tab:
+    # 2 sütun kart düzeni
+    cols = st.columns(2)
+    for i, link in enumerate(VAP_LINKS):
+        with cols[i % 2]:
             st.markdown(
-                f'''<iframe src="{vap_url}"
-                    width="100%" height="820"
-                    style="border:none;border-radius:8px;"
-                    title="{tab_name}">
-                </iframe>''',
+                f"""<a href="{link['url']}" target="_blank" style="text-decoration:none;">
+                <div style="background:#fff;border:1.5px solid #c8d6e8;border-radius:10px;
+                            padding:16px 18px;margin-bottom:14px;
+                            transition:box-shadow .2s;cursor:pointer;">
+                    <div style="font-size:22px;margin-bottom:6px;">{link['ikon']}</div>
+                    <div style="font-size:14px;font-weight:700;color:#1b2a4a;
+                                margin-bottom:4px;">{link['baslik']}</div>
+                    <div style="font-size:12px;color:#6c7a9c;">{link['aciklama']}</div>
+                </div></a>""",
                 unsafe_allow_html=True
             )
-            st.caption(f"Kaynak: [{vap_url}]({vap_url})")
+
+    st.divider()
+
+    # ── MKK Güncel Özet Veriler ─────────────────────────────
+    st.subheader("Güncel Piyasa Verileri (MKK)")
+    st.markdown(
+        "_Bu veriler web aramasından alınmıştır. Güncel veriler için yukarıdaki VAP bağlantılarını kullanın._"
+    )
+
+    mkk_cols = st.columns(5)
+    mkk_data = [
+        ("Saklanan MK Değeri", "35,14 Trilyon ₺"),
+        ("Toplam Yatırımcı",   "38,57 Milyon"),
+        ("Toplam Hesap",       "92,60 Milyon"),
+        ("Bakiyeli Yatırımcı", "10,64 Milyon"),
+        ("Bakiyeli Hesap",     "15,45 Milyon"),
+    ]
+    for col, (lbl, val) in zip(mkk_cols, mkk_data):
+        with col:
+            st.metric(lbl, val)
+
+    st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
 
