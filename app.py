@@ -761,6 +761,11 @@ with st.sidebar:
             st.success("Kaydedildi!")
         if st.button("Şimdi Gönder",key="send_now"):
             try:
+                import json as _ej
+                _ecfg = load_email_cfg()
+                if _ecfg.get("smtp_user") and _ecfg.get("smtp_pass"):
+                    with open("email_config.json", "w", encoding="utf-8") as _ef:
+                        _ej.dump(_ecfg, _ef)
                 from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
