@@ -170,7 +170,7 @@ def render_auth_gate():
         st.stop()
 
     # ── Giriş ekranı: sol logo, sağ form ────────────────────
-    col_logo, col_form = st.columns([1, 0.55])
+    _sp1, col_logo, col_form, _sp2 = st.columns([0.8, 0.7, 0.65, 0.8])
 
     with col_logo:
         st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
