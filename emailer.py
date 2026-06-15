@@ -342,8 +342,8 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     if logo_b64:
         logo_tag = (
             f'<img src="data:image/png;base64,{logo_b64}" '
-            f'width="200" height="auto" '
-            f'style="display:block;max-width:220px;max-height:75px;width:auto;height:auto;border:0;" '
+            f'width="180" height="auto" '
+            f'style="display:block;width:180px;height:auto;border:0;" '
             f'alt="TrendSurf Optima">'
         )
     else:
@@ -373,7 +373,7 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
               box-shadow:0 2px 12px rgba(0,0,0,.10);">
 
   <!-- HEADER -->
-  <tr><td style="background:#ffffff;padding:14px 28px;
+  <tr><td style="background:#ffffff;padding:10px 24px;
                  border-bottom:3px solid #2c3e6b;">
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align:middle;">{logo_tag}</td>
