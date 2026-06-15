@@ -22,14 +22,14 @@ RISK_W = {
 
 # Sütun genişlikleri (px) — toplam ~860px (28px padding her iki taraf)
 _COL_W = {
-    "kat":    "80",   # Kategori
-    "tkr":    "70",   # Ticker
-    "ad":     "220",  # Ad
-    "skor":   "50",   # Skor
-    "fiyat":  "90",   # Fiyat
-    "lot":    "60",   # Lot / Adet
-    "tutar":  "100",  # Tutar / Toplam
-    "sinyal": "110",  # Sinyal / K/Z
+    "kat":    "65",   # Kategori
+    "tkr":    "58",   # Ticker
+    "ad":     "175",  # Ad (uzun isimler kırpılır)
+    "skor":   "42",   # Skor
+    "fiyat":  "72",   # Fiyat
+    "lot":    "52",   # Lot / Adet
+    "tutar":  "82",   # Tutar / Toplam
+    "sinyal": "95",   # Sinyal / K/Z
 }
 
 # ── Yardımcı ──────────────────────────────────────────────────────────────────
@@ -87,13 +87,13 @@ def _sig_lbl(score: float) -> str:
 
 def _th(text, align="left", width=None):
     w = f"width:{width}px;" if width else ""
-    return (f'<th style="{w}padding:8px 10px;text-align:{align};background:#2c3e6b;'
+    return (f'<th style="{w}padding:6px 8px;text-align:{align};background:#2c3e6b;'
             f'color:#fff;white-space:nowrap;font-size:11px;">{text}</th>')
 
 
 def _td(val, align="left", bold=False, color=None, extra=""):
-    style = (f"padding:7px 10px;border-bottom:1px solid #e8edf5;"
-             f"text-align:{align};font-size:12px;vertical-align:middle;")
+    style = (f"padding:6px 8px;border-bottom:1px solid #e8edf5;"
+             f"text-align:{align};font-size:11px;vertical-align:middle;")
     if bold:  style += "font-weight:700;"
     if color: style += f"color:{color};"
     if extra: style += extra
