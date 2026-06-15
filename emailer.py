@@ -373,12 +373,15 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
               box-shadow:0 2px 12px rgba(0,0,0,.10);">
 
   <!-- HEADER -->
-  <tr><td style="background:#ffffff;padding:16px 28px 12px 28px;
-                 border-bottom:3px solid #2c3e6b;text-align:center;">
-    {logo_tag}
-    <div style="font-size:11px;color:#6c7a9c;margin-top:6px;">
-      Finansal Rapor &nbsp;|&nbsp; <strong style="color:#1b2a4a;">{now}</strong>
-    </div>
+  <tr><td style="background:#ffffff;padding:10px 24px;
+                 border-bottom:3px solid #2c3e6b;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="vertical-align:middle;width:240px;">{logo_tag}</td>
+      <td style="text-align:right;vertical-align:middle;">
+        <span style="font-size:11px;color:#6c7a9c;">Finansal Rapor</span><br>
+        <span style="font-size:13px;font-weight:700;color:#1b2a4a;">{now}</span>
+      </td>
+    </tr></table>
   </td></tr>
 
   <!-- İÇERİK -->
