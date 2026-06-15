@@ -1366,9 +1366,13 @@ elif page=="Portföyüm":
         # Optima Skoru hesapla (CAT sayfalarındaki gibi)
         if not _match.empty:
             _row = _match.iloc[0]
-            _rsi_v = float(_row.get("RSI", 50) or 50)
-            _ret1m = float(_row.get("Ret1M", 0) or 0)
-            _vol_v = float(_row.get("Vol_1Y", 30) or 30)
+            import pandas as _pd
+            def _sf(v, d):
+                try: f=float(v); return d if _pd.isna(f) else f
+                except: return d
+            _rsi_v = _sf(_row.get("RSI"), 50.0)
+            _ret1m = _sf(_row.get("Ret1M"), 0.0)
+            _vol_v = _sf(_row.get("Vol_1Y"), 30.0)
             _skor  = optima_score(_rsi_v, _ret1m, _vol_v)
         else:
             _skor = 0.0
@@ -1378,9 +1382,9 @@ elif page=="Portföyüm":
         _kz_pct = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
 
         _pf_rows.append({
+            "Sil":               False,
             "Ticker":            _tkr,
             "Ad":                _ad,
-            "Kategori":          _kat,
             "Tarih":             _tarih_g,
             "Miktar":            _adet,
             "Birim":             _unit,
@@ -1389,7 +1393,6 @@ elif page=="Portföyüm":
             "Toplam (TL)":       _toplam,
             "K/Z (%)":           _kz_pct,
             "Optima Skor":       _skor,
-            "Sil":               False,
         })
         _id_list.append(pos["id"])
 
@@ -1407,12 +1410,11 @@ elif page=="Portföyüm":
             "Güncel (TL)":      st.column_config.NumberColumn(format="%.4f"),
             "Toplam (TL)":      st.column_config.NumberColumn(format="%.2f"),
             "K/Z (%)":          st.column_config.NumberColumn(format="%+.2f%%"),
-            "Optima Skor":      st.column_config.ProgressColumn(
-                                    min_value=0, max_value=100, format="%.1f"),
+            "Optima Skor":      st.column_config.NumberColumn(format="%.1f"),
             "Sil":              st.column_config.CheckboxColumn(
                                     "Sil", help="Satırı silmek için işaretleyin"),
         },
-        disabled=["Ticker","Ad","Kategori","Tarih","Miktar","Birim",
+        disabled=["Ticker","Ad","Tarih","Miktar","Birim",
                   "Alış Fiyatı (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Optima Skor"],
     )
 
