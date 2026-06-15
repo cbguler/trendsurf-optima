@@ -1271,7 +1271,6 @@ if page=="Ana Sayfa":
 # ══════════════════════════════════════════════════════════════
 elif page=="Portföyüm":
     st.title("Portföyüm")
-
     portfolio = load_portfolio()
 
     # ── Yeni Pozisyon Ekle ──────────────────────────────────────
@@ -1284,48 +1283,34 @@ elif page=="Portföyüm":
             labels       = df_uni_copy["_label"].tolist()
             tickers_list = df_uni_copy["Ticker"].tolist()
             cats_list    = df_uni_copy["Kategori"].tolist()
-
             sel_label = st.selectbox("Varlık", labels, key="pf_varlik_sel")
             idx_sel   = labels.index(sel_label)
             pt        = tickers_list[idx_sel]
             pt_cat    = cats_list[idx_sel]
-
-            _pm = df_uni[df_uni["Ticker"] == pt]
+            _pm       = df_uni[df_uni["Ticker"] == pt]
             auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
-
             f_c1, f_c2, f_c3, f_c4 = st.columns([1.2, 0.9, 0.8, 1.2])
             with f_c1:
                 import datetime as _dt
-                satin_tarih = st.date_input("Satın Alma Tarihi", value=_dt.date.today(),
-                                            key="pf_tarih", format="DD.MM.YYYY")
+                satin_tarih = st.date_input("Satın Alma Tarihi", value=_dt.date.today(), key="pf_tarih", format="DD.MM.YYYY")
             with f_c2:
-                pa_str = st.text_input("Birim (miktar)", value="1",
-                                       key="pf_adet", placeholder="Örn: 5,06")
+                pa_str = st.text_input("Birim (miktar)", value="1", key="pf_adet", placeholder="Örn: 5,06")
                 try:    pa = parse_tr(pa_str)
                 except: pa = 0.0
             with f_c3:
-                _unit_opts = ["Adet", "Gram", "Lot", "Ons", "Varil", "Ton", "kg", "m²", "Diğer"]
-                unit_type = st.selectbox("Birim Türü", _unit_opts, key="pf_unit")
+                unit_type = st.selectbox("Birim Türü", ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"], key="pf_unit")
             with f_c4:
-                _ph = fmt_tr(auto_price, 4) if auto_price > 0 else "Örn: 6.277,08"
-                pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
-                                       key="pf_maliyet", placeholder=_ph)
+                _ph = fmt_tr(auto_price,4) if auto_price>0 else "Örn: 6.277,08"
+                pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="", key="pf_maliyet", placeholder=_ph)
                 try:    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
                 except: pm = auto_price
-
-            if auto_price > 0 and pa > 0:
-                st.caption(f"Güncel piyasa fiyatı: {fmt_tr(auto_price,4)} TL"
-                           f"  |  Tahmini toplam: {fmt_tr(pa*auto_price)} TL")
-
-            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                    placeholder="Örn: İlk alım, uzun vadeli")
-
+            if auto_price>0 and pa>0:
+                st.caption(f"Güncel piyasa fiyatı: {fmt_tr(auto_price,4)} TL  |  Tahmini toplam: {fmt_tr(pa*auto_price)} TL")
+            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not", placeholder="Örn: İlk alım, uzun vadeli")
             if st.button("EKLE", use_container_width=True, key="pf_ekle"):
                 if pa > 0:
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat,
-                                       note=pf_note,
-                                       purchase_date=satin_tarih.strftime("%Y-%m-%d"),
-                                       unit_type=unit_type)
+                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note,
+                                       purchase_date=satin_tarih.strftime("%Y-%m-%d"), unit_type=unit_type)
                     st.success(f"{pt} eklendi — {fmt_tr(pa,4)} {unit_type} @ {fmt_tr(pm,4)} TL")
                     st.rerun()
                 else:
@@ -1335,151 +1320,107 @@ elif page=="Portföyüm":
         st.info("Henüz pozisyon yok. Yukarıdan ekleyebilirsin.")
         st.stop()
 
-    import datetime as _dt
-    import pandas as pd
+    import datetime as _dt, pandas as _pd
 
     # ── Portföy Varlıkları Tablosu ───────────────────────────────
     st.divider()
     st.subheader("Portföy Varlıkları Tablosu")
+    st.caption("Analiz için sol kutucuğu, silmek için sağ kutucuğu işaretleyin.")
 
-    if "pf_sel" not in st.session_state:
-        st.session_state["pf_sel"] = None
+    # Sütun oranları: [Analiz□, Ticker, Tarih, Miktar, Birim, Alış(TL), Güncel(TL), Toplam(TL), K/Z%, Skor, Sil□]
+    _CW = [0.4, 1.1, 1.0, 0.85, 0.75, 1.15, 1.15, 1.15, 0.85, 0.7, 0.4]
 
-    # Tablo verisi + Optima Skoru hesapla
-    _pf_rows = []
-    _id_list = []
+    # Başlık
+    _hh = st.columns(_CW)
+    for _hc, _lb in zip(_hh, ["","Ticker","Tarih","Miktar","Birim","Alış (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Skor",""]):
+        _hc.markdown(f"<span style='font-size:11px;font-weight:700;color:#6c7a9c;'>{_lb}</span>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin:2px 0 4px 0;border:0;border-top:2px solid #2c3e6b;'>", unsafe_allow_html=True)
+
+    _total_val, _total_kz = 0.0, 0.0
+    _sel_tkr = None
+
     for pos in portfolio:
-        _tkr   = pos["ticker"]
-        _kat   = pos["asset_type"]
-        _adet  = float(pos["quantity"])
-        _alis  = float(pos["avg_cost"])
-        _unit  = pos.get("unit_type", "Adet") or "Adet"
-        _tarih_raw = pos.get("purchase_date","")
-        _tarih_g = (
-            _dt.datetime.strptime(_tarih_raw,"%Y-%m-%d").strftime("%d.%m.%Y")
-            if _tarih_raw and len(_tarih_raw)==10 else _tarih_raw or "—"
-        )
-        _match  = df_uni[df_uni["Ticker"] == _tkr]
-        _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0]) > 0 else 0.0
-        _ad     = str(_match["Ad"].iloc[0])[:40] if not _match.empty else _tkr
-
-        # Optima Skoru hesapla (CAT sayfalarındaki gibi)
+        _tkr  = pos["ticker"]
+        _adet = float(pos["quantity"])
+        _alis = float(pos["avg_cost"])
+        _unit = pos.get("unit_type","Adet") or "Adet"
+        _traw = pos.get("purchase_date","")
+        _tg   = (_dt.datetime.strptime(_traw,"%Y-%m-%d").strftime("%d.%m.%Y")
+                 if _traw and len(_traw)==10 else _traw or "—")
+        _match  = df_uni[df_uni["Ticker"]==_tkr]
+        _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0])>0 else 0.0
         if not _match.empty:
             _row = _match.iloc[0]
-            import pandas as _pd
-            def _sf(v, d):
-                try: f=float(v); return d if _pd.isna(f) else f
+            def _sf(v,d):
+                try: fv=float(v); return d if _pd.isna(fv) else fv
                 except: return d
-            _rsi_v = _sf(_row.get("RSI"), 50.0)
-            _ret1m = _sf(_row.get("Ret1M"), 0.0)
-            _vol_v = _sf(_row.get("Vol_1Y"), 30.0)
-            _skor  = optima_score(_rsi_v, _ret1m, _vol_v)
+            _skor = optima_score(_sf(_row.get("RSI"),50.0), _sf(_row.get("Ret1M"),0.0), _sf(_row.get("Vol_1Y"),30.0))
         else:
             _skor = 0.0
+        _toplam = _adet*_guncel
+        _kz_tl  = _toplam - _adet*_alis
+        _kz_pct = ((_guncel/_alis-1)*100) if _alis>0 else 0.0
+        _total_val += _toplam; _total_kz += _kz_tl
+        _kzc = "#27ae60" if _kz_pct>=0 else "#e74c3c"
 
-        _toplam = _adet * _guncel
-        _kz_tl  = _toplam - _adet * _alis
-        _kz_pct = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
-
-        _pf_rows.append({
-            "Sil":               False,
-            "Ticker":            _tkr,
-            "Ad":                _ad,
-            "Tarih":             _tarih_g,
-            "Miktar":            _adet,
-            "Birim":             _unit,
-            "Alış Fiyatı (TL)": _alis,
-            "Güncel (TL)":       _guncel,
-            "Toplam (TL)":       _toplam,
-            "K/Z (%)":           _kz_pct,
-            "Optima Skor":       _skor,
-        })
-        _id_list.append(pos["id"])
-
-    df_pf = pd.DataFrame(_pf_rows)
-
-    # st.data_editor ile tablo — Sil sütunu checkbox
-    _edited = st.data_editor(
-        df_pf,
-        use_container_width=True,
-        hide_index=True,
-        key="pf_editor",
-        column_config={
-            "Miktar":            st.column_config.NumberColumn(format="%.4f"),
-            "Alış Fiyatı (TL)": st.column_config.NumberColumn(format="%.4f"),
-            "Güncel (TL)":      st.column_config.NumberColumn(format="%.4f"),
-            "Toplam (TL)":      st.column_config.NumberColumn(format="%.2f"),
-            "K/Z (%)":          st.column_config.NumberColumn(format="%+.2f%%"),
-            "Optima Skor":      st.column_config.NumberColumn(format="%.1f"),
-            "Sil":              st.column_config.CheckboxColumn(
-                                    "Sil", help="Satırı silmek için işaretleyin"),
-        },
-        disabled=["Ticker","Ad","Tarih","Miktar","Birim",
-                  "Alış Fiyatı (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Optima Skor"],
-    )
-
-    # Sil işlemi — işaretlenen satırları sil
-    for _i, _row in _edited.iterrows():
-        if _row["Sil"]:
-            delete_portfolio_item(_id_list[_i])
+        _rc = st.columns(_CW)
+        # Sol: analiz checkbox
+        _chk_a = _rc[0].checkbox("", key=f"chk_a_{pos['id']}", label_visibility="collapsed")
+        if _chk_a: _sel_tkr = _tkr
+        # Veri sütunları
+        _rc[1].markdown(f"<b style='font-size:13px;color:#1b2a4a;'>{_tkr}</b>", unsafe_allow_html=True)
+        _rc[2].markdown(f"<span style='font-size:12px;color:#6c7a9c;'>{_tg}</span>", unsafe_allow_html=True)
+        _rc[3].markdown(f"<span style='font-size:13px;'>{fmt_tr(_adet,4)}</span>", unsafe_allow_html=True)
+        _rc[4].markdown(f"<span style='font-size:12px;color:#6c7a9c;'>{_unit}</span>", unsafe_allow_html=True)
+        _rc[5].markdown(f"<span style='font-size:13px;'>{fmt_tr(_alis,4)}</span>", unsafe_allow_html=True)
+        _rc[6].markdown(f"<span style='font-size:13px;'>{fmt_tr(_guncel,4) if _guncel>0 else '—'}</span>", unsafe_allow_html=True)
+        _rc[7].markdown(f"<b style='font-size:13px;'>{fmt_tr(_toplam)}</b>", unsafe_allow_html=True)
+        _rc[8].markdown(f"<span style='font-size:13px;font-weight:600;color:{_kzc};'>{'+'if _kz_pct>=0 else ''}{fmt_tr(_kz_pct)}%</span>", unsafe_allow_html=True)
+        _rc[9].markdown(f"<span style='font-size:13px;'>{_skor:.1f}</span>", unsafe_allow_html=True)
+        # Sağ: sil checkbox
+        _chk_s = _rc[10].checkbox("", key=f"chk_s_{pos['id']}", label_visibility="collapsed")
+        if _chk_s:
+            delete_portfolio_item(pos["id"])
             st.rerun()
+        st.markdown("<hr style='margin:1px 0;border:0;border-top:1px solid #e8edf5;'>", unsafe_allow_html=True)
 
-    # Toplam satırı (tablo devamı görünümünde)
-    _total_val = df_pf["Toplam (TL)"].sum()
-    _total_kz  = sum(r["Toplam (TL)"] - r["Miktar"]*r["Alış Fiyatı (TL)"] for r in _pf_rows)
-    _tc_color  = "#27ae60" if _total_kz >= 0 else "#e74c3c"
-    _tc_sign   = "+" if _total_kz >= 0 else ""
+    # Toplam
+    _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
+    _tcs = "+" if _total_kz>=0 else ""
     st.markdown(
-        f"<div style='border:1px solid #e0eeff;border-top:2px solid #2c3e6b;"
-        f"border-radius:0 0 8px 8px;padding:10px 18px;"
-        f"display:flex;justify-content:space-between;align-items:center;background:#f8faff;'>"
+        f"<div style='padding:8px 0;display:flex;justify-content:space-between;border-top:2px solid #2c3e6b;'>"
         f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b>"
         f"<b style='font-size:18px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL"
-        f"&nbsp;&nbsp;<b style='font-size:13px;color:{_tc_color};'>"
-        f"{_tc_sign}{fmt_tr(_total_kz)} TL</b></b></div>",
+        f"&nbsp;<b style='font-size:13px;color:{_tcc};'>{_tcs}{fmt_tr(_total_kz)} TL</b></b></div>",
         unsafe_allow_html=True
     )
 
-    # ── Seçili varlık analizi (st.data_editor satır seçimi) ──────
-    st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
-
-    # selection via session state click — manual ticker select
-    _pf_tickers = [r["Ticker"] for r in _pf_rows]
-    _sel_tkr = st.selectbox("Varlık analizi", ["—"] + _pf_tickers,
-                             key="pf_analiz_sel",
-                             label_visibility="collapsed")
-    if _sel_tkr and _sel_tkr != "—":
-        _sel_match = df_uni[df_uni["Ticker"] == _sel_tkr]
-        if not _sel_match.empty:
-            _sel_row = _sel_match.iloc[0]
+    # ── Analiz (sol checkbox seçilince) ─────────────────────────
+    if _sel_tkr:
+        _sm = df_uni[df_uni["Ticker"]==_sel_tkr]
+        if not _sm.empty:
+            _sr = _sm.iloc[0]
             st.divider()
-            st.subheader(f"Detay: {_sel_tkr} — {str(_sel_row['Ad'])[:60]}")
-
-            _period_map = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
-            _p_lbl = st.radio("Periyot", list(_period_map.keys()), horizontal=True, key="pf_per")
-
+            st.subheader(f"Detay: {_sel_tkr} — {str(_sr['Ad'])[:60]}")
+            _pm2 = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
+            _pl  = st.radio("Periyot", list(_pm2.keys()), horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
-                _d = enrich(_sel_row, _period_map[_p_lbl])
-                _sig_lbl, _sig_cls = get_signal(_d["score"], _d["rsi"], _d["trend"])
-
+                _d = enrich(_sr, _pm2[_pl])
+                _sig_lbl, _sig_cls = get_signal(_d["score"],_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
-            _m1.metric("Son Fiyat",    f"{float(_sel_row['Son_Fiyat']):,.4f}")
-            _m2.metric("Optima Skor",  f"{_d['score']:.1f}")
-            _m3.metric("RSI (14)",     f"{_d['rsi']:.1f}")
-            _m4.metric("1A Getiri %",  f"{_d['ret1m']:+.2f}%")
-            _m5.metric("Yıllık Vol %", f"{_d['vol']:.1f}%")
-
+            _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
+            _m2.metric("Optima Skor", f"{_d['score']:.1f}")
+            _m3.metric("RSI (14)",    f"{_d['rsi']:.1f}")
+            _m4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
+            _m5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
             _sc = SIG_COLORS.get(_sig_cls,"#666")
-            st.markdown(f"""<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
+            st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> &nbsp;|&nbsp;
-        Optima Skor: <b>{_d["score"]}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{_d["macd"]:.4f}</b>
-      </span></div>""", unsafe_allow_html=True)
-
+        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>
+      </span></div>''', unsafe_allow_html=True)
             if not _d["hist"].empty:
-                _fig = candle_fig(_d["hist"], _sel_tkr)
+                _fig = candle_fig(_d["hist"],_sel_tkr)
                 if _fig: st.plotly_chart(_fig, use_container_width=True)
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
