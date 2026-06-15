@@ -37,7 +37,7 @@ _COL_W = {
 def _logo_b64():
     """Email banner (logo + metin) veya fallback logo dosyasini base64'e cevirir."""
     # Once email banner'i dene
-    for p in ["logo_email_clean.png", "logo_email_banner.png", "logo2.png", "logo.png", "Logo.png"]:
+    for p in ["logo_email_clean.png", "logo2.png", "logo.png", "Logo.png"]:
         if os.path.exists(p):
             with open(p, "rb") as f:
                 return base64.b64encode(f.read()).decode()

@@ -6,7 +6,7 @@ try:
     HAS_PLOTLY = True
 except: HAS_PLOTLY = False
 
-st.set_page_config(page_title="TrendSurf Optima", page_icon="📈", layout="wide",
+st.set_page_config(page_title="TrendSurf Optima", page_icon="favicon.png", layout="wide",
                    initial_sidebar_state="expanded")
 
 # ══════════════════════════════════════════════════════════════
