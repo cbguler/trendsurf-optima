@@ -664,6 +664,22 @@ def _simple_portfolio(portfolio, df_uni):
         c1.metric("Toplam Değer", f"{df_p['Toplam'].sum():,.2f} ₺")
         c2.metric("Toplam K/Z", f"{df_p['K/Z (₺)'].sum():+,.2f} ₺")
 
+def fmt_tr(val, decimals=2):
+    """Float → Türkçe format: 1.234,56"""
+    if val is None: return "—"
+    sign = "-" if val < 0 else ""
+    s = f"{abs(val):,.{decimals}f}"          # "1,234.56"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return sign + s
+
+def parse_tr(s):
+    """Türkçe format string → float: '1.234,56' → 1234.56"""
+    try:
+        return float(str(s).replace(".", "").replace(",", "."))
+    except Exception:
+        return 0.0
+
+
 def load_portfolio(user_id: int = None) -> list:
     """
     Kullanıcıya özel portföyü SQLite'tan çeker.
@@ -709,9 +725,16 @@ def load_portfolio(user_id: int = None) -> list:
             pass
 
     conn = get_conn()
+    # purchase_date sütunu yoksa ekle (migration)
+    try:
+        conn.execute("ALTER TABLE portfolio ADD COLUMN purchase_date TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass
     rows = conn.execute(
-        "SELECT id, asset_type, ticker, quantity, avg_cost, note, added_at "
-        "FROM portfolio WHERE user_id=? ORDER BY added_at DESC",
+        "SELECT id, asset_type, ticker, quantity, avg_cost, note, added_at, "
+        "COALESCE(purchase_date,'') as purchase_date "
+        "FROM portfolio WHERE user_id=? ORDER BY purchase_date ASC, added_at ASC",
         (user_id,)
     ).fetchall()
     conn.close()
@@ -719,15 +742,22 @@ def load_portfolio(user_id: int = None) -> list:
 
 
 def add_portfolio_item(ticker: str, adet: float, maliyet: float,
-                        asset_type: str = "BIST", note: str = "") -> bool:
+                        asset_type: str = "BIST", note: str = "",
+                        purchase_date: str = "") -> bool:
     from db import get_conn
     user_id = (_cur_user or {}).get("id")
     if not user_id: return False
     conn = get_conn()
+    # purchase_date sütunu yoksa ekle (migration)
+    try:
+        conn.execute("ALTER TABLE portfolio ADD COLUMN purchase_date TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass  # Zaten mevcut
     conn.execute(
-        "INSERT INTO portfolio (user_id,asset_type,ticker,quantity,avg_cost,note) "
-        "VALUES (?,?,?,?,?,?)",
-        (user_id, asset_type, ticker.strip().upper(), adet, maliyet, note)
+        "INSERT INTO portfolio (user_id,asset_type,ticker,quantity,avg_cost,note,purchase_date) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (user_id, asset_type, ticker.strip().upper(), adet, maliyet, note, purchase_date)
     )
     conn.commit(); conn.close()
     return True
@@ -1236,7 +1266,6 @@ if page=="Ana Sayfa":
 elif page=="Portföyüm":
     st.title("Portföyüm")
 
-    # ── Veri yükle ──────────────────────────────────────────────
     portfolio = load_portfolio()
 
     # ── Yeni Pozisyon Ekle ──────────────────────────────────────
@@ -1245,56 +1274,61 @@ elif page=="Portföyüm":
             st.warning("`python worker.py` ile veriyi önce oluşturun.")
         else:
             df_uni_copy = df_uni.copy()
-            df_uni_copy["_label"] = (
-                df_uni_copy["Ticker"] + " — " +
-                df_uni_copy["Ad"].astype(str).str[:50]
-            )
-            labels  = df_uni_copy["_label"].tolist()
+            df_uni_copy["_label"] = df_uni_copy["Ticker"] + " — " + df_uni_copy["Ad"].astype(str).str[:50]
+            labels       = df_uni_copy["_label"].tolist()
             tickers_list = df_uni_copy["Ticker"].tolist()
             cats_list    = df_uni_copy["Kategori"].tolist()
 
-            p_c1, p_c2, p_c3 = st.columns(3)
-            with p_c1:
-                sel_label = st.selectbox("Varlık", labels, key="pf_varlik_sel")
-                idx_sel   = labels.index(sel_label)
-                pt        = tickers_list[idx_sel]
-                pt_cat    = cats_list[idx_sel]
-            with p_c2:
-                pa_str = st.text_input("Adet / Lot", value="1", key="pf_adet",
-                                       placeholder="Örn: 5,06")
+            # Satır 1: Varlık seçimi
+            sel_label = st.selectbox("Varlık", labels, key="pf_varlik_sel")
+            idx_sel   = labels.index(sel_label)
+            pt        = tickers_list[idx_sel]
+            pt_cat    = cats_list[idx_sel]
+
+            # Güncel fiyatı df_uni'den otomatik getir
+            _pm = df_uni[df_uni["Ticker"] == pt]
+            auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
+
+            # Satır 2: Tarih — Adet — Alış Fiyatı
+            f_c1, f_c2, f_c3 = st.columns([1.2, 1, 1.2])
+            with f_c1:
+                import datetime as _dt
+                satin_tarih = st.date_input("Satın Alma Tarihi",
+                                            value=_dt.date.today(), key="pf_tarih",
+                                            format="DD.MM.YYYY")
+            with f_c2:
+                pa_str = st.text_input("Adet / Gram / Lot", value="1",
+                                       key="pf_adet", placeholder="Örn: 5,06")
                 try:
-                    pa = float(pa_str.replace(".", "").replace(",", "."))
+                    pa = parse_tr(pa_str)
                 except Exception:
                     pa = 0.0
-            with p_c3:
-                pm_str = st.text_input("Alış Maliyeti (birim, TL)", value="0", key="pf_maliyet",
-                                       placeholder="Örn: 6.480,00")
+            with f_c3:
+                _placeholder = fmt_tr(auto_price, 4) if auto_price > 0 else "Örn: 6.277,08"
+                pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
+                                       key="pf_maliyet", placeholder=_placeholder)
                 try:
-                    pm = float(pm_str.replace(".", "").replace(",", "."))
+                    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
                 except Exception:
-                    pm = 0.0
-            p_c4, p_c5 = st.columns(2)
-            with p_c4:
-                pm_kurum_str = st.text_input(
-                    "Kurumun Güncel Alış Fiyatı (TL) — K/Z için",
-                    value="0", key="pf_kurum_alis",
-                    placeholder="Örn: 6.027,19",
-                    help="Varlığı bugün satsanız kurumun size ödeyeceği fiyat"
+                    pm = auto_price
+
+            # Güncel fiyat bilgisi + tahmini toplam
+            if auto_price > 0:
+                _toplam_tahmini = pa * auto_price if pa > 0 else 0.0
+                st.caption(
+                    f"📊 Güncel piyasa fiyatı: **{fmt_tr(auto_price, 4)} TL**"
+                    + (f"  |  Tahmini toplam: **{fmt_tr(_toplam_tahmini)} ₺**" if _toplam_tahmini > 0 else "")
                 )
-                try:
-                    pm_kurum = float(pm_kurum_str.replace(".", "").replace(",", "."))
-                except Exception:
-                    pm_kurum = 0.0
-            with p_c5:
-                pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                        placeholder="Örn: ING Bank, uzun vadeli")
+
+            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
+                                    placeholder="Örn: İlk alım, uzun vadeli")
+
             if st.button("EKLE", use_container_width=True, key="pf_ekle"):
                 if pa > 0:
-                    note_full = pf_note
-                    if pm_kurum > 0:
-                        note_full = f"kurum_alis:{pm_kurum:.4f}" + (f"|{pf_note}" if pf_note else "")
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=note_full)
-                    st.success(f"{pt} portföye eklendi.")
+                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat,
+                                       note=pf_note,
+                                       purchase_date=satin_tarih.strftime("%Y-%m-%d"))
+                    st.success(f"{pt} portföye eklendi — {fmt_tr(pa, 4)} adet @ {fmt_tr(pm, 4)} TL")
                     st.rerun()
                 else:
                     st.warning("Adet 0'dan büyük olmalı.")
@@ -1303,337 +1337,119 @@ elif page=="Portföyüm":
         st.info("Henüz pozisyon yok. Yukarıdan ekleyebilirsin.")
         st.stop()
 
-    # ── Özet ve gelir hesabı ────────────────────────────────────
-    # dividend_engine için eski format (ticker/adet/maliyet)
-    pf_legacy = [
-        {"ticker": r["ticker"], "adet": r["quantity"], "maliyet": r["avg_cost"]}
-        for r in portfolio
-    ]
+    # ── Portföy Tablosu ─────────────────────────────────────────
+    st.divider()
 
+    # Her satır için güncel fiyat + toplam hesapla
+    _pf_rows = []
+    for pos in portfolio:
+        _tkr  = pos["ticker"]
+        _kat  = pos["asset_type"]
+        _adet = float(pos["quantity"])
+        _alis = float(pos["avg_cost"])
+        _tarih = pos.get("purchase_date", "")
+        _tarih_disp = (
+            _dt.datetime.strptime(_tarih, "%Y-%m-%d").strftime("%d.%m.%Y")
+            if _tarih and len(_tarih) == 10 else _tarih
+        )
+        _match = df_uni[df_uni["Ticker"] == _tkr]
+        _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0]) > 0 else 0.0
+        _toplam  = _adet * _guncel
+        _alis_t  = _adet * _alis
+        _kz_tl   = _toplam - _alis_t
+        _kz_pct  = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
+        _pf_rows.append({
+            "_id":              pos["id"],
+            "Tarih":            _tarih_disp,
+            "Ticker":           _tkr,
+            "Kategori":         _kat,
+            "Adet":             fmt_tr(_adet, 4),
+            "Alış Fiyatı (TL)": fmt_tr(_alis, 4),
+            "Güncel Fiyat (TL)":fmt_tr(_guncel, 4) if _guncel > 0 else "—",
+            "Toplam Değer (₺)": fmt_tr(_toplam),
+            "K/Z (%)":          ("+" if _kz_pct >= 0 else "") + fmt_tr(_kz_pct) + "%",
+            "K/Z (₺)":          ("+" if _kz_tl >= 0 else "") + fmt_tr(_kz_tl),
+            "_toplam_raw":      _toplam,
+            "_kz_raw":          _kz_tl,
+        })
+
+    import pandas as pd
+    df_pf = pd.DataFrame(_pf_rows)
+
+    # Tablo gösterimi
+    st.subheader("Portföy Varlıkları")
+    st.dataframe(
+        df_pf[[c for c in df_pf.columns if not c.startswith("_")]],
+        use_container_width=True, hide_index=True
+    )
+
+    # Toplam satırı
+    _total_val = df_pf["_toplam_raw"].sum()
+    _total_kz  = df_pf["_kz_raw"].sum()
+    _kz_sign   = "+" if _total_kz >= 0 else ""
+    _kz_color  = "#27ae60" if _total_kz >= 0 else "#e74c3c"
+    st.markdown(
+        f"<div style='background:#f0f4f8;border-radius:8px;padding:10px 18px;"
+        f"display:flex;justify-content:space-between;align-items:center;margin-top:4px;'>"
+        f"<span style='font-size:14px;color:#6c7a9c;font-weight:600;'>TOPLAM PORTFÖY DEĞERİ</span>"
+        f"<span style='font-size:20px;font-weight:800;color:#1b2a4a;'>{fmt_tr(_total_val)} ₺"
+        f"&nbsp;&nbsp;<span style='font-size:13px;color:{_kz_color};'>"
+        f"{_kz_sign}{fmt_tr(_total_kz)} ₺</span></span></div>",
+        unsafe_allow_html=True
+    )
+
+    # ── Gelir & Temettü Analizi ────────────────────────────────
+    pf_legacy = [{"ticker": r["ticker"], "adet": r["quantity"], "maliyet": r["avg_cost"]}
+                 for r in portfolio]
     try:
         from dividend_engine import calc_portfolio_income, portfolio_income_summary
         with st.spinner("Temettü ve gelir hesaplanıyor..."):
             df_income = calc_portfolio_income(pf_legacy, df_uni)
         if not df_income.empty:
             summary = portfolio_income_summary(df_income)
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Toplam Değer",
-                      f"{summary.get('toplam_deger',0):,.2f} ₺")
-            m2.metric("Yıllık Temettü + Staking",
-                      f"{summary.get('yillik_gelir_try',0):,.2f} ₺")
-            m3.metric("Ort. Pasif Gelir %",
-                      f"{summary.get('ortalama_gelir_pct',0):.2f}%")
-            m4.metric("En Yüksek Gelirli",
-                      summary.get("max_gelir_varlik","—"))
-
-            if summary.get("temettu_try",0)+summary.get("staking_try",0) > 0:
-                st.divider()
-                st.subheader("Gelir Kaynakları")
-                g1, g2, g3 = st.columns(3)
-                g1.metric("Temettü (BIST)",
-                          f"{summary.get('temettu_try',0):,.2f} ₺/yıl")
-                g2.metric("Staking (Kripto)",
-                          f"{summary.get('staking_try',0):,.2f} $/yıl")
-                g3.metric("Fon Getirisi (TEFAS)",
-                          f"{summary.get('fon_getiri_try',0):,.2f} ₺/yıl")
-
             st.divider()
-            st.subheader("Pozisyon Detayı")
-            st.dataframe(
-                df_income,
-                use_container_width=True, hide_index=True,
-                column_config={
-                    "Güncel Fiyat":       st.column_config.NumberColumn(format="%.4f"),
-                    "Toplam Değer (₺)":   st.column_config.NumberColumn(format="%.2f"),
-                    "Yıllık Gelir/Birim": st.column_config.NumberColumn(format="%.4f"),
-                    "Yıllık Gelir (₺)":   st.column_config.NumberColumn(format="%.2f"),
-                    "Gelir Oranı (%)":    st.column_config.NumberColumn(format="%.2f"),
-                    "K/Z (%)":            st.column_config.NumberColumn(format="%.2f"),
-                    "Toplam Getiri (%)":  st.column_config.NumberColumn(format="%.2f"),
-                }
-            )
-            st.caption(
-                "Toplam Getiri = K/Z (%) + Pasif Gelir Oranı (%). "
-                "BIST: temettü | Kripto: staking APY | TEFAS: fon getirisi."
-            )
-        else:
-            _simple_portfolio(pf_legacy, df_uni)
-    except Exception as e:
-        st.warning(f"Gelir hesabı: {e}")
-        _simple_portfolio(pf_legacy, df_uni)
+            st.subheader("Gelir Analizi")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Yıllık Temettü + Staking", f"{summary.get('yillik_gelir_try',0):,.2f} ₺")
+            m2.metric("Ort. Pasif Gelir %", f"{summary.get('ortalama_gelir_pct',0):.2f}%")
+            m3.metric("En Yüksek Gelirli", summary.get("max_gelir_varlik","—"))
+            if summary.get("temettu_try",0) + summary.get("staking_try",0) > 0:
+                g1, g2, g3 = st.columns(3)
+                g1.metric("Temettü (BIST)", f"{summary.get('temettu_try',0):,.2f} ₺/yıl")
+                g2.metric("Staking (Kripto)", f"{summary.get('staking_try',0):,.2f} $/yıl")
+                g3.metric("Fon Getirisi (TEFAS)", f"{summary.get('fon_getiri_try',0):,.2f} ₺/yıl")
+    except Exception:
+        pass
 
-    # ── Pozisyon Yönetimi ────────────────────────────────────────
+    # ── Pozisyon Silme ──────────────────────────────────────────
     st.divider()
     st.subheader("Pozisyon Yönetimi")
-
-    # Tek tek silme
     for pos in portfolio:
-        col_t, col_q, col_c, col_btn = st.columns([3, 2, 2, 1])
-        col_t.markdown(
+        _c1, _c2, _c3, _c4 = st.columns([2, 1, 2, 1])
+        _c1.markdown(
             f"**{pos['ticker']}** "
-            f"<span style='color:#6c7a9c;font-size:12px'>{pos['asset_type']}</span>",
-            unsafe_allow_html=True
+            f"<span style='color:#6c7a9c;font-size:11px;'>{pos['asset_type']}</span>",
+            unsafe_allow_html=True)
+        _tarih_raw = pos.get("purchase_date","")
+        _tarih_g = (
+            _dt.datetime.strptime(_tarih_raw,"%Y-%m-%d").strftime("%d.%m.%Y")
+            if _tarih_raw and len(_tarih_raw)==10 else _tarih_raw or "—"
         )
-        col_q.markdown(
-            f"<span style='color:#1b2a4a'>{pos['quantity']:,.4f} adet</span>",
-            unsafe_allow_html=True
-        )
-        col_c.markdown(
-            f"<span style='color:#1b2a4a'>Alış: {pos['avg_cost']:,.4f} TL</span>",
-            unsafe_allow_html=True
-        )
-        if col_btn.button("Sil", key=f"del_{pos['id']}"):
+        _c2.markdown(f"<span style='color:#6c7a9c;font-size:11px;'>{_tarih_g}</span>", unsafe_allow_html=True)
+        _c3.markdown(
+            f"<span style='color:#1b2a4a;'>"
+            f"{fmt_tr(float(pos['quantity']),4)} adet"
+            f" @ {fmt_tr(float(pos['avg_cost']),4)} TL</span>",
+            unsafe_allow_html=True)
+        if _c4.button("Sil", key=f"del_{pos['id']}"):
             delete_portfolio_item(pos["id"])
             st.rerun()
-
     st.divider()
     if st.button("Tümünü Sil", use_container_width=True, key="pf_clear"):
         clear_portfolio()
         st.rerun()
 
-# ══════════════════════════════════════════════════════════════
-# KATEGORİ SAYFALARI (tıklanabilir tablo)
-# ══════════════════════════════════════════════════════════════
-elif page in CAT:
-    cat_code=CAT[page]
-    st.title(page)
-    if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
-    df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
-    if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
-
-    # Optima Skoru hesapla
-    df_cat["Optima_Skor"]=df_cat.apply(
-        lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
-                               vol=float(r.get("Vol",30) or 30)),axis=1)
-
-    # Fiyatlılar üste, fiyatsızlar alta — skor sıralı
-    df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
-    df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
-    df_cat = df_cat.drop(columns=["_fiyatli"])
-
-    # Özet metrikler
-    m1,m2,m3,m4=st.columns(4)
-    fiyatli=df_cat[df_cat["Son_Fiyat"]>0]
-    # TEFAS için Ret1M>0 olan varlıklar da değerlendirilebilir
-    degerli = fiyatli if cat_code != "TEFAS" else df_cat[df_cat["Ret1M"] != 0]
-    if degerli.empty:
-        degerli = df_cat
-    m1.metric("Toplam Varlık",len(df_cat))
-    m2.metric("Fiyatı Olan" if cat_code != "TEFAS" else "Getiri Verisi",
-              len(fiyatli) if cat_code != "TEFAS" else len(degerli))
-    ret_mean = degerli["Ret1M"].mean() if not degerli.empty else 0.0
-    m3.metric("Ort. 1A Getiri %",f"{ret_mean:.2f}%")
-    m4.metric("Ort. Optima Skor",f"{degerli['Optima_Skor'].mean():.1f}" if not degerli.empty else "N/A")
-
-    # ── TOP 5 ────────────────────────────────────────────────
-    st.divider()
-    st.subheader("En Yüksek Optima Skoru — Top 5")
-    top5=degerli.nlargest(5,"Optima_Skor")
-    # Top5 dataframe olarak göster — tıklanabilir
-    top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
-    top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
-    new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
-                                   sel_ticker=st.session_state.get(f"sel_{page}",""))
-    if new_sel_top5 and new_sel_top5 != st.session_state.get(f"sel_{page}"):
-        st.session_state[f"sel_{page}"] = new_sel_top5
-        st.rerun()
-
-    # ── Tüm Varlıklar Tablosu (tıklanabilir) ─────────────────
-    st.divider()
-    st.subheader("Tüm Varlıklar")
-    if cat_code in ["BIST","TEFAS"]:
-        srch=st.text_input("Ara",placeholder="Ticker veya ad...")
-        if srch.strip():
-            mask=(df_cat["Ticker"].str.contains(srch.strip().upper(),na=False)|
-                  df_cat["Ad"].str.contains(srch.strip(),case=False,na=False))
-            df_cat=df_cat[mask]
-
-    # Sayfalama
-    page_size = 50
-    pg_key = f"tbl_pg_{page}"
-    if pg_key not in st.session_state:
-        st.session_state[pg_key] = 0
-    cur_pg  = st.session_state[pg_key]
-    df_page = df_cat.iloc[cur_pg*page_size:(cur_pg+1)*page_size]
-    sel_now = st.session_state.get(f"sel_{page}", "")
-
-    # Tıklanabilir tablo
-    df_page_show = df_page[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
-    df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
-    new_sel = clickable_table(df_page_show, key=f"cat_{page}_{cur_pg}", sel_ticker=sel_now)
-    if new_sel and new_sel != sel_now:
-        st.session_state[f"sel_{page}"] = new_sel
-        st.rerun()
-
-    # Sayfa navigasyonu
-    total_pages = max(1, -(-len(df_cat) // page_size))
-    if total_pages > 1:
-        nav1, nav2, nav3 = st.columns([1,2,1])
-        with nav1:
-            if cur_pg > 0 and st.button("Onceki", key=f"pg_prev_{page}"):
-                st.session_state[pg_key] = cur_pg - 1; st.rerun()
-        with nav2:
-            st.caption(f"Sayfa {cur_pg+1} / {total_pages}  ({len(df_cat)} varlik)")
-        with nav3:
-            if cur_pg < total_pages-1 and st.button("Sonraki", key=f"pg_next_{page}"):
-                st.session_state[pg_key] = cur_pg + 1; st.rerun()
-
-    # ── DETAY ANALİZ ─────────────────────────────────────────
-    sel=st.session_state.get(f"sel_{page}")
-    if not sel:
-        st.info("Tablodan bir satıra tıklayarak analizi açın.")
-        st.stop()
-
-    all_tickers=df_uni[df_uni["Kategori"]==cat_code]["Ticker"].tolist()
-    if sel not in all_tickers:
-        st.session_state[f"sel_{page}"]=all_tickers[0] if all_tickers else None
-        st.rerun()
-
-    sel_row=df_uni[df_uni["Ticker"]==sel].iloc[0]
-    st.divider()
-    st.subheader(f"Detay: {sel}  —  {str(sel_row['Ad'])[:60]}")
-
-    period_map={"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
-    p_lbl=st.radio("Periyot",list(period_map.keys()),horizontal=True,key=f"per_{page}")
-    period_val=period_map[p_lbl]
-
-    with st.spinner("Analiz yükleniyor..."):
-        d=enrich(sel_row,period_val)
-        sig_lbl,sig_cls=get_signal(d["score"],d["rsi"],d["trend"])
-
-    r1,r2,r3,r4,r5=st.columns(5)
-    r1.metric("Son Fiyat",f"{float(sel_row['Son_Fiyat']):,.4f}")
-    r2.metric("Optima Skor",f"{d['score']:.1f}")
-    r3.metric("RSI (14)",f"{d['rsi']:.1f}")
-    r4.metric("1A Getiri %",f"{d['ret1m']:+.2f}%")
-    r5.metric("Yıllık Vol %",f"{d['vol']:.1f}%")
-
-    sig_color=SIG_COLORS.get(sig_cls,"#666")
-    st.markdown(f"""
-    <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
-      <span class="ts-sig {sig_cls}">{sig_lbl}</span>
-      <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
-        Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{d['macd']:.4f}</b>
-      </span>
-    </div>""",unsafe_allow_html=True)
-
-    # Mum grafiği
-    if not d["hist"].empty:
-        fig=candle_fig(d["hist"],sel)
-        if fig: st.plotly_chart(fig,use_container_width=True)
-    else:
-            st.info(f"{sel} için geçmiş fiyat verisi henüz yüklenemedi.")
-
-    # BIST Temel Analiz
-    if cat_code=="BIST":
-        st.divider()
-        st.subheader("Temel Analiz")
-        try:
-            from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
-                                    score_from_fundamentals, get_kap_url)
-            kap_url = get_kap_url(sel)
-
-            with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
-                raw  = fetch_kap_fundamentals(sel)
-                disp = fundamentals_to_display(raw)
-                fund_skor = score_from_fundamentals(raw, float(sel_row["Son_Fiyat"]))
-
-            pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
-            combined = min(100, round(
-                optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy), 1))
-            final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
-
-            # Kaynak bilgisi
-            src_note = "yfinance"
-            if raw.get("_kap_available"):
-                src_note += " + KAP"
-            elif raw.get("_kap_note"):
-                src_note += f" | KAP: {raw['_kap_note']}"
-            st.caption(f"Kaynak: {src_note}")
-
-            if kap_url:
-                st.caption(f"[KAP Finansal Bilgiler Sayfası]({kap_url})")
-
-            ka, kb = st.columns([2, 1])
-            with ka:
-                rows_html = "".join(
-                    f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
-                    for k, v in disp.items()
-                )
-                st.markdown(
-                    f'<table class="kap-table">{rows_html}</table>',
-                    unsafe_allow_html=True
-                )
-            with kb:
-                st.markdown('<div class="ts-card">', unsafe_allow_html=True)
-                st.markdown("**Skor Bileşimi**")
-                clr = SIG_COLORS.get(final_cls, "#666")
-                st.markdown(f"""
-                <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
-                <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
-                <hr style='border-color:#e0e8f4;margin:10px 0'>
-                <small style='color:#6c7a9c'>Master Skor</small><br>
-                <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
-                <span class="ts-sig {final_cls}">{final_lbl}</span>
-                """, unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-        except Exception as e:
-            st.warning(f"Temel analiz yüklenemedi: {e}")
-            st.info("Kontrol: `pip install yfinance` kurulu mu?")
-
-    # TEFAS Getiri ve Risk Analizi (API verisinden)
-    if cat_code=="TEFAS":
-        st.divider(); st.subheader("TEFAS Getiri ve Risk Analizi")
-        risk_val = int(sel_row.get("Risk_Deger",4))
-        risk_labels={1:"Çok Düşük",2:"Düşük",3:"Orta Altı",4:"Orta",
-                     5:"Orta Üstü",6:"Yüksek",7:"Çok Yüksek"}
-
-
-        # Excel'den gelen getiri metrikleri — her zaman göster
-        ret1m_x = float(sel_row.get("Ret1M", 0) or 0)
-        ret3m_x = float(sel_row.get("Ret3M", 0) or 0)
-        ret6m_x = float(sel_row.get("Ret6M", 0) or 0) if "Ret6M" in sel_row.index else 0.0
-        ret1y_x = float(sel_row.get("Ret1Y", 0) or 0) if "Ret1Y" in sel_row.index else 0.0
-        ret3y_x = float(sel_row.get("Ret3Y", 0) or 0) if "Ret3Y" in sel_row.index else 0.0
-        ret5y_x = float(sel_row.get("Ret5Y", 0) or 0) if "Ret5Y" in sel_row.index else 0.0
-
-        ta,tb,tc,td = st.columns(4)
-        ta.metric("1 Ay",  f"{ret1m_x:+.2f}%")
-        tb.metric("3 Ay",  f"{ret3m_x:+.2f}%")
-        tc.metric("6 Ay",  f"{ret6m_x:+.2f}%")
-        td.metric("1 Yil", f"{ret1y_x:+.2f}%")
-
-        if ret3y_x != 0 or ret5y_x != 0:
-            te,tf,tg = st.columns(3)
-            te.metric("3 Yil", f"{ret3y_x:+.2f}%")
-            tf.metric("5 Yil", f"{ret5y_x:+.2f}%")
-            tg.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
-        else:
-            st.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
-
-        if not d["hist"].empty:
-            pr = d["hist"]["Close"].dropna() if "Close" in d["hist"].columns else d["hist"].iloc[:,0].dropna()
-            if len(pr) > 20 and pr.pct_change().dropna().std() > 0:
-                rets=pr.pct_change().dropna(); rf=0.42/252; ex=rets-rf
-                sharpe=round(float(ex.mean()/ex.std()*np.sqrt(252)),3)
-                maxdd=round(float(((pr-pr.cummax())/pr.cummax()).min()*100),2)
-                s1,s2=st.columns(2)
-                s1.metric("Tahmini Sharpe",f"{sharpe:.3f}",
-                          help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
-                s2.metric("Tahmini Max Drawdown",f"{maxdd:.2f}%",
-                          help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
-        st.caption("Kaynak: TEFAS Excel (TEFAS.gov.tr)")
-# ══════════════════════════════════════════════════════════════
-# HALKA ARZ
-# ══════════════════════════════════════════════════════════════
 elif page=="Halka Arz":
     from datetime import datetime
     st.title("Halka Arz Takip")
