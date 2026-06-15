@@ -93,7 +93,9 @@ section.main [data-testid="stRadio"] label span,
   [data-testid="metric-container"]{padding:8px 10px!important;}
   [data-testid="stMetricValue"]>div{font-size:16px!important;}
 }
-</style>""", unsafe_allow_html=True)
+
+    [data-testid="stTextInput"] {width:100%!important;}
+    </style>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
 # SABITLER & YARDIMCILAR
@@ -168,7 +170,7 @@ def render_auth_gate():
         st.stop()
 
     # ── Giriş ekranı: sol logo, sağ form ────────────────────
-    col_logo, col_form = st.columns([1, 0.7])
+    col_logo, col_form = st.columns([1, 0.55])
 
     with col_logo:
         st.markdown("<div style='padding-top:40px'>", unsafe_allow_html=True)
@@ -186,7 +188,23 @@ def render_auth_gate():
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
-            email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com")
+            # Beni Hatırla: cookie'dan email oku
+            _remembered = st.query_params.get("_re", "")
+            st.markdown("""
+            <script>
+            (function() {
+                function getCookie(n){var v="; "+document.cookie,p=v.split("; "+n+"=");if(p.length===2)return decodeURIComponent(p.pop().split(";")[0]);return "";}
+                var em=getCookie("ts_rem_email");
+                if(em && !window.location.search.includes("_re=")){
+                    var u=new URL(window.location);
+                    u.searchParams.set("_re",em);
+                    window.history.replaceState({},"",u);
+                    location.reload();
+                }
+            })();
+            </script>
+            """, unsafe_allow_html=True)
+            email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com", value=_remembered)
             pwd   = st.text_input("Sifre", type="password", key="li_pass", placeholder="Sifreniz")
             remember = st.checkbox("Beni Hatirla", key="li_remember")
             if st.button("Giris Yap", key="btn_login", use_container_width=True):
@@ -196,6 +214,14 @@ def render_auth_gate():
                         st.session_state["auth_token"] = res["token"]
                         if remember:
                             st.session_state["remember_token"] = res["token"]
+                            # Email cookie - 30 gün
+                            import urllib.parse as _up
+                            _enc = _up.quote(email)
+                            _exp = "expires=Thu, 31 Dec 2026 23:59:59 GMT"
+                            st.markdown(
+                                f'<script>document.cookie="ts_rem_email={_enc};{_exp};path=/;SameSite=Lax";</script>',
+                                unsafe_allow_html=True
+                            )
                         st.rerun()
                     else:
                         st.error(res["msg"])
