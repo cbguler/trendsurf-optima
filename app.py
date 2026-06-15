@@ -1330,6 +1330,25 @@ elif page=="Portföyüm":
     # Sütun oranları: [Analiz□, Ticker, Tarih, Miktar, Birim, Alış(TL), Güncel(TL), Toplam(TL), K/Z%, Skor, Sil□]
     _CW = [0.4, 1.1, 1.0, 0.85, 0.75, 1.15, 1.15, 1.15, 0.85, 0.7, 0.4]
 
+    # Kompakt tablo CSS
+    st.markdown("""
+    <style>
+    /* Portföy tablosu: kompakt satırlar */
+    div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] {
+        min-height:0!important; padding:0!important; margin:0!important;
+    }
+    div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label {
+        min-height:0!important; padding:2px 0!important;
+    }
+    div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] p {
+        display:none!important;
+    }
+    div[data-testid="stHorizontalBlock"] .stMarkdown p {
+        margin:0!important; padding:2px 0!important; line-height:1.3!important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Başlık
     _hh = st.columns(_CW)
     for _hc, _lb in zip(_hh, ["","Ticker","Tarih","Miktar","Birim","Alış (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Skor",""]):
@@ -1382,7 +1401,7 @@ elif page=="Portföyüm":
         if _chk_s:
             delete_portfolio_item(pos["id"])
             st.rerun()
-        st.markdown("<hr style='margin:1px 0;border:0;border-top:1px solid #e8edf5;'>", unsafe_allow_html=True)
+        st.markdown("<div style='height:1px;background:#e8edf5;margin:0;'></div>", unsafe_allow_html=True)
 
     # Toplam
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
