@@ -1450,6 +1450,248 @@ elif page=="Portföyüm":
         st.rerun()
 
 
+
+# ══════ KATEGORİ SAYFALARI ══════
+elif page in CAT:
+    cat_code=CAT[page]
+    st.title(page)
+    if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
+
+    df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
+    if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
+
+    # Optima Skoru hesapla
+    df_cat["Optima_Skor"]=df_cat.apply(
+        lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
+                               vol=float(r.get("Vol",30) or 30)),axis=1)
+
+    # Fiyatlılar üste, fiyatsızlar alta — skor sıralı
+    df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
+    df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
+    df_cat = df_cat.drop(columns=["_fiyatli"])
+
+    # Özet metrikler
+    m1,m2,m3,m4=st.columns(4)
+    fiyatli=df_cat[df_cat["Son_Fiyat"]>0]
+    # TEFAS için Ret1M>0 olan varlıklar da değerlendirilebilir
+    degerli = fiyatli if cat_code != "TEFAS" else df_cat[df_cat["Ret1M"] != 0]
+    if degerli.empty:
+        degerli = df_cat
+    m1.metric("Toplam Varlık",len(df_cat))
+    m2.metric("Fiyatı Olan" if cat_code != "TEFAS" else "Getiri Verisi",
+              len(fiyatli) if cat_code != "TEFAS" else len(degerli))
+    ret_mean = degerli["Ret1M"].mean() if not degerli.empty else 0.0
+    m3.metric("Ort. 1A Getiri %",f"{ret_mean:.2f}%")
+    m4.metric("Ort. Optima Skor",f"{degerli['Optima_Skor'].mean():.1f}" if not degerli.empty else "N/A")
+
+    # ── TOP 5 ────────────────────────────────────────────────
+    st.divider()
+    st.subheader("En Yüksek Optima Skoru — Top 5")
+    top5=degerli.nlargest(5,"Optima_Skor")
+    # Top5 dataframe olarak göster — tıklanabilir
+    top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
+    top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
+    top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
+    new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
+                                   sel_ticker=st.session_state.get(f"sel_{page}",""))
+    if new_sel_top5 and new_sel_top5 != st.session_state.get(f"sel_{page}"):
+        st.session_state[f"sel_{page}"] = new_sel_top5
+        st.rerun()
+
+    # ── Tüm Varlıklar Tablosu (tıklanabilir) ─────────────────
+    st.divider()
+    st.subheader("Tüm Varlıklar")
+    if cat_code in ["BIST","TEFAS"]:
+        srch=st.text_input("Ara",placeholder="Ticker veya ad...")
+        if srch.strip():
+            mask=(df_cat["Ticker"].str.contains(srch.strip().upper(),na=False)|
+                  df_cat["Ad"].str.contains(srch.strip(),case=False,na=False))
+            df_cat=df_cat[mask]
+
+    # Sayfalama
+    page_size = 50
+    pg_key = f"tbl_pg_{page}"
+    if pg_key not in st.session_state:
+        st.session_state[pg_key] = 0
+    cur_pg  = st.session_state[pg_key]
+    df_page = df_cat.iloc[cur_pg*page_size:(cur_pg+1)*page_size]
+    sel_now = st.session_state.get(f"sel_{page}", "")
+
+    # Tıklanabilir tablo
+    df_page_show = df_page[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
+    df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
+    df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
+    new_sel = clickable_table(df_page_show, key=f"cat_{page}_{cur_pg}", sel_ticker=sel_now)
+    if new_sel and new_sel != sel_now:
+        st.session_state[f"sel_{page}"] = new_sel
+        st.rerun()
+
+    # Sayfa navigasyonu
+    total_pages = max(1, -(-len(df_cat) // page_size))
+    if total_pages > 1:
+        nav1, nav2, nav3 = st.columns([1,2,1])
+        with nav1:
+            if cur_pg > 0 and st.button("Onceki", key=f"pg_prev_{page}"):
+                st.session_state[pg_key] = cur_pg - 1; st.rerun()
+        with nav2:
+            st.caption(f"Sayfa {cur_pg+1} / {total_pages}  ({len(df_cat)} varlik)")
+        with nav3:
+            if cur_pg < total_pages-1 and st.button("Sonraki", key=f"pg_next_{page}"):
+                st.session_state[pg_key] = cur_pg + 1; st.rerun()
+
+    # ── DETAY ANALİZ ─────────────────────────────────────────
+    sel=st.session_state.get(f"sel_{page}")
+    if not sel:
+        st.info("Tablodan bir satıra tıklayarak analizi açın.")
+        st.stop()
+
+    all_tickers=df_uni[df_uni["Kategori"]==cat_code]["Ticker"].tolist()
+    if sel not in all_tickers:
+        st.session_state[f"sel_{page}"]=all_tickers[0] if all_tickers else None
+        st.rerun()
+
+    sel_row=df_uni[df_uni["Ticker"]==sel].iloc[0]
+    st.divider()
+    st.subheader(f"Detay: {sel}  —  {str(sel_row['Ad'])[:60]}")
+
+    period_map={"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
+    p_lbl=st.radio("Periyot",list(period_map.keys()),horizontal=True,key=f"per_{page}")
+    period_val=period_map[p_lbl]
+
+    with st.spinner("Analiz yükleniyor..."):
+        d=enrich(sel_row,period_val)
+        sig_lbl,sig_cls=get_signal(d["score"],d["rsi"],d["trend"])
+
+    r1,r2,r3,r4,r5=st.columns(5)
+    r1.metric("Son Fiyat",f"{float(sel_row['Son_Fiyat']):,.4f}")
+    r2.metric("Optima Skor",f"{d['score']:.1f}")
+    r3.metric("RSI (14)",f"{d['rsi']:.1f}")
+    r4.metric("1A Getiri %",f"{d['ret1m']:+.2f}%")
+    r5.metric("Yıllık Vol %",f"{d['vol']:.1f}%")
+
+    sig_color=SIG_COLORS.get(sig_cls,"#666")
+    st.markdown(f"""
+    <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
+      <span class="ts-sig {sig_cls}">{sig_lbl}</span>
+      <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
+        Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
+        Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
+        MACD: <b>{d['macd']:.4f}</b>
+      </span>
+    </div>""",unsafe_allow_html=True)
+
+    # Mum grafiği
+    if not d["hist"].empty:
+        fig=candle_fig(d["hist"],sel)
+        if fig: st.plotly_chart(fig,use_container_width=True)
+    else:
+        st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
+
+    # BIST Temel Analiz
+    if cat_code=="BIST":
+        st.divider()
+        st.subheader("Temel Analiz")
+        try:
+            from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
+                                    score_from_fundamentals, get_kap_url)
+            kap_url = get_kap_url(sel)
+
+            with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
+                raw  = fetch_kap_fundamentals(sel)
+                disp = fundamentals_to_display(raw)
+                fund_skor = score_from_fundamentals(raw, float(sel_row["Son_Fiyat"]))
+
+            pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
+            combined = min(100, round(
+                optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy), 1))
+            final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
+
+            # Kaynak bilgisi
+            src_note = "yfinance"
+            if raw.get("_kap_available"):
+                src_note += " + KAP"
+            elif raw.get("_kap_note"):
+                src_note += f" | KAP: {raw['_kap_note']}"
+            st.caption(f"Kaynak: {src_note}")
+
+            if kap_url:
+                st.caption(f"[KAP Finansal Bilgiler Sayfası]({kap_url})")
+
+            ka, kb = st.columns([2, 1])
+            with ka:
+                rows_html = "".join(
+                    f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
+                    for k, v in disp.items()
+                )
+                st.markdown(
+                    f'<table class="kap-table">{rows_html}</table>',
+                    unsafe_allow_html=True
+                )
+            with kb:
+                st.markdown('<div class="ts-card">', unsafe_allow_html=True)
+                st.markdown("**Skor Bileşimi**")
+                clr = SIG_COLORS.get(final_cls, "#666")
+                st.markdown(f"""
+                <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
+                <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
+                <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
+                <hr style='border-color:#e0e8f4;margin:10px 0'>
+                <small style='color:#6c7a9c'>Master Skor</small><br>
+                <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
+                <span class="ts-sig {final_cls}">{final_lbl}</span>
+                """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        except Exception as e:
+            st.warning(f"Temel analiz yüklenemedi: {e}")
+            st.info("Kontrol: `pip install yfinance` kurulu mu?")
+
+    # TEFAS Getiri ve Risk Analizi (API verisinden)
+    if cat_code=="TEFAS":
+        st.divider(); st.subheader("TEFAS Getiri ve Risk Analizi")
+        risk_val = int(sel_row.get("Risk_Deger",4))
+        risk_labels={1:"Çok Düşük",2:"Düşük",3:"Orta Altı",4:"Orta",
+                     5:"Orta Üstü",6:"Yüksek",7:"Çok Yüksek"}
+
+
+        # Excel'den gelen getiri metrikleri — her zaman göster
+        ret1m_x = float(sel_row.get("Ret1M", 0) or 0)
+        ret3m_x = float(sel_row.get("Ret3M", 0) or 0)
+        ret6m_x = float(sel_row.get("Ret6M", 0) or 0) if "Ret6M" in sel_row.index else 0.0
+        ret1y_x = float(sel_row.get("Ret1Y", 0) or 0) if "Ret1Y" in sel_row.index else 0.0
+        ret3y_x = float(sel_row.get("Ret3Y", 0) or 0) if "Ret3Y" in sel_row.index else 0.0
+        ret5y_x = float(sel_row.get("Ret5Y", 0) or 0) if "Ret5Y" in sel_row.index else 0.0
+
+        ta,tb,tc,td = st.columns(4)
+        ta.metric("1 Ay",  f"{ret1m_x:+.2f}%")
+        tb.metric("3 Ay",  f"{ret3m_x:+.2f}%")
+        tc.metric("6 Ay",  f"{ret6m_x:+.2f}%")
+        td.metric("1 Yil", f"{ret1y_x:+.2f}%")
+
+        if ret3y_x != 0 or ret5y_x != 0:
+            te,tf,tg = st.columns(3)
+            te.metric("3 Yil", f"{ret3y_x:+.2f}%")
+            tf.metric("5 Yil", f"{ret5y_x:+.2f}%")
+            tg.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
+        else:
+            st.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
+
+        if not d["hist"].empty:
+            pr = d["hist"]["Close"].dropna() if "Close" in d["hist"].columns else d["hist"].iloc[:,0].dropna()
+            if len(pr) > 20 and pr.pct_change().dropna().std() > 0:
+                rets=pr.pct_change().dropna(); rf=0.42/252; ex=rets-rf
+                sharpe=round(float(ex.mean()/ex.std()*np.sqrt(252)),3)
+                maxdd=round(float(((pr-pr.cummax())/pr.cummax()).min()*100),2)
+                s1,s2=st.columns(2)
+                s1.metric("Tahmini Sharpe",f"{sharpe:.3f}",
+                          help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
+                s2.metric("Tahmini Max Drawdown",f"{maxdd:.2f}%",
+                          help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
+        st.caption("Kaynak: TEFAS Excel (TEFAS.gov.tr)")
+# ══════════════════════════════════════════════════════════════
+# HALKA ARZ
+# ══════════════════════════════════════════════════════════════
 elif page=="Halka Arz":
     from datetime import datetime
     st.title("Halka Arz Takip")
