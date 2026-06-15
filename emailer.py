@@ -87,13 +87,14 @@ def _sig_lbl(score: float) -> str:
 
 def _th(text, align="left", width=None):
     w = f"width:{width}px;" if width else ""
-    return (f'<th style="{w}padding:6px 8px;text-align:{align};background:#2c3e6b;'
+    return (f'<th style="{w}padding:6px 8px;text-align:{align};background:#2c3e6b;white-space:nowrap;'
             f'color:#fff;white-space:nowrap;font-size:11px;">{text}</th>')
 
 
-def _td(val, align="left", bold=False, color=None, extra=""):
+def _td(val, align="left", bold=False, color=None, extra="", nowrap=False):
     style = (f"padding:6px 8px;border-bottom:1px solid #e8edf5;"
-             f"text-align:{align};font-size:11px;vertical-align:middle;")
+             f"text-align:{align};font-size:11px;vertical-align:middle;"
+             + ("white-space:nowrap;" if nowrap else ""))
     if bold:  style += "font-weight:700;"
     if color: style += f"color:{color};"
     if extra: style += extra
@@ -210,15 +211,15 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
 
         rows_html += f"""<tr>
           {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
-          {_td(f"<b>{row['Ticker']}</b>")}
+          {_td(f"<b>{row['Ticker']}</b>", nowrap=True)}
           {_td(ad_str)}
           {_td(f"<b>{skor:.0f}</b>", "right")}
-          {_td(f"{price:,.4f}", "right")}
-          {_td(str(lot), "right", bold=True)}
-          {_td(f"{gercek:,.2f}&nbsp;₺", "right", bold=True)}
+          {_td(f"{price:,.4f}", "right", nowrap=True)}
+          {_td(str(lot), "right", bold=True, nowrap=True)}
+          {_td(f"{gercek:,.2f}&nbsp;₺", "right", bold=True, nowrap=True)}
           {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
                f'border-radius:5px;font-size:10px;font-weight:700;'
-               f'white-space:nowrap">{sl}</span>', "center")}
+               f'white-space:nowrap">{_email_sig(sl)}</span>', "center")}
         </tr>"""
 
     if not rows_html:
@@ -229,8 +230,9 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
                border-left:4px solid #2c3e6b;padding-left:10px;">
       Portföy Optimizasyonu &mdash; {budget:,.0f}&nbsp;₺ &nbsp;|&nbsp; Risk: {risk}
     </h2>
-    <table style="width:100%;border-collapse:collapse;background:#fff;
-                  font-size:12px;table-layout:fixed;">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+<table style="width:100%;border-collapse:collapse;background:#fff;
+                  font-size:12px;table-layout:fixed;min-width:560px;">
       {_col_group()}
       <thead><tr>
         {_th("Kategori", "left",   _COL_W["kat"])}
@@ -244,6 +246,7 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
       </tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
+</div>
     <p style="font-size:11px;color:#9aa8c0;margin-top:6px;">
       Toplam: <b style="color:#1b2a4a">{grand_total:,.2f}&nbsp;₺</b> &nbsp;|&nbsp;
       {len(selected)} varlık önerildi. Yatırım tavsiyesi değildir.
@@ -290,12 +293,12 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
 
         rows_html += f"""<tr>
           {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
-          {_td(f"<b>{tkr}</b>")}
+          {_td(f"<b>{tkr}</b>", nowrap=True)}
           {_td(ad_name)}
           {_td(f"<b>{skor:.0f}</b>" if skor > 0 else "—", "right")}
-          {_td(f"{cur:,.4f}", "right")}
-          {_td(f"{adet:,.4f}", "right")}
-          {_td(f"{toplam:,.2f}&nbsp;₺", "right", bold=True)}
+          {_td(f"{cur:,.4f}", "right", nowrap=True)}
+          {_td(f"{adet:,.4f}", "right", nowrap=True)}
+          {_td(f"{toplam:,.2f}&nbsp;₺", "right", bold=True, nowrap=True)}
           {_td(f'<span style="color:{clr};font-weight:700">{pnl_pct:+.2f}%</span><br>'
                f'<span style="color:{clr};font-size:10px">{pnl_try:+,.2f}&nbsp;₺</span>',
                "right")}
@@ -309,8 +312,9 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
     return f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
                border-left:4px solid #2c3e6b;padding-left:10px;">Portföy Durumu</h2>
-    <table style="width:100%;border-collapse:collapse;background:#fff;
-                  font-size:12px;table-layout:fixed;">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+<table style="width:100%;border-collapse:collapse;background:#fff;
+                  font-size:12px;table-layout:fixed;min-width:560px;">
       {_col_group()}
       <thead><tr>
         {_th("Kategori",     "left",   _COL_W["kat"])}
@@ -404,6 +408,12 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
 
 
 # ── Gönderici ─────────────────────────────────────────────────────────────────
+
+def _email_sig(sig: str) -> str:
+    """Email için sinyal kısaltması."""
+    return {"GÜÇLÜ AL": "GÜ.AL", "KADEMELİ AL": "KAD.AL",
+            "TUT İZLE": "TUT", "SAT": "SAT", "NET SAT": "N.SAT"}.get(sig, sig)
+
 
 def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
                 budget: float = 0, risk: str = "Orta", max_assets: int = 10,
