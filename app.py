@@ -112,6 +112,21 @@ from auth import get_current_user, login_user, register_user, logout
 from admin import render_admin_panel
 init_db()
 
+# ── Secrets'tan admin kullanıcı otomatik oluştur (Cloud reboot) ─────
+try:
+    _asec = st.secrets.get("admin", {})
+    if _asec.get("email") and _asec.get("password"):
+        from db import get_conn as _gc
+        _cc = _gc()
+        _ex = _cc.execute("SELECT id FROM users WHERE email=?",
+                          (_asec["email"],)).fetchone()
+        _cc.close()
+        if not _ex:
+            register_user(_asec["email"], _asec["password"], role="admin")
+except Exception:
+    pass
+
+
 def _logo_html():
     for p in ["logo.png","Logo.png","LOGO.PNG"]:
         if os.path.exists(p):
