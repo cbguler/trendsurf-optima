@@ -1293,7 +1293,6 @@ elif page=="Portföyüm":
             _pm = df_uni[df_uni["Ticker"] == pt]
             auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
 
-            # Satır: Tarih | Birim + Birim Türü | Alış Fiyatı
             f_c1, f_c2, f_c3, f_c4 = st.columns([1.2, 0.9, 0.8, 1.2])
             with f_c1:
                 import datetime as _dt
@@ -1339,11 +1338,14 @@ elif page=="Portföyüm":
     import datetime as _dt
     import pandas as pd
 
-    # ── Portföy Varlıkları ───────────────────────────────────────
+    # ── Portföy Varlıkları Tablosu ───────────────────────────────
     st.divider()
-    st.subheader("Portföy Varlıkları")
+    st.subheader("Portföy Varlıkları Tablosu")
 
-    # Tablo için veri hazırla
+    if "pf_sel" not in st.session_state:
+        st.session_state["pf_sel"] = None
+
+    # Tablo verisi + Optima Skoru hesapla
     _pf_rows = []
     _id_list = []
     for pos in portfolio:
@@ -1359,8 +1361,18 @@ elif page=="Portföyüm":
         )
         _match  = df_uni[df_uni["Ticker"] == _tkr]
         _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0]) > 0 else 0.0
-        _skor   = float(_match["Optima_Skor"].iloc[0]) if not _match.empty and "Optima_Skor" in _match.columns else 0.0
         _ad     = str(_match["Ad"].iloc[0])[:40] if not _match.empty else _tkr
+
+        # Optima Skoru hesapla (CAT sayfalarındaki gibi)
+        if not _match.empty:
+            _row = _match.iloc[0]
+            _rsi_v = float(_row.get("RSI", 50) or 50)
+            _ret1m = float(_row.get("Ret1M", 0) or 0)
+            _vol_v = float(_row.get("Vol_1Y", 30) or 30)
+            _skor  = optima_score(_rsi_v, _ret1m, _vol_v)
+        else:
+            _skor = 0.0
+
         _toplam = _adet * _guncel
         _kz_tl  = _toplam - _adet * _alis
         _kz_pct = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
@@ -1373,61 +1385,68 @@ elif page=="Portföyüm":
             "Miktar":            _adet,
             "Birim":             _unit,
             "Alış Fiyatı (TL)": _alis,
-            "Güncel (TL)":      _guncel,
-            "Toplam (₺)":       _toplam,
-            "K/Z (%)":          _kz_pct,
+            "Güncel (TL)":       _guncel,
+            "Toplam (TL)":       _toplam,
+            "K/Z (%)":           _kz_pct,
             "Optima Skor":       _skor,
+            "Sil":               False,
         })
         _id_list.append(pos["id"])
 
     df_pf = pd.DataFrame(_pf_rows)
 
-    # Görüntü sütunları - sayısal değerler ham bırakılır (st.dataframe format uygular)
-    _event = st.dataframe(
+    # st.data_editor ile tablo — Sil sütunu checkbox
+    _edited = st.data_editor(
         df_pf,
         use_container_width=True,
         hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
+        key="pf_editor",
         column_config={
-            "Miktar":           st.column_config.NumberColumn(format="%.4f"),
-            "Alış Fiyatı (TL)":st.column_config.NumberColumn(format="%.4f"),
-            "Güncel (TL)":     st.column_config.NumberColumn(format="%.4f"),
-            "Toplam (₺)":      st.column_config.NumberColumn(format="%.2f"),
-            "K/Z (%)":         st.column_config.NumberColumn(format="%+.2f%%"),
-            "Optima Skor":     st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f"),
-        }
+            "Miktar":            st.column_config.NumberColumn(format="%.4f"),
+            "Alış Fiyatı (TL)": st.column_config.NumberColumn(format="%.4f"),
+            "Güncel (TL)":      st.column_config.NumberColumn(format="%.4f"),
+            "Toplam (TL)":      st.column_config.NumberColumn(format="%.2f"),
+            "K/Z (%)":          st.column_config.NumberColumn(format="%+.2f%%"),
+            "Optima Skor":      st.column_config.ProgressColumn(
+                                    min_value=0, max_value=100, format="%.1f"),
+            "Sil":              st.column_config.CheckboxColumn(
+                                    "Sil", help="Satırı silmek için işaretleyin"),
+        },
+        disabled=["Ticker","Ad","Kategori","Tarih","Miktar","Birim",
+                  "Alış Fiyatı (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Optima Skor"],
     )
 
+    # Sil işlemi — işaretlenen satırları sil
+    for _i, _row in _edited.iterrows():
+        if _row["Sil"]:
+            delete_portfolio_item(_id_list[_i])
+            st.rerun()
+
     # Toplam satırı (tablo devamı görünümünde)
-    _total_val = sum(r["Toplam (₺)"] for r in _pf_rows)
-    _total_kz  = sum(r["Toplam (₺)"] - r["Miktar"]*r["Alış Fiyatı (TL)"] for r in _pf_rows)
+    _total_val = df_pf["Toplam (TL)"].sum()
+    _total_kz  = sum(r["Toplam (TL)"] - r["Miktar"]*r["Alış Fiyatı (TL)"] for r in _pf_rows)
     _tc_color  = "#27ae60" if _total_kz >= 0 else "#e74c3c"
     _tc_sign   = "+" if _total_kz >= 0 else ""
     st.markdown(
         f"<div style='border:1px solid #e0eeff;border-top:2px solid #2c3e6b;"
         f"border-radius:0 0 8px 8px;padding:10px 18px;"
         f"display:flex;justify-content:space-between;align-items:center;background:#f8faff;'>"
-        f"<span style='font-size:13px;color:#6c7a9c;font-weight:700;'>TOPLAM PORTFÖY DEĞERİ</span>"
-        f"<span style='font-size:18px;font-weight:800;color:#1b2a4a;'>{fmt_tr(_total_val)} ₺"
-        f"&nbsp;&nbsp;<span style='font-size:13px;font-weight:700;color:{_tc_color};'>"
-        f"{_tc_sign}{fmt_tr(_total_kz)} ₺</span></span></div>",
+        f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        f"<b style='font-size:18px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL"
+        f"&nbsp;&nbsp;<b style='font-size:13px;color:{_tc_color};'>"
+        f"{_tc_sign}{fmt_tr(_total_kz)} TL</b></b></div>",
         unsafe_allow_html=True
     )
 
-    # Seçili satır — Sil + Analiz
-    _sel_rows = _event.selection.rows if hasattr(_event, "selection") else []
-    if _sel_rows:
-        _sel_idx = _sel_rows[0]
-        _sel_id  = _id_list[_sel_idx]
-        _sel_tkr = _pf_rows[_sel_idx]["Ticker"]
+    # ── Seçili varlık analizi (st.data_editor satır seçimi) ──────
+    st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
 
-        _sc1, _sc2 = st.columns([1, 6])
-        if _sc1.button(f"Sil: {_sel_tkr}", key="pf_del_sel", type="secondary"):
-            delete_portfolio_item(_sel_id)
-            st.rerun()
-
-        # Analiz
+    # selection via session state click — manual ticker select
+    _pf_tickers = [r["Ticker"] for r in _pf_rows]
+    _sel_tkr = st.selectbox("Varlık analizi", ["—"] + _pf_tickers,
+                             key="pf_analiz_sel",
+                             label_visibility="collapsed")
+    if _sel_tkr and _sel_tkr != "—":
         _sel_match = df_uni[df_uni["Ticker"] == _sel_tkr]
         if not _sel_match.empty:
             _sel_row = _sel_match.iloc[0]
@@ -1442,18 +1461,19 @@ elif page=="Portföyüm":
                 _sig_lbl, _sig_cls = get_signal(_d["score"], _d["rsi"], _d["trend"])
 
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
-            _m1.metric("Son Fiyat",   f"{float(_sel_row['Son_Fiyat']):,.4f}")
-            _m2.metric("Optima Skor", f"{_d['score']:.1f}")
-            _m3.metric("RSI (14)",    f"{_d['rsi']:.1f}")
-            _m4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
-            _m5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
+            _m1.metric("Son Fiyat",    f"{float(_sel_row['Son_Fiyat']):,.4f}")
+            _m2.metric("Optima Skor",  f"{_d['score']:.1f}")
+            _m3.metric("RSI (14)",     f"{_d['rsi']:.1f}")
+            _m4.metric("1A Getiri %",  f"{_d['ret1m']:+.2f}%")
+            _m5.metric("Yıllık Vol %", f"{_d['vol']:.1f}%")
 
             _sc = SIG_COLORS.get(_sig_cls,"#666")
             st.markdown(f"""<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d['trend']}</b> &nbsp;|&nbsp; Optima Skor: <b>{_d['score']}/100</b>
-        &nbsp;|&nbsp; MACD: <b>{_d['macd']:.4f}</b>
+        Trend: <b>{_d["trend"]}</b> &nbsp;|&nbsp;
+        Optima Skor: <b>{_d["score"]}/100</b> &nbsp;|&nbsp;
+        MACD: <b>{_d["macd"]:.4f}</b>
       </span></div>""", unsafe_allow_html=True)
 
             if not _d["hist"].empty:
