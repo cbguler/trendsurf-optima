@@ -1325,7 +1325,7 @@ elif page=="Portföyüm":
     # ── Portföy Varlıkları Tablosu ───────────────────────────────
     st.divider()
     st.subheader("Portföy Varlıkları Tablosu")
-    st.caption("Analiz için sol kutucuğu, silmek için sağ kutucuğu işaretleyin.")
+    st.markdown("<span style='font-size:13px;color:#6c7a9c;'>Analiz için sol kutucuğu, silmek için sağ kutucuğu işaretleyin.</span>", unsafe_allow_html=True)
 
     # Sütun oranları: [Analiz□, Ticker, Tarih, Miktar, Birim, Alış(TL), Güncel(TL), Toplam(TL), K/Z%, Skor, Sil□]
     _CW = [0.4, 1.1, 1.0, 0.85, 0.75, 1.15, 1.15, 1.15, 0.85, 0.7, 0.4]
@@ -1333,7 +1333,7 @@ elif page=="Portföyüm":
     # Başlık
     _hh = st.columns(_CW)
     for _hc, _lb in zip(_hh, ["","Ticker","Tarih","Miktar","Birim","Alış (TL)","Güncel (TL)","Toplam (TL)","K/Z (%)","Skor",""]):
-        _hc.markdown(f"<span style='font-size:11px;font-weight:700;color:#6c7a9c;'>{_lb}</span>", unsafe_allow_html=True)
+        _hc.markdown(f"<span style='font-size:13px;font-weight:700;color:#6c7a9c;'>{_lb}</span>", unsafe_allow_html=True)
     st.markdown("<hr style='margin:2px 0 4px 0;border:0;border-top:2px solid #2c3e6b;'>", unsafe_allow_html=True)
 
     _total_val, _total_kz = 0.0, 0.0
@@ -1368,15 +1368,15 @@ elif page=="Portföyüm":
         _chk_a = _rc[0].checkbox("", key=f"chk_a_{pos['id']}", label_visibility="collapsed")
         if _chk_a: _sel_tkr = _tkr
         # Veri sütunları
-        _rc[1].markdown(f"<b style='font-size:13px;color:#1b2a4a;'>{_tkr}</b>", unsafe_allow_html=True)
-        _rc[2].markdown(f"<span style='font-size:12px;color:#6c7a9c;'>{_tg}</span>", unsafe_allow_html=True)
-        _rc[3].markdown(f"<span style='font-size:13px;'>{fmt_tr(_adet,4)}</span>", unsafe_allow_html=True)
-        _rc[4].markdown(f"<span style='font-size:12px;color:#6c7a9c;'>{_unit}</span>", unsafe_allow_html=True)
-        _rc[5].markdown(f"<span style='font-size:13px;'>{fmt_tr(_alis,4)}</span>", unsafe_allow_html=True)
-        _rc[6].markdown(f"<span style='font-size:13px;'>{fmt_tr(_guncel,4) if _guncel>0 else '—'}</span>", unsafe_allow_html=True)
-        _rc[7].markdown(f"<b style='font-size:13px;'>{fmt_tr(_toplam)}</b>", unsafe_allow_html=True)
-        _rc[8].markdown(f"<span style='font-size:13px;font-weight:600;color:{_kzc};'>{'+'if _kz_pct>=0 else ''}{fmt_tr(_kz_pct)}%</span>", unsafe_allow_html=True)
-        _rc[9].markdown(f"<span style='font-size:13px;'>{_skor:.1f}</span>", unsafe_allow_html=True)
+        _rc[1].markdown(f"<b style='font-size:15px;color:#1b2a4a;'>{_tkr}</b>", unsafe_allow_html=True)
+        _rc[2].markdown(f"<span style='font-size:14px;color:#6c7a9c;'>{_tg}</span>", unsafe_allow_html=True)
+        _rc[3].markdown(f"<span style='font-size:14px;'>{fmt_tr(_adet,4)}</span>", unsafe_allow_html=True)
+        _rc[4].markdown(f"<span style='font-size:14px;color:#6c7a9c;'>{_unit}</span>", unsafe_allow_html=True)
+        _rc[5].markdown(f"<span style='font-size:14px;'>{fmt_tr(_alis,4)}</span>", unsafe_allow_html=True)
+        _rc[6].markdown(f"<span style='font-size:14px;'>{fmt_tr(_guncel,4) if _guncel>0 else '—'}</span>", unsafe_allow_html=True)
+        _rc[7].markdown(f"<b style='font-size:15px;'>{fmt_tr(_toplam)}</b>", unsafe_allow_html=True)
+        _rc[8].markdown(f"<span style='font-size:14px;font-weight:600;color:{_kzc};'>{'+'if _kz_pct>=0 else ''}{fmt_tr(_kz_pct)}%</span>", unsafe_allow_html=True)
+        _rc[9].markdown(f"<span style='font-size:15px;'>{_skor:.1f}</span>", unsafe_allow_html=True)
         # Sağ: sil checkbox
         _chk_s = _rc[10].checkbox("", key=f"chk_s_{pos['id']}", label_visibility="collapsed")
         if _chk_s:
