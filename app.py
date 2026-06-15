@@ -1279,46 +1279,33 @@ elif page=="Portföyüm":
             tickers_list = df_uni_copy["Ticker"].tolist()
             cats_list    = df_uni_copy["Kategori"].tolist()
 
-            # Satır 1: Varlık seçimi
             sel_label = st.selectbox("Varlık", labels, key="pf_varlik_sel")
             idx_sel   = labels.index(sel_label)
             pt        = tickers_list[idx_sel]
             pt_cat    = cats_list[idx_sel]
 
-            # Güncel fiyatı df_uni'den otomatik getir
             _pm = df_uni[df_uni["Ticker"] == pt]
             auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
 
-            # Satır 2: Tarih — Adet — Alış Fiyatı
             f_c1, f_c2, f_c3 = st.columns([1.2, 1, 1.2])
             with f_c1:
                 import datetime as _dt
-                satin_tarih = st.date_input("Satın Alma Tarihi",
-                                            value=_dt.date.today(), key="pf_tarih",
-                                            format="DD.MM.YYYY")
+                satin_tarih = st.date_input("Satın Alma Tarihi", value=_dt.date.today(),
+                                            key="pf_tarih", format="DD.MM.YYYY")
             with f_c2:
                 pa_str = st.text_input("Adet / Gram / Lot", value="1",
                                        key="pf_adet", placeholder="Örn: 5,06")
-                try:
-                    pa = parse_tr(pa_str)
-                except Exception:
-                    pa = 0.0
+                try:    pa = parse_tr(pa_str)
+                except: pa = 0.0
             with f_c3:
-                _placeholder = fmt_tr(auto_price, 4) if auto_price > 0 else "Örn: 6.277,08"
+                _ph = fmt_tr(auto_price, 4) if auto_price > 0 else "Örn: 6.277,08"
                 pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
-                                       key="pf_maliyet", placeholder=_placeholder)
-                try:
-                    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
-                except Exception:
-                    pm = auto_price
+                                       key="pf_maliyet", placeholder=_ph)
+                try:    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
+                except: pm = auto_price
 
-            # Güncel fiyat bilgisi + tahmini toplam
-            if auto_price > 0:
-                _toplam_tahmini = pa * auto_price if pa > 0 else 0.0
-                st.caption(
-                    f"📊 Güncel piyasa fiyatı: **{fmt_tr(auto_price, 4)} TL**"
-                    + (f"  |  Tahmini toplam: **{fmt_tr(_toplam_tahmini)} ₺**" if _toplam_tahmini > 0 else "")
-                )
+            if auto_price > 0 and pa > 0:
+                st.caption(f"📊 Güncel: **{fmt_tr(auto_price,4)} TL**  |  Tahmini toplam: **{fmt_tr(pa*auto_price)} ₺**")
 
             pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
                                     placeholder="Örn: İlk alım, uzun vadeli")
@@ -1328,7 +1315,7 @@ elif page=="Portföyüm":
                     add_portfolio_item(pt, pa, pm, asset_type=pt_cat,
                                        note=pf_note,
                                        purchase_date=satin_tarih.strftime("%Y-%m-%d"))
-                    st.success(f"{pt} portföye eklendi — {fmt_tr(pa, 4)} adet @ {fmt_tr(pm, 4)} TL")
+                    st.success(f"{pt} eklendi — {fmt_tr(pa,4)} adet @ {fmt_tr(pm,4)} TL")
                     st.rerun()
                 else:
                     st.warning("Adet 0'dan büyük olmalı.")
@@ -1337,117 +1324,124 @@ elif page=="Portföyüm":
         st.info("Henüz pozisyon yok. Yukarıdan ekleyebilirsin.")
         st.stop()
 
-    # ── Portföy Tablosu ─────────────────────────────────────────
+    import datetime as _dt
+
+    # ── Portföy Varlıkları tablosu ───────────────────────────────
     st.divider()
-
-    # Her satır için güncel fiyat + toplam hesapla
-    _pf_rows = []
-    for pos in portfolio:
-        _tkr  = pos["ticker"]
-        _kat  = pos["asset_type"]
-        _adet = float(pos["quantity"])
-        _alis = float(pos["avg_cost"])
-        _tarih = pos.get("purchase_date", "")
-        _tarih_disp = (
-            _dt.datetime.strptime(_tarih, "%Y-%m-%d").strftime("%d.%m.%Y")
-            if _tarih and len(_tarih) == 10 else _tarih
-        )
-        _match = df_uni[df_uni["Ticker"] == _tkr]
-        _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0]) > 0 else 0.0
-        _toplam  = _adet * _guncel
-        _alis_t  = _adet * _alis
-        _kz_tl   = _toplam - _alis_t
-        _kz_pct  = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
-        _pf_rows.append({
-            "_id":              pos["id"],
-            "Tarih":            _tarih_disp,
-            "Ticker":           _tkr,
-            "Kategori":         _kat,
-            "Adet":             fmt_tr(_adet, 4),
-            "Alış Fiyatı (TL)": fmt_tr(_alis, 4),
-            "Güncel Fiyat (TL)":fmt_tr(_guncel, 4) if _guncel > 0 else "—",
-            "Toplam Değer (₺)": fmt_tr(_toplam),
-            "K/Z (%)":          ("+" if _kz_pct >= 0 else "") + fmt_tr(_kz_pct) + "%",
-            "K/Z (₺)":          ("+" if _kz_tl >= 0 else "") + fmt_tr(_kz_tl),
-            "_toplam_raw":      _toplam,
-            "_kz_raw":          _kz_tl,
-        })
-
-    import pandas as pd
-    df_pf = pd.DataFrame(_pf_rows)
-
-    # Tablo gösterimi
     st.subheader("Portföy Varlıkları")
-    st.dataframe(
-        df_pf[[c for c in df_pf.columns if not c.startswith("_")]],
-        use_container_width=True, hide_index=True
-    )
 
-    # Toplam satırı
-    _total_val = df_pf["_toplam_raw"].sum()
-    _total_kz  = df_pf["_kz_raw"].sum()
-    _kz_sign   = "+" if _total_kz >= 0 else ""
-    _kz_color  = "#27ae60" if _total_kz >= 0 else "#e74c3c"
-    st.markdown(
-        f"<div style='background:#f0f4f8;border-radius:8px;padding:10px 18px;"
-        f"display:flex;justify-content:space-between;align-items:center;margin-top:4px;'>"
-        f"<span style='font-size:14px;color:#6c7a9c;font-weight:600;'>TOPLAM PORTFÖY DEĞERİ</span>"
-        f"<span style='font-size:20px;font-weight:800;color:#1b2a4a;'>{fmt_tr(_total_val)} ₺"
-        f"&nbsp;&nbsp;<span style='font-size:13px;color:{_kz_color};'>"
-        f"{_kz_sign}{fmt_tr(_total_kz)} ₺</span></span></div>",
-        unsafe_allow_html=True
-    )
+    # Tablo başlık satırı
+    _h0,_h1,_h2,_h3,_h4,_h5,_h6,_h7,_h8,_h9 = st.columns([0.4,1.1,1,0.9,1.1,1.2,1.2,1.1,1,0.6])
+    for _col,_lbl in zip([_h1,_h2,_h3,_h4,_h5,_h6,_h7,_h8,_h9],
+                          ["Tarih","Ticker","Kategori","Adet","Alış Fiyatı","Güncel Fiyat",
+                           "Toplam Değer ₺","K/Z","Sil"]):
+        _col.markdown(f"<span style='font-size:11px;font-weight:700;color:#6c7a9c;'>{_lbl}</span>",
+                      unsafe_allow_html=True)
+    st.markdown("<hr style='margin:2px 0 6px 0;border-color:#e0eeff;'>",unsafe_allow_html=True)
 
-    # ── Gelir & Temettü Analizi ────────────────────────────────
-    pf_legacy = [{"ticker": r["ticker"], "adet": r["quantity"], "maliyet": r["avg_cost"]}
-                 for r in portfolio]
-    try:
-        from dividend_engine import calc_portfolio_income, portfolio_income_summary
-        with st.spinner("Temettü ve gelir hesaplanıyor..."):
-            df_income = calc_portfolio_income(pf_legacy, df_uni)
-        if not df_income.empty:
-            summary = portfolio_income_summary(df_income)
-            st.divider()
-            st.subheader("Gelir Analizi")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Yıllık Temettü + Staking", f"{summary.get('yillik_gelir_try',0):,.2f} ₺")
-            m2.metric("Ort. Pasif Gelir %", f"{summary.get('ortalama_gelir_pct',0):.2f}%")
-            m3.metric("En Yüksek Gelirli", summary.get("max_gelir_varlik","—"))
-            if summary.get("temettu_try",0) + summary.get("staking_try",0) > 0:
-                g1, g2, g3 = st.columns(3)
-                g1.metric("Temettü (BIST)", f"{summary.get('temettu_try',0):,.2f} ₺/yıl")
-                g2.metric("Staking (Kripto)", f"{summary.get('staking_try',0):,.2f} $/yıl")
-                g3.metric("Fon Getirisi (TEFAS)", f"{summary.get('fon_getiri_try',0):,.2f} ₺/yıl")
-    except Exception:
-        pass
+    # Seçili varlık state
+    if "pf_sel" not in st.session_state:
+        st.session_state["pf_sel"] = None
 
-    # ── Pozisyon Silme ──────────────────────────────────────────
-    st.divider()
-    st.subheader("Pozisyon Yönetimi")
+    _total_val, _total_kz = 0.0, 0.0
+
     for pos in portfolio:
-        _c1, _c2, _c3, _c4 = st.columns([2, 1, 2, 1])
-        _c1.markdown(
-            f"**{pos['ticker']}** "
-            f"<span style='color:#6c7a9c;font-size:11px;'>{pos['asset_type']}</span>",
-            unsafe_allow_html=True)
+        _tkr   = pos["ticker"]
+        _kat   = pos["asset_type"]
+        _adet  = float(pos["quantity"])
+        _alis  = float(pos["avg_cost"])
         _tarih_raw = pos.get("purchase_date","")
         _tarih_g = (
             _dt.datetime.strptime(_tarih_raw,"%Y-%m-%d").strftime("%d.%m.%Y")
             if _tarih_raw and len(_tarih_raw)==10 else _tarih_raw or "—"
         )
-        _c2.markdown(f"<span style='color:#6c7a9c;font-size:11px;'>{_tarih_g}</span>", unsafe_allow_html=True)
-        _c3.markdown(
-            f"<span style='color:#1b2a4a;'>"
-            f"{fmt_tr(float(pos['quantity']),4)} adet"
-            f" @ {fmt_tr(float(pos['avg_cost']),4)} TL</span>",
-            unsafe_allow_html=True)
-        if _c4.button("Sil", key=f"del_{pos['id']}"):
-            delete_portfolio_item(pos["id"])
+        _match  = df_uni[df_uni["Ticker"] == _tkr]
+        _guncel = float(_match["Son_Fiyat"].iloc[0]) if not _match.empty and float(_match["Son_Fiyat"].iloc[0]) > 0 else 0.0
+        _toplam = _adet * _guncel
+        _kz_tl  = _toplam - _adet * _alis
+        _kz_pct = ((_guncel / _alis - 1) * 100) if _alis > 0 else 0.0
+        _total_val += _toplam
+        _total_kz  += _kz_tl
+
+        _is_sel = st.session_state.get("pf_sel") == f"{_tkr}_{pos['id']}"
+        _kz_color = "#27ae60" if _kz_pct >= 0 else "#e74c3c"
+
+        _c0,_c1,_c2,_c3,_c4,_c5,_c6,_c7,_c8,_c9 = st.columns([0.4,1.1,1,0.9,1.1,1.2,1.2,1.1,1,0.6])
+        # Seçim butonu
+        if _c0.button("▶" if _is_sel else "○", key=f"sel_{pos['id']}", help="Analiz göster"):
+            st.session_state["pf_sel"] = None if _is_sel else f"{_tkr}_{pos['id']}"
             st.rerun()
-    st.divider()
-    if st.button("Tümünü Sil", use_container_width=True, key="pf_clear"):
-        clear_portfolio()
-        st.rerun()
+        _c1.markdown(f"<span style='font-size:12px;'>{_tarih_g}</span>", unsafe_allow_html=True)
+        _c2.markdown(f"<b style='font-size:13px;'>{_tkr}</b>", unsafe_allow_html=True)
+        _c3.markdown(f"<span style='font-size:12px;color:#6c7a9c;'>{_kat}</span>", unsafe_allow_html=True)
+        _c4.markdown(f"<span style='font-size:12px;'>{fmt_tr(_adet,4)}</span>", unsafe_allow_html=True)
+        _c5.markdown(f"<span style='font-size:12px;'>{fmt_tr(_alis,4)}</span>", unsafe_allow_html=True)
+        _c6.markdown(f"<span style='font-size:12px;'>{fmt_tr(_guncel,4) if _guncel>0 else '—'}</span>", unsafe_allow_html=True)
+        _c7.markdown(f"<b style='font-size:13px;'>{fmt_tr(_toplam)}</b>", unsafe_allow_html=True)
+        _c8.markdown(f"<span style='font-size:12px;color:{_kz_color};font-weight:600;'>"
+                     f"{'+'if _kz_pct>=0 else ''}{fmt_tr(_kz_pct)}%</span>", unsafe_allow_html=True)
+        if _c9.button("Sil", key=f"del_{pos['id']}"):
+            delete_portfolio_item(pos["id"])
+            if st.session_state.get("pf_sel") == f"{_tkr}_{pos['id']}":
+                st.session_state["pf_sel"] = None
+            st.rerun()
+
+    # Toplam satırı
+    st.markdown("<hr style='margin:4px 0;border-color:#e0eeff;'>", unsafe_allow_html=True)
+    _tc_sign  = "+" if _total_kz >= 0 else ""
+    _tc_color = "#27ae60" if _total_kz >= 0 else "#e74c3c"
+    st.markdown(
+        f"<div style='background:#f0f4f8;border-radius:8px;padding:10px 18px;"
+        f"display:flex;justify-content:space-between;align-items:center;margin-top:4px;'>"
+        f"<span style='font-size:13px;color:#6c7a9c;font-weight:700;'>TOPLAM PORTFÖY DEĞERİ</span>"
+        f"<span style='font-size:20px;font-weight:800;color:#1b2a4a;'>{fmt_tr(_total_val)} ₺"
+        f"&nbsp;&nbsp;<span style='font-size:13px;color:{_tc_color};'>"
+        f"{_tc_sign}{fmt_tr(_total_kz)} ₺</span></span></div>",
+        unsafe_allow_html=True
+    )
+
+    # ── Seçili varlık analizi ────────────────────────────────────
+    _sel_key = st.session_state.get("pf_sel")
+    if _sel_key:
+        _sel_tkr = _sel_key.split("_")[0]
+        _sel_rows = df_uni[df_uni["Ticker"] == _sel_tkr]
+        if not _sel_rows.empty:
+            _sel_row = _sel_rows.iloc[0]
+            st.divider()
+            st.subheader(f"Analiz: {_sel_tkr}  —  {str(_sel_row['Ad'])[:60]}")
+
+            _period_map = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
+            _p_lbl = st.radio("Periyot", list(_period_map.keys()),
+                               horizontal=True, key="pf_per")
+            _period_val = _period_map[_p_lbl]
+
+            with st.spinner("Analiz yükleniyor..."):
+                _d = enrich(_sel_row, _period_val)
+                _sig_lbl, _sig_cls = get_signal(_d["score"], _d["rsi"], _d["trend"])
+
+            _r1,_r2,_r3,_r4,_r5 = st.columns(5)
+            _r1.metric("Son Fiyat",   f"{float(_sel_row['Son_Fiyat']):,.4f}")
+            _r2.metric("Optima Skor", f"{_d['score']:.1f}")
+            _r3.metric("RSI (14)",    f"{_d['rsi']:.1f}")
+            _r4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
+            _r5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
+
+            _sc = SIG_COLORS.get(_sig_cls,"#666")
+            st.markdown(f"""
+    <div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
+      <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
+      <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
+        Trend: <b>{_d['trend']}</b> &nbsp;|&nbsp;
+        Optima Skor: <b>{_d['score']}/100</b> &nbsp;|&nbsp;
+        MACD: <b>{_d['macd']:.4f}</b>
+      </span>
+    </div>""", unsafe_allow_html=True)
+
+            if not _d["hist"].empty:
+                _fig = candle_fig(_d["hist"], _sel_tkr)
+                if _fig: st.plotly_chart(_fig, use_container_width=True)
+            else:
+                st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
 
 
 
