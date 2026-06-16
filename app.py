@@ -311,6 +311,20 @@ if "auth_token" not in st.session_state and "remember_token" in st.session_state
     st.session_state["auth_token"] = st.session_state["remember_token"]
 
 _cur_user = get_current_user()
+# is_admin override: role=="admin" veya Secrets email eşleşmesi
+if _cur_user:
+    try:
+        _asec2 = st.secrets.get("admin", {})
+        _is_adm = (
+            _cur_user.get("role") == "admin" or
+            _cur_user.get("is_admin") == True or
+            _cur_user.get("is_admin") == 1 or
+            (_asec2.get("email") and
+             _cur_user.get("email","").lower() == _asec2["email"].lower())
+        )
+        _cur_user["is_admin"] = _is_adm
+    except Exception:
+        pass
 if _cur_user is None:
     render_auth_gate()
     st.stop()
