@@ -1,9 +1,8 @@
 """
 TrendSurf Optima — Standalone Email Sender (GitHub Actions)
 """
-import os, sys, json, pandas as pd
+import os, sys, pandas as pd
 
-# Çevre değişkenlerinden config oluştur
 cfg = {
     "address":   os.environ.get("EMAIL_ADDRESS", ""),
     "smtp_host": "smtp.gmail.com",
@@ -13,18 +12,16 @@ cfg = {
 }
 
 if not cfg["smtp_user"] or not cfg["smtp_pass"]:
-    print("HATA: EMAIL_ADDRESS, SMTP_USER, SMTP_PASS env değişkenleri eksik")
+    print("HATA: SMTP_USER ve SMTP_PASS env degiskenleri eksik")
     sys.exit(1)
 
-# Veri yükle
 try:
     df_uni = pd.read_csv("optimized_universe.csv")
-    print(f"Veri yüklendi: {len(df_uni)} varlık")
+    print(f"Veri yuklendi: {len(df_uni)} varlik")
 except FileNotFoundError:
-    print("optimized_universe.csv bulunamadı")
+    print("optimized_universe.csv bulunamadi — bos DataFrame ile devam")
     df_uni = pd.DataFrame()
 
-# Gönder (portfolyo GitHub Actions'ta yok — boş bırakılır)
 from emailer import send_report
-result = send_report(df_uni=df_uni, portfolio_rows=[], cfg=cfg)
-print("E-posta gönderildi:", result)
+result = send_report(df_uni=df_uni, portfolio=[], cfg=cfg)
+print("Sonuc:", result)
