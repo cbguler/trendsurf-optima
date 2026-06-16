@@ -140,10 +140,16 @@ try:
                 except Exception:
                     register_user(_asec["email"], _asec["password"], "Admin", role="admin")
         else:
-            # Kullanıcı var ama rol admin değilse güncelle
-            _cc.execute("UPDATE users SET role='admin' WHERE email=?",
-                        (_asec["email"],))
-            _cc.commit()
+            # Kullanıcı var — admin yap + onayla
+            for _sql in [
+                "UPDATE users SET role='admin' WHERE email=?",
+                "UPDATE users SET is_approved=1 WHERE email=?",
+                "UPDATE users SET status='approved' WHERE email=?",
+                "UPDATE users SET is_active=1 WHERE email=?",
+                "UPDATE users SET approved=1 WHERE email=?",
+            ]:
+                try: _cc.execute(_sql, (_asec["email"],)); _cc.commit()
+                except Exception: pass
         _cc.close()
 except Exception as _e:
     import traceback; traceback.print_exc()
