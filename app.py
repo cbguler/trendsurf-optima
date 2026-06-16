@@ -856,18 +856,25 @@ def load_email_cfg():
     # 1) Önce secrets.toml (Streamlit Cloud)
     try:
         s = st.secrets
-        # GitHub Secrets key adlarından herhangi biri varsa kullan
+        # [email] nested section (toml: [email] smtp_user=...)
+        _es = dict(s.get("email", {}) or {})
+        # Üst seviye veya [email] altındaki anahtarları kontrol et
         email_user = (s.get("EMAIL_USER") or s.get("SMTP_USER")
-                      or s.get("smtp_user") or "")
+                      or s.get("smtp_user")
+                      or _es.get("smtp_user") or "")
         email_pass = (s.get("EMAIL_PASS") or s.get("SMTP_PASS")
-                      or s.get("smtp_pass") or "")
+                      or s.get("smtp_pass")
+                      or _es.get("smtp_pass") or "")
         email_addr = (s.get("EMAIL_ADDRESS") or s.get("address")
-                      or s.get("ADMIN_EMAIL") or "")
+                      or s.get("ADMIN_EMAIL")
+                      or _es.get("address") or "")
+        smtp_host  = (s.get("SMTP_HOST") or _es.get("smtp_host","smtp.gmail.com"))
+        smtp_port  = int(s.get("SMTP_PORT") or _es.get("smtp_port", 587))
         if email_user and email_pass:
             return {
-                "address":   email_addr,
-                "smtp_host": s.get("SMTP_HOST", "smtp.gmail.com"),
-                "smtp_port": int(s.get("SMTP_PORT", 587)),
+                "address":   email_addr or email_user,
+                "smtp_host": smtp_host,
+                "smtp_port": smtp_port,
                 "smtp_user": email_user,
                 "smtp_pass": email_pass,
                 "times":     list(s.get("REPORT_TIMES", ["08:30","11:30"])),
