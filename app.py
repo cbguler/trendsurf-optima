@@ -116,15 +116,37 @@ init_db()
 try:
     _asec = st.secrets.get("admin", {})
     if _asec.get("email") and _asec.get("password"):
+        import hashlib as _hl
         from db import get_conn as _gc
         _cc = _gc()
         _ex = _cc.execute("SELECT id FROM users WHERE email=?",
                           (_asec["email"],)).fetchone()
-        _cc.close()
         if not _ex:
-            register_user(_asec["email"], _asec["password"], role="admin")
-except Exception:
-    pass
+            # register_user imzası bilinmiyor — doğrudan SQL ile oluştur
+            _pw_hash = _hl.sha256(_asec["password"].encode()).hexdigest()
+            try:
+                _cc.execute(
+                    "INSERT INTO users (email, password_hash, role, full_name, plan) "
+                    "VALUES (?,?,'admin','Admin','premium')",
+                    (_asec["email"], _pw_hash))
+                _cc.commit()
+            except Exception:
+                # Kolon adları farklıysa alternatif dene
+                try:
+                    _cc.execute(
+                        "INSERT INTO users (email, password, role) VALUES (?,?,'admin')",
+                        (_asec["email"], _pw_hash))
+                    _cc.commit()
+                except Exception:
+                    register_user(_asec["email"], _asec["password"], "Admin", role="admin")
+        else:
+            # Kullanıcı var ama rol admin değilse güncelle
+            _cc.execute("UPDATE users SET role='admin' WHERE email=?",
+                        (_asec["email"],))
+            _cc.commit()
+        _cc.close()
+except Exception as _e:
+    import traceback; traceback.print_exc()
 
 
 def _logo_html():
