@@ -424,6 +424,15 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
         if os.path.exists(CFG_FILE):
             with open(CFG_FILE) as f:
                 cfg = json.load(f)
+        # Streamlit Secrets fallback (Cloud reboots sonrası kalıcılık)
+        if not cfg:
+            try:
+                import streamlit as _st
+                _s = _st.secrets.get("email", {})
+                if _s.get("smtp_user"):
+                    cfg = dict(_s)
+            except Exception:
+                pass
 
     to_addr   = cfg.get("address",   "")
     smtp_host = cfg.get("smtp_host", "smtp.gmail.com")

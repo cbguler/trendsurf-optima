@@ -1,0 +1,33 @@
+name: Scheduled Email Reports
+
+on:
+  schedule:
+    # UTC saatleri — Türkiye UTC+3:
+    # 08:30 TRT = 05:30 UTC
+    - cron: "30 5 * * 1-5"
+    # 12:00 TRT = 09:00 UTC  
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch:   # Manuel çalıştırma butonu
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas yfinance plotly streamlit requests pytefas --quiet
+
+      - name: Send email report
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          SMTP_USER:     ${{ secrets.SMTP_USER }}
+          SMTP_PASS:     ${{ secrets.SMTP_PASS }}
+        run: python emailer_standalone.py
