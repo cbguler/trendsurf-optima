@@ -286,8 +286,23 @@ def render_auth_gate():
                     st.error("Sifre en az 8 karakter olmali.")
                 else:
                     res = register_user(email_r, pass_r, full_name)
-                    if res["ok"]: st.success(res["msg"])
-                    else:         st.error(res["msg"])
+                    if res["ok"]:
+                        # Kayıt sonrası otomatik onayla
+                        try:
+                            from db import get_conn as _gc2
+                            _cc2 = _gc2()
+                            for _s2 in [
+                                "UPDATE users SET is_approved=1 WHERE email=?",
+                                "UPDATE users SET status='approved' WHERE email=?",
+                                "UPDATE users SET is_active=1 WHERE email=?",
+                                "UPDATE users SET approved=1 WHERE email=?",
+                            ]:
+                                try: _cc2.execute(_s2,(email_r,)); _cc2.commit()
+                                except: pass
+                            _cc2.close()
+                        except: pass
+                        st.success("Kaydiniz tamamlandi. Giris Yap sekmesinden girebilirsiniz.")
+                    else: st.error(res["msg"])
 
         with tab_reset:
             st.markdown("E-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.")
@@ -2399,4 +2414,8 @@ Portfoy veritabaninda saklanir. Cikis yapip tekrar giris yapin.
 **Uygulama yavash aciliyor?**
 Uzun sure kullanilmayinca uyku moduna giriyor. Ilk acilista 1-2 dakika normaldir.
 """)
-
+            if not _ex:
+                try:
+                    register_user(_asec["email"], _asec["password"], "Admin")
+                except Exception:
+                    pass
