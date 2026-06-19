@@ -2,12 +2,12 @@ name: Scheduled Email Reports
 
 on:
   schedule:
-    # UTC saatleri — Türkiye UTC+3:
+    # Türkiye UTC+3 — hafta içi:
     # 08:30 TRT = 05:30 UTC
     - cron: "30 5 * * 1-5"
-    # 12:00 TRT = 09:00 UTC  
+    # 12:00 TRT = 09:00 UTC
     - cron: "0 9 * * 1-5"
-  workflow_dispatch:   # Manuel çalıştırma butonu
+  workflow_dispatch:
 
 jobs:
   send-email:
@@ -24,6 +24,16 @@ jobs:
       - name: Install dependencies
         run: |
           pip install pandas yfinance plotly streamlit requests pytefas --quiet
+
+      - name: Check data file
+        run: |
+          if [ -f "optimized_universe.csv" ]; then
+            echo "CSV mevcut: $(wc -l < optimized_universe.csv) satir"
+          else
+            echo "UYARI: optimized_universe.csv bulunamadi"
+            echo "Lutfen guncelle_ve_push.bat calistirin"
+            exit 1
+          fi
 
       - name: Send email report
         env:

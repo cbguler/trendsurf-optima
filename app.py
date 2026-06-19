@@ -140,9 +140,10 @@ try:
                 except Exception:
                     register_user(_asec["email"], _asec["password"], "Admin", role="admin")
         else:
-            # Kullanıcı var — admin yap + onayla
+            # Kullanıcı var — admin yap + onayla + premium
             for _sql in [
                 "UPDATE users SET role='admin' WHERE email=?",
+                "UPDATE users SET plan='premium' WHERE email=?",
                 "UPDATE users SET is_approved=1 WHERE email=?",
                 "UPDATE users SET status='approved' WHERE email=?",
                 "UPDATE users SET is_active=1 WHERE email=?",
@@ -323,6 +324,8 @@ if _cur_user:
              _cur_user.get("email","").lower() == _asec2["email"].lower())
         )
         _cur_user["is_admin"] = _is_adm
+        if _is_adm:
+            _cur_user["plan"] = "premium"
     except Exception:
         pass
 if _cur_user is None:
