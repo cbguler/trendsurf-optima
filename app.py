@@ -287,21 +287,30 @@ def render_auth_gate():
                 else:
                     res = register_user(email_r, pass_r, full_name)
                     if res["ok"]:
-                        # Kayıt sonrası otomatik onayla
+                        # Sadece admin e-postası veya ilk kullanıcıysa otomatik onayla
                         try:
+                            _admin_email = st.secrets.get("admin",{}).get("email","")
                             from db import get_conn as _gc2
                             _cc2 = _gc2()
-                            for _s2 in [
-                                "UPDATE users SET is_approved=1 WHERE email=?",
-                                "UPDATE users SET status='approved' WHERE email=?",
-                                "UPDATE users SET is_active=1 WHERE email=?",
-                                "UPDATE users SET approved=1 WHERE email=?",
-                            ]:
-                                try: _cc2.execute(_s2,(email_r,)); _cc2.commit()
-                                except: pass
+                            _user_count = _cc2.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                            _is_admin_email = email_r.lower() == _admin_email.lower()
+                            if _is_admin_email or _user_count <= 1:
+                                for _s2 in [
+                                    "UPDATE users SET is_approved=1 WHERE email=?",
+                                    "UPDATE users SET status='approved' WHERE email=?",
+                                    "UPDATE users SET is_active=1 WHERE email=?",
+                                    "UPDATE users SET approved=1 WHERE email=?",
+                                    "UPDATE users SET role='admin' WHERE email=?",
+                                    "UPDATE users SET plan='premium' WHERE email=?",
+                                ]:
+                                    try: _cc2.execute(_s2,(email_r,)); _cc2.commit()
+                                    except: pass
+                                st.success("Kaydiniz tamamlandi. Giris Yap sekmesinden girebilirsiniz.")
+                            else:
+                                st.info("Kaydiniz alindi. Admin onayi bekleniyor.")
                             _cc2.close()
-                        except: pass
-                        st.success("Kaydiniz tamamlandi. Giris Yap sekmesinden girebilirsiniz.")
+                        except:
+                            st.success(res["msg"])
                     else: st.error(res["msg"])
 
         with tab_reset:
