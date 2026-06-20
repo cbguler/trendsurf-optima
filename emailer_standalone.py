@@ -1,17 +1,14 @@
 """
 TrendSurf Optima - Standalone Email Sender (GitHub Actions)
-v1.7.0: live_data.py entegrasyonu
+v1.7.1: live_data.py entegrasyonu + budget/risk default fix
 
-Onceki davranis:  optimized_universe.csv'yi okuyup oldugu gibi gonderirdi.
-                  Worker.py PC'de calismadigi gunlerde icerik 1+ hafta eski olurdu.
+Onceki davranis (v1.7.0): live_data taze veri getiriyordu ama send_report'a
+                          budget parametresi gecmiyordu, default 0 idi -> opt
+                          section bos -> e-posta sadece header'dan ibaret kaldi.
 
-Yeni davranis:    CSV'yi tabani okur, live_data.py uzerinden Streamlit Cloud
-                  ile birebir ayni pipeline'i uygular:
-                    1. USD bazli emtialari filtrele (Brent/WTI/Bugday vb.)
-                    2. Gram Altin/Gumus/Platin adlarini netlestir
-                    3. 6 yeni sikke ekle (Ceyrek/Yarim/Tam/Cumhuriyet/Ata/Ons-TL)
-                    4. DOVIZ + MADEN + KRIPTO icin borsapy canli fiyat overlay
-                  Boylece e-posta icerigi Streamlit ile birebir.
+Yeni davranis (v1.7.1):   budget=20000, risk="Orta", max_assets=10 default.
+                          Env degiskenleriyle (REPORT_BUDGET, REPORT_RISK,
+                          REPORT_MAX_ASSETS) override edilebilir.
 
 BIST ve TEFAS hala CSV'den gelir (worker.py sorumlulugu).
 """
@@ -91,9 +88,41 @@ else:
             print(f"        {cat:6}: {n} satir")
 
 # ----------------------------------------------------------------------------
-# 4. E-posta gonder (mevcut emailer.send_report kullanir)
+# 4. Rapor parametrelerini env'den al (default: 20000 TL, Orta risk, 10 varlik)
+#    GitHub Secrets'a REPORT_BUDGET / REPORT_RISK / REPORT_MAX_ASSETS ekleyerek
+#    yeniden deploy etmeden degistirilebilir.
+# ----------------------------------------------------------------------------
+try:
+    budget = float(os.environ.get("REPORT_BUDGET", "20000"))
+    if budget <= 0:
+        budget = 20000.0
+except (TypeError, ValueError):
+    budget = 20000.0
+
+risk = os.environ.get("REPORT_RISK", "Orta")
+if risk not in ("Çok Düşük", "Düşük", "Orta", "Yüksek", "Çok Yüksek"):
+    risk = "Orta"
+
+try:
+    max_assets = int(os.environ.get("REPORT_MAX_ASSETS", "10"))
+    if max_assets <= 0:
+        max_assets = 10
+except (TypeError, ValueError):
+    max_assets = 10
+
+print(f"[3.5/4] Rapor parametreleri: butce={budget:.0f} TL, risk={risk}, max_varlik={max_assets}")
+
+# ----------------------------------------------------------------------------
+# 5. E-posta gonder (mevcut emailer.send_report kullanir)
 #    portfolio=[] cunku GitHub Actions SQLite'a erisemez (Streamlit Cloud'da)
 # ----------------------------------------------------------------------------
 from emailer import send_report
-result = send_report(df_uni=df_uni, portfolio=[], cfg=cfg)
+result = send_report(
+    df_uni=df_uni,
+    portfolio=[],
+    budget=budget,
+    risk=risk,
+    max_assets=max_assets,
+    cfg=cfg,
+)
 print(f"[4/4] Sonuc: {result}")
