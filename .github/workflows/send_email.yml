@@ -23,16 +23,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas yfinance plotly streamlit requests pytefas --quiet
+          pip install --upgrade pip --quiet
+          pip install pandas yfinance plotly streamlit requests pytefas bcrypt borsapy --quiet
 
-      - name: Check data file
+      - name: Check data file (informational)
         run: |
           if [ -f "optimized_universe.csv" ]; then
             echo "CSV mevcut: $(wc -l < optimized_universe.csv) satir"
+            echo "BIST ve TEFAS icerikleri CSV'den gelecek."
           else
-            echo "UYARI: optimized_universe.csv bulunamadi"
-            echo "Lutfen guncelle_ve_push.bat calistirin"
-            exit 1
+            echo "UYARI: optimized_universe.csv yok"
+            echo "BIST/TEFAS bolumleri bos olabilir; DOVIZ+MADEN+KRIPTO borsapy'den gelir."
           fi
 
       - name: Send email report
