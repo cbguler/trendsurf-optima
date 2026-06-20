@@ -102,14 +102,17 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler & Emtialar","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
-CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler & Emtialar":"MADEN","Kriptolar":"KRIPTO"}
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
+CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
 # ── Canli veri katmani (borsapy) - v1.6+ ─────────────────────────────────────
 from live_data import (
     filter_universe as _ld_filter_universe,
+    rename_existing_maden as _ld_rename_maden,
+    extend_maden_universe as _ld_extend_maden,
     refresh_fx_maden_kripto as _ld_refresh_overlay,
+    portfolio_value_prices as _ld_portfolio_prices,
     get_fx_history as _ld_fx_history,
     get_maden_history as _ld_maden_history,
     get_kripto_history as _ld_kripto_history,
@@ -415,8 +418,12 @@ def load_universe():
     df["Son_Fiyat"]=pd.to_numeric(df["Son_Fiyat"],errors="coerce").fillna(0)
     df["RSI"]=pd.to_numeric(df["RSI"],errors="coerce").fillna(50)
     df["Ret1M"]=pd.to_numeric(df["Ret1M"],errors="coerce").fillna(0)
-    # v1.6: USD bazli emtialari evrenden cikar (Brent/WTI/Bakir/Paladyum/tarim)
+    # v1.6: USD bazli emtialari evrenden cikar (Brent/WTI/Dogalgaz/tarim emtialari)
     df = _ld_filter_universe(df)
+    # v1.6.1: Mevcut MADEN adlarini netlestir (ALTIN_TRY -> "Gram Altin")
+    df = _ld_rename_maden(df)
+    # v1.6.1: Yeni MADEN sikkelerini ekle (Ceyrek/Yarim/Tam/Cumhuriyet/Ata/Ons-TL)
+    df = _ld_extend_maden(df)
     # v1.6: DOVIZ + MADEN + KRIPTO icin canli fiyat uzerine yaz (borsapy)
     df = _ld_refresh_overlay(df)
     return df.reset_index(drop=True)
@@ -1452,6 +1459,12 @@ elif page=="Portföyüm":
     st.divider()
     st.subheader("Portföy Varlıkları Tablosu")
 
+    # v1.6.1: Portfoy degerleme icin Harem alis fiyati (kullanicinin satinca alacagi)
+    # Sadece 4 ana metal (gram-altin/gumus/platin, ons-altin TL) icin Harem-spesifik;
+    # diger varliklarda Son_Fiyat (canlidoviz mid / yfinance last) kullanilir.
+    _pf_tickers = [pos["ticker"] for pos in portfolio]
+    _satis_fiyatlari = _ld_portfolio_prices(df_uni, _pf_tickers)
+
     # Tablo verisi
     _pf_rows = []
     _id_map  = {}
@@ -1464,8 +1477,11 @@ elif page=="Portföyüm":
         _tg   = (_dt.datetime.strptime(_traw,"%Y-%m-%d").strftime("%d.%m.%Y")
                  if _traw and len(_traw)==10 else _traw or "—")
         _match  = df_uni[df_uni["Ticker"]==_tkr]
-        _guncel = (float(_match["Son_Fiyat"].iloc[0])
-                   if not _match.empty and float(_match["Son_Fiyat"].iloc[0])>0 else 0.0)
+        # Once Harem alis (varsa), yoksa Son_Fiyat'a duser
+        _guncel = _satis_fiyatlari.get(_tkr, 0.0)
+        if _guncel <= 0 and not _match.empty:
+            _try = float(_match["Son_Fiyat"].iloc[0])
+            _guncel = _try if _try > 0 else 0.0
         if not _match.empty:
             _row = _match.iloc[0]
             def _sf(v,d):

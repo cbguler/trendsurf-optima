@@ -37,15 +37,16 @@ except Exception as e:
 
 
 # ----------------------------------------------------------------------------
-# USD bazli emtia filtresi (kullanici karari, 19 Haziran 2026 - VIII oturum)
-# Brent / WTI / Bakir / Paladyum / Tarim emtialari Turkiye'de fiziki olarak
-# alip-satilamayan, dunya borsalarinda USD ile fiyatlanan turetilmis varliklar.
-# Bu kategorideki varliklar sadece referans gosterge degerinde, portfoye
-# eklenebilir nitelikte degiller; bu yuzden tamamen evrenden cikariliyor.
+# USD bazli emtia filtresi (kullanici karari, 19-20 Haziran 2026 - VIII oturum)
+# Tarim emtialari ve enerji (Brent/WTI/Dogalgaz) Turkiye'de fiziki olarak
+# alinip-satilamayan, dunya borsalarinda USD ile fiyatlanan turetilmis
+# varliklardir; portfoye eklenebilir nitelikte degiller.
+#
+# Paladyum ve Bakir geri eklendi: USD bazli olsa da degerli/endustriyel metal
+# olarak yatirim sayilabilir; worker.py CSV'ye yfinance ile yaziyor (× USDTRY).
 # ----------------------------------------------------------------------------
 EXCLUDED_USD_COMMODITIES = {
     "BRENT_TRY", "PETROL_TRY", "DOGALGAZ_TRY",
-    "BAKIR_TRY", "PALADYUM_TRY",
     "BUGDAY_TRY", "MISIR_TRY", "SOYA_TRY", "KAKAO_TRY",
 }
 
@@ -61,12 +62,36 @@ _DOVIZ_TO_BP = {
     "SEKTRY": "SEK", "DKKTRY": "DKK", "CNYTRY": "CNY",
 }
 
-# MADEN: sadece TRY-direkt gram bazli kiymetli madenler
+# MADEN: TRY-direkt gram bazli kiymetli madenler + sikke altinlar
 # (canlidoviz.com'dan gercek zamanli TL fiyat)
 _MADEN_TO_BP = {
-    "ALTIN_TRY":  "gram-altin",
-    "GUMUS_TRY":  "gram-gumus",
-    "PLATIN_TRY": "gram-platin",
+    "ALTIN_TRY":      "gram-altin",
+    "GUMUS_TRY":      "gram-gumus",
+    "PLATIN_TRY":     "gram-platin",
+    # v1.6.1 - sikke altinlar (Turk yatirimcisinin yaygin tuttugu fiziki ureunler)
+    "CEYREK_ALTIN":   "ceyrek-altin",
+    "YARIM_ALTIN":    "yarim-altin",
+    "TAM_ALTIN":      "tam-altin",
+    "CUMHURIYET_ALTIN": "cumhuriyet-altin",
+    "ATA_ALTIN":      "ata-altin",
+    "ONS_ALTIN_TRY":  "ons-altin",       # canlidoviz bunu TL olarak yayinliyor
+}
+
+# Yeni sikke varliklarinin gosterim isimleri (CSV'deki "Ad" sutununa karsilik gelir)
+_NEW_MADEN_DISPLAY = {
+    "CEYREK_ALTIN":     "Çeyrek Altın",
+    "YARIM_ALTIN":      "Yarım Altın",
+    "TAM_ALTIN":        "Tam Altın",
+    "CUMHURIYET_ALTIN": "Cumhuriyet Altını",
+    "ATA_ALTIN":        "Ata Altını",
+    "ONS_ALTIN_TRY":    "Ons Altın (TL)",
+}
+
+# Mevcut ALTIN_TRY adini gunceller: "Altin (TL)" yerine "Gram Altın" diye gosterilir
+_MADEN_AD_GUNCELLE = {
+    "ALTIN_TRY":  "Gram Altın",
+    "GUMUS_TRY":  "Gram Gümüş",
+    "PLATIN_TRY": "Gram Platin",
 }
 
 # KRIPTO: BTC -> "BTCTRY", ETH -> "ETHTRY" (BtcTurk borsasindan TRY cifti)
@@ -101,14 +126,209 @@ def _normalize_fx_price(ticker: str, price: float) -> float:
 # Public API
 # ----------------------------------------------------------------------------
 def filter_universe(df: pd.DataFrame) -> pd.DataFrame:
-    """USD bazli emtialari (Brent/WTI/Bakir vb.) varlik evreninden cikar.
-
-    CSV'nin kendisini degistirmez, sadece bellekteki DataFrame'i filtreler.
-    worker.py guncellense de guncellenmese de UI'a yansiyan evren temiz olur.
-    """
+    """USD bazli emtialari (Brent/WTI/Bugday vb.) varlik evreninden cikar."""
     if df is None or df.empty or "Ticker" not in df.columns:
         return df
     return df[~df["Ticker"].isin(EXCLUDED_USD_COMMODITIES)].reset_index(drop=True)
+
+
+def rename_existing_maden(df: pd.DataFrame) -> pd.DataFrame:
+    """Mevcut MADEN satirlarinin gosterim adlarini netlestir.
+
+    Eski CSV: ALTIN_TRY -> "Altin (TL)"  (yaniltici, hangi altin belli degil)
+    Yeni:                  "Gram Altın"  (net)
+    """
+    if df is None or df.empty or "Ad" not in df.columns:
+        return df
+    for ticker, yeni_ad in _MADEN_AD_GUNCELLE.items():
+        mask = df["Ticker"] == ticker
+        if mask.any():
+            df.loc[mask, "Ad"] = yeni_ad
+    return df
+
+
+def _compute_rsi(closes: pd.Series, period: int = 14) -> float:
+    """Klasik Wilder RSI hesabi - history'den son 14+ kapanis fiyatiyla."""
+    try:
+        if closes is None or len(closes) < period + 1:
+            return 50.0
+        delta = closes.diff().dropna()
+        gain = delta.clip(lower=0).rolling(window=period, min_periods=period).mean()
+        loss = -delta.clip(upper=0).rolling(window=period, min_periods=period).mean()
+        if loss.iloc[-1] == 0:
+            return 100.0
+        rs = gain.iloc[-1] / loss.iloc[-1]
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        if pd.isna(rsi):
+            return 50.0
+        return float(round(rsi, 1))
+    except Exception:
+        return 50.0
+
+
+def _compute_ret_1m(closes: pd.Series) -> float:
+    """1 ay onceki kapanisa gore yuzdesel getiri (yaklasik 22 isgunu)."""
+    try:
+        if closes is None or len(closes) < 22:
+            return 0.0
+        son = float(closes.iloc[-1])
+        ay_once = float(closes.iloc[max(0, len(closes) - 22)])
+        if ay_once == 0 or pd.isna(son) or pd.isna(ay_once):
+            return 0.0
+        return float(round((son - ay_once) / ay_once * 100.0, 4))
+    except Exception:
+        return 0.0
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _fetch_maden_history_summary(bp_code: str) -> tuple:
+    """Bir madenin 1 aylik tarihcesinden anlik fiyat, RSI, Ret1M dondur.
+
+    Returns: (son_fiyat, rsi, ret1m) - hata olursa (None, 50.0, 0.0)
+    """
+    if not BORSAPY_OK:
+        return (None, 50.0, 0.0)
+    try:
+        h = bp.FX(bp_code).history(period="3mo", interval="1d")
+        if h is None or h.empty:
+            return (None, 50.0, 0.0)
+        # Close sutununu bul
+        col = None
+        for c in ("Close", "close", "PRICE", "price"):
+            if c in h.columns:
+                col = c
+                break
+        if col is None:
+            return (None, 50.0, 0.0)
+        closes = pd.to_numeric(h[col], errors="coerce").dropna()
+        if closes.empty:
+            return (None, 50.0, 0.0)
+        son = float(closes.iloc[-1])
+        rsi = _compute_rsi(closes)
+        ret = _compute_ret_1m(closes)
+        return (son, rsi, ret)
+    except Exception:
+        return (None, 50.0, 0.0)
+
+
+def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
+    """Mevcut CSV'de olmayan yeni MADEN sikkelerini DataFrame'e satir olarak ekler.
+
+    Eklenecek satirlar: ceyrek/yarim/tam/cumhuriyet/ata altin + ons-altin (TL).
+    Her satir icin canli fiyat, RSI ve Ret1M borsapy tarihçesinden hesaplanir.
+    CSV dosyasi degismez, sadece bellekteki DataFrame genisletilir.
+    """
+    if df is None or "Ticker" not in df.columns:
+        return df
+
+    yeni_satirlar = []
+    for ticker, ad in _NEW_MADEN_DISPLAY.items():
+        # CSV'de zaten varsa atla
+        if (df["Ticker"] == ticker).any():
+            continue
+        bp_code = _MADEN_TO_BP.get(ticker)
+        if not bp_code:
+            continue
+        son, rsi, ret1m = _fetch_maden_history_summary(bp_code)
+        # Fiyat yoksa satiri ekleme (anlamsiz olur)
+        if son is None or son <= 0:
+            continue
+        row = {
+            "Ticker":     ticker,
+            "Ad":         ad,
+            "Kategori":   "MADEN",
+            "TEFAS_Kind": "",
+            "Tur":        "",
+            "Risk_Deger": "",
+            "Son_Fiyat":  float(son),
+            "RSI":        float(rsi),
+            "Ret1M":      float(ret1m),
+            "Ret3M":      0.0,
+            "Ret6M":      0.0,
+            "Ret1Y":      0.0,
+            "Ret3Y":      0.0,
+            "Ret5Y":      0.0,
+            "Vol":        0.0,
+            "YF_Symbol":  "",
+            "_tcmb_guncellendi": "",
+        }
+        yeni_satirlar.append(row)
+
+    if not yeni_satirlar:
+        return df
+
+    ek_df = pd.DataFrame(yeni_satirlar)
+    # df'deki tum sutunlar varsa onlari kullan, eksikse default
+    for c in df.columns:
+        if c not in ek_df.columns:
+            ek_df[c] = "" if df[c].dtype == object else 0.0
+    ek_df = ek_df[df.columns]
+    return pd.concat([df, ek_df], ignore_index=True)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_harem_buy_prices() -> dict:
+    """Portfoy degerleme icin Harem'in alis fiyatlari (kullanicinin satinca alacagi).
+
+    Sadece 4 metal icin Harem-ozel verisi var: gram-altin, gram-gumus,
+    gram-platin, ons-altin. Diger MADEN varliklarinda canlidoviz mid kullanilir.
+
+    Returns: { ticker: buy_price_tl }   - hata olursa eksik anahtar
+    """
+    if not BORSAPY_OK:
+        return {}
+    out = {}
+    HAREM_DESTEKLI = {
+        "ALTIN_TRY":     "gram-altin",
+        "GUMUS_TRY":     "gram-gumus",
+        "PLATIN_TRY":    "gram-platin",
+        "ONS_ALTIN_TRY": "ons-altin",
+    }
+    for ticker, bp_code in HAREM_DESTEKLI.items():
+        try:
+            inst = bp.FX(bp_code).institution_rate("harem")
+            if isinstance(inst, dict):
+                buy = inst.get("buy")
+                if buy is not None:
+                    f = float(buy)
+                    if f > 0:
+                        out[ticker] = f
+        except Exception:
+            continue
+    return out
+
+
+def portfolio_value_prices(df: pd.DataFrame, tickers: list) -> dict:
+    """Portfoy degerleme icin SATIS fiyati (kullanicinin satarsa elime gececek).
+
+    Mantik:
+      - MADEN (4 ana metal): Harem alis fiyati (varsa)
+      - Diger varliklar:     mevcut Son_Fiyat (canlidoviz mid / yfinance last)
+
+    Bu fonksiyon portfoyde gosterilen "Guncel Fiyat" sutunu icin kullanilir;
+    K/Z hesabi bu fiyat uzerinden yapilir, gercek satis senaryosuna yakin olur.
+
+    Returns: { ticker: price_tl } - her ticker icin bir fiyat
+    """
+    out = {}
+    if df is None or df.empty or "Ticker" not in df.columns or "Son_Fiyat" not in df.columns:
+        return out
+
+    # Once Harem alis fiyatlari (sadece 4 metal icin)
+    harem = get_harem_buy_prices()
+
+    # df'ten ticker -> Son_Fiyat dict'i
+    son_fiyat_map = dict(zip(df["Ticker"].astype(str), pd.to_numeric(df["Son_Fiyat"], errors="coerce")))
+
+    for t in tickers:
+        t = str(t)
+        if t in harem and harem[t] > 0:
+            out[t] = harem[t]  # Satis fiyati = Harem alis (kullanici satinca alacagi)
+        else:
+            v = son_fiyat_map.get(t)
+            if v is not None and not pd.isna(v) and v > 0:
+                out[t] = float(v)
+    return out
 
 
 def _safe_current(bp_obj) -> float | None:
