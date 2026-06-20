@@ -126,47 +126,40 @@ from auth import get_current_user, login_user, register_user, logout
 from admin import render_admin_panel
 init_db()
 
-# ── Secrets'tan admin kullanıcı otomatik oluştur (Cloud reboot) ─────
+# ── Secrets'tan admin kullanıcı otomatik oluştur (Cloud reboot icin kritik) ──
+# auth.py bcrypt hash kullaniyor; biz de register_user() uzerinden gitmeli ki
+# verify_password ile eslessin. Kolonlar: password, is_active, is_admin.
 try:
     _asec = st.secrets.get("admin", {})
     if _asec.get("email") and _asec.get("password"):
-        import hashlib as _hl
         from db import get_conn as _gc
+        _admin_email = _asec["email"].strip().lower()
+        _admin_pass  = _asec["password"]
+        _admin_name  = _asec.get("name", "Bahri Güler")
+
         _cc = _gc()
         _ex = _cc.execute("SELECT id FROM users WHERE email=?",
-                          (_asec["email"],)).fetchone()
-        if not _ex:
-            # register_user imzası bilinmiyor — doğrudan SQL ile oluştur
-            _pw_hash = _hl.sha256(_asec["password"].encode()).hexdigest()
-            try:
-                _cc.execute(
-                    "INSERT INTO users (email, password_hash, role, full_name, plan) "
-                    "VALUES (?,?,'admin','Admin','premium')",
-                    (_asec["email"], _pw_hash))
-                _cc.commit()
-            except Exception:
-                # Kolon adları farklıysa alternatif dene
-                try:
-                    _cc.execute(
-                        "INSERT INTO users (email, password, role) VALUES (?,?,'admin')",
-                        (_asec["email"], _pw_hash))
-                    _cc.commit()
-                except Exception:
-                    register_user(_asec["email"], _asec["password"], "Admin", role="admin")
-        else:
-            # Kullanıcı var — admin yap + onayla + premium
-            for _sql in [
-                "UPDATE users SET role='admin' WHERE email=?",
-                "UPDATE users SET plan='premium' WHERE email=?",
-                "UPDATE users SET is_approved=1 WHERE email=?",
-                "UPDATE users SET status='approved' WHERE email=?",
-                "UPDATE users SET is_active=1 WHERE email=?",
-                "UPDATE users SET approved=1 WHERE email=?",
-            ]:
-                try: _cc.execute(_sql, (_asec["email"],)); _cc.commit()
-                except Exception: pass
+                          (_admin_email,)).fetchone()
         _cc.close()
-except Exception as _e:
+
+        if not _ex:
+            # Yeni kullanici: register_user ile bcrypt hashli kayit
+            try:
+                register_user(_admin_email, _admin_pass, _admin_name)
+            except Exception:
+                pass
+
+        # Her durumda: is_admin=1, is_active=1, plan=premium
+        _cc = _gc()
+        for _sql in [
+            "UPDATE users SET is_admin=1 WHERE email=?",
+            "UPDATE users SET is_active=1 WHERE email=?",
+            "UPDATE users SET plan='premium' WHERE email=?",
+        ]:
+            try: _cc.execute(_sql, (_admin_email,)); _cc.commit()
+            except Exception: pass
+        _cc.close()
+except Exception:
     import traceback; traceback.print_exc()
 
 
@@ -309,12 +302,10 @@ def render_auth_gate():
                             _user_count = _cc2.execute("SELECT COUNT(*) FROM users").fetchone()[0]
                             _is_admin_email = email_r.lower() == _admin_email.lower()
                             if _is_admin_email or _user_count <= 1:
+                                # auth.py kolonlari: is_active (aktif/onayli), is_admin, plan
                                 for _s2 in [
-                                    "UPDATE users SET is_approved=1 WHERE email=?",
-                                    "UPDATE users SET status='approved' WHERE email=?",
                                     "UPDATE users SET is_active=1 WHERE email=?",
-                                    "UPDATE users SET approved=1 WHERE email=?",
-                                    "UPDATE users SET role='admin' WHERE email=?",
+                                    "UPDATE users SET is_admin=1 WHERE email=?",
                                     "UPDATE users SET plan='premium' WHERE email=?",
                                 ]:
                                     try: _cc2.execute(_s2,(email_r,)); _cc2.commit()
