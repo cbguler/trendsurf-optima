@@ -4,7 +4,7 @@ TrendSurf Optima — Kimlik Dogrulama Modulu (auth.py)
 import sqlite3, secrets, hashlib
 from datetime import datetime, timedelta
 import streamlit as st
-from db import get_conn, init_db
+from db import get_conn, init_db, IntegrityError
 
 # ── Sifre Hash ───────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
@@ -36,7 +36,7 @@ def register_user(email: str, password: str, full_name: str) -> dict:
         )
         conn.commit()
         return {"ok": True, "msg": "Kaydiniz alindi. Admin onayi bekleniyor."}
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return {"ok": False, "msg": "Bu e-posta adresi zaten kayitli."}
     finally:
         conn.close()

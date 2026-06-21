@@ -124,43 +124,7 @@ from live_data import (
 from db import init_db
 from auth import get_current_user, login_user, register_user, logout
 from admin import render_admin_panel
-init_db()
-
-# ── Secrets'tan admin kullanıcı otomatik oluştur (Cloud reboot icin kritik) ──
-# auth.py bcrypt hash kullaniyor; biz de register_user() uzerinden gitmeli ki
-# verify_password ile eslessin. Kolonlar: password, is_active, is_admin.
-try:
-    _asec = st.secrets.get("admin", {})
-    if _asec.get("email") and _asec.get("password"):
-        from db import get_conn as _gc
-        _admin_email = _asec["email"].strip().lower()
-        _admin_pass  = _asec["password"]
-        _admin_name  = _asec.get("name", "Bahri Güler")
-
-        _cc = _gc()
-        _ex = _cc.execute("SELECT id FROM users WHERE email=?",
-                          (_admin_email,)).fetchone()
-        _cc.close()
-
-        if not _ex:
-            # Yeni kullanici: register_user ile bcrypt hashli kayit
-            try:
-                register_user(_admin_email, _admin_pass, _admin_name)
-            except Exception:
-                pass
-
-        # Her durumda: is_admin=1, is_active=1, plan=premium
-        _cc = _gc()
-        for _sql in [
-            "UPDATE users SET is_admin=1 WHERE email=?",
-            "UPDATE users SET is_active=1 WHERE email=?",
-            "UPDATE users SET plan='premium' WHERE email=?",
-        ]:
-            try: _cc.execute(_sql, (_admin_email,)); _cc.commit()
-            except Exception: pass
-        _cc.close()
-except Exception:
-    import traceback; traceback.print_exc()
+init_db()  # Tablolari olustur ve Secrets'tan admin'i seed et (db.py icinde)
 
 
 def _logo_html():
