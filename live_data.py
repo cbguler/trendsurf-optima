@@ -425,8 +425,11 @@ def _fetch_live_kripto(tickers_key: tuple) -> dict:
 def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
     """DOVIZ + MADEN + KRIPTO satirlarinin Son_Fiyat'ini canli verilerle uzerine yaz.
 
+    v1.8: MADEN tickerlari icin ek olarak RSI ve Ret1M da borsapy history'den
+    yeniden hesaplanir (boylece altin trendi optimizatore yansir).
+
     BIST ve TEFAS dokunulmaz:
-      - BIST: 770 ticker, batch refresh v1.7'de eklenecek
+      - BIST: 770 ticker, batch refresh v1.9'da eklenecek
       - TEFAS: 1347 fon, gunluk NAV (regulatif), worker.py sorumlu
     """
     if df is None or df.empty:
@@ -440,12 +443,27 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
     if kripto_list:
         live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
 
-    if not live:
-        return df
+    if live:
+        mask = df["Ticker"].isin(live.keys())
+        if mask.any():
+            df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
 
-    mask = df["Ticker"].isin(live.keys())
-    if mask.any():
-        df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
+    # v1.8 - MADEN tickerlari icin RSI ve Ret1M'i borsapy history'den tazele
+    # (Sadece _MADEN_TO_BP'de tanimli olanlar - BAKIR/PALADYUM USD-derived,
+    # onlarin RSI/Ret1M CSV'de kalan worker.py degerlerini kullanir)
+    if "RSI" in df.columns and "Ret1M" in df.columns:
+        for ticker, bp_code in _MADEN_TO_BP.items():
+            row_mask = df["Ticker"] == ticker
+            if not row_mask.any():
+                continue
+            son, rsi, ret = _fetch_maden_history_summary(bp_code)
+            # Son_Fiyat'i taze borsapy degeriyle de guncelle (live'da yoksa fallback)
+            if son is not None and son > 0:
+                df.loc[row_mask, "Son_Fiyat"] = float(son)
+            # RSI ve Ret1M her zaman guncellenir (history bos donerse default 50/0)
+            df.loc[row_mask, "RSI"]   = float(rsi)
+            df.loc[row_mask, "Ret1M"] = float(ret)
+
     return df
 
 

@@ -127,6 +127,82 @@ from admin import render_admin_panel
 init_db()  # Tablolari olustur ve Secrets'tan admin'i seed et (db.py icinde)
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# HTTP TRIGGER ENDPOINT (v1.8 - Asama 2)
+# URL: https://trendsurf-optima.streamlit.app/?trigger=email&token=<SECRET>
+# cron-job.org bu URL'i hafta ici 09:00 ve 12:00 TRT'de hit eder.
+# st.stop() ile normal app yuklenmeden tamamlanir.
+# ════════════════════════════════════════════════════════════════════════════
+_qp = st.query_params
+if _qp.get("trigger") == "email":
+    # 1) Token validasyonu
+    _expected = ""
+    try:
+        _expected = st.secrets["trigger"]["token"]
+    except Exception:
+        pass
+    _provided = _qp.get("token", "")
+
+    if not _expected:
+        st.write("ERROR: `trigger.token` Streamlit Secrets'ta tanimli degil.")
+        st.write("Secrets'a ekle: [trigger]\\ntoken = \"...\"")
+        st.stop()
+
+    if _provided != _expected:
+        st.write("403 Forbidden: Invalid token")
+        st.stop()
+
+    # 2) Email gonderimi
+    import time as _t
+    _t0 = _t.time()
+    try:
+        from emailer import send_report
+        from live_data import (filter_universe, rename_existing_maden,
+                                extend_maden_universe, refresh_fx_maden_kripto)
+
+        # Universe CSV'yi yukle (worker.py her gun guncelliyor)
+        _csv = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "optimized_universe.csv")
+        _df_uni = pd.read_csv(_csv)
+
+        # Live data pipeline (mevcut Streamlit ile ayni - tutarli sonuc)
+        _df_uni = filter_universe(_df_uni)
+        _df_uni = rename_existing_maden(_df_uni)
+        _df_uni = extend_maden_universe(_df_uni)
+        _df_uni = refresh_fx_maden_kripto(_df_uni)
+
+        # Email config (Secrets'tan)
+        _cfg = {
+            "address":   st.secrets["email"]["address"],
+            "smtp_host": st.secrets["email"]["smtp_host"],
+            "smtp_port": int(st.secrets["email"]["smtp_port"]),
+            "smtp_user": st.secrets["email"]["smtp_user"],
+            "smtp_pass": st.secrets["email"]["smtp_pass"],
+        }
+
+        # Optimizasyon parametreleri (Secrets'ta [trigger]'dan veya default)
+        _trig = st.secrets.get("trigger", {})
+        _budget     = int(_trig.get("budget", 20000))
+        _risk       = str(_trig.get("risk", "Orta"))
+        _max_assets = int(_trig.get("max_assets", 10))
+
+        # send_report portfolio=None -> DB'den otomatik okur (Supabase, kalici)
+        send_report(_df_uni, portfolio=None, cfg=_cfg,
+                    budget=_budget, risk=_risk, max_assets=_max_assets)
+
+        _dt = _t.time() - _t0
+        st.write(f"OK: Email gonderildi ({_dt:.1f}s)")
+        st.write(f"Alici: {_cfg['address']}")
+        st.write(f"Universe: {len(_df_uni)} satir | Butce: {_budget} TL | "
+                 f"Risk: {_risk} | Max varlik: {_max_assets}")
+    except Exception as _e:
+        import traceback
+        st.write(f"ERROR: {type(_e).__name__}: {_e}")
+        st.code(traceback.format_exc(), language=None)
+
+    st.stop()
+
+
 def _logo_html():
     for p in ["logo.png","Logo.png","LOGO.PNG"]:
         if os.path.exists(p):

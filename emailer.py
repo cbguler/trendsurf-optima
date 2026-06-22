@@ -124,6 +124,7 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
 
     # Her kategori için havuz oluştur
     cat_pools = {}
+    skipped_cats = []  # Agirligi >0 ama AL sinyali bulunmayan kategoriler
     for cat, weight in w.items():
         if weight <= 0:
             continue
@@ -132,12 +133,15 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         else:
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
         if df_c.empty:
+            skipped_cats.append(cat)
             continue
         df_c["_skor"] = df_c.apply(_optima_score, axis=1)
         df_c = df_c[(df_c["Ret1M"] > 0) & (df_c["_skor"] >= MIN_SKOR)]
         df_c = df_c.sort_values("_skor", ascending=False)
         if not df_c.empty:
             cat_pools[cat] = df_c
+        else:
+            skipped_cats.append(cat)
 
     if not cat_pools:
         return ""
@@ -225,11 +229,23 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     if not rows_html:
         return ""
 
+    # v1.8 - Butce dagildi banner'i (Streamlit Ana Sayfa ile ayni davranis)
+    banner_html = ""
+    if skipped_cats:
+        banner_html = f"""
+    <div style="background:#fff8e1;border-left:4px solid #f0a830;
+                padding:10px 12px;margin:10px 0 0 0;font-size:11px;color:#5a4a1a;
+                border-radius:4px;">
+      <b>Bütçe Dağılımı Notu:</b> Şu kategorilerde yeterli AL sinyalli varlık
+      bulunamadığı için bütçe diğer kategorilere dağıtıldı:
+      <b>{', '.join(skipped_cats)}</b>
+    </div>"""
+
     return f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
                border-left:4px solid #2c3e6b;padding-left:10px;">
       Portföy Optimizasyonu &mdash; {budget:,.0f}&nbsp;₺ &nbsp;|&nbsp; Risk: {risk}
-    </h2>
+    </h2>{banner_html}
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
 <table style="width:100%;border-collapse:collapse;background:#fff;
                   font-size:12px;table-layout:fixed;min-width:560px;">
