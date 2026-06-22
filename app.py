@@ -122,9 +122,17 @@ from live_data import (
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
+
+
+# v1.8.2 - init_db'yi session basina 1 kez calistir (PostgreSQL roundtrip'leri pahali)
+@st.cache_resource(show_spinner=False)
+def _init_db_once():
+    init_db()
+    return True
+
+_init_db_once()  # Tablolari olustur ve Secrets'tan admin'i seed et (db.py icinde, 1 kez)
 from auth import get_current_user, login_user, register_user, logout
 from admin import render_admin_panel
-init_db()  # Tablolari olustur ve Secrets'tan admin'i seed et (db.py icinde)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -437,7 +445,7 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
         pass
 
 
-@st.cache_data(ttl=300,show_spinner=False)
+@st.cache_data(ttl=60,show_spinner=False)  # v1.8.2: 300s -> 60s (fiyat tazelemesi daha sik)
 def load_universe():
     if not os.path.exists(CSV_PATH): return pd.DataFrame()
     df=pd.read_csv(CSV_PATH,on_bad_lines="skip")

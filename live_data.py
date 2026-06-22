@@ -299,35 +299,27 @@ def get_harem_buy_prices() -> dict:
 
 
 def portfolio_value_prices(df: pd.DataFrame, tickers: list) -> dict:
-    """Portfoy degerleme icin SATIS fiyati (kullanicinin satarsa elime gececek).
+    """Portfoy degerleme icin guncel piyasa fiyati.
 
-    Mantik:
-      - MADEN (4 ana metal): Harem alis fiyati (varsa)
-      - Diger varliklar:     mevcut Son_Fiyat (canlidoviz mid / yfinance last)
+    v1.8.2: Tek fiyat kaynagi - Son_Fiyat (canlidoviz mid).
+    Onceden 4 metal icin Harem alis fiyati kullaniliyordu (v1.6.1) ama
+    Madenler sayfasi piyasa fiyati gosterdigi icin kafa karistiriciydi.
+    Artik her yerde ayni fiyat (Son_Fiyat) gosterilir.
 
-    Bu fonksiyon portfoyde gosterilen "Guncel Fiyat" sutunu icin kullanilir;
-    K/Z hesabi bu fiyat uzerinden yapilir, gercek satis senaryosuna yakin olur.
-
-    Returns: { ticker: price_tl } - her ticker icin bir fiyat
+    Returns: { ticker: price_tl } - her ticker icin Son_Fiyat
     """
     out = {}
     if df is None or df.empty or "Ticker" not in df.columns or "Son_Fiyat" not in df.columns:
         return out
 
-    # Once Harem alis fiyatlari (sadece 4 metal icin)
-    harem = get_harem_buy_prices()
-
-    # df'ten ticker -> Son_Fiyat dict'i
-    son_fiyat_map = dict(zip(df["Ticker"].astype(str), pd.to_numeric(df["Son_Fiyat"], errors="coerce")))
+    son_fiyat_map = dict(zip(df["Ticker"].astype(str),
+                              pd.to_numeric(df["Son_Fiyat"], errors="coerce")))
 
     for t in tickers:
         t = str(t)
-        if t in harem and harem[t] > 0:
-            out[t] = harem[t]  # Satis fiyati = Harem alis (kullanici satinca alacagi)
-        else:
-            v = son_fiyat_map.get(t)
-            if v is not None and not pd.isna(v) and v > 0:
-                out[t] = float(v)
+        v = son_fiyat_map.get(t)
+        if v is not None and not pd.isna(v) and v > 0:
+            out[t] = float(v)
     return out
 
 
