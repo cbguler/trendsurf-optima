@@ -112,6 +112,7 @@ from live_data import (
     rename_existing_maden as _ld_rename_maden,
     extend_maden_universe as _ld_extend_maden,
     refresh_fx_maden_kripto as _ld_refresh_overlay,
+    refresh_bist as _ld_refresh_bist,
     portfolio_value_prices as _ld_portfolio_prices,
     get_fx_history as _ld_fx_history,
     get_maden_history as _ld_maden_history,
@@ -166,7 +167,8 @@ if _qp.get("trigger") == "email":
     try:
         from emailer import send_report
         from live_data import (filter_universe, rename_existing_maden,
-                                extend_maden_universe, refresh_fx_maden_kripto)
+                                extend_maden_universe, refresh_fx_maden_kripto,
+                                refresh_bist)
 
         # Universe CSV'yi yukle (worker.py her gun guncelliyor)
         _csv = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -178,6 +180,7 @@ if _qp.get("trigger") == "email":
         _df_uni = rename_existing_maden(_df_uni)
         _df_uni = extend_maden_universe(_df_uni)
         _df_uni = refresh_fx_maden_kripto(_df_uni)
+        _df_uni = refresh_bist(_df_uni)
 
         # Email config (Secrets'tan)
         _cfg = {
@@ -194,9 +197,13 @@ if _qp.get("trigger") == "email":
         _risk       = str(_trig.get("risk", "Orta"))
         _max_assets = int(_trig.get("max_assets", 10))
 
-        # send_report portfolio=None -> DB'den otomatik okur (Supabase, kalici)
+        # Admin user'in portfoyu (Secrets'tan email ile)
+        _admin_email = st.secrets.get("admin", {}).get("email", "")
+
+        # send_report portfolio=None + user_email -> sadece o kullanicinin portfoyu
         send_report(_df_uni, portfolio=None, cfg=_cfg,
-                    budget=_budget, risk=_risk, max_assets=_max_assets)
+                    budget=_budget, risk=_risk, max_assets=_max_assets,
+                    user_email=_admin_email)
 
         _dt = _t.time() - _t0
         st.write(f"OK: Email gonderildi ({_dt:.1f}s)")
@@ -465,6 +472,9 @@ def load_universe():
     df = _ld_extend_maden(df)
     # v1.6: DOVIZ + MADEN + KRIPTO icin canli fiyat uzerine yaz (borsapy)
     df = _ld_refresh_overlay(df)
+    # v1.9: BIST hisselerini de borsapy ile 15dk gecikmeli canli yenile
+    # (Worker.py CSV'sine bagimlilik bitti; CSV sadece son care fallback olarak kalir)
+    df = _ld_refresh_bist(df)
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)

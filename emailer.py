@@ -5,6 +5,27 @@ import smtplib, json, os, base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo
+    _TR_TZ = ZoneInfo("Europe/Istanbul")
+except Exception:
+    _TR_TZ = None  # Python < 3.9 fallback (degerlerimiz hep 3.12+)
+
+
+def _tr_now():
+    """Turkiye saatiyle (TRT, UTC+3) anlik datetime.
+
+    Onceki davranis: bare datetime.now() Ubuntu container'da UTC donuyordu,
+    mail subject ve body'sinde UTC saati basiliyordu. v1.9.0'dan itibaren
+    her zaman TRT.
+    """
+    if _TR_TZ is not None:
+        return datetime.now(_TR_TZ)
+    # Python <3.9 fallback (gercekte ortamimiz 3.12, asla buraya dusmemeli)
+    from datetime import timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=3)))
+
+
 import pandas as pd
 
 CFG_FILE = "email_config.json"
@@ -356,7 +377,7 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
                budget: float = 0, risk: str = "Orta",
                max_assets: int = 10) -> str:
 
-    now      = datetime.now().strftime("%d.%m.%Y  %H:%M")
+    now      = _tr_now().strftime("%d.%m.%Y  %H:%M")
     logo_b64 = _logo_b64()
 
     if logo_b64:
@@ -433,7 +454,14 @@ def _email_sig(sig: str) -> str:
 
 def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
                 budget: float = 0, risk: str = "Orta", max_assets: int = 10,
-                cfg: dict = None):
+                cfg: dict = None, user_email: str = None):
+    """E-posta raporu gonder.
+
+    Args:
+        user_email: Eger portfolio=None ise, sadece bu kullanicinin portfoyunu
+                    DB'den oku. Bos birakirsa hicbir kullanicinin portfoyu cekilmez.
+                    Onceki davranis: tum kullanicilarin portfoyu okunuyordu (yanlis).
+    """
 
     if cfg is None:
         cfg = {}
@@ -463,20 +491,29 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
         df_uni = pd.read_csv(CSV_PATH) if os.path.exists(CSV_PATH) else pd.DataFrame()
 
     if portfolio is None:
-        try:
-            from db import get_conn
-            conn = get_conn()
-            rows = conn.execute(
-                "SELECT ticker, quantity, avg_cost, asset_type, note "
-                "FROM portfolio ORDER BY added_at DESC"
-            ).fetchall()
-            conn.close()
-            portfolio = [dict(r) for r in rows]
-        except Exception:
+        # Sadece user_email verildiyse o kullanicinin portfoyunu cek.
+        # Aksi halde bos kalsin - tum kullanicilari karistirmak yanlis olur.
+        if user_email:
+            try:
+                from db import get_conn
+                conn = get_conn()
+                rows = conn.execute(
+                    "SELECT p.ticker, p.quantity, p.avg_cost, p.asset_type, p.note "
+                    "FROM portfolio p JOIN users u ON p.user_id = u.id "
+                    "WHERE LOWER(u.email) = LOWER(?) "
+                    "ORDER BY p.added_at DESC",
+                    (user_email,)
+                ).fetchall()
+                conn.close()
+                portfolio = [dict(r) for r in rows]
+            except Exception as _e:
+                print(f"[emailer] Portfoy DB okuma hatasi: {_e}")
+                portfolio = []
+        else:
             portfolio = []
 
     html = build_html(df_uni, portfolio, budget, risk, max_assets)
-    now  = datetime.now().strftime("%d.%m.%Y %H:%M")
+    now  = _tr_now().strftime("%d.%m.%Y %H:%M")
 
     msg            = MIMEMultipart("alternative")
     msg["Subject"] = f"TrendSurf Optima — Finansal Rapor {now}"

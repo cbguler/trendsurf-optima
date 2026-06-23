@@ -414,14 +414,117 @@ def _fetch_live_kripto(tickers_key: tuple) -> dict:
     return out
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_live_bist(tickers_key: tuple) -> dict:
+    """borsapy.download ile BIST hisselerinin son kapanis fiyatlarini batch cek.
+
+    5 dk cache. BIST regulatif olarak 15 dakika gecikmeli yayinlandigi icin
+    5 dk cache mantikli (canli ile aradaki en buyuk fark ~20 dk olur).
+
+    Args:
+        tickers_key: BIST ticker'larin tuple'i (cache key icin hashable olmali)
+
+    Returns:
+        {ticker: son_fiyat} dict. Hata olursa bos dict.
+    """
+    if not BORSAPY_OK or not tickers_key:
+        return {}
+
+    out: dict = {}
+    try:
+        tickers_str = " ".join(tickers_key)
+        df_bist = bp.download(
+            tickers_str,
+            period="2d",
+            interval="1d",
+            group_by="ticker",
+            progress=False,
+        )
+        if df_bist is None or len(df_bist) == 0:
+            return {}
+
+        # MultiIndex (multi-ticker) ya da flat (single ticker) olabilir
+        is_multi = isinstance(df_bist.columns, pd.MultiIndex)
+
+        for t in tickers_key:
+            try:
+                if is_multi:
+                    # group_by='ticker' -> ust seviye sembol, alt seviye OHLCV
+                    if t not in df_bist.columns.get_level_values(0):
+                        continue
+                    sub = df_bist[t]
+                    # Close kolonu (case-insensitive)
+                    close_col = None
+                    for c in ("Close", "close", "CLOSE"):
+                        if c in sub.columns:
+                            close_col = c
+                            break
+                    if not close_col:
+                        continue
+                    close = sub[close_col].dropna()
+                else:
+                    # Tek ticker: flat columns
+                    close_col = None
+                    for c in ("Close", "close", "CLOSE"):
+                        if c in df_bist.columns:
+                            close_col = c
+                            break
+                    if not close_col:
+                        continue
+                    close = df_bist[close_col].dropna()
+
+                if not close.empty:
+                    v = float(close.iloc[-1])
+                    if v > 0:
+                        out[t] = v
+            except Exception:
+                continue
+    except Exception:
+        # borsapy network/parse hatasi - sessizce devam (CSV degerleri kalir)
+        return out
+
+    return out
+
+
+def refresh_bist(df: pd.DataFrame) -> pd.DataFrame:
+    """BIST hisselerinin Son_Fiyat'ini borsapy ile (15dk gecikmeli) canli yenile.
+
+    v1.9.0: Worker.py/CSV bagimliligini BIST icin de kaldirir. Yedek: borsapy
+    cagrisi basarisiz olursa CSV'deki Son_Fiyat (worker.py cikti si) korunur.
+
+    TEFAS dokunulmaz (gunluk NAV, regulatif).
+    """
+    if df is None or df.empty or not BORSAPY_OK:
+        return df
+    if "Kategori" not in df.columns or "Son_Fiyat" not in df.columns:
+        return df
+
+    bist_tickers = sorted(
+        df[df["Kategori"] == "BIST"]["Ticker"].dropna().astype(str).tolist()
+    )
+    if not bist_tickers:
+        return df
+
+    prices = _fetch_live_bist(tuple(bist_tickers))
+    if not prices:
+        return df
+
+    df = df.copy()
+    mask = (df["Kategori"] == "BIST") & df["Ticker"].isin(prices.keys())
+    if mask.any():
+        df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(prices).astype(float)
+
+    return df
+
+
 def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
     """DOVIZ + MADEN + KRIPTO satirlarinin Son_Fiyat'ini canli verilerle uzerine yaz.
 
     v1.8: MADEN tickerlari icin ek olarak RSI ve Ret1M da borsapy history'den
     yeniden hesaplanir (boylece altin trendi optimizatore yansir).
 
-    BIST ve TEFAS dokunulmaz:
-      - BIST: 770 ticker, batch refresh v1.9'da eklenecek
+    BIST ve TEFAS:
+      - BIST: v1.9.0'da refresh_bist() ile ayri fonksiyon olarak eklendi (borsapy.download batch)
       - TEFAS: 1347 fon, gunluk NAV (regulatif), worker.py sorumlu
     """
     if df is None or df.empty:

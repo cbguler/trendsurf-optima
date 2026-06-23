@@ -2,11 +2,16 @@ name: Scheduled Email Reports
 
 on:
   schedule:
-    # Türkiye UTC+3 — hafta içi:
-    # 08:30 TRT = 05:30 UTC
-    - cron: "30 5 * * 1-5"
-    # 12:00 TRT = 09:00 UTC
-    - cron: "0 9 * * 1-5"
+    # Bahri'nin istedigi saatler: hafta ici 09:00 ve 12:00 TRT (UTC+3).
+    # GitHub Actions free tier'da saat basi en yogun kuyruk; tipik gecikme
+    # 10-30 dk, agir saatlerde saatlerce surebilir. Iki taktik birden:
+    # (a) Cron'u planlanan saatten 10 dk onceden tetikle - gecikmeyi yut.
+    # (b) Saat dakikasini 0/30 yerine 7'lik off-peak'e ayarla.
+    #
+    # 09:00 TRT (06:00 UTC) icin -> 08:50 TRT yani 05:50 UTC -> "50 5 * * 1-5"
+    # 12:00 TRT (09:00 UTC) icin -> 11:50 TRT yani 08:50 UTC -> "50 8 * * 1-5"
+    - cron: "50 5 * * 1-5"
+    - cron: "50 8 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -24,13 +29,13 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip --quiet
-          pip install pandas yfinance plotly streamlit requests pytefas bcrypt borsapy --quiet
+          pip install pandas yfinance plotly streamlit requests pytefas bcrypt borsapy psycopg2-binary --quiet
 
       - name: Check data file (informational)
         run: |
           if [ -f "optimized_universe.csv" ]; then
             echo "CSV mevcut: $(wc -l < optimized_universe.csv) satir"
-            echo "BIST ve TEFAS icerikleri CSV'den gelecek."
+            echo "BIST/MADEN/DOVIZ/KRIPTO icin borsapy ile live refresh uygulanacak."
           else
             echo "UYARI: optimized_universe.csv yok"
             echo "BIST/TEFAS bolumleri bos olabilir; DOVIZ+MADEN+KRIPTO borsapy'den gelir."
@@ -38,7 +43,15 @@ jobs:
 
       - name: Send email report
         env:
-          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
-          SMTP_USER:     ${{ secrets.SMTP_USER }}
-          SMTP_PASS:     ${{ secrets.SMTP_PASS }}
+          EMAIL_ADDRESS:    ${{ secrets.EMAIL_ADDRESS }}
+          SMTP_USER:        ${{ secrets.SMTP_USER }}
+          SMTP_PASS:        ${{ secrets.SMTP_PASS }}
+          # v1.9.0: Supabase'den portfoy okumak icin (Streamlit Cloud ile ayni DB)
+          SUPABASE_DB_URL:  ${{ secrets.SUPABASE_DB_URL }}
+          # v1.9.0: Hangi kullanicinin portfoyu cekilecek (admin email)
+          ADMIN_EMAIL:      ${{ secrets.ADMIN_EMAIL }}
+          # Opsiyonel - default 20000/Orta/10
+          # REPORT_BUDGET: 20000
+          # REPORT_RISK: "Orta"
+          # REPORT_MAX_ASSETS: 10
         run: python emailer_standalone.py
