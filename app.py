@@ -452,7 +452,7 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
         pass
 
 
-@st.cache_data(ttl=60,show_spinner=False)  # v1.8.2: 300s -> 60s (fiyat tazelemesi daha sik)
+@st.cache_data(ttl=600,show_spinner=False)  # v1.9.4: 60s -> 600s (kullanici beklemesi 1dk yerine 10dk'da bir)
 def load_universe():
     import time as _t
     _t0 = _t.perf_counter()

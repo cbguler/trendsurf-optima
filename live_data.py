@@ -562,6 +562,10 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
     v1.8: MADEN tickerlari icin ek olarak RSI ve Ret1M da borsapy history'den
     yeniden hesaplanir (boylece altin trendi optimizatore yansir).
 
+    v1.9.4: MADEN history call'lari ThreadPoolExecutor ile paralelize edildi
+            (5 sıralı çağrı yerine eş zamanlı, ~5x speedup beklenir).
+    v1.9.4: Alt-seviye timing'ler (sub-step) eklendi.
+
     BIST ve TEFAS:
       - BIST: v1.9.0'da refresh_bist() ile ayri fonksiyon olarak eklendi (borsapy.download batch)
       - TEFAS: 1347 fon, gunluk NAV (regulatif), worker.py sorumlu
@@ -572,11 +576,15 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
         if "Ticker" not in df.columns or "Son_Fiyat" not in df.columns:
             return df
 
-        live = _fetch_live_fx_maden()
+        # v1.9.4 alt-timing: DOVIZ + MADEN canlidoviz cagrisi
+        with _timed_block("  sub.fx_maden_live"):
+            live = _fetch_live_fx_maden()
 
-        kripto_list = df[df["Kategori"] == "KRIPTO"]["Ticker"].dropna().astype(str).tolist()
-        if kripto_list:
-            live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
+        # v1.9.4 alt-timing: KRIPTO BtcTurk
+        with _timed_block("  sub.kripto_live"):
+            kripto_list = df[df["Kategori"] == "KRIPTO"]["Ticker"].dropna().astype(str).tolist()
+            if kripto_list:
+                live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
 
         if live:
             mask = df["Ticker"].isin(live.keys())
@@ -584,20 +592,36 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                 df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
 
         # v1.8 - MADEN tickerlari icin RSI ve Ret1M'i borsapy history'den tazele
-        # (Sadece _MADEN_TO_BP'de tanimli olanlar - BAKIR/PALADYUM USD-derived,
-        # onlarin RSI/Ret1M CSV'de kalan worker.py degerlerini kullanir)
+        # v1.9.4: ThreadPoolExecutor ile paralelize (5 ticker es zamanli)
         if "RSI" in df.columns and "Ret1M" in df.columns:
-            for ticker, bp_code in _MADEN_TO_BP.items():
-                row_mask = df["Ticker"] == ticker
-                if not row_mask.any():
-                    continue
-                son, rsi, ret = _fetch_maden_history_summary(bp_code)
-                # Son_Fiyat'i taze borsapy degeriyle de guncelle (live'da yoksa fallback)
-                if son is not None and son > 0:
-                    df.loc[row_mask, "Son_Fiyat"] = float(son)
-                # RSI ve Ret1M her zaman guncellenir (history bos donerse default 50/0)
-                df.loc[row_mask, "RSI"]   = float(rsi)
-                df.loc[row_mask, "Ret1M"] = float(ret)
+            with _timed_block("  sub.maden_history_parallel"):
+                from concurrent.futures import ThreadPoolExecutor
+
+                # Sadece df'de var olan MADEN tickerlari al
+                to_fetch = []
+                for ticker, bp_code in _MADEN_TO_BP.items():
+                    if (df["Ticker"] == ticker).any():
+                        to_fetch.append((ticker, bp_code))
+
+                if to_fetch:
+                    # Paralel cagri (her birinin cache_data koruması var, kosey durumlarda hizli doner)
+                    def _fetch_one(item):
+                        ticker, bp_code = item
+                        son, rsi, ret = _fetch_maden_history_summary(bp_code)
+                        return (ticker, son, rsi, ret)
+
+                    with ThreadPoolExecutor(max_workers=min(8, len(to_fetch))) as ex:
+                        results = list(ex.map(_fetch_one, to_fetch))
+
+                    # Sonuclari df'ye yaz
+                    for ticker, son, rsi, ret in results:
+                        row_mask = df["Ticker"] == ticker
+                        if not row_mask.any():
+                            continue
+                        if son is not None and son > 0:
+                            df.loc[row_mask, "Son_Fiyat"] = float(son)
+                        df.loc[row_mask, "RSI"]   = float(rsi)
+                        df.loc[row_mask, "Ret1M"] = float(ret)
 
         return df
 
