@@ -53,6 +53,25 @@ _COL_W = {
     "sinyal": "95",   # Sinyal / K/Z
 }
 
+
+def _format_birim(val) -> str:
+    """Birim sutunu icin tutarli format (iki tabloda da ayni).
+
+    - Tam sayi ise: integer + binlik ayraci (orn 1,000 / 276 / 2,020)
+    - Ondalik varsa: en fazla 4 ondalik, trailing sifir yok (orn 5.06 / 0.4567)
+
+    v1.9.2 sonrasi: Optimizasyon ve Portfoy tablolarinda ayni gorunum.
+    """
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return str(val)
+    if f == int(f):
+        return f"{int(f):,}"
+    s = f"{f:,.4f}".rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
 # ── Yardımcı ──────────────────────────────────────────────────────────────────
 
 def _logo_b64():
@@ -240,7 +259,7 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
           {_td(ad_str)}
           {_td(f"<b>{skor:.0f}</b>", "right")}
           {_td(f"{price:,.4f}", "right", nowrap=True)}
-          {_td(str(lot), "right", bold=True, nowrap=True)}
+          {_td(_format_birim(lot), "right", bold=True, nowrap=True)}
           {_td(f"{gercek:,.2f}&nbsp;₺", "right", bold=True, nowrap=True)}
           {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
                f'border-radius:5px;font-size:10px;font-weight:700;'
@@ -277,16 +296,26 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         {_th("Ad",       "left",   _COL_W["ad"])}
         {_th("Skor",     "right",  _COL_W["skor"])}
         {_th("Fiyat",    "right",  _COL_W["fiyat"])}
-        {_th("Lot",      "right",  _COL_W["lot"])}
-        {_th("Tutar",    "right",  _COL_W["tutar"])}
+        {_th("Birim",    "right",  _COL_W["lot"])}
+        {_th("Toplam",   "right",  _COL_W["tutar"])}
         {_th("Sinyal",   "center", _COL_W["sinyal"])}
       </tr></thead>
       <tbody>{rows_html}</tbody>
+      <tfoot>
+        <tr style="background:#f4f6fb;border-top:2px solid #1b2a4a;">
+          <td colspan="6" style="padding:8px 10px;font-size:11px;
+              color:#1b2a4a;font-weight:700;text-align:right;">Genel Toplam:</td>
+          <td style="padding:8px 10px;font-size:12px;color:#1b2a4a;
+              font-weight:700;text-align:right;white-space:nowrap;">
+              {grand_total:,.2f}&nbsp;₺</td>
+          <td style="padding:8px 10px;font-size:10px;color:#9aa8c0;
+              text-align:center;">{len(selected)} varlık</td>
+        </tr>
+      </tfoot>
     </table>
 </div>
-    <p style="font-size:11px;color:#9aa8c0;margin-top:6px;">
-      Toplam: <b style="color:#1b2a4a">{grand_total:,.2f}&nbsp;₺</b> &nbsp;|&nbsp;
-      {len(selected)} varlık önerildi. Yatırım tavsiyesi değildir.
+    <p style="font-size:10px;color:#9aa8c0;margin-top:6px;font-style:italic;">
+      Yatırım tavsiyesi değildir.
     </p>"""
 
 
@@ -296,7 +325,8 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
     if not portfolio:
         return """
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
-               border-left:4px solid #2c3e6b;padding-left:10px;">Portföy Durumu</h2>
+               border-left:4px solid #2c3e6b;padding-left:10px;
+               page-break-before:always;">Portföy Durumu</h2>
     <p style="color:#9aa8c0;font-size:12px;font-style:italic;">
       Henüz portföye pozisyon eklenmemiş.
     </p>"""
@@ -328,17 +358,26 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
         pf_pnl   += pnl_try
         clr = "#00732f" if pnl_pct >= 0 else "#b71c1c"
 
+        # K/Z bilgisini Toplam sutununun icinde kucuk alt-satir olarak goster
+        # (Boylelikle K/Z ayri sutun gerektirmez, son sutun Sinyal olur)
+        toplam_cell = (
+            f'<b>{toplam:,.2f}&nbsp;₺</b><br>'
+            f'<span style="color:{clr};font-size:10px;font-weight:700;">'
+            f'{pnl_pct:+.2f}%&nbsp;&nbsp;{pnl_try:+,.2f}&nbsp;₺</span>'
+        )
+
         rows_html += f"""<tr>
           {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
           {_td(f"<b>{tkr}</b>", nowrap=True)}
           {_td(ad_name)}
           {_td(f"<b>{skor:.0f}</b>" if skor > 0 else "—", "right")}
           {_td(f"{cur:,.4f}", "right", nowrap=True)}
-          {_td(f"{adet:,.4f}", "right", nowrap=True)}
-          {_td(f"{toplam:,.2f}&nbsp;₺", "right", bold=True, nowrap=True)}
-          {_td(f'<span style="color:{clr};font-weight:700">{pnl_pct:+.2f}%</span><br>'
-               f'<span style="color:{clr};font-size:10px">{pnl_try:+,.2f}&nbsp;₺</span>',
-               "right")}
+          {_td(_format_birim(adet), "right", bold=True, nowrap=True)}
+          {_td(toplam_cell, "right", nowrap=True)}
+          {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
+               f'border-radius:5px;font-size:10px;font-weight:700;'
+               f'white-space:nowrap">{_email_sig(sl) if skor > 0 else "—"}</span>',
+               "center")}
         </tr>"""
 
     if not rows_html:
@@ -346,29 +385,43 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
 
     pf_color = "#00732f" if pf_pnl >= 0 else "#b71c1c"
 
+    # Genel Toplam icin K/Z'yi de tek satirda goster (Toplam sutununda)
+    pf_total_cell = (
+        f'<b>{pf_total:,.2f}&nbsp;₺</b><br>'
+        f'<span style="color:{pf_color};font-size:10px;font-weight:700;">'
+        f'K/Z: {pf_pnl:+,.2f}&nbsp;₺</span>'
+    )
+
     return f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
-               border-left:4px solid #2c3e6b;padding-left:10px;">Portföy Durumu</h2>
+               border-left:4px solid #2c3e6b;padding-left:10px;
+               page-break-before:always;">Portföy Durumu</h2>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
 <table style="width:100%;border-collapse:collapse;background:#fff;
                   font-size:12px;table-layout:fixed;min-width:560px;">
       {_col_group()}
       <thead><tr>
-        {_th("Kategori",     "left",   _COL_W["kat"])}
-        {_th("Ticker",       "left",   _COL_W["tkr"])}
-        {_th("Ad",           "left",   _COL_W["ad"])}
-        {_th("Skor",         "right",  _COL_W["skor"])}
-        {_th("Güncel Fiyat", "right",  _COL_W["fiyat"])}
-        {_th("Adet",         "right",  _COL_W["lot"])}
-        {_th("Toplam",       "right",  _COL_W["tutar"])}
-        {_th("K/Z",          "right",  _COL_W["sinyal"])}
+        {_th("Kategori",  "left",   _COL_W["kat"])}
+        {_th("Ticker",    "left",   _COL_W["tkr"])}
+        {_th("Ad",        "left",   _COL_W["ad"])}
+        {_th("Skor",      "right",  _COL_W["skor"])}
+        {_th("Fiyat",     "right",  _COL_W["fiyat"])}
+        {_th("Birim",     "right",  _COL_W["lot"])}
+        {_th("Toplam",    "right",  _COL_W["tutar"])}
+        {_th("Sinyal",    "center", _COL_W["sinyal"])}
       </tr></thead>
       <tbody>{rows_html}</tbody>
+      <tfoot>
+        <tr style="background:#f4f6fb;border-top:2px solid #1b2a4a;">
+          <td colspan="6" style="padding:8px 10px;font-size:11px;
+              color:#1b2a4a;font-weight:700;text-align:right;">Genel Toplam:</td>
+          <td style="padding:8px 10px;text-align:right;white-space:nowrap;
+              font-size:12px;color:#1b2a4a;">{pf_total_cell}</td>
+          <td style="padding:8px 10px;"></td>
+        </tr>
+      </tfoot>
     </table>
-    <p style="font-size:12px;margin-top:8px;color:#4a5a7a;">
-      <b>Toplam Değer:</b> {pf_total:,.2f}&nbsp;₺ &nbsp;|&nbsp;
-      <b style="color:{pf_color}">Kar / Zarar: {pf_pnl:+,.2f}&nbsp;₺</b>
-    </p>"""
+</div>"""
 
 
 # ── Ana HTML ──────────────────────────────────────────────────────────────────
@@ -432,8 +485,8 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
     <p style="color:#b0bac8;font-size:10px;margin-top:24px;
               border-top:1px solid #e8edf5;padding-top:12px;
               text-align:center;">
-      Bu rapor <b>TrendSurf Optima</b> tarafından otomatik olarak
-      oluşturulmuştur. Yatırım tavsiyesi değildir.
+      Bu rapor Bahri Güler'in geliştirdiği, <b>TrendSurf Optima</b> tarafından
+      otomatik olarak oluşturulmuştur. Yatırım tavsiyesi değildir.
     </p>
   </td></tr>
 
