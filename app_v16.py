@@ -476,7 +476,16 @@ def load_universe():
     df = _ld_refresh_overlay(df)
     # v1.9: BIST hisselerini de borsapy ile 15dk gecikmeli canli yenile
     # (Worker.py CSV'sine bagimlilik bitti; CSV sadece son care fallback olarak kalir)
-    df = _ld_refresh_bist(df)
+    # v1.9.5.1: 25 saniye timeout - takilirsa CSV verisi kullanilir, sayfa hep acilir
+    from concurrent.futures import ThreadPoolExecutor as _Pool, TimeoutError as _FTO
+    try:
+        with _Pool(max_workers=1) as _ex:
+            _fut = _ex.submit(_ld_refresh_bist, df)
+            df = _fut.result(timeout=25)
+    except _FTO:
+        print("[timing] refresh_bist 25sn timeout - CSV verisi kullanildi (sayfa acildi)")
+    except Exception as _bist_err:
+        print(f"[timing] refresh_bist hatasi: {_bist_err} - CSV verisi kullanildi")
     # v1.9.3 - profilleme: cache miss durumunda toplam yukleme suresi
     try:
         from live_data import _TIMINGS as _LD_TIMINGS
