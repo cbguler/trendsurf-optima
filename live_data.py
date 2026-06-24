@@ -464,61 +464,60 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
 
     Returns:
         {ticker: son_fiyat} dict. Hata olursa bos dict.
+
+    v1.9.5: borsapy.download (sirali, 770 ticker icin 344s) yerine
+            ThreadPoolExecutor ile paralel borsapy.Ticker.fast_info/history
+            (30 worker -> beklenen ~20-30s).
     """
     if not BORSAPY_OK or not tickers_key:
         return {}
 
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch_one(ticker: str):
+        """Tek bir BIST hissesinin son fiyatini al. Once fast_info dene
+        (en hizli), sonra history (yedek)."""
+        try:
+            tobj = bp.Ticker(ticker)
+            # 1) En hizli: fast_info.last_price
+            try:
+                fi = tobj.fast_info
+                # FastInfo objesi olarak veya dict olarak gelebilir
+                v = None
+                if hasattr(fi, "last_price"):
+                    v = fi.last_price
+                if v is None and hasattr(fi, "todict"):
+                    v = fi.todict().get("last_price") or fi.todict().get("regularMarketPrice")
+                if v is not None and float(v) > 0:
+                    return ticker, float(v)
+            except Exception:
+                pass
+            # 2) Yedek: 1 gunluk history (yine de hizli)
+            try:
+                h = tobj.history(period="2d", interval="1d")
+                if h is not None and len(h) > 0:
+                    for col in ("Close", "close", "CLOSE"):
+                        if col in h.columns:
+                            close = h[col].dropna()
+                            if not close.empty:
+                                v = float(close.iloc[-1])
+                                if v > 0:
+                                    return ticker, v
+                            break
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return ticker, None
+
     out: dict = {}
     try:
-        tickers_str = " ".join(tickers_key)
-        df_bist = bp.download(
-            tickers_str,
-            period="2d",
-            interval="1d",
-            group_by="ticker",
-            progress=False,
-        )
-        if df_bist is None or len(df_bist) == 0:
-            return {}
-
-        # MultiIndex (multi-ticker) ya da flat (single ticker) olabilir
-        is_multi = isinstance(df_bist.columns, pd.MultiIndex)
-
-        for t in tickers_key:
-            try:
-                if is_multi:
-                    # group_by='ticker' -> ust seviye sembol, alt seviye OHLCV
-                    if t not in df_bist.columns.get_level_values(0):
-                        continue
-                    sub = df_bist[t]
-                    # Close kolonu (case-insensitive)
-                    close_col = None
-                    for c in ("Close", "close", "CLOSE"):
-                        if c in sub.columns:
-                            close_col = c
-                            break
-                    if not close_col:
-                        continue
-                    close = sub[close_col].dropna()
-                else:
-                    # Tek ticker: flat columns
-                    close_col = None
-                    for c in ("Close", "close", "CLOSE"):
-                        if c in df_bist.columns:
-                            close_col = c
-                            break
-                    if not close_col:
-                        continue
-                    close = df_bist[close_col].dropna()
-
-                if not close.empty:
-                    v = float(close.iloc[-1])
-                    if v > 0:
-                        out[t] = v
-            except Exception:
-                continue
+        # 30 paralel worker -> 770 ticker / 30 ~= 26 ticker per thread
+        with ThreadPoolExecutor(max_workers=30) as ex:
+            for ticker, price in ex.map(_fetch_one, tickers_key):
+                if price is not None and price > 0:
+                    out[ticker] = price
     except Exception:
-        # borsapy network/parse hatasi - sessizce devam (CSV degerleri kalir)
         return out
 
     return out
