@@ -20,6 +20,43 @@ icin gelistirilmistir, ticari kullanim soz konusu degildir.
 
 import streamlit as st
 import pandas as pd
+import time as _time
+
+# ----------------------------------------------------------------------------
+# v1.9.3 — PROFILLEME ARACI
+# ----------------------------------------------------------------------------
+# Her ana fonksiyon kendi son cagri suresini buraya yazar. Streamlit
+# admin tanilama panelinden okunur. Sandboxa veya production'a ek bir
+# bagimlilik yok; sadece dict + time.perf_counter.
+_TIMINGS: dict = {}
+
+
+def get_timings() -> dict:
+    """Son cagrilarin sureleri (saniye). v1.9.3+ tanilama icin."""
+    return dict(_TIMINGS)
+
+
+def reset_timings() -> None:
+    """Tanilama panelinden manuel temizleme icin."""
+    _TIMINGS.clear()
+
+
+def _timed_block(name: str):
+    """Context manager - 'with _timed_block(\"refresh_bist\"):' kullanim."""
+    class _T:
+        def __enter__(self_):
+            self_.t0 = _time.perf_counter()
+            return self_
+        def __exit__(self_, *exc):
+            _TIMINGS[name] = _time.perf_counter() - self_.t0
+            # Streamlit Cloud Logs'a da yansisin
+            try:
+                print(f"[timing] {name}: {_TIMINGS[name]:.3f}s")
+            except Exception:
+                pass
+            return False
+    return _T()
+
 
 # ----------------------------------------------------------------------------
 # Borsapy guvenli import
@@ -218,52 +255,53 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
     Her satir icin canli fiyat, RSI ve Ret1M borsapy tarihçesinden hesaplanir.
     CSV dosyasi degismez, sadece bellekteki DataFrame genisletilir.
     """
-    if df is None or "Ticker" not in df.columns:
-        return df
+    with _timed_block("extend_maden_universe"):
+        if df is None or "Ticker" not in df.columns:
+            return df
 
-    yeni_satirlar = []
-    for ticker, ad in _NEW_MADEN_DISPLAY.items():
-        # CSV'de zaten varsa atla
-        if (df["Ticker"] == ticker).any():
-            continue
-        bp_code = _MADEN_TO_BP.get(ticker)
-        if not bp_code:
-            continue
-        son, rsi, ret1m = _fetch_maden_history_summary(bp_code)
-        # Fiyat yoksa satiri ekleme (anlamsiz olur)
-        if son is None or son <= 0:
-            continue
-        row = {
-            "Ticker":     ticker,
-            "Ad":         ad,
-            "Kategori":   "MADEN",
-            "TEFAS_Kind": "",
-            "Tur":        "",
-            "Risk_Deger": "",
-            "Son_Fiyat":  float(son),
-            "RSI":        float(rsi),
-            "Ret1M":      float(ret1m),
-            "Ret3M":      0.0,
-            "Ret6M":      0.0,
-            "Ret1Y":      0.0,
-            "Ret3Y":      0.0,
-            "Ret5Y":      0.0,
-            "Vol":        0.0,
-            "YF_Symbol":  "",
-            "_tcmb_guncellendi": "",
-        }
-        yeni_satirlar.append(row)
+        yeni_satirlar = []
+        for ticker, ad in _NEW_MADEN_DISPLAY.items():
+            # CSV'de zaten varsa atla
+            if (df["Ticker"] == ticker).any():
+                continue
+            bp_code = _MADEN_TO_BP.get(ticker)
+            if not bp_code:
+                continue
+            son, rsi, ret1m = _fetch_maden_history_summary(bp_code)
+            # Fiyat yoksa satiri ekleme (anlamsiz olur)
+            if son is None or son <= 0:
+                continue
+            row = {
+                "Ticker":     ticker,
+                "Ad":         ad,
+                "Kategori":   "MADEN",
+                "TEFAS_Kind": "",
+                "Tur":        "",
+                "Risk_Deger": "",
+                "Son_Fiyat":  float(son),
+                "RSI":        float(rsi),
+                "Ret1M":      float(ret1m),
+                "Ret3M":      0.0,
+                "Ret6M":      0.0,
+                "Ret1Y":      0.0,
+                "Ret3Y":      0.0,
+                "Ret5Y":      0.0,
+                "Vol":        0.0,
+                "YF_Symbol":  "",
+                "_tcmb_guncellendi": "",
+            }
+            yeni_satirlar.append(row)
 
-    if not yeni_satirlar:
-        return df
+        if not yeni_satirlar:
+            return df
 
-    ek_df = pd.DataFrame(yeni_satirlar)
-    # df'deki tum sutunlar varsa onlari kullan, eksikse default
-    for c in df.columns:
-        if c not in ek_df.columns:
-            ek_df[c] = "" if df[c].dtype == object else 0.0
-    ek_df = ek_df[df.columns]
-    return pd.concat([df, ek_df], ignore_index=True)
+        ek_df = pd.DataFrame(yeni_satirlar)
+        # df'deki tum sutunlar varsa onlari kullan, eksikse default
+        for c in df.columns:
+            if c not in ek_df.columns:
+                ek_df[c] = "" if df[c].dtype == object else 0.0
+        ek_df = ek_df[df.columns]
+        return pd.concat([df, ek_df], ignore_index=True)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -494,27 +532,28 @@ def refresh_bist(df: pd.DataFrame) -> pd.DataFrame:
 
     TEFAS dokunulmaz (gunluk NAV, regulatif).
     """
-    if df is None or df.empty or not BORSAPY_OK:
-        return df
-    if "Kategori" not in df.columns or "Son_Fiyat" not in df.columns:
-        return df
+    with _timed_block("refresh_bist"):
+        if df is None or df.empty or not BORSAPY_OK:
+            return df
+        if "Kategori" not in df.columns or "Son_Fiyat" not in df.columns:
+            return df
 
-    bist_tickers = sorted(
-        df[df["Kategori"] == "BIST"]["Ticker"].dropna().astype(str).tolist()
-    )
-    if not bist_tickers:
+        bist_tickers = sorted(
+            df[df["Kategori"] == "BIST"]["Ticker"].dropna().astype(str).tolist()
+        )
+        if not bist_tickers:
+            return df
+
+        prices = _fetch_live_bist(tuple(bist_tickers))
+        if not prices:
+            return df
+
+        df = df.copy()
+        mask = (df["Kategori"] == "BIST") & df["Ticker"].isin(prices.keys())
+        if mask.any():
+            df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(prices).astype(float)
+
         return df
-
-    prices = _fetch_live_bist(tuple(bist_tickers))
-    if not prices:
-        return df
-
-    df = df.copy()
-    mask = (df["Kategori"] == "BIST") & df["Ticker"].isin(prices.keys())
-    if mask.any():
-        df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(prices).astype(float)
-
-    return df
 
 
 def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
@@ -527,39 +566,40 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
       - BIST: v1.9.0'da refresh_bist() ile ayri fonksiyon olarak eklendi (borsapy.download batch)
       - TEFAS: 1347 fon, gunluk NAV (regulatif), worker.py sorumlu
     """
-    if df is None or df.empty:
+    with _timed_block("refresh_fx_maden_kripto"):
+        if df is None or df.empty:
+            return df
+        if "Ticker" not in df.columns or "Son_Fiyat" not in df.columns:
+            return df
+
+        live = _fetch_live_fx_maden()
+
+        kripto_list = df[df["Kategori"] == "KRIPTO"]["Ticker"].dropna().astype(str).tolist()
+        if kripto_list:
+            live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
+
+        if live:
+            mask = df["Ticker"].isin(live.keys())
+            if mask.any():
+                df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
+
+        # v1.8 - MADEN tickerlari icin RSI ve Ret1M'i borsapy history'den tazele
+        # (Sadece _MADEN_TO_BP'de tanimli olanlar - BAKIR/PALADYUM USD-derived,
+        # onlarin RSI/Ret1M CSV'de kalan worker.py degerlerini kullanir)
+        if "RSI" in df.columns and "Ret1M" in df.columns:
+            for ticker, bp_code in _MADEN_TO_BP.items():
+                row_mask = df["Ticker"] == ticker
+                if not row_mask.any():
+                    continue
+                son, rsi, ret = _fetch_maden_history_summary(bp_code)
+                # Son_Fiyat'i taze borsapy degeriyle de guncelle (live'da yoksa fallback)
+                if son is not None and son > 0:
+                    df.loc[row_mask, "Son_Fiyat"] = float(son)
+                # RSI ve Ret1M her zaman guncellenir (history bos donerse default 50/0)
+                df.loc[row_mask, "RSI"]   = float(rsi)
+                df.loc[row_mask, "Ret1M"] = float(ret)
+
         return df
-    if "Ticker" not in df.columns or "Son_Fiyat" not in df.columns:
-        return df
-
-    live = _fetch_live_fx_maden()
-
-    kripto_list = df[df["Kategori"] == "KRIPTO"]["Ticker"].dropna().astype(str).tolist()
-    if kripto_list:
-        live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
-
-    if live:
-        mask = df["Ticker"].isin(live.keys())
-        if mask.any():
-            df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
-
-    # v1.8 - MADEN tickerlari icin RSI ve Ret1M'i borsapy history'den tazele
-    # (Sadece _MADEN_TO_BP'de tanimli olanlar - BAKIR/PALADYUM USD-derived,
-    # onlarin RSI/Ret1M CSV'de kalan worker.py degerlerini kullanir)
-    if "RSI" in df.columns and "Ret1M" in df.columns:
-        for ticker, bp_code in _MADEN_TO_BP.items():
-            row_mask = df["Ticker"] == ticker
-            if not row_mask.any():
-                continue
-            son, rsi, ret = _fetch_maden_history_summary(bp_code)
-            # Son_Fiyat'i taze borsapy degeriyle de guncelle (live'da yoksa fallback)
-            if son is not None and son > 0:
-                df.loc[row_mask, "Son_Fiyat"] = float(son)
-            # RSI ve Ret1M her zaman guncellenir (history bos donerse default 50/0)
-            df.loc[row_mask, "RSI"]   = float(rsi)
-            df.loc[row_mask, "Ret1M"] = float(ret)
-
-    return df
 
 
 # ----------------------------------------------------------------------------

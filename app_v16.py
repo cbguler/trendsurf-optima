@@ -454,6 +454,8 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
 
 @st.cache_data(ttl=60,show_spinner=False)  # v1.8.2: 300s -> 60s (fiyat tazelemesi daha sik)
 def load_universe():
+    import time as _t
+    _t0 = _t.perf_counter()
     if not os.path.exists(CSV_PATH): return pd.DataFrame()
     df=pd.read_csv(CSV_PATH,on_bad_lines="skip")
     if not all(c in df.columns for c in ["Ticker","Kategori","Son_Fiyat"]): return pd.DataFrame()
@@ -475,6 +477,14 @@ def load_universe():
     # v1.9: BIST hisselerini de borsapy ile 15dk gecikmeli canli yenile
     # (Worker.py CSV'sine bagimlilik bitti; CSV sadece son care fallback olarak kalir)
     df = _ld_refresh_bist(df)
+    # v1.9.3 - profilleme: cache miss durumunda toplam yukleme suresi
+    try:
+        from live_data import _TIMINGS as _LD_TIMINGS
+        _LD_TIMINGS["load_universe_TOPLAM"] = _t.perf_counter() - _t0
+        print(f"[timing] load_universe (cache MISS, ilk yukleme): "
+              f"{_LD_TIMINGS['load_universe_TOPLAM']:.3f}s")
+    except Exception:
+        pass
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)
@@ -1084,6 +1094,54 @@ with st.sidebar:
                 st.error(f"Hata: {ex}")
     st.divider()
     if _cur_user.get("is_admin"):
+        # v1.9.3 - Sistem Tanilama paneli (yavaslik teshisi icin)
+        with st.expander("🔧 Sistem Tanılama"):
+            st.markdown("""<style>
+            [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
+            [data-testid="stSidebar"] [data-testid="stExpander"] label p,
+            [data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"] {
+                color:#1b2a4a!important;font-weight:600!important;
+            }
+            </style>""", unsafe_allow_html=True)
+            try:
+                from live_data import get_timings as _ld_get_timings, reset_timings as _ld_reset_timings
+                _tdict = _ld_get_timings()
+                if _tdict:
+                    # Sayfa yuklemesi: cache hit ise tum degerler eski, cache miss ise yeni
+                    _toplam = _tdict.get("load_universe_TOPLAM", 0.0)
+                    if _toplam > 0:
+                        st.caption(f"**Son yüklenme:** {_toplam:.2f} sn")
+                    st.caption("**Parça parça (saniye):**")
+                    _order = ["extend_maden_universe", "refresh_fx_maden_kripto", "refresh_bist"]
+                    _shown = set()
+                    for k in _order:
+                        if k in _tdict:
+                            v = _tdict[k]
+                            _shown.add(k)
+                            _color = "#00732f" if v < 1 else ("#a06000" if v < 5 else "#b71c1c")
+                            st.markdown(
+                                f"<small><code>{k}</code>: "
+                                f"<b style='color:{_color}'>{v:.3f}s</b></small>",
+                                unsafe_allow_html=True)
+                    # Sirada olmayan ek olculmus seyler varsa goster
+                    for k, v in _tdict.items():
+                        if k in _shown or k == "load_universe_TOPLAM":
+                            continue
+                        st.markdown(f"<small><code>{k}</code>: {v:.3f}s</small>",
+                                    unsafe_allow_html=True)
+                else:
+                    st.caption("Henüz ölçüm yok — bir sayfa açın.")
+                if st.button("Olcumleri Sifirla", key="diag_reset", use_container_width=True):
+                    _ld_reset_timings()
+                    st.rerun()
+                st.caption(
+                    "İlk yükleme cache miss = 30-60 sn beklenir. "
+                    "Sonraki açılışlar 5 dk içinde hızlı (cache hit, ~0s). "
+                    "Streamlit Cloud Logs'a `[timing]` satırları da basar."
+                )
+            except Exception as _e:
+                st.caption(f"Tanilama yuklenemedi: {_e}")
+
         if st.button("Admin Paneli", use_container_width=True):
             st.session_state["page_override"] = "admin"
             st.rerun()
