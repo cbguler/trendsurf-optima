@@ -605,6 +605,28 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
         else:
             portfolio = []
 
+    # v1.9.7 - Mail icinde portfoy + optimization Top BIST'leri canli olsun
+    # (load_universe'de BIST yok cunku 770 ticker yavasti; burada selective refresh)
+    try:
+        from live_data import refresh_bist_selective as _rb_sel
+        _wanted_bist = set()
+        # Portfoydeki BIST tickerlari
+        for _pos in (portfolio or []):
+            _t = str(_pos.get("ticker", "")).strip().upper()
+            _at = str(_pos.get("asset_type", "")).upper()
+            if _t and _at == "BIST":
+                _wanted_bist.add(_t)
+        # Optimizasyonda Top BIST'ler (CSV'de en yuksek skor ya da basitce ilk 50)
+        if df_uni is not None and not df_uni.empty and "Kategori" in df_uni.columns:
+            _top_bist = df_uni[df_uni["Kategori"] == "BIST"].head(50)
+            for _t in _top_bist["Ticker"].astype(str).tolist():
+                _wanted_bist.add(_t)
+        if _wanted_bist:
+            print(f"[emailer] Selective BIST refresh: {len(_wanted_bist)} ticker")
+            df_uni = _rb_sel(df_uni, sorted(_wanted_bist))
+    except Exception as _bist_err:
+        print(f"[emailer] Selective BIST refresh hatasi (devam): {_bist_err}")
+
     html = build_html(df_uni, portfolio, budget, risk, max_assets)
     now  = _tr_now().strftime("%d.%m.%Y %H:%M")
 
