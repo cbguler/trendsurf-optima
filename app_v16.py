@@ -987,13 +987,21 @@ def save_portfolio(p):
     """Geriye dönük uyumluluk — artık kullanılmıyor."""
     pass
 
-def load_email_cfg():
+def load_email_cfg(user_id=None):
+    """E-posta ayarlarini yukle.
+
+    v1.9.8: Kullanici saatleri (times) Supabase'den gelir, SMTP credentials
+    Streamlit Secrets'tan. Saat ayarlari kalici (logout sonrasi kaybolmaz).
+
+    Args:
+        user_id: Kullanici ID'si. Verilmezse default saatler kullanilir.
+    """
     # 1) Önce secrets.toml (Streamlit Cloud)
+    cfg = {"address":"", "smtp_host":"smtp.gmail.com", "smtp_port":587,
+           "smtp_user":"", "smtp_pass":"", "times":["08:30","11:30"], "tcmb_key":""}
     try:
         s = st.secrets
-        # [email] nested section (toml: [email] smtp_user=...)
         _es = dict(s.get("email", {}) or {})
-        # Üst seviye veya [email] altındaki anahtarları kontrol et
         email_user = (s.get("EMAIL_USER") or s.get("SMTP_USER")
                       or s.get("smtp_user")
                       or _es.get("smtp_user") or "")
@@ -1006,7 +1014,7 @@ def load_email_cfg():
         smtp_host  = (s.get("SMTP_HOST") or _es.get("smtp_host","smtp.gmail.com"))
         smtp_port  = int(s.get("SMTP_PORT") or _es.get("smtp_port", 587))
         if email_user and email_pass:
-            return {
+            cfg = {
                 "address":   email_addr or email_user,
                 "smtp_host": smtp_host,
                 "smtp_port": smtp_port,
@@ -1017,14 +1025,69 @@ def load_email_cfg():
             }
     except Exception:
         pass
-    # 2) Lokal email_config.json
-    if os.path.exists(EMAIL_CFG_FILE):
-        with open(EMAIL_CFG_FILE) as f: return json.load(f)
-    return {"address":"","smtp_host":"smtp.gmail.com","smtp_port":587,
-            "smtp_user":"","smtp_pass":"","times":["08:30","11:30"]}
 
-def save_email_cfg(cfg):
-    with open(EMAIL_CFG_FILE,"w") as f: json.dump(cfg,f)
+    # 2) Lokal email_config.json (Secrets yoksa)
+    if not cfg["smtp_user"]:
+        if os.path.exists(EMAIL_CFG_FILE):
+            try:
+                with open(EMAIL_CFG_FILE) as f:
+                    cfg.update(json.load(f))
+            except Exception:
+                pass
+
+    # 3) v1.9.8 - Kullanici saatleri Supabase'den (kalici)
+    if user_id:
+        try:
+            from db import get_conn as _gc_es
+            _conn_es = _gc_es()
+            _row_es = _conn_es.execute(
+                "SELECT gonderim_saati_1, gonderim_saati_2 FROM email_settings WHERE user_id=?",
+                (user_id,)
+            ).fetchone()
+            if _row_es:
+                cfg["times"] = [str(_row_es[0]), str(_row_es[1])]
+        except Exception as _es_err:
+            print(f"[db] email_settings okuma hatasi (default kullanilacak): {_es_err}")
+
+    return cfg
+
+def save_email_cfg(cfg, user_id=None):
+    """E-posta ayarlarini kaydet.
+
+    v1.9.8: Saatler Supabase'e, SMTP credentials lokal dosyaya.
+    """
+    # Saatleri Supabase'e (kalici)
+    if user_id and cfg.get("times"):
+        try:
+            from db import get_conn as _gc_es
+            _conn_es = _gc_es()
+            _t1 = str(cfg["times"][0]) if len(cfg["times"]) > 0 else "09:00"
+            _t2 = str(cfg["times"][-1]) if len(cfg["times"]) > 1 else "12:00"
+            # UPSERT - postgres syntax
+            _conn_es.execute(
+                """INSERT INTO email_settings (user_id, gonderim_saati_1, gonderim_saati_2, son_guncelleme)
+                   VALUES (?, ?, ?, NOW())
+                   ON CONFLICT (user_id) DO UPDATE SET
+                     gonderim_saati_1 = EXCLUDED.gonderim_saati_1,
+                     gonderim_saati_2 = EXCLUDED.gonderim_saati_2,
+                     son_guncelleme = NOW()""",
+                (user_id, _t1, _t2)
+            )
+            try:
+                _conn_es.commit()
+            except Exception:
+                pass
+            print(f"[db] email_settings kaydedildi: user={user_id} t1={_t1} t2={_t2}")
+        except Exception as _es_err:
+            print(f"[db] email_settings yazma hatasi: {_es_err}")
+            # Yedek: lokal dosyaya da yaz (eski davranis)
+            try:
+                with open(EMAIL_CFG_FILE,"w") as f: json.dump(cfg,f)
+            except Exception:
+                pass
+    else:
+        # user_id yoksa eski davranis (lokal dosya)
+        with open(EMAIL_CFG_FILE,"w") as f: json.dump(cfg,f)
 
 # ══════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -1106,23 +1169,27 @@ with st.sidebar:
             color:#ffffff!important;font-weight:700!important;
         }
         </style>""", unsafe_allow_html=True)
-        ecfg=load_email_cfg()
+        # v1.9.8 - Saatler artik Supabase'den (kalici, logout sonrasi kaybolmaz)
+        _uid_for_cfg = _cur_user.get("id") if _cur_user else None
+        ecfg=load_email_cfg(user_id=_uid_for_cfg)
         e_addr=st.text_input("Alıcı E-posta",value=ecfg.get("address",""))
-        e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["08:30"])[0])
-        e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["08:30","11:30"])[-1])
+        e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["09:00"])[0])
+        e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["09:00","12:00"])[-1])
         st.markdown('<style>[data-testid="stSidebar"] button{color:#ffffff!important;font-weight:700!important;opacity:1!important;}</style>', unsafe_allow_html=True)
         if st.button("Ayarları Kaydet", key="ecfg_save", use_container_width=True):
             save_email_cfg({"address":e_addr,"smtp_host":"smtp.gmail.com","smtp_port":587,
                              "smtp_user":ecfg.get("smtp_user",""),
                              "smtp_pass":ecfg.get("smtp_pass",""),
                              "times":[e_t1,e_t2],
-                             "tcmb_key":ecfg.get("tcmb_key","")})
-            st.success("Kaydedildi!")
+                             "tcmb_key":ecfg.get("tcmb_key","")},
+                            user_id=_uid_for_cfg)
+            st.success("Kaydedildi! (Saatler Supabase'de kalıcı)")
         if st.button("Şimdi Gönder", key="send_now", use_container_width=True):
             try:
                 # Streamlit Cloud için: Secrets'dan cfg oku, email_config.json'a yaz
                 import json as _ej
-                _ecfg = load_email_cfg()
+                # v1.9.8: user_id ile Supabase'den saatleri de al
+                _ecfg = load_email_cfg(user_id=_uid_for_cfg)
                 if _ecfg.get("smtp_user") and _ecfg.get("smtp_pass"):
                     with open("email_config.json", "w", encoding="utf-8") as _ef:
                         _ej.dump(_ecfg, _ef)
@@ -1213,63 +1280,16 @@ df_uni=load_universe()
 if _AUTOREFRESH_OK:
     _st_autorefresh(interval=60_000, key="trendsurf_auto_refresh", limit=None)
 
-# v1.9.7 - Selective BIST refresh: sadece kullanicinin portfoyundeki BIST tickerlari
-# canli (1-5 ticker, ~1-2 sn). load_universe'de BIST yok (770 ticker cok yavasti),
-# burada sadece ihtiyac olan canli yenilenir.
-# v1.9.7.2 - Portfolio'yu DB'den direkt cek (_cur_user dict'inde olmayabilir)
-try:
-    _portfolio_bist_tickers = []
-    # 1) Portfoydeki BIST tickerlari (DB'den direct query)
-    if _cur_user and _cur_user.get("id"):
-        try:
-            from db import get_conn as _gc_for_pf
-            _conn_pf = _gc_for_pf()
-            _rows_pf = _conn_pf.execute(
-                "SELECT ticker FROM portfolio WHERE user_id=? AND UPPER(asset_type)='BIST'",
-                (_cur_user["id"],)
-            ).fetchall()
-            for _r in _rows_pf:
-                _t_db = str(_r[0]).strip().upper() if _r and _r[0] else ""
-                if _t_db:
-                    _portfolio_bist_tickers.append(_t_db)
-        except Exception as _pf_db_err:
-            print(f"[timing] portfoy BIST DB hatasi: {_pf_db_err}")
-    # Yedek: _cur_user.portfolio (eski yontem)
-    if not _portfolio_bist_tickers:
-        _cur_pf = _cur_user.get("portfolio", []) if _cur_user else []
-        for _pos in _cur_pf:
-            _t = str(_pos.get("ticker", "")).strip().upper()
-            _at = str(_pos.get("asset_type", "")).upper()
-            if _t and (_at == "BIST" or (df_uni is not None and not df_uni.empty
-                                          and ((df_uni["Ticker"] == _t) &
-                                               (df_uni["Kategori"] == "BIST")).any())):
-                _portfolio_bist_tickers.append(_t)
-    # 2) v1.9.7.4: Ana Sayfa'da Top 50 BIST'i SADECE optimizasyon icin gerekiyorsa yenile
-    # Portfoyum/diger sayfalar icin sadece portfoy BIST'leri (1-5 ticker) yeter.
-    # Bu sayfa acilirken kullanici uzun beklemesin.
-    if page == "Ana Sayfa" and df_uni is not None and not df_uni.empty:
-        _bist_df = df_uni[df_uni["Kategori"] == "BIST"].copy()
-        if not _bist_df.empty:
-            _top_bist = _bist_df.head(50)["Ticker"].astype(str).tolist()
-            for _t in _top_bist:
-                if _t not in _portfolio_bist_tickers:
-                    _portfolio_bist_tickers.append(_t)
-    # v1.9.7.4: timeout korumasi - borsapy takilirsa CSV verisi kullanilir
-    if _portfolio_bist_tickers:
-        try:
-            from concurrent.futures import ThreadPoolExecutor as _Pool2, TimeoutError as _FTO2
-            # Portfoy icin 8sn, Top 50 icin 20sn timeout (kullanici tahammulu sinirli)
-            _tmo = 20 if len(_portfolio_bist_tickers) > 10 else 8
-            with _Pool2(max_workers=1) as _ex2:
-                _f2 = _ex2.submit(_ld_refresh_bist_sel, df_uni, _portfolio_bist_tickers)
-                df_uni = _f2.result(timeout=_tmo)
-            print(f"[timing] selective BIST: {len(_portfolio_bist_tickers)} ticker yenilendi")
-        except _FTO2:
-            print(f"[timing] selective BIST {_tmo}sn timeout - CSV verisi kullanildi")
-        except Exception as _sel_err:
-            print(f"[timing] selective BIST hatasi: {_sel_err} - CSV verisi kullanildi")
-except Exception as _bist_sel_err:
-    print(f"[timing] selective BIST refresh hatasi: {_bist_sel_err}")
+# v1.9.7.5 - Selective BIST refresh ACIL DEVRE DISI
+# Sebep: app sayfa render'inda selective refresh bazen takiliyor, sayfalar bos kaliyor
+# EUKYO/diger BIST tickerlari CSV verisinden gelir (worker.py her gun gunceller)
+# v1.9.8'de daha guvenli bir strateji ile (kisa timeout + async pattern) tekrar acilacak
+_portfolio_bist_tickers = []  # placeholder, kullanilmiyor
+# Asagidaki blok comment'lendi - timeout korumasi yetersiz kaldi:
+# try:
+#     ... selective BIST refresh kodu ...
+# except Exception:
+#     pass
 
 # session_state: seçili ticker
 for pg in PAGES:
