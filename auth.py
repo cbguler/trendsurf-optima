@@ -42,7 +42,18 @@ def register_user(email: str, password: str, full_name: str) -> dict:
         conn.close()
 
 # ── Giris ────────────────────────────────────────────────────────────────────
-def login_user(email: str, password: str) -> dict:
+def login_user(email: str, password: str, remember: bool = False) -> dict:
+    """Kullaniciyi dogrula ve oturum acmasini sagla.
+
+    v1.9.9: remember=True ise token 90 gun, False ise 7 gun yasar.
+            Beni Hatirla checkbox isaretliyse 90 gunluk token uretilir,
+            tarayici cookie'sine yazilir (login persistence).
+
+    Args:
+        email: Kullanici e-postasi
+        password: Kullanici sifresi (plain)
+        remember: True = 90 gun, False = 7 gun (default)
+    """
     conn = get_conn()
     row = conn.execute(
         "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)
@@ -57,7 +68,9 @@ def login_user(email: str, password: str) -> dict:
         return {"ok": False, "msg": "Hesabiniz henuz onaylanmadi. Lutfen bekleyin."}
 
     token = secrets.token_urlsafe(32)
-    expires = (datetime.now() + timedelta(days=7)).isoformat()
+    # v1.9.9 - Beni Hatirla: 90 gun, Aksi halde: 7 gun
+    _days = 90 if remember else 7
+    expires = (datetime.now() + timedelta(days=_days)).isoformat()
     conn = get_conn()
     conn.execute(
         "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",

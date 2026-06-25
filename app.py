@@ -132,6 +132,16 @@ except ImportError:
         """Fallback (paket yoksa no-op)."""
         return 0
 
+# v1.9.9 - Beni Hatirla: tarayici cookie persistence
+# Login basariliysa auth token cookie'ye yazilir, 90 gun yasar.
+# Sayfa acildiginda cookie okunur, DB'de gecerli ise auto-login.
+try:
+    from streamlit_cookies_controller import CookieController as _CookieCtrl
+    _COOKIE_OK = True
+except ImportError:
+    _COOKIE_OK = False
+    _CookieCtrl = None
+
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
 
@@ -305,40 +315,27 @@ def render_auth_gate():
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
-            # Beni Hatırla: cookie'dan email oku
-            _remembered = st.query_params.get("_re", "")
-            st.markdown("""
-            <script>
-            (function() {
-                function getCookie(n){var v="; "+document.cookie,p=v.split("; "+n+"=");if(p.length===2)return decodeURIComponent(p.pop().split(";")[0]);return "";}
-                var em=getCookie("ts_rem_email");
-                if(em && !window.location.search.includes("_re=")){
-                    var u=new URL(window.location);
-                    u.searchParams.set("_re",em);
-                    window.history.replaceState({},"",u);
-                    location.reload();
-                }
-            })();
-            </script>
-            """, unsafe_allow_html=True)
-            email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com", value=_remembered)
+            # v1.9.9 - Beni Hatirla: artik tarayici cookie ile gerçek persistence
+            # (eski ts_rem_email JavaScript hack'i kaldirildi - sadece email saklarken
+            # sifre yine isteniyordu; simdi auth token cookie ile auto-login)
+            email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com")
             pwd   = st.text_input("Sifre", type="password", key="li_pass", placeholder="Sifreniz")
-            remember = st.checkbox("Beni Hatirla", key="li_remember")
+            remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
             if st.button("Giris Yap", key="btn_login", use_container_width=True):
                 if email and pwd:
-                    res = login_user(email, pwd)
+                    # v1.9.9 - remember=True ise 90 gunluk DB token uretilir
+                    res = login_user(email, pwd, remember=remember)
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
-                        if remember:
-                            st.session_state["remember_token"] = res["token"]
-                            # Email cookie - 30 gün
-                            import urllib.parse as _up
-                            _enc = _up.quote(email)
-                            _exp = "expires=Thu, 31 Dec 2026 23:59:59 GMT"
-                            st.markdown(
-                                f'<script>document.cookie="ts_rem_email={_enc};{_exp};path=/;SameSite=Lax";</script>',
-                                unsafe_allow_html=True
-                            )
+                        # v1.9.9 - Cookie persistence (sadece "Beni Hatirla" isaretli ise)
+                        if remember and _COOKIE_OK and _cookie_ctrl is not None:
+                            try:
+                                # 90 gun = 90 * 24 * 3600 saniye
+                                _cookie_ctrl.set('tso_auth_token', res["token"],
+                                                 max_age=90 * 24 * 3600)
+                                print(f"[cookie] Beni Hatirla aktif: 90 gun cookie yazildi")
+                            except Exception as _cs_err:
+                                print(f"[cookie] yazma hatasi: {_cs_err}")
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -405,6 +402,23 @@ def render_auth_gate():
 # Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
+
+# v1.9.9 - Tarayici cookie'sinden auto-login
+# Cookie'de tso_auth_token varsa session_state'e koy; get_current_user otomatik dogrular
+# Cookie controller global (sayfa basinda 1 kez), sonra login/logout'ta tekrar erisilir.
+_cookie_ctrl = None
+if _COOKIE_OK:
+    try:
+        _cookie_ctrl = _CookieCtrl(key='tso_cookies')
+        # Cookie'lerin yuklenmesi icin minik bir bekleme (component init)
+        if "auth_token" not in st.session_state:
+            _saved_tok = _cookie_ctrl.get('tso_auth_token')
+            if _saved_tok and isinstance(_saved_tok, str) and len(_saved_tok) >= 32:
+                st.session_state["auth_token"] = _saved_tok
+                # get_current_user asagida DB'den dogrulayacak;
+                # gecersiz/sureli ise session_state'ten temizleyecek
+    except Exception as _ck_err:
+        print(f"[cookie] init hatasi: {_ck_err}")
 
 _cur_user = get_current_user()
 # is_admin override: role=="admin" veya Secrets email eşleşmesi
@@ -1258,7 +1272,20 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        logout(); st.rerun()
+        # v1.9.9 - Logout sirasinda cookie'yi de temizle (auto-login bypass)
+        if _COOKIE_OK and _cookie_ctrl is not None:
+            try:
+                _cookie_ctrl.remove('tso_auth_token')
+                print("[cookie] tso_auth_token silindi")
+            except Exception as _cr_err:
+                print(f"[cookie] silme hatasi: {_cr_err}")
+        # Eski JavaScript cookie'sini de temizle (legacy)
+        st.markdown(
+            '<script>document.cookie="ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";</script>',
+            unsafe_allow_html=True
+        )
+        logout()
+        st.rerun()
 
 # Admin panel override
 if st.session_state.get("page_override") == "admin":
