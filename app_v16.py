@@ -1124,7 +1124,11 @@ with st.sidebar:
                 from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
-                send_report(df_uni2,pf,budget,risk,max_assets,cfg=_ecfg)
+                # v1.9.7.2: butce 0 ise default 20.000 TL kullan (optimizasyon tablosu icin)
+                _send_budget = budget if budget > 0 else 20000
+                if budget <= 0:
+                    st.info("Bütçe girilmediği için optimizasyon için varsayılan 20.000 TL kullanılıyor.")
+                send_report(df_uni2,pf,_send_budget,risk,max_assets,cfg=_ecfg)
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
@@ -1207,29 +1211,45 @@ if _AUTOREFRESH_OK:
 # v1.9.7 - Selective BIST refresh: sadece kullanicinin portfoyundeki BIST tickerlari
 # canli (1-5 ticker, ~1-2 sn). load_universe'de BIST yok (770 ticker cok yavasti),
 # burada sadece ihtiyac olan canli yenilenir.
+# v1.9.7.2 - Portfolio'yu DB'den direkt cek (_cur_user dict'inde olmayabilir)
 try:
     _portfolio_bist_tickers = []
-    _cur_pf = _cur_user.get("portfolio", []) if _cur_user else []
-    for _pos in _cur_pf:
-        _t = str(_pos.get("ticker", "")).strip().upper()
-        _at = str(_pos.get("asset_type", "")).upper()
-        if _t and (_at == "BIST" or (df_uni is not None and not df_uni.empty
-                                      and ((df_uni["Ticker"] == _t) &
-                                           (df_uni["Kategori"] == "BIST")).any())):
-            _portfolio_bist_tickers.append(_t)
-    # Optimizasyon sayfasi acildiginda Top 50 BIST de canli olsun (~3-5 sn ek)
+    # 1) Portfoydeki BIST tickerlari (DB'den direct query)
+    if _cur_user and _cur_user.get("id"):
+        try:
+            from db import get_conn as _gc_for_pf
+            _conn_pf = _gc_for_pf()
+            _rows_pf = _conn_pf.execute(
+                "SELECT ticker FROM portfolio WHERE user_id=? AND UPPER(asset_type)='BIST'",
+                (_cur_user["id"],)
+            ).fetchall()
+            for _r in _rows_pf:
+                _t_db = str(_r[0]).strip().upper() if _r and _r[0] else ""
+                if _t_db:
+                    _portfolio_bist_tickers.append(_t_db)
+        except Exception as _pf_db_err:
+            print(f"[timing] portfoy BIST DB hatasi: {_pf_db_err}")
+    # Yedek: _cur_user.portfolio (eski yontem)
+    if not _portfolio_bist_tickers:
+        _cur_pf = _cur_user.get("portfolio", []) if _cur_user else []
+        for _pos in _cur_pf:
+            _t = str(_pos.get("ticker", "")).strip().upper()
+            _at = str(_pos.get("asset_type", "")).upper()
+            if _t and (_at == "BIST" or (df_uni is not None and not df_uni.empty
+                                          and ((df_uni["Ticker"] == _t) &
+                                               (df_uni["Kategori"] == "BIST")).any())):
+                _portfolio_bist_tickers.append(_t)
+    # 2) Optimizasyon sayfasi acildiginda Top 50 BIST de canli olsun (~3-5 sn ek)
     if page == "Ana Sayfa" and df_uni is not None and not df_uni.empty:
-        # Optima skor en yuksek 50 BIST'i de yenile (cache hit cogunda olur)
         _bist_df = df_uni[df_uni["Kategori"] == "BIST"].copy()
         if not _bist_df.empty:
-            # Onceden _skor kolonu yoksa basit yaklasim: en yuksek Son_Fiyat veya
-            # mevcut sirayla ilk 50 ticker (CSV'den)
             _top_bist = _bist_df.head(50)["Ticker"].astype(str).tolist()
             for _t in _top_bist:
                 if _t not in _portfolio_bist_tickers:
                     _portfolio_bist_tickers.append(_t)
     if _portfolio_bist_tickers:
         df_uni = _ld_refresh_bist_sel(df_uni, _portfolio_bist_tickers)
+        print(f"[timing] selective BIST: {len(_portfolio_bist_tickers)} ticker yenilendi")
 except Exception as _bist_sel_err:
     print(f"[timing] selective BIST refresh hatasi: {_bist_sel_err}")
 
