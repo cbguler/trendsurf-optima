@@ -1032,9 +1032,14 @@ def save_email_cfg(cfg):
 with st.sidebar:
     st.markdown(_logo_html(),unsafe_allow_html=True)
     # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
-    # Bahri'nin "yenilenmenin gorunmesi guven verir" istegine cevap.
+    # v1.9.7.4 - Saat damgasi TRT (Europe/Istanbul), UTC yerine
     import datetime as _dt_now
-    _now_str = _dt_now.datetime.now().strftime("%H:%M:%S")
+    try:
+        from zoneinfo import ZoneInfo as _ZI_sb
+        _now_str = _dt_now.datetime.now(_ZI_sb("Europe/Istanbul")).strftime("%H:%M:%S")
+    except Exception:
+        # ZoneInfo yoksa: UTC+3 manuel ofset
+        _now_str = (_dt_now.datetime.utcnow() + _dt_now.timedelta(hours=3)).strftime("%H:%M:%S")
     st.markdown(
         '<style>'
         '@keyframes tso_pulse { 0%,100% {opacity:1;} 50% {opacity:0.35;} }'
@@ -1124,11 +1129,11 @@ with st.sidebar:
                 from emailer import send_report
                 df_uni2=load_universe()
                 pf=load_portfolio()
-                # v1.9.7.2: butce 0 ise default 20.000 TL kullan (optimizasyon tablosu icin)
-                _send_budget = budget if budget > 0 else 20000
+                # v1.9.7.3: butce 0 ise emailer Watchlist (Top 10) modunda calisir
+                # Kullaniciya bilgilendirme:
                 if budget <= 0:
-                    st.info("Bütçe girilmediği için optimizasyon için varsayılan 20.000 TL kullanılıyor.")
-                send_report(df_uni2,pf,_send_budget,risk,max_assets,cfg=_ecfg)
+                    st.info("Bütçe girilmedi — İzleme Listesi (Top 10) modunda gönderiliyor.")
+                send_report(df_uni2,pf,budget,risk,max_assets,cfg=_ecfg)
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
@@ -1239,7 +1244,9 @@ try:
                                           and ((df_uni["Ticker"] == _t) &
                                                (df_uni["Kategori"] == "BIST")).any())):
                 _portfolio_bist_tickers.append(_t)
-    # 2) Optimizasyon sayfasi acildiginda Top 50 BIST de canli olsun (~3-5 sn ek)
+    # 2) v1.9.7.4: Ana Sayfa'da Top 50 BIST'i SADECE optimizasyon icin gerekiyorsa yenile
+    # Portfoyum/diger sayfalar icin sadece portfoy BIST'leri (1-5 ticker) yeter.
+    # Bu sayfa acilirken kullanici uzun beklemesin.
     if page == "Ana Sayfa" and df_uni is not None and not df_uni.empty:
         _bist_df = df_uni[df_uni["Kategori"] == "BIST"].copy()
         if not _bist_df.empty:
@@ -1247,9 +1254,20 @@ try:
             for _t in _top_bist:
                 if _t not in _portfolio_bist_tickers:
                     _portfolio_bist_tickers.append(_t)
+    # v1.9.7.4: timeout korumasi - borsapy takilirsa CSV verisi kullanilir
     if _portfolio_bist_tickers:
-        df_uni = _ld_refresh_bist_sel(df_uni, _portfolio_bist_tickers)
-        print(f"[timing] selective BIST: {len(_portfolio_bist_tickers)} ticker yenilendi")
+        try:
+            from concurrent.futures import ThreadPoolExecutor as _Pool2, TimeoutError as _FTO2
+            # Portfoy icin 8sn, Top 50 icin 20sn timeout (kullanici tahammulu sinirli)
+            _tmo = 20 if len(_portfolio_bist_tickers) > 10 else 8
+            with _Pool2(max_workers=1) as _ex2:
+                _f2 = _ex2.submit(_ld_refresh_bist_sel, df_uni, _portfolio_bist_tickers)
+                df_uni = _f2.result(timeout=_tmo)
+            print(f"[timing] selective BIST: {len(_portfolio_bist_tickers)} ticker yenilendi")
+        except _FTO2:
+            print(f"[timing] selective BIST {_tmo}sn timeout - CSV verisi kullanildi")
+        except Exception as _sel_err:
+            print(f"[timing] selective BIST hatasi: {_sel_err} - CSV verisi kullanildi")
 except Exception as _bist_sel_err:
     print(f"[timing] selective BIST refresh hatasi: {_bist_sel_err}")
 
