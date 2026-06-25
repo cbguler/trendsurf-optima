@@ -113,6 +113,7 @@ from live_data import (
     extend_maden_universe as _ld_extend_maden,
     refresh_fx_maden_kripto as _ld_refresh_overlay,
     refresh_bist as _ld_refresh_bist,
+    refresh_bist_selective as _ld_refresh_bist_sel,  # v1.9.7
     portfolio_value_prices as _ld_portfolio_prices,
     get_fx_history as _ld_fx_history,
     get_maden_history as _ld_maden_history,
@@ -120,6 +121,16 @@ from live_data import (
     BORSAPY_OK as _LIVE_BORSAPY_OK,
     status_summary as _ld_status,
 )
+
+# v1.9.7 - Otomatik sayfa yenileme (streamlit-autorefresh paketi)
+try:
+    from streamlit_autorefresh import st_autorefresh as _st_autorefresh
+    _AUTOREFRESH_OK = True
+except ImportError:
+    _AUTOREFRESH_OK = False
+    def _st_autorefresh(*args, **kwargs):
+        """Fallback (paket yoksa no-op)."""
+        return 0
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
@@ -1020,6 +1031,28 @@ def save_email_cfg(cfg):
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown(_logo_html(),unsafe_allow_html=True)
+    # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
+    # Bahri'nin "yenilenmenin gorunmesi guven verir" istegine cevap.
+    import datetime as _dt_now
+    _now_str = _dt_now.datetime.now().strftime("%H:%M:%S")
+    st.markdown(
+        '<style>'
+        '@keyframes tso_pulse { 0%,100% {opacity:1;} 50% {opacity:0.35;} }'
+        '.tso-live-dot { display:inline-block; width:8px; height:8px; '
+        '  border-radius:50%; background:#22c55e; margin-right:6px; '
+        '  animation: tso_pulse 2s ease-in-out infinite; '
+        '  box-shadow: 0 0 6px #22c55e88;}'
+        '.tso-live-box { background:#f0f7f0; border:1px solid #c5e1c5; '
+        '  border-radius:6px; padding:6px 10px; margin:6px 0 4px 0; '
+        '  font-size:11px; color:#1b2a4a; }'
+        '</style>'
+        f'<div class="tso-live-box">'
+        f'<span class="tso-live-dot"></span>'
+        f'<b>Canlı veri</b> &nbsp;•&nbsp; '
+        f'<span style="color:#4a5a7a">{_now_str}</span>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
     plan_badge = {"free":"Ucretsiz","pro":"Pro","premium":"Premium"}
     st.markdown(
         f"<small style='color:#8ca3cc'>"
@@ -1164,6 +1197,41 @@ if st.session_state.get("page_override") == "admin":
 # VERİ YÜKLE
 # ══════════════════════════════════════════════════════════════
 df_uni=load_universe()
+
+# v1.9.7 - Otomatik veri yenileme (her 60 saniyede sessiz re-run)
+# Cache hit oldugunda kullanici fark etmez, cache miss oldugunda yeni veri gelir.
+# Boylece kullanici hicbir buton tiklamadan portfoyundeki fiyatlari guncel gorur.
+if _AUTOREFRESH_OK:
+    _st_autorefresh(interval=60_000, key="trendsurf_auto_refresh", limit=None)
+
+# v1.9.7 - Selective BIST refresh: sadece kullanicinin portfoyundeki BIST tickerlari
+# canli (1-5 ticker, ~1-2 sn). load_universe'de BIST yok (770 ticker cok yavasti),
+# burada sadece ihtiyac olan canli yenilenir.
+try:
+    _portfolio_bist_tickers = []
+    _cur_pf = _cur_user.get("portfolio", []) if _cur_user else []
+    for _pos in _cur_pf:
+        _t = str(_pos.get("ticker", "")).strip().upper()
+        _at = str(_pos.get("asset_type", "")).upper()
+        if _t and (_at == "BIST" or (df_uni is not None and not df_uni.empty
+                                      and ((df_uni["Ticker"] == _t) &
+                                           (df_uni["Kategori"] == "BIST")).any())):
+            _portfolio_bist_tickers.append(_t)
+    # Optimizasyon sayfasi acildiginda Top 50 BIST de canli olsun (~3-5 sn ek)
+    if page == "Ana Sayfa" and df_uni is not None and not df_uni.empty:
+        # Optima skor en yuksek 50 BIST'i de yenile (cache hit cogunda olur)
+        _bist_df = df_uni[df_uni["Kategori"] == "BIST"].copy()
+        if not _bist_df.empty:
+            # Onceden _skor kolonu yoksa basit yaklasim: en yuksek Son_Fiyat veya
+            # mevcut sirayla ilk 50 ticker (CSV'den)
+            _top_bist = _bist_df.head(50)["Ticker"].astype(str).tolist()
+            for _t in _top_bist:
+                if _t not in _portfolio_bist_tickers:
+                    _portfolio_bist_tickers.append(_t)
+    if _portfolio_bist_tickers:
+        df_uni = _ld_refresh_bist_sel(df_uni, _portfolio_bist_tickers)
+except Exception as _bist_sel_err:
+    print(f"[timing] selective BIST refresh hatasi: {_bist_sel_err}")
 
 # session_state: seçili ticker
 for pg in PAGES:

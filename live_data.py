@@ -625,6 +625,61 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
+def refresh_bist_selective(df: pd.DataFrame, tickers: list) -> pd.DataFrame:
+    """Sadece belirli BIST tickerlarini canli yenile (v1.9.7).
+
+    Tum 770 ticker yerine sadece kullanicinin portfoyundeki + Top N
+    optimizasyon adaylari icin canli refresh yapilir. 1-50 ticker = 1-5 sn.
+
+    Args:
+        df: Ana evren DataFrame
+        tickers: Yenilenecek BIST tickerlari listesi (string list)
+
+    Returns:
+        Belirtilen tickerlar canli, digerleri degistirilmeden DataFrame.
+
+    Performans:
+        - 1 ticker  -> ~0.5s
+        - 5 ticker  -> ~1s   (portfoy senaryosu)
+        - 50 ticker -> ~3-5s (optimizasyon senaryosu)
+    """
+    with _timed_block("refresh_bist_selective"):
+        if df is None or df.empty or not BORSAPY_OK:
+            return df
+        if not tickers:
+            return df
+        if "Kategori" not in df.columns or "Son_Fiyat" not in df.columns:
+            return df
+
+        # Tickerlari sanitize et + sadece df'de var olanlar
+        wanted = set()
+        for t in tickers:
+            if t and isinstance(t, str):
+                wanted.add(t.strip().upper())
+        if not wanted:
+            return df
+
+        # Sadece df'de mevcut olan BIST tickerlari
+        bist_mask = df["Kategori"] == "BIST"
+        actual = sorted(
+            t for t in df.loc[bist_mask, "Ticker"].dropna().astype(str)
+            if t in wanted
+        )
+        if not actual:
+            return df
+
+        # _fetch_live_bist zaten paralel + cache_data ile sarmalanmis
+        prices = _fetch_live_bist(tuple(actual))
+        if not prices:
+            return df
+
+        df = df.copy()
+        mask = bist_mask & df["Ticker"].isin(prices.keys())
+        if mask.any():
+            df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(prices).astype(float)
+        return df
+
+
 # ----------------------------------------------------------------------------
 # Tarihsel veri (OHLC) - app.py'deki _CROSS blogunu degistirir
 # ----------------------------------------------------------------------------
