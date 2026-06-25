@@ -185,8 +185,17 @@ def _col_group():
 
 def _build_opt_section(df_uni: pd.DataFrame, budget: float,
                        risk: str, max_assets: int) -> str:
-    if budget <= 0 or df_uni.empty:
+    """Optimizasyon / Izleme Listesi tablosu.
+
+    v1.9.7.3: budget=0 senaryosu desteklenir -> "Izleme Listesi" modu
+              (Birim ve Toplam sutunlari gizlenir, sadece Skor/Fiyat/Sinyal)
+              Boylece kullanici butce girmese bile en yuksek skorlu varlıklari görür.
+    """
+    if df_uni.empty:
         return ""
+
+    # v1.9.7.3 - Watchlist modu: butce 0 ise sadece Top N goster
+    watchlist_mode = (budget <= 0)
 
     w = RISK_W.get(risk, RISK_W["Orta"])
     MIN_SKOR = 60.0
@@ -218,51 +227,70 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     n_cats      = len(cat_pools)
     max_per_cat = max(1, max_assets // n_cats)
 
-    # Kalite ağırlıklı bütçe dağılımı
-    adj_weights = {}
-    total_adj   = 0.0
-    for cat, weight in w.items():
-        if cat not in cat_pools:
-            continue
-        quality = float(cat_pools[cat]["_skor"].head(max_per_cat).mean()) / 100.0
-        adj = weight * quality
-        adj_weights[cat] = adj
-        total_adj += adj
-    if total_adj > 0:
-        adj_weights = {c: a / total_adj for c, a in adj_weights.items()}
-
-    # Seçilen varlıkları topla
-    selected = []
-    for cat, weight in adj_weights.items():
-        sample  = cat_pools[cat].head(max_per_cat)
-        cat_bud = budget * weight
-        per     = cat_bud / len(sample)
-        for _, row in sample.iterrows():
-            price  = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
-            lot    = int(per / price) if price > 0 else 0
-            gercek = round(lot * price, 2)
-            skor   = float(row["_skor"])
+    # v1.9.7.3 - Watchlist modu: butce yok, kategori agirlik yok.
+    # Tum havuzlarini birlestir, en yuksek skorlu Top N varlık secilir.
+    if watchlist_mode:
+        all_candidates = []
+        for cat, pool in cat_pools.items():
+            for _, row in pool.iterrows():
+                all_candidates.append((cat, row, float(row["_skor"])))
+        # Skora gore azalan sirala
+        all_candidates.sort(key=lambda x: x[2], reverse=True)
+        # Top N al
+        selected = []
+        for cat, row, skor in all_candidates[:max_assets]:
+            price = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
             selected.append({
                 "cat": cat, "row": row, "price": price,
-                "lot": lot, "gercek": gercek, "skor": skor
+                "lot": 0, "gercek": 0.0, "skor": skor
             })
+    else:
+        # Klasik butce-bazli optimizasyon
+        # Kalite ağırlıklı bütçe dağılımı
+        adj_weights = {}
+        total_adj   = 0.0
+        for cat, weight in w.items():
+            if cat not in cat_pools:
+                continue
+            quality = float(cat_pools[cat]["_skor"].head(max_per_cat).mean()) / 100.0
+            adj = weight * quality
+            adj_weights[cat] = adj
+            total_adj += adj
+        if total_adj > 0:
+            adj_weights = {c: a / total_adj for c, a in adj_weights.items()}
 
-    # max_assets'e tam ulaşmak için eksik yerleri doldur
-    if len(selected) < max_assets:
-        already = {(s["cat"], s["row"]["Ticker"]) for s in selected}
-        for cat in cat_pools:
-            for _, row in cat_pools[cat].iterrows():
-                if len(selected) >= max_assets:
-                    break
-                if (cat, row["Ticker"]) in already:
-                    continue
-                price  = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
-                skor   = float(row["_skor"])
-                per    = budget / max_assets
+        # Seçilen varlıkları topla
+        selected = []
+        for cat, weight in adj_weights.items():
+            sample  = cat_pools[cat].head(max_per_cat)
+            cat_bud = budget * weight
+            per     = cat_bud / len(sample)
+            for _, row in sample.iterrows():
+                price  = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
                 lot    = int(per / price) if price > 0 else 0
                 gercek = round(lot * price, 2)
-                selected.append({"cat": cat, "row": row, "price": price,
-                                  "lot": lot, "gercek": gercek, "skor": skor})
+                skor   = float(row["_skor"])
+                selected.append({
+                    "cat": cat, "row": row, "price": price,
+                    "lot": lot, "gercek": gercek, "skor": skor
+                })
+
+        # max_assets'e tam ulaşmak için eksik yerleri doldur
+        if len(selected) < max_assets:
+            already = {(s["cat"], s["row"]["Ticker"]) for s in selected}
+            for cat in cat_pools:
+                for _, row in cat_pools[cat].iterrows():
+                    if len(selected) >= max_assets:
+                        break
+                    if (cat, row["Ticker"]) in already:
+                        continue
+                    price  = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
+                    skor   = float(row["_skor"])
+                    per    = budget / max_assets
+                    lot    = int(per / price) if price > 0 else 0
+                    gercek = round(lot * price, 2)
+                    selected.append({"cat": cat, "row": row, "price": price,
+                                      "lot": lot, "gercek": gercek, "skor": skor})
 
     # Skora göre azalan sırala — en iyi varlık her zaman en üstte
     selected.sort(key=lambda x: x["skor"], reverse=True)
@@ -282,25 +310,39 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         ad_str = str(row.get("Ad", row["Ticker"]))[:38]
         grand_total += gercek
 
-        rows_html += f"""<tr>
-          {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
-          {_td(f"<b>{row['Ticker']}</b>", nowrap=True)}
-          {_td(ad_str)}
-          {_td(f"<b>{skor:.0f}</b>", "right")}
-          {_td(f"{_tr_num(price, 4)}", "right", nowrap=True)}
-          {_td(_format_birim(lot), "right", bold=True, nowrap=True)}
-          {_td(f"{_tr_num(gercek, 2)}&nbsp;₺", "right", bold=True, nowrap=True)}
-          {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
-               f'border-radius:5px;font-size:10px;font-weight:700;'
-               f'white-space:nowrap">{_email_sig(sl)}</span>', "center")}
-        </tr>"""
+        if watchlist_mode:
+            # Watchlist: Birim/Toplam sutunlari yok
+            rows_html += f"""<tr>
+              {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
+              {_td(f"<b>{row['Ticker']}</b>", nowrap=True)}
+              {_td(ad_str)}
+              {_td(f"<b>{skor:.0f}</b>", "right")}
+              {_td(f"{_tr_num(price, 4)}", "right", nowrap=True)}
+              {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
+                   f'border-radius:5px;font-size:10px;font-weight:700;'
+                   f'white-space:nowrap">{_email_sig(sl)}</span>', "center")}
+            </tr>"""
+        else:
+            # Klasik optimizasyon: Birim/Toplam dahil
+            rows_html += f"""<tr>
+              {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
+              {_td(f"<b>{row['Ticker']}</b>", nowrap=True)}
+              {_td(ad_str)}
+              {_td(f"<b>{skor:.0f}</b>", "right")}
+              {_td(f"{_tr_num(price, 4)}", "right", nowrap=True)}
+              {_td(_format_birim(lot), "right", bold=True, nowrap=True)}
+              {_td(f"{_tr_num(gercek, 2)}&nbsp;₺", "right", bold=True, nowrap=True)}
+              {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
+                   f'border-radius:5px;font-size:10px;font-weight:700;'
+                   f'white-space:nowrap">{_email_sig(sl)}</span>', "center")}
+            </tr>"""
 
     if not rows_html:
         return ""
 
     # v1.8 - Butce dagildi banner'i (Streamlit Ana Sayfa ile ayni davranis)
     banner_html = ""
-    if skipped_cats:
+    if skipped_cats and not watchlist_mode:
         banner_html = f"""
     <div style="background:#fff8e1;border-left:4px solid #f0a830;
                 padding:10px 12px;margin:10px 0 0 0;font-size:11px;color:#5a4a1a;
@@ -310,15 +352,35 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
       <b>{', '.join(skipped_cats)}</b>
     </div>"""
 
-    return f"""
+    # v1.9.7.3 - Watchlist modunda baslik ve tablo yapisi farkli
+    if watchlist_mode:
+        title_html = f"""
+    <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
+               border-left:4px solid #2c3e6b;padding-left:10px;">
+      İzleme Listesi &mdash; En Yüksek Optima Skoru Top {len(selected)}
+    </h2>
+    <p style="font-size:11px;color:#6c7a9c;margin:4px 0 8px 0;font-style:italic;">
+      Bütçe girilmedi - bütçe-bağımsız öneri listesi gösteriliyor.
+      Bütçe paylaşımı için sol panelden "Portföy Bütçesi" girin.
+    </p>"""
+        thead_html = f"""
+      <thead><tr>
+        {_th("Kategori", "left",   _COL_W["kat"])}
+        {_th("Ticker",   "left",   _COL_W["tkr"])}
+        {_th("Ad",       "left",   _COL_W["ad"])}
+        {_th("Skor",     "right",  _COL_W["skor"])}
+        {_th("Fiyat",    "right",  _COL_W["fiyat"])}
+        {_th("Sinyal",   "center", _COL_W["sinyal"])}
+      </tr></thead>"""
+        # Watchlist'te tfoot yok (toplam yok)
+        tfoot_html = ""
+    else:
+        title_html = f"""
     <h2 style="color:#1b2a4a;margin:24px 0 10px 0;font-size:15px;
                border-left:4px solid #2c3e6b;padding-left:10px;">
       Portföy Optimizasyonu &mdash; {_tr_num(budget, 0)}&nbsp;₺ &nbsp;|&nbsp; Risk: {risk}
-    </h2>{banner_html}
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
-<table style="width:100%;border-collapse:collapse;background:#fff;
-                  font-size:12px;table-layout:fixed;min-width:560px;">
-      {_col_group()}
+    </h2>{banner_html}"""
+        thead_html = f"""
       <thead><tr>
         {_th("Kategori", "left",   _COL_W["kat"])}
         {_th("Ticker",   "left",   _COL_W["tkr"])}
@@ -328,8 +390,8 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         {_th("Birim",    "right",  _COL_W["lot"])}
         {_th("Toplam",   "right",  _COL_W["tutar"])}
         {_th("Sinyal",   "center", _COL_W["sinyal"])}
-      </tr></thead>
-      <tbody>{rows_html}</tbody>
+      </tr></thead>"""
+        tfoot_html = f"""
       <tfoot>
         <tr style="background:#f4f6fb;border-top:2px solid #1b2a4a;">
           <td colspan="6" style="padding:8px 10px;font-size:11px;
@@ -340,7 +402,14 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
           <td style="padding:8px 10px;font-size:10px;color:#9aa8c0;
               text-align:center;">{len(selected)} varlık</td>
         </tr>
-      </tfoot>
+      </tfoot>"""
+
+    return f"""{title_html}
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+<table style="width:100%;border-collapse:collapse;background:#fff;
+                  font-size:12px;table-layout:fixed;min-width:560px;">
+      {_col_group()}{thead_html}
+      <tbody>{rows_html}</tbody>{tfoot_html}
     </table>
 </div>
     <p style="font-size:10px;color:#9aa8c0;margin-top:6px;font-style:italic;">
@@ -605,27 +674,15 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
         else:
             portfolio = []
 
-    # v1.9.7 - Mail icinde portfoy + optimization Top BIST'leri canli olsun
-    # (load_universe'de BIST yok cunku 770 ticker yavasti; burada selective refresh)
-    try:
-        from live_data import refresh_bist_selective as _rb_sel
-        _wanted_bist = set()
-        # Portfoydeki BIST tickerlari
-        for _pos in (portfolio or []):
-            _t = str(_pos.get("ticker", "")).strip().upper()
-            _at = str(_pos.get("asset_type", "")).upper()
-            if _t and _at == "BIST":
-                _wanted_bist.add(_t)
-        # Optimizasyonda Top BIST'ler (CSV'de en yuksek skor ya da basitce ilk 50)
-        if df_uni is not None and not df_uni.empty and "Kategori" in df_uni.columns:
-            _top_bist = df_uni[df_uni["Kategori"] == "BIST"].head(50)
-            for _t in _top_bist["Ticker"].astype(str).tolist():
-                _wanted_bist.add(_t)
-        if _wanted_bist:
-            print(f"[emailer] Selective BIST refresh: {len(_wanted_bist)} ticker")
-            df_uni = _rb_sel(df_uni, sorted(_wanted_bist))
-    except Exception as _bist_err:
-        print(f"[emailer] Selective BIST refresh hatasi (devam): {_bist_err}")
+    # v1.9.7.5 - Mail icin selective BIST refresh DEVRE DISI (timeout sorunlari)
+    # EUKYO ve diger portfoy BIST'leri CSV verisinden gelir (worker.py her gun gunceller)
+    # v1.9.8'de farkli strateji ile tekrar acilacak (async pattern + kisa timeout)
+    # Asagidaki blok comment'lendi:
+    # try:
+    #     from live_data import refresh_bist_selective as _rb_sel
+    #     ... selective BIST kodu ...
+    # except Exception:
+    #     pass
 
     html = build_html(df_uni, portfolio, budget, risk, max_assets)
     now  = _tr_now().strftime("%d.%m.%Y %H:%M")

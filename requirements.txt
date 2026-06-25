@@ -12,4 +12,3 @@ Pillow
 borsapy>=0.10.0
 psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
-streamlit-cookies-controller>=0.0.4

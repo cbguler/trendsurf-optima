@@ -133,14 +133,10 @@ except ImportError:
         return 0
 
 # v1.9.9 - Beni Hatirla: tarayici cookie persistence
-# Login basariliysa auth token cookie'ye yazilir, 90 gun yasar.
-# Sayfa acildiginda cookie okunur, DB'de gecerli ise auto-login.
-try:
-    from streamlit_cookies_controller import CookieController as _CookieCtrl
-    _COOKIE_OK = True
-except ImportError:
-    _COOKIE_OK = False
-    _CookieCtrl = None
+# v1.9.9.1 - streamlit-cookies-controller paketi async timing sorunlari yaratti
+# Bunun yerine localStorage tabanli JavaScript yontemi kullaniyoruz (daha guvenilir).
+# (streamlit_cookies_controller import'u kaldirildi - artik gerek yok)
+_COOKIE_OK = True  # localStorage her zaman erisilebilir
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
@@ -327,15 +323,20 @@ def render_auth_gate():
                     res = login_user(email, pwd, remember=remember)
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
-                        # v1.9.9 - Cookie persistence (sadece "Beni Hatirla" isaretli ise)
-                        if remember and _COOKIE_OK and _cookie_ctrl is not None:
-                            try:
-                                # 90 gun = 90 * 24 * 3600 saniye
-                                _cookie_ctrl.set('tso_auth_token', res["token"],
-                                                 max_age=90 * 24 * 3600)
-                                print(f"[cookie] Beni Hatirla aktif: 90 gun cookie yazildi")
-                            except Exception as _cs_err:
-                                print(f"[cookie] yazma hatasi: {_cs_err}")
+                        # v1.9.9.1 - localStorage persistence (Beni Hatirla isaretli ise)
+                        # JavaScript ile tarayici localStorage'a token yaz, 90 gun yasar
+                        if remember:
+                            _tok_safe = res["token"].replace("'", "").replace('"', '')
+                            st.markdown(f"""
+                            <script>
+                            try {{
+                              localStorage.setItem('tso_auth_token', '{_tok_safe}');
+                              sessionStorage.setItem('tso_logged_in', '1');
+                              console.log('[tso] auth token saved to localStorage');
+                            }} catch(e) {{ console.log('[tso] localStorage err:', e); }}
+                            </script>
+                            """, unsafe_allow_html=True)
+                            print(f"[auth] Beni Hatirla aktif: 90 gun localStorage")
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -403,22 +404,40 @@ def render_auth_gate():
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
 
-# v1.9.9 - Tarayici cookie'sinden auto-login
-# Cookie'de tso_auth_token varsa session_state'e koy; get_current_user otomatik dogrular
-# Cookie controller global (sayfa basinda 1 kez), sonra login/logout'ta tekrar erisilir.
-_cookie_ctrl = None
-if _COOKIE_OK:
-    try:
-        _cookie_ctrl = _CookieCtrl(key='tso_cookies')
-        # Cookie'lerin yuklenmesi icin minik bir bekleme (component init)
-        if "auth_token" not in st.session_state:
-            _saved_tok = _cookie_ctrl.get('tso_auth_token')
-            if _saved_tok and isinstance(_saved_tok, str) and len(_saved_tok) >= 32:
-                st.session_state["auth_token"] = _saved_tok
-                # get_current_user asagida DB'den dogrulayacak;
-                # gecersiz/sureli ise session_state'ten temizleyecek
-    except Exception as _ck_err:
-        print(f"[cookie] init hatasi: {_ck_err}")
+# v1.9.9.1 - localStorage tabanli auto-login (tarayici kapansa bile token kalir)
+# JavaScript localStorage'dan token alir, URL'e ekler, sayfa reload olur,
+# Python query_param'dan token'i session_state'e kopyalar, query temizler.
+# Sonsuz dongu engellenir: sessionStorage'da "tso_logged_in" flag'i ile
+# tab acik kaldigi surece tekrar reload yapilmaz.
+_tok_from_url = st.query_params.get("_tso_tok", "")
+if _tok_from_url and "auth_token" not in st.session_state:
+    st.session_state["auth_token"] = str(_tok_from_url)
+    # Query param'i URL'den temizle (gizlilik + temiz URL)
+    st.query_params.clear()
+    st.rerun()
+
+# localStorage kontrol scripti - sayfa basinda her render'da calisir ama idempotent:
+# - URL'de _tso_tok varsa: hicbir sey yapma
+# - sessionStorage'da flag varsa: hicbir sey yapma
+# - localStorage'da token yoksa: hicbir sey yapma
+# - Sadece: token var + flag yok + URL temiz ise -> reload tetikle
+st.markdown("""
+<script>
+(function() {
+  try {
+    if (window.location.search.indexOf('_tso_tok=') !== -1) return;
+    if (sessionStorage.getItem('tso_logged_in')) return;
+    var token = localStorage.getItem('tso_auth_token');
+    if (token && token.length >= 32) {
+      sessionStorage.setItem('tso_logged_in', '1');
+      var u = new URL(window.location.href);
+      u.searchParams.set('_tso_tok', token);
+      window.location.href = u.toString();
+    }
+  } catch (e) { console.log('tso autologin err:', e); }
+})();
+</script>
+""", unsafe_allow_html=True)
 
 _cur_user = get_current_user()
 # is_admin override: role=="admin" veya Secrets email eşleşmesi
@@ -1272,14 +1291,17 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v1.9.9 - Logout sirasinda cookie'yi de temizle (auto-login bypass)
-        if _COOKIE_OK and _cookie_ctrl is not None:
-            try:
-                _cookie_ctrl.remove('tso_auth_token')
-                print("[cookie] tso_auth_token silindi")
-            except Exception as _cr_err:
-                print(f"[cookie] silme hatasi: {_cr_err}")
-        # Eski JavaScript cookie'sini de temizle (legacy)
+        # v1.9.9.1 - localStorage + sessionStorage temizle (auto-login bypass)
+        st.markdown("""
+        <script>
+        try {
+          localStorage.removeItem('tso_auth_token');
+          sessionStorage.removeItem('tso_logged_in');
+          console.log('[tso] auth token cleared from localStorage');
+        } catch(e) { console.log('[tso] localStorage clear err:', e); }
+        </script>
+        """, unsafe_allow_html=True)
+        # Eski JS cookie'sini de temizle (legacy)
         st.markdown(
             '<script>document.cookie="ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";</script>',
             unsafe_allow_html=True
