@@ -474,22 +474,16 @@ def load_universe():
     df = _ld_extend_maden(df)
     # v1.6: DOVIZ + MADEN + KRIPTO icin canli fiyat uzerine yaz (borsapy)
     df = _ld_refresh_overlay(df)
-    # v1.9: BIST hisselerini de borsapy ile 15dk gecikmeli canli yenile
-    # (Worker.py CSV'sine bagimlilik bitti; CSV sadece son care fallback olarak kalir)
-    # v1.9.5.1: 25 saniye timeout - takilirsa CSV verisi kullanilir, sayfa hep acilir
-    from concurrent.futures import ThreadPoolExecutor as _Pool, TimeoutError as _FTO
-    try:
-        with _Pool(max_workers=1) as _ex:
-            _fut = _ex.submit(_ld_refresh_bist, df)
-            df = _fut.result(timeout=25)
-    except _FTO:
-        print("[timing] refresh_bist 25sn timeout - CSV verisi kullanildi (sayfa acildi)")
-    except Exception as _bist_err:
-        print(f"[timing] refresh_bist hatasi: {_bist_err} - CSV verisi kullanildi")
+    # v1.9.5.2 ACIL: refresh_bist tamamen kaldirildi (770 ticker 380+ sn aliyordu)
+    # BIST fiyatlari CSV'den (worker.py her gun guncelliyor, 1 gun gecikmeli)
+    # v1.9.6'da: portfoydeki + top N BIST icin selective canli refresh yapilacak
+    # NOT: BIST sayfasinda "Canli Yenile" butonu manuel tetikleme icin uygun olur
     # v1.9.3 - profilleme: cache miss durumunda toplam yukleme suresi
     try:
         from live_data import _TIMINGS as _LD_TIMINGS
         _LD_TIMINGS["load_universe_TOPLAM"] = _t.perf_counter() - _t0
+        # refresh_bist artik cagrilmiyor - eski timing varsa sil
+        _LD_TIMINGS.pop("refresh_bist", None)
         print(f"[timing] load_universe (cache MISS, ilk yukleme): "
               f"{_LD_TIMINGS['load_universe_TOPLAM']:.3f}s")
     except Exception:
