@@ -132,15 +132,15 @@ except ImportError:
         """Fallback (paket yoksa no-op)."""
         return 0
 
-# v1.9.9.5.2 - Login persistence yaklasimi (final)
-# Onceki versiyonlarda (v1.9.9 - v1.9.9.5.1) cookie/localStorage/JS tabanli
-# 4 farkli yaklasim denendi; hepsi Streamlit Cloud iframe sandbox'inda
-# saglikli calismadi. Final pratik cozum:
-#   - st.text_input NATIVE autocomplete parametresi ile Edge/Chrome
-#     password manager iki alani da tek tikla doldurur
-#   - st.session_state ayni sekme acik kaldigi surece auth_token'i korur
-#   - DB sessions tablosu 90 gunluk token uretmeye devam ediyor (gelecekteki
-#     URL-token tabanli persistence icin altyapi hazir)
+# v1.9.9 - Beni Hatirla: tarayici cookie persistence
+# v1.9.9.1 - streamlit-cookies-controller paketi async timing sorunlari yaratti
+# Bunun yerine localStorage tabanli JavaScript yontemi kullaniyoruz (daha guvenilir).
+# (streamlit_cookies_controller import'u kaldirildi - artik gerek yok)
+_COOKIE_OK = True  # localStorage her zaman erisilebilir
+
+# v1.9.9.3.1 - components.v1.html icin module-level import (scope sorunu engellenir)
+# Asagidaki render_auth_gate ve logout button'da kullaniliyor.
+import streamlit.components.v1 as _stc_v1
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
@@ -239,22 +239,6 @@ if _qp.get("trigger") == "email":
     st.stop()
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# v1.9.9.5.2 - LOGIN PERSISTENCE NOTU
-# ────────────────────────────────────────────────────────────────────────────
-# Cookie/localStorage/JS yontemleri (v1.9.9.x serisinde 4 farkli yaklasim
-# denendi) Streamlit Cloud iframe sandbox'inda saglikli calismadi. Browser
-# tabanli persistence yerine simdi tarayicinin kendi password manager'ina
-# guveniyoruz:
-#   - st.text_input(autocomplete=...) parametresi ile Edge/Chrome native
-#     autofill (email ve sifre kutularina tek tikla otomatik dolar)
-#   - Streamlit session_state ayni sekme acik kaldigi surece auth_token'i
-#     korur (sayfa icinde F5 sorun yaratmaz)
-#   - DB tarafindaki 90 gunluk sessions token uretmeye devam ediyor
-#     (gelecekte URL-token veya farkli mekanizmaya geciste hazir altyapi)
-# ════════════════════════════════════════════════════════════════════════════
-
-
 def _logo_html():
     for p in ["logo.png","Logo.png","LOGO.PNG"]:
         if os.path.exists(p):
@@ -331,50 +315,108 @@ def render_auth_gate():
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
-            # v1.9.9.5.2 - Login form (cookie persistence kaldirildi)
-            # Form st.form ile sarili; submit DOM'daki gercek values'i Streamlit'e
-            # iletir, browser autofill ile uyumlu calisir. text_input'un native
-            # autocomplete parametresi sayesinde Edge/Chrome iki alani da otomatik
-            # doldurur (kayitli sifre varsa).
-            #
-            # Email recall: session_state'de tutuluyor (ayni sekme acik kaldigi
-            # surece korunur). Tarayicinin kendi password manager'i da email'i
-            # hatirlar; tarayici kapatilip acilsa bile autofill yine calisir.
-            _remembered_email = st.session_state.get("li_email_remembered", "")
+            # v1.9.9.4 - st.form ile sarma: browser autofill (Edge password manager)
+            # form submit ile DOM'daki gercek values'i Streamlit'e iletir; React state
+            # senkronize degilse bile email/sifre dogru yakalanir.
+            # Onceki sorun: autofill DOM'da values'i guncelliyordu ama Streamlit
+            # text_input state'i sifir kaliyordu, "Lutfen tum alanlari doldurun" uyarisi.
 
-            with st.form("login_form_v19952", clear_on_submit=False):
-                # Streamlit'in NATIVE autocomplete parametresi: Edge/Chrome
-                # password manager iki alani tek tikla doldurur.
+            # Email autofill: ts_rem_email cookie'sinden email'i URL query'sine koy
+            _remembered_email = st.query_params.get("_re", "")
+            _stc_v1.html("""
+            <script>
+            (function() {
+                try {
+                  var loc = window.parent.location;
+                  if (loc.search.indexOf('_re=') !== -1) return;  // zaten eklenmis
+                  // Cookie'den email oku
+                  var v = "; " + window.parent.document.cookie;
+                  var p = v.split("; ts_rem_email=");
+                  if (p.length === 2) {
+                    var em = decodeURIComponent(p.pop().split(";")[0]);
+                    if (em) {
+                      var u = new URL(loc.href);
+                      u.searchParams.set("_re", em);
+                      loc.href = u.toString();
+                    }
+                  }
+                } catch(e) { console.log('tso email autofill err:', e); }
+            })();
+            </script>
+            """, height=0)
+
+            with st.form("login_form_v1994", clear_on_submit=False):
                 email = st.text_input("E-posta", key="li_email",
                                       placeholder="ornek@gmail.com",
-                                      value=_remembered_email,
-                                      autocomplete="username")
+                                      value=_remembered_email)
                 pwd   = st.text_input("Sifre", type="password", key="li_pass",
-                                      placeholder="Sifreniz",
-                                      autocomplete="current-password")
-                remember = st.checkbox(
-                    "Email'imi hatirla (bu tarayicida)",
-                    key="li_remember",
-                    value=True,
-                    help="Tarayicinizin sifre kaydet ozelligi aktifse, bir sonraki "
-                         "girisinizde email ve sifre kutulari otomatik dolar."
-                )
+                                      placeholder="Sifreniz")
+                remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
+
+                # v1.9.9.3 - Browser password manager entegrasyonu (fallback)
+                # Streamlit 1.32+ text_input autocomplete parametresi var (yukarida);
+                # eski sürümlerde calismadigi icin yedek MutationObserver script'i:
+                _stc_v1.html("""
+                <script>
+                (function() {
+                  function applyAutofill() {
+                    try {
+                      var doc = window.parent.document;
+                      var inputs = doc.querySelectorAll('input[aria-label]');
+                      inputs.forEach(function(inp) {
+                        var lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+                        if (lbl.indexOf('posta') !== -1 || lbl.indexOf('mail') !== -1) {
+                          if (inp.getAttribute('autocomplete') !== 'username') {
+                            inp.setAttribute('autocomplete', 'username');
+                            inp.setAttribute('name', 'username');
+                          }
+                        }
+                      });
+                      var passes = doc.querySelectorAll('input[type="password"]');
+                      passes.forEach(function(inp) {
+                        if (inp.getAttribute('autocomplete') !== 'current-password') {
+                          inp.setAttribute('autocomplete', 'current-password');
+                          inp.setAttribute('name', 'password');
+                        }
+                      });
+                    } catch(e) { console.log('[tso] autofill attr err:', e); }
+                  }
+                  applyAutofill();
+                  var iv = setInterval(applyAutofill, 800);
+                  setTimeout(function() { clearInterval(iv); }, 30000);
+                })();
+                </script>
+                """, height=0)
 
                 submitted = st.form_submit_button("Giris Yap", use_container_width=True)
 
             if submitted:
                 if email and pwd:
-                    # DB tarafi: remember=True ise 90 gunluk session token uretilir
-                    # (gelecekte URL-token veya farkli persistence mekanizmasi
-                    # icin altyapi hazir). Browser session_state ayni sekme acik
-                    # kaldigi surece auth_token'i korur.
+                    # v1.9.9 - remember=True ise 90 gunluk DB token uretilir
                     res = login_user(email, pwd, remember=remember)
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
+                        # v1.9.9.2 - Hem localStorage hem email cookie yaz (components.v1.html ile)
+                        # Email cookie 90 gun, localStorage token 90 gun (DB token suresi ile ayni)
                         if remember:
-                            # Bir sonraki login formu acilisinda email kutusu
-                            # ayni sekme acik kaldigi surece dolu gelir.
-                            st.session_state["li_email_remembered"] = email
+                            _tok_safe = res["token"].replace("'","").replace('"','')
+                            _em_safe = email.replace("'","").replace('"','')
+                            _stc_v1.html(f"""
+                            <script>
+                            try {{
+                              window.parent.localStorage.setItem('tso_auth_token', '{_tok_safe}');
+                              window.parent.sessionStorage.setItem('tso_logged_in', '1');
+                              var d = new Date();
+                              d.setTime(d.getTime() + 90*24*60*60*1000);
+                              window.parent.document.cookie = "ts_rem_email=" +
+                                  encodeURIComponent('{_em_safe}') +
+                                  ";expires=" + d.toUTCString() +
+                                  ";path=/;SameSite=Lax";
+                              console.log('[tso] auth+email saved to browser');
+                            }} catch(e) {{ console.log('[tso] save err:', e); }}
+                            </script>
+                            """, height=0)
+                            print(f"[auth] Beni Hatirla aktif: 90 gun localStorage + email cookie")
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -438,11 +480,21 @@ def render_auth_gate():
                         st.error(f"Hata: {_re}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-# v1.9.9.5.2 - Legacy "remember_token" senkronizasyonu
-# Eski versiyonlardan kalan session_state["remember_token"] varsa auth_token'a
-# kopyala. Boylece versiyon gecislerinde kullanicilar zorla logout edilmez.
+# Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
-    st.session_state["auth_token"] = st.session_state.pop("remember_token", None)
+    st.session_state["auth_token"] = st.session_state["remember_token"]
+
+# v1.9.9.3 - Beni Hatirla yapilanmasi:
+#   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
+#   nedeniyle calismadi. Bunun yerine browser password manager'i (Edge/Chrome) ile
+#   entegre calisan basit bir yontem: input alanlarina autocomplete attribute ekle.
+#
+#   Browser autofill her iki alani (username + password) tek tikla doldurur.
+#   DB tarafindaki 90 gunluk token uretilmeye devam ediyor (gelecekteki kullanim icin).
+#
+# Ana JavaScript trick'i: Streamlit DOM'undaki email input'una autocomplete="username"
+# ve sifre input'una autocomplete="current-password" attribute'larini ekle.
+# MutationObserver ile Streamlit re-render'larinda attribute'lar korunur.
 
 _cur_user = get_current_user()
 # is_admin override: role=="admin" veya Secrets email eşleşmesi
@@ -1296,10 +1348,19 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v1.9.9.5.2 - Logout: DB token + session_state temizligi
-        # Email recall'u da temizliyoruz; cikis sonrasi bir baskasinin bu cihazi
-        # kullanacagi senaryoda email kutusunu eskisini gostermesin.
-        st.session_state.pop("li_email_remembered", None)
+        # v1.9.9.2 - localStorage + sessionStorage + email cookie temizle
+        # components.v1.html ile script gercekten calisir (st.markdown calismaz)
+        _stc_v1.html("""
+        <script>
+        try {
+          window.parent.localStorage.removeItem('tso_auth_token');
+          window.parent.sessionStorage.removeItem('tso_logged_in');
+          window.parent.document.cookie =
+              "ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+          console.log('[tso] auth cleared from browser');
+        } catch(e) { console.log('[tso] clear err:', e); }
+        </script>
+        """, height=0)
         logout()
         st.rerun()
 
@@ -1678,6 +1739,23 @@ elif page=="Portföyüm":
     st.title("Portföyüm")
     portfolio = load_portfolio()
 
+    # ── v1.9.11 - Birim Türü için akıllı default (UX iyileştirmesi) ──────────
+    # Kullanici yeni varlik eklerken Birim Türünü kategoriden mantikli bir
+    # baslangic degeriyle gosterir. Kullanici yine de manuel degistirebilir.
+    def _default_unit_for(ticker: str, kategori: str) -> str:
+        k = (kategori or "").upper()
+        t = (ticker or "").upper()
+        if k == "BIST":
+            return "Lot"
+        if k == "MADEN":
+            # Gram-bazli kiymetli madenler
+            if t in {"ALTIN_TRY", "GUMUS_TRY", "PLATIN_TRY"}:
+                return "Gram"
+            # Sikkeler ve diger madenler (Bakir, Paladyum vb.) -> Adet
+            return "Adet"
+        # TEFAS, KRIPTO, DOVIZ ve digerleri -> Adet
+        return "Adet"
+
     # ── Yeni Pozisyon Ekle ──────────────────────────────────────
     with st.expander("Yeni Pozisyon Ekle", expanded=not portfolio):
         if df_uni.empty:
@@ -1705,8 +1783,16 @@ elif page=="Portföyüm":
                 try:    pa = parse_tr(pa_str)
                 except: pa = 0.0
             with f_c3:
-                unit_type = st.selectbox("Birim Türü",
-                    ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"], key="pf_unit")
+                # v1.9.11 - Otomatik Birim Turu (UX)
+                # Default kategoriye gore (BIST->Lot, MADEN gram->Gram, vs).
+                # Key ticker'a baglandigi icin yeni varlik secildikce dropdown
+                # uygun default'a doner. Kullanici manuel de degistirebilir.
+                _unit_opts = ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
+                _def_unit  = _default_unit_for(pt, pt_cat)
+                _def_idx   = _unit_opts.index(_def_unit) if _def_unit in _unit_opts else 0
+                unit_type = st.selectbox("Birim Türü", _unit_opts,
+                                          index=_def_idx,
+                                          key=f"pf_unit_{pt}")
             with f_c4:
                 _ph = fmt_tr(auto_price,4) if auto_price>0 else "Örn: 6.277,08"
                 pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
