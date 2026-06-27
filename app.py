@@ -312,31 +312,111 @@ def render_auth_gate():
 
         with tab_login:
             # v1.9.9 - Beni Hatirla: artik tarayici cookie ile gerçek persistence
-            # (eski ts_rem_email JavaScript hack'i kaldirildi - sadece email saklarken
-            # sifre yine isteniyordu; simdi auth token cookie ile auto-login)
-            email = st.text_input("E-posta", key="li_email", placeholder="ornek@gmail.com")
+            # v1.9.9.2 - Email autofill sigorta katmani (eski cookie hack geri yuklendi)
+            #            Tam auto-login icin components.v1.html ile localStorage kullanilir
+            #            (st.markdown script execute etmez, Streamlit sanitize ediyor)
+
+            # Email autofill: ts_rem_email cookie'sinden email'i URL query'sine koy
+            _remembered_email = st.query_params.get("_re", "")
+            _stc_v1.html("""
+            <script>
+            (function() {
+                try {
+                  var loc = window.parent.location;
+                  if (loc.search.indexOf('_re=') !== -1) return;  // zaten eklenmis
+                  // Cookie'den email oku
+                  var v = "; " + window.parent.document.cookie;
+                  var p = v.split("; ts_rem_email=");
+                  if (p.length === 2) {
+                    var em = decodeURIComponent(p.pop().split(";")[0]);
+                    if (em) {
+                      var u = new URL(loc.href);
+                      u.searchParams.set("_re", em);
+                      loc.href = u.toString();
+                    }
+                  }
+                } catch(e) { console.log('tso email autofill err:', e); }
+            })();
+            </script>
+            """, height=0)
+
+            email = st.text_input("E-posta", key="li_email",
+                                  placeholder="ornek@gmail.com",
+                                  value=_remembered_email)
             pwd   = st.text_input("Sifre", type="password", key="li_pass", placeholder="Sifreniz")
             remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
+
+            # v1.9.9.3 - Browser password manager entegrasyonu
+            # Streamlit'in text_input'larina autocomplete HTML attribute'u ekle:
+            #   - E-posta -> autocomplete="username"  (browser autofill icin)
+            #   - Sifre   -> autocomplete="current-password"  (zaten dolduruyor)
+            # Bu sayede Edge/Chrome password manager iki alani tek tikla birden doldurur.
+            # MutationObserver ile Streamlit re-render'larinda attribute'lar korunur.
+            _stc_v1.html("""
+            <script>
+            (function() {
+              function applyAutofill() {
+                try {
+                  var doc = window.parent.document;
+                  // E-posta input (aria-label ile bul)
+                  var inputs = doc.querySelectorAll('input[aria-label]');
+                  inputs.forEach(function(inp) {
+                    var lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+                    if (lbl.indexOf('posta') !== -1 || lbl.indexOf('mail') !== -1) {
+                      if (inp.getAttribute('autocomplete') !== 'username') {
+                        inp.setAttribute('autocomplete', 'username');
+                        inp.setAttribute('name', 'username');
+                      }
+                    }
+                  });
+                  // Sifre input
+                  var passes = doc.querySelectorAll('input[type="password"]');
+                  passes.forEach(function(inp) {
+                    if (inp.getAttribute('autocomplete') !== 'current-password') {
+                      inp.setAttribute('autocomplete', 'current-password');
+                      inp.setAttribute('name', 'password');
+                    }
+                  });
+                } catch(e) { console.log('[tso] autofill attr err:', e); }
+              }
+              // Hemen uygula
+              applyAutofill();
+              // Streamlit re-render'larinda attribute kaybolursa yeniden uygula
+              var iv = setInterval(applyAutofill, 800);
+              // 30 saniye sonra durdur (login yapilmistir veya kullanici vazgecmistir)
+              setTimeout(function() { clearInterval(iv); }, 30000);
+            })();
+            </script>
+            """, height=0)
             if st.button("Giris Yap", key="btn_login", use_container_width=True):
                 if email and pwd:
                     # v1.9.9 - remember=True ise 90 gunluk DB token uretilir
                     res = login_user(email, pwd, remember=remember)
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
-                        # v1.9.9.1 - localStorage persistence (Beni Hatirla isaretli ise)
-                        # JavaScript ile tarayici localStorage'a token yaz, 90 gun yasar
+                        # v1.9.9.2 - Hem localStorage hem email cookie yaz (components.v1.html ile)
+                        # Email cookie 90 gun, localStorage token 90 gun (DB token suresi ile ayni)
                         if remember:
-                            _tok_safe = res["token"].replace("'", "").replace('"', '')
-                            st.markdown(f"""
+                            _tok_safe = res["token"].replace("'","").replace('"','')
+                            _em_safe = email.replace("'","").replace('"','')
+                            _stc_v1.html(f"""
                             <script>
                             try {{
-                              localStorage.setItem('tso_auth_token', '{_tok_safe}');
-                              sessionStorage.setItem('tso_logged_in', '1');
-                              console.log('[tso] auth token saved to localStorage');
-                            }} catch(e) {{ console.log('[tso] localStorage err:', e); }}
+                              // localStorage'a token (auto-login)
+                              window.parent.localStorage.setItem('tso_auth_token', '{_tok_safe}');
+                              window.parent.sessionStorage.setItem('tso_logged_in', '1');
+                              // Email cookie (autofill, sigorta)
+                              var d = new Date();
+                              d.setTime(d.getTime() + 90*24*60*60*1000);
+                              window.parent.document.cookie = "ts_rem_email=" +
+                                  encodeURIComponent('{_em_safe}') +
+                                  ";expires=" + d.toUTCString() +
+                                  ";path=/;SameSite=Lax";
+                              console.log('[tso] auth+email saved to browser');
+                            }} catch(e) {{ console.log('[tso] save err:', e); }}
                             </script>
-                            """, unsafe_allow_html=True)
-                            print(f"[auth] Beni Hatirla aktif: 90 gun localStorage")
+                            """, height=0)
+                            print(f"[auth] Beni Hatirla aktif: 90 gun localStorage + email cookie")
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -404,40 +484,17 @@ def render_auth_gate():
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
 
-# v1.9.9.1 - localStorage tabanli auto-login (tarayici kapansa bile token kalir)
-# JavaScript localStorage'dan token alir, URL'e ekler, sayfa reload olur,
-# Python query_param'dan token'i session_state'e kopyalar, query temizler.
-# Sonsuz dongu engellenir: sessionStorage'da "tso_logged_in" flag'i ile
-# tab acik kaldigi surece tekrar reload yapilmaz.
-_tok_from_url = st.query_params.get("_tso_tok", "")
-if _tok_from_url and "auth_token" not in st.session_state:
-    st.session_state["auth_token"] = str(_tok_from_url)
-    # Query param'i URL'den temizle (gizlilik + temiz URL)
-    st.query_params.clear()
-    st.rerun()
-
-# localStorage kontrol scripti - sayfa basinda her render'da calisir ama idempotent:
-# - URL'de _tso_tok varsa: hicbir sey yapma
-# - sessionStorage'da flag varsa: hicbir sey yapma
-# - localStorage'da token yoksa: hicbir sey yapma
-# - Sadece: token var + flag yok + URL temiz ise -> reload tetikle
-st.markdown("""
-<script>
-(function() {
-  try {
-    if (window.location.search.indexOf('_tso_tok=') !== -1) return;
-    if (sessionStorage.getItem('tso_logged_in')) return;
-    var token = localStorage.getItem('tso_auth_token');
-    if (token && token.length >= 32) {
-      sessionStorage.setItem('tso_logged_in', '1');
-      var u = new URL(window.location.href);
-      u.searchParams.set('_tso_tok', token);
-      window.location.href = u.toString();
-    }
-  } catch (e) { console.log('tso autologin err:', e); }
-})();
-</script>
-""", unsafe_allow_html=True)
+# v1.9.9.3 - Beni Hatirla yapilanmasi:
+#   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
+#   nedeniyle calismadi. Bunun yerine browser password manager'i (Edge/Chrome) ile
+#   entegre calisan basit bir yontem: input alanlarina autocomplete attribute ekle.
+#
+#   Browser autofill her iki alani (username + password) tek tikla doldurur.
+#   DB tarafindaki 90 gunluk token uretilmeye devam ediyor (gelecekteki kullanim icin).
+#
+# Ana JavaScript trick'i: Streamlit DOM'undaki email input'una autocomplete="username"
+# ve sifre input'una autocomplete="current-password" attribute'larini ekle.
+# MutationObserver ile Streamlit re-render'larinda attribute'lar korunur.
 
 _cur_user = get_current_user()
 # is_admin override: role=="admin" veya Secrets email eşleşmesi
@@ -1291,21 +1348,19 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v1.9.9.1 - localStorage + sessionStorage temizle (auto-login bypass)
-        st.markdown("""
+        # v1.9.9.2 - localStorage + sessionStorage + email cookie temizle
+        # components.v1.html ile script gercekten calisir (st.markdown calismaz)
+        _stc_v1.html("""
         <script>
         try {
-          localStorage.removeItem('tso_auth_token');
-          sessionStorage.removeItem('tso_logged_in');
-          console.log('[tso] auth token cleared from localStorage');
-        } catch(e) { console.log('[tso] localStorage clear err:', e); }
+          window.parent.localStorage.removeItem('tso_auth_token');
+          window.parent.sessionStorage.removeItem('tso_logged_in');
+          window.parent.document.cookie =
+              "ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+          console.log('[tso] auth cleared from browser');
+        } catch(e) { console.log('[tso] clear err:', e); }
         </script>
-        """, unsafe_allow_html=True)
-        # Eski JS cookie'sini de temizle (legacy)
-        st.markdown(
-            '<script>document.cookie="ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";</script>',
-            unsafe_allow_html=True
-        )
+        """, height=0)
         logout()
         st.rerun()
 
