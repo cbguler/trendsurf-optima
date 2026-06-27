@@ -315,10 +315,11 @@ def render_auth_gate():
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
-            # v1.9.9 - Beni Hatirla: artik tarayici cookie ile gerçek persistence
-            # v1.9.9.2 - Email autofill sigorta katmani (eski cookie hack geri yuklendi)
-            #            Tam auto-login icin components.v1.html ile localStorage kullanilir
-            #            (st.markdown script execute etmez, Streamlit sanitize ediyor)
+            # v1.9.9.4 - st.form ile sarma: browser autofill (Edge password manager)
+            # form submit ile DOM'daki gercek values'i Streamlit'e iletir; React state
+            # senkronize degilse bile email/sifre dogru yakalanir.
+            # Onceki sorun: autofill DOM'da values'i guncelliyordu ama Streamlit
+            # text_input state'i sifir kaliyordu, "Lutfen tum alanlari doldurun" uyarisi.
 
             # Email autofill: ts_rem_email cookie'sinden email'i URL query'sine koy
             _remembered_email = st.query_params.get("_re", "")
@@ -344,55 +345,52 @@ def render_auth_gate():
             </script>
             """, height=0)
 
-            email = st.text_input("E-posta", key="li_email",
-                                  placeholder="ornek@gmail.com",
-                                  value=_remembered_email)
-            pwd   = st.text_input("Sifre", type="password", key="li_pass", placeholder="Sifreniz")
-            remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
+            with st.form("login_form_v1994", clear_on_submit=False):
+                email = st.text_input("E-posta", key="li_email",
+                                      placeholder="ornek@gmail.com",
+                                      value=_remembered_email)
+                pwd   = st.text_input("Sifre", type="password", key="li_pass",
+                                      placeholder="Sifreniz")
+                remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
 
-            # v1.9.9.3 - Browser password manager entegrasyonu
-            # Streamlit'in text_input'larina autocomplete HTML attribute'u ekle:
-            #   - E-posta -> autocomplete="username"  (browser autofill icin)
-            #   - Sifre   -> autocomplete="current-password"  (zaten dolduruyor)
-            # Bu sayede Edge/Chrome password manager iki alani tek tikla birden doldurur.
-            # MutationObserver ile Streamlit re-render'larinda attribute'lar korunur.
-            _stc_v1.html("""
-            <script>
-            (function() {
-              function applyAutofill() {
-                try {
-                  var doc = window.parent.document;
-                  // E-posta input (aria-label ile bul)
-                  var inputs = doc.querySelectorAll('input[aria-label]');
-                  inputs.forEach(function(inp) {
-                    var lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
-                    if (lbl.indexOf('posta') !== -1 || lbl.indexOf('mail') !== -1) {
-                      if (inp.getAttribute('autocomplete') !== 'username') {
-                        inp.setAttribute('autocomplete', 'username');
-                        inp.setAttribute('name', 'username');
-                      }
-                    }
-                  });
-                  // Sifre input
-                  var passes = doc.querySelectorAll('input[type="password"]');
-                  passes.forEach(function(inp) {
-                    if (inp.getAttribute('autocomplete') !== 'current-password') {
-                      inp.setAttribute('autocomplete', 'current-password');
-                      inp.setAttribute('name', 'password');
-                    }
-                  });
-                } catch(e) { console.log('[tso] autofill attr err:', e); }
-              }
-              // Hemen uygula
-              applyAutofill();
-              // Streamlit re-render'larinda attribute kaybolursa yeniden uygula
-              var iv = setInterval(applyAutofill, 800);
-              // 30 saniye sonra durdur (login yapilmistir veya kullanici vazgecmistir)
-              setTimeout(function() { clearInterval(iv); }, 30000);
-            })();
-            </script>
-            """, height=0)
-            if st.button("Giris Yap", key="btn_login", use_container_width=True):
+                # v1.9.9.3 - Browser password manager entegrasyonu (fallback)
+                # Streamlit 1.32+ text_input autocomplete parametresi var (yukarida);
+                # eski sürümlerde calismadigi icin yedek MutationObserver script'i:
+                _stc_v1.html("""
+                <script>
+                (function() {
+                  function applyAutofill() {
+                    try {
+                      var doc = window.parent.document;
+                      var inputs = doc.querySelectorAll('input[aria-label]');
+                      inputs.forEach(function(inp) {
+                        var lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+                        if (lbl.indexOf('posta') !== -1 || lbl.indexOf('mail') !== -1) {
+                          if (inp.getAttribute('autocomplete') !== 'username') {
+                            inp.setAttribute('autocomplete', 'username');
+                            inp.setAttribute('name', 'username');
+                          }
+                        }
+                      });
+                      var passes = doc.querySelectorAll('input[type="password"]');
+                      passes.forEach(function(inp) {
+                        if (inp.getAttribute('autocomplete') !== 'current-password') {
+                          inp.setAttribute('autocomplete', 'current-password');
+                          inp.setAttribute('name', 'password');
+                        }
+                      });
+                    } catch(e) { console.log('[tso] autofill attr err:', e); }
+                  }
+                  applyAutofill();
+                  var iv = setInterval(applyAutofill, 800);
+                  setTimeout(function() { clearInterval(iv); }, 30000);
+                })();
+                </script>
+                """, height=0)
+
+                submitted = st.form_submit_button("Giris Yap", use_container_width=True)
+
+            if submitted:
                 if email and pwd:
                     # v1.9.9 - remember=True ise 90 gunluk DB token uretilir
                     res = login_user(email, pwd, remember=remember)
@@ -406,10 +404,8 @@ def render_auth_gate():
                             _stc_v1.html(f"""
                             <script>
                             try {{
-                              // localStorage'a token (auto-login)
                               window.parent.localStorage.setItem('tso_auth_token', '{_tok_safe}');
                               window.parent.sessionStorage.setItem('tso_logged_in', '1');
-                              // Email cookie (autofill, sigorta)
                               var d = new Date();
                               d.setTime(d.getTime() + 90*24*60*60*1000);
                               window.parent.document.cookie = "ts_rem_email=" +
