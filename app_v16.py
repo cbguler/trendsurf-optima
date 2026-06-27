@@ -138,6 +138,10 @@ except ImportError:
 # (streamlit_cookies_controller import'u kaldirildi - artik gerek yok)
 _COOKIE_OK = True  # localStorage her zaman erisilebilir
 
+# v1.9.9.3.1 - components.v1.html icin module-level import (scope sorunu engellenir)
+# Asagidaki render_auth_gate ve logout button'da kullaniliyor.
+import streamlit.components.v1 as _stc_v1
+
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
 
