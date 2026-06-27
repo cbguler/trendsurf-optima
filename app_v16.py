@@ -953,7 +953,7 @@ def _simple_portfolio(portfolio, df_uni):
         c2.metric("Toplam K/Z", f"{df_p['K/Z (₺)'].sum():+,.2f} ₺")
 
 def fmt_tr(val, decimals=2):
-    """Float → Türkçe format: 1.234,56"""
+    """Float -> Türkçe format: 1.234,56"""
     if val is None: return "—"
     sign = "-" if val < 0 else ""
     s = f"{abs(val):,.{decimals}f}"          # "1,234.56"
@@ -961,7 +961,7 @@ def fmt_tr(val, decimals=2):
     return sign + s
 
 def parse_tr(s):
-    """Türkçe format string → float: '1.234,56' → 1234.56"""
+    """Türkçe format string -> float: '1.234,56' -> 1234.56"""
     try:
         return float(str(s).replace(".", "").replace(",", "."))
     except Exception:
@@ -1306,7 +1306,7 @@ with st.sidebar:
     # GitHub Actions workflow (peak_check.yml) bu ayarlari okuyup her kullanici
     # icin uygun frekansta fiyat takibi yapar ve uyari maillerini kullanicinin
     # KENDI e-posta adresine gonderir.
-    with st.expander("🔔 Uyarı Ayarları"):
+    with st.expander("Uyarı Ayarları"):
         _uid_for_alert = _cur_user.get("id") if _cur_user else None
         if _uid_for_alert is None:
             st.warning("Kullanıcı bilgisi alınamadı.")
@@ -1416,7 +1416,7 @@ with st.sidebar:
 
             # Bilgilendirme
             st.caption(
-                "ℹ Uyarı mailleri **sizin e-posta adresinize** gönderilir "
+                "Uyarı mailleri **sizin e-posta adresinize** gönderilir "
                 "(E-Posta Ayarları'ndaki alıcı). Yalnızca **portföyünüzdeki** "
                 "varlıklar takip edilir. Sistem hafta sonu sadece kripto varlıkları "
                 "için aktif çalışır (BIST/TEFAS/döviz piyasaları kapalı)."
@@ -1425,7 +1425,7 @@ with st.sidebar:
     st.divider()
     if _cur_user.get("is_admin"):
         # v1.9.3 - Sistem Tanilama paneli (yavaslik teshisi icin)
-        with st.expander("🔧 Sistem Tanılama"):
+        with st.expander("Sistem Tanılama"):
             st.markdown("""<style>
             [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
             [data-testid="stSidebar"] [data-testid="stExpander"] label p,
@@ -2355,7 +2355,7 @@ elif page=="Halka Arz":
             "Veri yüklenemedi. Olası nedenler:\n"
             "- `Endeksler.xlsx` klasörde yok\n"
             "- Borsa İstanbul'a bağlanılamıyor\n\n"
-            "Çözüm: borsaistanbul.com → Endeksler → Excel olarak indir → "
+            "Çözüm: borsaistanbul.com -> Endeksler -> Excel olarak indir -> "
             "klasöre `Endeksler.xlsx` adıyla kaydet."
         )
         st.stop()
@@ -2580,49 +2580,41 @@ elif page=="Makro Göstergeler":
             "baslik": "Genel Bakış",
             "aciklama": "Toplam yatırımcı, bakiyeli hesap sayısı ve saklanan menkul kıymet değeri.",
             "url": "https://www.vap.org.tr/",
-            "ikon": "📊",
         },
         {
             "baslik": "Yaş Grupları Bazında Yatırımcı Sayıları",
             "aciklama": "Demografik dağılım — yaş grubu ve cinsiyet bazında yatırımcı profili.",
             "url": "https://www.vap.org.tr/yas-gruplari-bazinda-yatirimci-sayilari",
-            "ikon": "👥",
         },
         {
             "baslik": "Yerli / Yabancı Pay Senedi Analizi",
             "aciklama": "Yerli ve yabancı yatırımcıların pay senedi portföy dağılımı.",
             "url": "https://www.vap.org.tr/yerli-yabanci-pay-senedi-analizi",
-            "ikon": "🌍",
         },
         {
             "baslik": "Yabancı Yatırımcı Sayıları (İlk 10 Ülke)",
             "aciklama": "Ülke bazında yabancı yatırımcı sayıları ve portföy değerleri.",
             "url": "https://www.vap.org.tr/pay-senedi-yabanci-yatirimci-sayilari-ilk-10-ulke",
-            "ikon": "🗺️",
         },
         {
             "baslik": "BIST Endeksleri Bazında Portföy Değerleri",
             "aciklama": "9 farklı BIST endeksi için yatırımcı sayısı ve portföy değeri.",
             "url": "https://www.vap.org.tr/bist-endeksleri-bazinda-portfoy-degerleri",
-            "ikon": "📈",
         },
         {
             "baslik": "Dönemsel Finansal Oranlar",
             "aciklama": "BIST şirketlerinin F/K, PD/DD, temettü verimi gibi finansal oranları.",
             "url": "https://www.vap.org.tr/donemsel-finansal-oranlar",
-            "ikon": "🔢",
         },
         {
             "baslik": "REKS — Risk İştahı Endeksi",
             "aciklama": "Türkiye sermaye piyasası risk iştahı endeksi ve tarihsel trendi.",
             "url": "https://www.vap.org.tr/reks",
-            "ikon": "⚡",
         },
         {
             "baslik": "MKK Aylık Piyasa Bülteni",
             "aciklama": "Yatırımcı ve piyasa verilerinin aylık özet raporu (PDF).",
             "url": "https://www.mkk.com.tr/veri-hizmetleri/mkk-aylik-piyasa-bulteni",
-            "ikon": "📄",
         },
     ]
 
@@ -2633,9 +2625,8 @@ elif page=="Makro Göstergeler":
                 f'''<a href="{_link['url']}" target="_blank" style="text-decoration:none;">
                 <div style="background:#fff;border:1.5px solid #c8d6e8;border-radius:10px;
                             padding:16px 18px;margin-bottom:14px;cursor:pointer;">
-                    <div style="font-size:22px;margin-bottom:6px;">{_link['ikon']}</div>
                     <div style="font-size:14px;font-weight:700;color:#1b2a4a;
-                                margin-bottom:4px;">{_link['baslik']}</div>
+                                margin-bottom:6px;">{_link['baslik']}</div>
                     <div style="font-size:12px;color:#6c7a9c;">{_link['aciklama']}</div>
                 </div></a>''',
                 unsafe_allow_html=True
@@ -2689,7 +2680,7 @@ elif page=="Yardım":
 | `KAP_BIST.xlsx` | BIST hisse sembol/slug esleme (771 hisse) |
 | `Endeksler.xlsx` | Endeks uye listeleri (fallback) |
 
-**Veri Akisi:** `worker.py` → `optimized_universe.csv` → `app.py` → kullanici
+**Veri Akisi:** `worker.py` -> `optimized_universe.csv` -> `app.py` -> kullanici
 
 **Varlik Sayilari:** BIST 610 | TEFAS 1347 | Kripto 19 | Maden 12 | Doviz 12
 """)
@@ -2718,11 +2709,11 @@ elif page=="Yardım":
 - Yedek: Bigpara kripto fiyatlari
 
 **Temel Analiz (BIST):**
-- kap_client.py → kap.org.tr sirket sayfalari
+- kap_client.py -> kap.org.tr sirket sayfalari
 - yfinance info (P/E, beta, dividendYield)
 
 **Halka Arz / Tetemttu:**
-- KAP RSC endpoint (Next.js) → endeks uyeleri
+- KAP RSC endpoint (Next.js) -> endeks uyeleri
 - Yedek: Endeksler.xlsx
 """)
 
@@ -2733,7 +2724,7 @@ elif page=="Yardım":
 **Streamlit Cloud:**
 `https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app`
 
-**Streamlit Cloud Secrets** (App Settings → Secrets):
+**Streamlit Cloud Secrets** (App Settings -> Secrets):
 ```
 EMAIL_USER    = "bahriguler@gmail.com"
 EMAIL_PASS    = "xxxx xxxx xxxx xxxx"
@@ -2767,11 +2758,11 @@ git push origin main
 | `premium` | Tum ozellikler |
 | `admin` | Sistem yoneticisi |
 
-**Yeni Abone Onaylama:** Admin Paneli → Bekleyen Kullanicilar → Onayla
+**Yeni Abone Onaylama:** Admin Paneli -> Bekleyen Kullanicilar -> Onayla
 
 **Sifre Sifirlama:**
 - `python auth_reset.py` (lokal)
-- Veya Giris ekrani → Sifremi Unuttum
+- Veya Giris ekrani -> Sifremi Unuttum
 
 **SQLite Veritabani:** `trendsurf.db`
 - Tablolar: `users`, `sessions`, `portfolio`, `reset_tokens`
@@ -2782,12 +2773,12 @@ git push origin main
             st.markdown("""
 **Gonderim Zamanlayici:**
 - Windows Task Scheduler: `emailler.py` — 08:30 ve 11:30
-- Manuel: Sol menu → E-posta Ayarlari → Simdi Gonder
+- Manuel: Sol menu -> E-posta Ayarlari -> Simdi Gonder
 
 **Gmail App Password Yenileme:**
 1. `myaccount.google.com/apppasswords` adresine git
 2. Yeni App Password olustur (TrendSurf)
-3. Streamlit Cloud Secrets → EMAIL_PASS guncelle
+3. Streamlit Cloud Secrets -> EMAIL_PASS guncelle
 4. `email_config.json` dosyasini da guncelle
 
 **email_config.json yapisi:**
@@ -2812,7 +2803,7 @@ git push origin main
 | Altin fiyati yanlis | yfinance ons/gram karisikligi | Bigpara birincil — otomatik duzelmeli |
 | Turkce karakter bozuk | KAP API encoding | latin-1 UTF-8 fix_encoding'de cozuldu |
 | E-posta gitmiyor | Streamlit Secrets eksik | EMAIL_USER/EMAIL_PASS ekle |
-| Uygulama acilamiyor | Streamlit gizlilik | share.streamlit.io → Settings → Public |
+| Uygulama acilamiyor | Streamlit gizlilik | share.streamlit.io -> Settings -> Public |
 | Veritabani sifirlanmis | Streamlit Cloud reboot | Beklenen davranis — F5 kullan |
 | CSV push edilemiyor | gitignore sorunu | `git add -f optimized_universe.csv` |
 """)
@@ -2833,7 +2824,7 @@ git push origin main
 - **Beni Hatirla** kutusunu isaretlerseniz otomatik giris aktif olur
 
 **Sifremi Unuttum:**
-- Giris ekraninda **Sifremi Unuttum** sekmesi → e-posta adresinizi girin
+- Giris ekraninda **Sifremi Unuttum** sekmesi -> e-posta adresinizi girin
 - Sifirlama baglantisi e-postaniza gelir
 """)
 
@@ -2843,7 +2834,7 @@ Ana Sayfa, butce ve risk tercihine gore en iyi yatirim firsatlarini listeler.
 
 **Sol Panelden Ayarlar:**
 - **Portfoy Butcesi (TL):** Yatirim dusundugunuz toplam tutar
-- **Risk Toleransi:** Cok Dusuk → Cok Yuksek (5 seviye)
+- **Risk Toleransi:** Cok Dusuk -> Cok Yuksek (5 seviye)
 - **Max Varlik Sayisi:** Portfoyde kac farkli varlik olsun (5-20)
 
 **Oneri Tablosu Sutunlari:**
@@ -2870,7 +2861,7 @@ Ana Sayfa, butce ve risk tercihine gore en iyi yatirim firsatlarini listeler.
 3. Adet, Alis Maliyeti (TL) ve isterseniz Not girin
 4. **Pozisyon Ekle** butonuna tiklayin
 
-**Fiyat Girisi:** Ondalik ayirici virgul → `6.480,00`
+**Fiyat Girisi:** Ondalik ayirici virgul -> `6.480,00`
 
 **Portfoy Tablosu:**
 - Guncel Fiyat: Bigpara / yfinance anlık veri

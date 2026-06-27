@@ -30,7 +30,7 @@ ALERT_MODES        = {
     "hourly":     "Saatte bir tekrarla",
 }
 EMIR_FORMULS = {
-    "peak_minus_threshold": "Peak × (1 − threshold) — örn peak 100, %3 → tavsiye 97",
+    "peak_minus_threshold": "Peak × (1 − threshold) — örn peak 100, %3 -> tavsiye 97",
     "current_price":        "Şu anki fiyat (anlık satış emri)",
     "info_only":            "Sadece bilgi ver (tavsiye fiyat yok)",
 }
