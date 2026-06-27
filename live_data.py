@@ -74,17 +74,34 @@ except Exception as e:
 
 
 # ----------------------------------------------------------------------------
-# USD bazli emtia filtresi (kullanici karari, 19-20 Haziran 2026 - VIII oturum)
-# Tarim emtialari ve enerji (Brent/WTI/Dogalgaz) Turkiye'de fiziki olarak
-# alinip-satilamayan, dunya borsalarinda USD ile fiyatlanan turetilmis
-# varliklardir; portfoye eklenebilir nitelikte degiller.
+# Sistemde takip edilmeyen varliklar (filter_universe ile evrenden cikariliyor)
+# ----------------------------------------------------------------------------
+# 1) USD bazli emtia filtresi (kullanici karari, 19-20 Haziran 2026 - VIII oturum)
+#    Tarim emtialari ve enerji (Brent/WTI/Dogalgaz) Turkiye'de fiziki olarak
+#    alinip-satilamayan, dunya borsalarinda USD ile fiyatlanan turetilmis
+#    varliklardir; portfoye eklenebilir nitelikte degiller.
 #
-# Paladyum ve Bakir geri eklendi: USD bazli olsa da degerli/endustriyel metal
-# olarak yatirim sayilabilir; worker.py CSV'ye yfinance ile yaziyor (× USDTRY).
+#    Paladyum ve Bakir geri eklendi: USD bazli olsa da degerli/endustriyel metal
+#    olarak yatirim sayilabilir; worker.py CSV'ye yfinance ile yaziyor (× USDTRY).
+#
+# 2) v1.9.10 - Guvenilir TL fiyat kaynagi olmayan varliklar (27 Haziran 2026 - X oturum)
+#    - ONS_ALTIN_TRY: canlidoviz.com "ons-altin" endpoint'i USD veriyor olabilir;
+#      bu nedenle CSV ve UI'da gercek TL fiyatin yaklasik 1/47'si goruluyordu
+#      (~106k TL gosterirken gercek ~188k TL/ons). Cozum: tamamen cikar.
+#      Yatirimci ihtiyac duyarsa: gram altin × 31.1035 ile manuel hesap yapabilir.
+#    - BNB: BtcTurk borsasinda BNB/TRY paritesi YOK (regulatif sebep, BtcTurk
+#      Binance'in rakibi). borsapy.Crypto("BNBTRY") 404 doner, CSV'deki USD
+#      fiyat TL etiketiyle gosteriliyordu (603 gorulurken gercek ~26.300 TL).
+#      Cozum: tamamen cikar. Diger kriptolar (BTC, ETH, SOL, XRP, AVAX, vb.)
+#      BtcTurk'ta TRY pariteleri var, dogru calismaya devam ediyor.
 # ----------------------------------------------------------------------------
 EXCLUDED_USD_COMMODITIES = {
+    # USD bazli emtialar
     "BRENT_TRY", "PETROL_TRY", "DOGALGAZ_TRY",
     "BUGDAY_TRY", "MISIR_TRY", "SOYA_TRY", "KAKAO_TRY",
+    # v1.9.10 - Guvenilir TL fiyat kaynagi olmayan varliklar
+    "ONS_ALTIN_TRY",   # canlidoviz endpoint'i USD veriyor (~1/47 gosteriyordu)
+    "BNB",             # BtcTurk'ta BNB/TRY paritesi yok (~1/44 gosteriyordu)
 }
 
 
@@ -101,6 +118,7 @@ _DOVIZ_TO_BP = {
 
 # MADEN: TRY-direkt gram bazli kiymetli madenler + sikke altinlar
 # (canlidoviz.com'dan gercek zamanli TL fiyat)
+# v1.9.10 - ONS_ALTIN_TRY cikarildi (canlidoviz endpoint'i guvenilir TL vermiyor)
 _MADEN_TO_BP = {
     "ALTIN_TRY":      "gram-altin",
     "GUMUS_TRY":      "gram-gumus",
@@ -111,17 +129,16 @@ _MADEN_TO_BP = {
     "TAM_ALTIN":      "tam-altin",
     "CUMHURIYET_ALTIN": "cumhuriyet-altin",
     "ATA_ALTIN":      "ata-altin",
-    "ONS_ALTIN_TRY":  "ons-altin",       # canlidoviz bunu TL olarak yayinliyor
 }
 
 # Yeni sikke varliklarinin gosterim isimleri (CSV'deki "Ad" sutununa karsilik gelir)
+# v1.9.10 - ONS_ALTIN_TRY display'den cikarildi
 _NEW_MADEN_DISPLAY = {
     "CEYREK_ALTIN":     "Çeyrek Altın",
     "YARIM_ALTIN":      "Yarım Altın",
     "TAM_ALTIN":        "Tam Altın",
     "CUMHURIYET_ALTIN": "Cumhuriyet Altını",
     "ATA_ALTIN":        "Ata Altını",
-    "ONS_ALTIN_TRY":    "Ons Altın (TL)",
 }
 
 # Mevcut ALTIN_TRY adini gunceller: "Altin (TL)" yerine "Gram Altın" diye gosterilir
@@ -320,7 +337,7 @@ def get_harem_buy_prices() -> dict:
         "ALTIN_TRY":     "gram-altin",
         "GUMUS_TRY":     "gram-gumus",
         "PLATIN_TRY":    "gram-platin",
-        "ONS_ALTIN_TRY": "ons-altin",
+        # v1.9.10 - ONS_ALTIN_TRY cikarildi (universe'den de cikarildi)
     }
     for ticker, bp_code in HAREM_DESTEKLI.items():
         try:
