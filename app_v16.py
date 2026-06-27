@@ -1470,10 +1470,13 @@ with st.sidebar:
                     st.caption("Atlananlar: " + ", ".join(_skip_msgs))
 
             # Peak'leri Sifirla butonu
+            # help= parametresi Streamlit'in button rendering'ini farklilastiriyor
+            # (silik/okunmaz hale getiriyor); aciklamayi caption olarak yaziyoruz.
+            st.caption("**Tüm Peak'leri Sıfırla** — DB'deki tüm peak kayıtlarınızı "
+                       "siler. Bir sonraki kontrolde mevcut fiyatlardan yeni "
+                       "peak başlatılır.")
             if st.button("Tüm Peak'leri Sıfırla", key="alert_peak_reset",
-                         use_container_width=True,
-                         help="DB'deki tüm peak kayıtlarınızı siler. Bir sonraki "
-                              "kontrolde mevcut fiyatlardan yeni peak başlatılır."):
+                         use_container_width=True):
                 ok = reset_peaks_for_user(_uid_for_alert)
                 if ok:
                     st.success("Peak kayıtları sıfırlandı.")

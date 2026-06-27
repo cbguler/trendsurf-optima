@@ -192,28 +192,15 @@ def _should_trigger_alert(peak_rec: dict, current_price: float,
 def evaluate_user_alerts(user_id: int, df_uni) -> dict:
     """Kullanicinin portfoyundeki tum varliklar icin peak update + threshold kontrol.
 
-    df_uni: pandas DataFrame, 'Ticker' ve 'Son Fiyat' sutunlari olmali.
+    df_uni: pandas DataFrame, 'Ticker' ve 'Son_Fiyat' sutunlari olmali.
+    (NOT: Sutun adi 'Son_Fiyat' alt cizgi ile - UI'da gosterimde 'Son Fiyat'
+    olarak rename edilir ama DataFrame'in ic adi 'Son_Fiyat'.)
 
     Returns:
       {
         "updated_peaks":  [list of (ticker, peak, status)],
         "alerts_pending": [list of dict - uyari bekleyen tickerlar],
         "skipped":        [list of (ticker, reason)],
-      }
-
-    alerts_pending dict yapisi:
-      {
-        "ticker": str,
-        "asset_type": str,
-        "alish_fiyat": float,
-        "miktar": float,
-        "unit_type": str,
-        "peak_price": float,
-        "peak_time": datetime,
-        "current_price": float,
-        "drop_pct": float,
-        "tavsiye_fiyat": float,
-        "toplam_deger": float,
       }
     """
     result = {"updated_peaks": [], "alerts_pending": [], "skipped": []}
@@ -232,16 +219,27 @@ def evaluate_user_alerts(user_id: int, df_uni) -> dict:
             return result
 
         # Universe -> ticker:fiyat dict (hizli lookup)
+        # Sutun adi 'Son_Fiyat' (alt cizgi), 'Son Fiyat' (bosluk) DEGIL.
         price_map = {}
         if df_uni is not None and not df_uni.empty:
-            for _, row in df_uni.iterrows():
-                t = str(row.get("Ticker", ""))
-                p = row.get("Son Fiyat")
-                if t and p is not None:
-                    try:
-                        price_map[t] = float(p)
-                    except (TypeError, ValueError):
-                        pass
+            # Hem 'Son_Fiyat' hem 'Son Fiyat' destegi (UI'da rename'li tablo da
+            # bu fonksiyona gelebilir)
+            price_col = None
+            for cand in ("Son_Fiyat", "Son Fiyat", "Fiyat"):
+                if cand in df_uni.columns:
+                    price_col = cand
+                    break
+            if price_col:
+                for _, row in df_uni.iterrows():
+                    t = str(row.get("Ticker", ""))
+                    p = row.get(price_col)
+                    if t and p is not None:
+                        try:
+                            pf = float(p)
+                            if pf > 0:
+                                price_map[t] = pf
+                        except (TypeError, ValueError):
+                            pass
 
         # Her ticker icin
         for pos in portfolio:
