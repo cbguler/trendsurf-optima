@@ -161,6 +161,10 @@ from alert_settings import (
     DEFAULTS as ALERT_DEFAULTS,
     ALERT_MODES, EMIR_FORMULS,
 )
+# v2.0 asama 3a - Peak Tracker (peak/threshold mantigi)
+from peak_tracker import (
+    evaluate_user_alerts, get_user_peaks, reset_peaks_for_user,
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1413,6 +1417,68 @@ with st.sidebar:
                     st.success("Uyarı ayarları kaydedildi. (Supabase'de kalıcı)")
                 else:
                     st.error("Kaydetme hatası — loglara bakın.")
+
+            st.divider()
+
+            # v2.0 asama 3a - Manuel Test butonu
+            # Mevcut portfoy + canli universe ile peak update ve threshold kontrol
+            # yapar. Mail GONDERMEZ - sadece "uyari bekleyen" tickerlari listeler.
+            # GitHub Actions workflow'u kurulmadan once mantigi test etmek icin.
+            st.caption("**Manuel Test** — Portföyünüzdeki varlıkların peak değerlerini "
+                       "güncelleyip threshold kontrolü yapar. Mail gönderilmez.")
+            if st.button("Şimdi Kontrol Et (Test)", key="alert_test_run",
+                         use_container_width=True):
+                with st.spinner("Peak kontrol ediliyor..."):
+                    df_uni_test = load_universe()
+                    result = evaluate_user_alerts(_uid_for_alert, df_uni_test)
+
+                st.success(
+                    f"Kontrol tamamlandı: "
+                    f"{len(result['updated_peaks'])} peak güncellendi, "
+                    f"{len(result['alerts_pending'])} uyarı bekliyor, "
+                    f"{len(result['skipped'])} varlık atlandı."
+                )
+
+                # Uyari bekleyen tickerlari tablo halinde goster
+                if result["alerts_pending"]:
+                    st.markdown("**Uyarı Bekleyen Varlıklar:**")
+                    _alert_rows = []
+                    for a in result["alerts_pending"]:
+                        _alert_rows.append({
+                            "Ticker":      a["ticker"],
+                            "Kategori":    a["asset_type"],
+                            "Alış":        f"{a['alish_fiyat']:.4f}",
+                            "Peak":        f"{a['peak_price']:.4f}",
+                            "Şu Anki":     f"{a['current_price']:.4f}",
+                            "Düşüş (%)":   f"{a['drop_pct']:.2f}",
+                            "Tavsiye":     f"{a['tavsiye_fiyat']:.4f}" if a['tavsiye_fiyat'] > 0 else "—",
+                            "Miktar":      f"{a['miktar']:.4f}",
+                            "Toplam (TL)": f"{a['toplam_deger']:,.2f}",
+                        })
+                    st.dataframe(_alert_rows, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("Şu an uyarı tetikleyen varlık yok.")
+
+                # Yeni peak yapan tickerlar
+                if result["updated_peaks"]:
+                    _peak_msgs = [f"{t} -> {p:.4f} ({s})" for t, p, s in result["updated_peaks"]]
+                    st.caption("Peak güncellemeleri: " + ", ".join(_peak_msgs))
+
+                # Atlananlar
+                if result["skipped"]:
+                    _skip_msgs = [f"{t}: {r}" for t, r in result["skipped"]]
+                    st.caption("Atlananlar: " + ", ".join(_skip_msgs))
+
+            # Peak'leri Sifirla butonu
+            if st.button("Tüm Peak'leri Sıfırla", key="alert_peak_reset",
+                         use_container_width=True,
+                         help="DB'deki tüm peak kayıtlarınızı siler. Bir sonraki "
+                              "kontrolde mevcut fiyatlardan yeni peak başlatılır."):
+                ok = reset_peaks_for_user(_uid_for_alert)
+                if ok:
+                    st.success("Peak kayıtları sıfırlandı.")
+                else:
+                    st.error("Sıfırlama hatası — loglara bakın.")
 
             # Bilgilendirme
             st.caption(
