@@ -132,18 +132,15 @@ except ImportError:
         """Fallback (paket yoksa no-op)."""
         return 0
 
-# v1.9.9 - Beni Hatirla: tarayici cookie persistence
-# v1.9.9.1 - streamlit-cookies-controller paketi async timing sorunlari yaratti
-# Bunun yerine localStorage tabanli JavaScript yontemi kullaniyoruz (daha guvenilir).
-# (streamlit_cookies_controller import'u kaldirildi - artik gerek yok)
-_COOKIE_OK = True  # localStorage her zaman erisilebilir
-
-# v1.9.9.5 - st.components.v1.html artik kullanilmiyor (deprecated)
-# Onceki versiyonlarda autocomplete attribute injection + localStorage JS icin
-# kullaniliyordu. v1.9.9.5'te bunlarin yerine:
-#   - Streamlit'in NATIVE text_input(autocomplete=...) parametresi
-#   - EncryptedCookieManager (sifreli persistent cookie)
-# kullanildigi icin _stc_v1 import'una gerek kalmadi.
+# v1.9.9.5.2 - Login persistence yaklasimi (final)
+# Onceki versiyonlarda (v1.9.9 - v1.9.9.5.1) cookie/localStorage/JS tabanli
+# 4 farkli yaklasim denendi; hepsi Streamlit Cloud iframe sandbox'inda
+# saglikli calismadi. Final pratik cozum:
+#   - st.text_input NATIVE autocomplete parametresi ile Edge/Chrome
+#     password manager iki alani da tek tikla doldurur
+#   - st.session_state ayni sekme acik kaldigi surece auth_token'i korur
+#   - DB sessions tablosu 90 gunluk token uretmeye devam ediyor (gelecekteki
+#     URL-token tabanli persistence icin altyapi hazir)
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
@@ -243,92 +240,19 @@ if _qp.get("trigger") == "email":
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# COOKIE MANAGER (v1.9.9.5)
+# v1.9.9.5.2 - LOGIN PERSISTENCE NOTU
 # ────────────────────────────────────────────────────────────────────────────
-# Login persistence: Encrypted cookie ile 90 gun otomatik giris.
-# Onemli sirali konum: HTTP trigger endpoint'in HEMEN SONRASI, render_auth_gate
-# ONCESI. Cron-job.org'un trigger isteklerinde cookie init'e gerek yok; bunlar
-# yukarida st.stop() ile tamamlanir. Sadece interaktif sayfa yuklenirken
-# cookies.ready() bekler.
-#
-# Sifreleme anahtari: Streamlit Cloud Secrets'taki COOKIES_PASSWORD.
-# Bu anahtar olmazsa fallback default kullanilir; o durumda cookie'ler
-# yine sifreli olur ama paylasilan domain'de baska app'lerden okunabilir.
-# Production icin Secrets'a uzun rastgele bir string yazilmalidir.
+# Cookie/localStorage/JS yontemleri (v1.9.9.x serisinde 4 farkli yaklasim
+# denendi) Streamlit Cloud iframe sandbox'inda saglikli calismadi. Browser
+# tabanli persistence yerine simdi tarayicinin kendi password manager'ina
+# guveniyoruz:
+#   - st.text_input(autocomplete=...) parametresi ile Edge/Chrome native
+#     autofill (email ve sifre kutularina tek tikla otomatik dolar)
+#   - Streamlit session_state ayni sekme acik kaldigi surece auth_token'i
+#     korur (sayfa icinde F5 sorun yaratmaz)
+#   - DB tarafindaki 90 gunluk sessions token uretmeye devam ediyor
+#     (gelecekte URL-token veya farkli mekanizmaya geciste hazir altyapi)
 # ════════════════════════════════════════════════════════════════════════════
-try:
-    from streamlit_cookies_manager import EncryptedCookieManager
-    _cookies_password = st.secrets.get(
-        "COOKIES_PASSWORD",
-        "tso-default-please-set-in-secrets-32chars-minimum-AAAA"
-    )
-    cookies = EncryptedCookieManager(
-        prefix="tso/",
-        password=_cookies_password,
-    )
-    # Cookie'ler tarayicidan asenkron geliyor. Hazir degilse render durdur.
-    if not cookies.ready():
-        st.stop()
-    _COOKIES_AVAILABLE = True
-except Exception as _ce:
-    # Paket yuklu degilse veya import hata verirse: graceful fallback
-    # (login form gosterilir, persistence calismaz, app yine de calisir)
-    print(f"[cookies] EncryptedCookieManager init hata: {_ce}")
-    cookies = None
-    _COOKIES_AVAILABLE = False
-
-
-# v1.9.9.5 - Cookie'den token recovery (auth gate render'indan ONCE)
-# Cookie'de auth_token varsa session_state'e koy → get_current_user DB'yi sorgular.
-# Token gecersizse (DB'de yok veya expired) get_current_user None doner ve normal
-# login akisi devam eder.
-if _COOKIES_AVAILABLE and "auth_token" not in st.session_state:
-    try:
-        _saved_tok = cookies.get("auth_token")
-        if _saved_tok:
-            st.session_state["auth_token"] = _saved_tok
-    except Exception as _cre:
-        import sys as _sys_cre
-        _sys_cre.stderr.write(f"[cookies] token recovery hata: {_cre}\n")
-        _sys_cre.stderr.flush()
-
-
-# v1.9.9.5.1 - DEFERRED COOKIE WRITE HANDLER
-# Login submit cookie'leri direkt yazamadi (st.rerun() JS senkronu kesiyordu).
-# Onun yerine session_state'e flag birakti; rerun sonrasi BURADA isleniyor.
-# Bu noktada EncryptedCookieManager init zaten browser ile senkron oldugu icin
-# cookies.save() guvenle persistant olur. Ardindan sayfa normal sekilde renderlar.
-if _COOKIES_AVAILABLE and "__pending_cookie_write__" in st.session_state:
-    import sys as _sys_dcw
-    _pending = st.session_state.pop("__pending_cookie_write__", None)
-    if _pending:
-        try:
-            cookies["auth_token"] = _pending["auth_token"]
-            cookies["rem_email"]  = _pending["rem_email"]
-            cookies.save()
-            _sys_dcw.stderr.write(
-                f"[auth] Cookie yazildi (deferred): token+email (90 gun)\n"
-            )
-            _sys_dcw.stderr.flush()
-        except Exception as _wre:
-            _sys_dcw.stderr.write(f"[auth] Deferred cookie write hata: {_wre}\n")
-            _sys_dcw.stderr.flush()
-
-
-# v1.9.9.5.1 - DEFERRED COOKIE DELETE HANDLER (logout icin ayni mantik)
-if _COOKIES_AVAILABLE and st.session_state.pop("__pending_cookie_clear__", False):
-    import sys as _sys_dcc
-    try:
-        if "auth_token" in cookies:
-            del cookies["auth_token"]
-        if "rem_email" in cookies:
-            del cookies["rem_email"]
-        cookies.save()
-        _sys_dcc.stderr.write("[auth] Cookie silindi (deferred): logout temizligi\n")
-        _sys_dcc.stderr.flush()
-    except Exception as _dle:
-        _sys_dcc.stderr.write(f"[auth] Deferred cookie delete hata: {_dle}\n")
-        _sys_dcc.stderr.flush()
 
 
 def _logo_html():
@@ -407,25 +331,20 @@ def render_auth_gate():
         tab_login, tab_register, tab_reset = st.tabs(["Giris Yap", "Kayit Ol", "Sifremi Unuttum"])
 
         with tab_login:
-            # v1.9.9.5 - st.form ile sarma + cookie-tabanli email recall
-            # form submit ile DOM'daki gercek values'i Streamlit'e iletir; React state
-            # senkronize degilse bile email/sifre dogru yakalanir.
-            # Email recall: artik JS+cookie hilesi yok, EncryptedCookieManager'dan
-            # dogrudan Python tarafinda okunuyor (rem_email cookie'si).
+            # v1.9.9.5.2 - Login form (cookie persistence kaldirildi)
+            # Form st.form ile sarili; submit DOM'daki gercek values'i Streamlit'e
+            # iletir, browser autofill ile uyumlu calisir. text_input'un native
+            # autocomplete parametresi sayesinde Edge/Chrome iki alani da otomatik
+            # doldurur (kayitli sifre varsa).
+            #
+            # Email recall: session_state'de tutuluyor (ayni sekme acik kaldigi
+            # surece korunur). Tarayicinin kendi password manager'i da email'i
+            # hatirlar; tarayici kapatilip acilsa bile autofill yine calisir.
+            _remembered_email = st.session_state.get("li_email_remembered", "")
 
-            # Email recall kaynagi: encrypted cookie (Python tarafi)
-            _remembered_email = ""
-            if _COOKIES_AVAILABLE:
-                try:
-                    _remembered_email = cookies.get("rem_email", "") or ""
-                except Exception:
-                    _remembered_email = ""
-
-            with st.form("login_form_v1995", clear_on_submit=False):
-                # v1.9.9.5 - Streamlit'in NATIVE autocomplete parametresi
-                # MutationObserver JS hack'i artik gerekli degil; st.text_input
-                # autocomplete attribute'unu dogrudan input element'ine yazar.
-                # Edge/Chrome password manager iki alani da otomatik tanir.
+            with st.form("login_form_v19952", clear_on_submit=False):
+                # Streamlit'in NATIVE autocomplete parametresi: Edge/Chrome
+                # password manager iki alani tek tikla doldurur.
                 email = st.text_input("E-posta", key="li_email",
                                       placeholder="ornek@gmail.com",
                                       value=_remembered_email,
@@ -433,32 +352,29 @@ def render_auth_gate():
                 pwd   = st.text_input("Sifre", type="password", key="li_pass",
                                       placeholder="Sifreniz",
                                       autocomplete="current-password")
-                remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
+                remember = st.checkbox(
+                    "Email'imi hatirla (bu tarayicida)",
+                    key="li_remember",
+                    value=True,
+                    help="Tarayicinizin sifre kaydet ozelligi aktifse, bir sonraki "
+                         "girisinizde email ve sifre kutulari otomatik dolar."
+                )
 
                 submitted = st.form_submit_button("Giris Yap", use_container_width=True)
 
             if submitted:
                 if email and pwd:
-                    # v1.9.9 - remember=True ise 90 gunluk DB token uretilir
+                    # DB tarafi: remember=True ise 90 gunluk session token uretilir
+                    # (gelecekte URL-token veya farkli persistence mekanizmasi
+                    # icin altyapi hazir). Browser session_state ayni sekme acik
+                    # kaldigi surece auth_token'i korur.
                     res = login_user(email, pwd, remember=remember)
                     if res["ok"]:
                         st.session_state["auth_token"] = res["token"]
-                        # v1.9.9.5.1 - DEFERRED COOKIE WRITE PATTERN
-                        # streamlit-cookies-manager-v2 paketi cookies.save() ile JS
-                        # frontend'e mesaj kuyruga atar, ancak senkronizasyon icin
-                        # bir Streamlit rerun cycle gerekir. st.rerun() bu cycle'i
-                        # kisa kestigi icin v1.9.9.5'te cookie hic yazilmadi.
-                        #
-                        # Cozum: cookie'leri burada degil, app baslangicinda yaz.
-                        # Login submit sadece session_state'e flag birakir; st.rerun()
-                        # sonrasi app yeniden basladiginda EncryptedCookieManager init
-                        # zaten browser ile senkron olmus oluyor, cookies.save() o
-                        # noktada guvenle ise yariyor.
-                        if remember and _COOKIES_AVAILABLE:
-                            st.session_state["__pending_cookie_write__"] = {
-                                "auth_token": res["token"],
-                                "rem_email":  email,
-                            }
+                        if remember:
+                            # Bir sonraki login formu acilisinda email kutusu
+                            # ayni sekme acik kaldigi surece dolu gelir.
+                            st.session_state["li_email_remembered"] = email
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -522,10 +438,9 @@ def render_auth_gate():
                         st.error(f"Hata: {_re}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-# v1.9.9.5 - Beni Hatirla artik EncryptedCookieManager ile yapiliyor.
-# Cookie'den token recovery yukarida (cookies.ready() sonrasi) yapildi.
-# Buradaki eski "remember_token" session-state hack'i artik gereksiz; ama eski
-# kullanicilarda kalmis olabilir diye bir kez senkron edip temizliyoruz.
+# v1.9.9.5.2 - Legacy "remember_token" senkronizasyonu
+# Eski versiyonlardan kalan session_state["remember_token"] varsa auth_token'a
+# kopyala. Boylece versiyon gecislerinde kullanicilar zorla logout edilmez.
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state.pop("remember_token", None)
 
@@ -1381,11 +1296,10 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v1.9.9.5.1 - DEFERRED COOKIE DELETE (login submit ile ayni mantik)
-        # cookies.save() st.rerun() oncesinde calismiyor; flag birakiyoruz,
-        # rerun sonrasi app baslangicinda cookie silinir.
-        if _COOKIES_AVAILABLE:
-            st.session_state["__pending_cookie_clear__"] = True
+        # v1.9.9.5.2 - Logout: DB token + session_state temizligi
+        # Email recall'u da temizliyoruz; cikis sonrasi bir baskasinin bu cihazi
+        # kullanacagi senaryoda email kutusunu eskisini gostermesin.
+        st.session_state.pop("li_email_remembered", None)
         logout()
         st.rerun()
 
