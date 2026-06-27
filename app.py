@@ -155,6 +155,12 @@ def _init_db_once():
 _init_db_once()  # Tablolari olustur ve Secrets'tan admin'i seed et (db.py icinde, 1 kez)
 from auth import get_current_user, login_user, register_user, logout
 from admin import render_admin_panel
+# v2.0 - Kar Realizasyonu Uyari Sistemi (alert_settings + peak_tracker tablolari Supabase'de)
+from alert_settings import (
+    load_alert_settings, save_alert_settings,
+    DEFAULTS as ALERT_DEFAULTS,
+    ALERT_MODES, EMIR_FORMULS,
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1294,6 +1300,128 @@ with st.sidebar:
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
+
+    # v2.0 - Kar Realizasyonu Uyarı Sistemi (Uyarı Ayarları)
+    # E-posta Ayarları'na paralel mantik: DB-tabanli, kullanici bazli, kalici.
+    # GitHub Actions workflow (peak_check.yml) bu ayarlari okuyup her kullanici
+    # icin uygun frekansta fiyat takibi yapar ve uyari maillerini kullanicinin
+    # KENDI e-posta adresine gonderir.
+    with st.expander("🔔 Uyarı Ayarları"):
+        _uid_for_alert = _cur_user.get("id") if _cur_user else None
+        if _uid_for_alert is None:
+            st.warning("Kullanıcı bilgisi alınamadı.")
+        else:
+            _acfg = load_alert_settings(_uid_for_alert)
+
+            # Sistem aktif/pasif
+            a_enabled = st.checkbox(
+                "Uyarı sistemi aktif",
+                value=_acfg["enabled"],
+                key="alert_enabled",
+                help="Kapalıyken hiçbir uyarı maili gönderilmez. Açıkken "
+                     "portföyünüzdeki varlıklar takip edilir."
+            )
+
+            # Threshold (düşüş eşiği) - hazır seçenekler + özel
+            _thr_choices = ["%2 (agresif)", "%3 (önerilen)", "%5 (rahat)", "Özel..."]
+            _cur_thr = float(_acfg["threshold_pct"])
+            if abs(_cur_thr - 2.0) < 0.01:   _thr_idx = 0
+            elif abs(_cur_thr - 3.0) < 0.01: _thr_idx = 1
+            elif abs(_cur_thr - 5.0) < 0.01: _thr_idx = 2
+            else:                            _thr_idx = 3
+
+            a_thr_pick = st.radio(
+                "Düşüş eşiği (peak'ten %)",
+                _thr_choices,
+                index=_thr_idx,
+                key="alert_thr_pick",
+                help="Peak fiyatına göre bu yüzde kadar düşüş olursa uyarı tetiklenir."
+            )
+            if a_thr_pick == "Özel...":
+                a_thr = st.slider("Özel eşik (%)", 0.5, 10.0, _cur_thr, 0.5,
+                                  key="alert_thr_custom")
+            elif a_thr_pick == "%2 (agresif)":
+                a_thr = 2.0
+            elif a_thr_pick == "%5 (rahat)":
+                a_thr = 5.0
+            else:
+                a_thr = 3.0
+
+            # Kar koşulu
+            a_kar_only = st.checkbox(
+                "Sadece kârdayken uyar",
+                value=_acfg["kar_only"],
+                key="alert_kar_only",
+                help="İşaretliyse: uyarı yalnızca güncel fiyat alış fiyatının üstündeyken "
+                     "gelir (kar realizasyonu). İşaretsizse: zararda olsa bile peak "
+                     "sonrası düşüşlerde uyarı gelir (stop-loss mantığı)."
+            )
+
+            # Kontrol sıklığı
+            _intv_labels = {15: "15 dk", 30: "30 dk", 60: "60 dk (saatlik)"}
+            _intv_keys   = list(_intv_labels.keys())
+            _cur_intv    = int(_acfg["check_interval_min"])
+            _intv_idx    = _intv_keys.index(_cur_intv) if _cur_intv in _intv_keys else 1
+            a_intv_lbl = st.radio(
+                "Kontrol sıklığı",
+                [_intv_labels[k] for k in _intv_keys],
+                index=_intv_idx,
+                key="alert_intv",
+                help="Sistemin fiyatları ne sıklıkta kontrol edeceği. "
+                     "Daha sık = daha hızlı uyarı, daha çok mail."
+            )
+            a_intv = _intv_keys[[_intv_labels[k] for k in _intv_keys].index(a_intv_lbl)]
+
+            # Uyarı modu (tekrar mantığı)
+            _mode_keys   = list(ALERT_MODES.keys())
+            _mode_labels = [ALERT_MODES[k] for k in _mode_keys]
+            _cur_mode    = _acfg["alert_mode"]
+            _mode_idx    = _mode_keys.index(_cur_mode) if _cur_mode in _mode_keys else 0
+            a_mode_lbl = st.selectbox(
+                "Uyarı tekrar mantığı",
+                _mode_labels,
+                index=_mode_idx,
+                key="alert_mode_sel",
+            )
+            a_mode = _mode_keys[_mode_labels.index(a_mode_lbl)]
+
+            # Tavsiye emir fiyatı formülü
+            _fml_keys   = list(EMIR_FORMULS.keys())
+            _fml_labels = [EMIR_FORMULS[k] for k in _fml_keys]
+            _cur_fml    = _acfg["emir_formul"]
+            _fml_idx    = _fml_keys.index(_cur_fml) if _cur_fml in _fml_keys else 0
+            a_fml_lbl = st.selectbox(
+                "Tavsiye emir fiyatı",
+                _fml_labels,
+                index=_fml_idx,
+                key="alert_fml_sel",
+            )
+            a_fml = _fml_keys[_fml_labels.index(a_fml_lbl)]
+
+            # Kaydet butonu
+            if st.button("Uyarı Ayarlarını Kaydet", key="alert_save",
+                         use_container_width=True):
+                ok = save_alert_settings(_uid_for_alert, {
+                    "threshold_pct":      float(a_thr),
+                    "kar_only":           bool(a_kar_only),
+                    "check_interval_min": int(a_intv),
+                    "alert_mode":         a_mode,
+                    "emir_formul":        a_fml,
+                    "enabled":            bool(a_enabled),
+                })
+                if ok:
+                    st.success("Uyarı ayarları kaydedildi. (Supabase'de kalıcı)")
+                else:
+                    st.error("Kaydetme hatası — loglara bakın.")
+
+            # Bilgilendirme
+            st.caption(
+                "ℹ Uyarı mailleri **sizin e-posta adresinize** gönderilir "
+                "(E-Posta Ayarları'ndaki alıcı). Yalnızca **portföyünüzdeki** "
+                "varlıklar takip edilir. Sistem hafta sonu sadece kripto varlıkları "
+                "için aktif çalışır (BIST/TEFAS/döviz piyasaları kapalı)."
+            )
+
     st.divider()
     if _cur_user.get("is_admin"):
         # v1.9.3 - Sistem Tanilama paneli (yavaslik teshisi icin)
