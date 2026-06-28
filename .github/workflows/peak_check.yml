@@ -1,0 +1,53 @@
+name: Peak Check Alert System
+
+on:
+  schedule:
+    # v2.0 Asama 4 - Her 15 dakikada bir tetiklen
+    # peak_check_standalone.py kullanici bazli check_interval_min ayarini
+    # okur ve sadece "su an kontrol zamani mi?" sorusuna evet diyenler icin
+    # peak/threshold kontrolu yapar. Hafta sonu sadece kripto uyarilari mail
+    # edilir (BIST/TEFAS/DOVIZ/MADEN piyasalari kapali).
+    #
+    # GitHub Actions cron gecikmesi tipik olarak 5-10 dk. peak_check_standalone
+    # icindeki _should_check_now fonksiyonu bu gecikmeye toleransli (10 dk).
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Interval/weekend kontrollerini atla (manuel test icin)'
+        type: boolean
+        default: false
+
+jobs:
+  peak-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas yfinance plotly streamlit requests pytefas bcrypt borsapy psycopg2-binary --quiet
+
+      - name: Check data file (informational)
+        run: |
+          if [ -f "optimized_universe.csv" ]; then
+            echo "CSV mevcut: $(wc -l < optimized_universe.csv) satir"
+            echo "BIST/MADEN/DOVIZ/KRIPTO icin borsapy ile live refresh uygulanacak."
+          else
+            echo "UYARI: optimized_universe.csv yok"
+          fi
+
+      - name: Run peak check
+        env:
+          SMTP_USER:          ${{ secrets.SMTP_USER }}
+          SMTP_PASS:          ${{ secrets.SMTP_PASS }}
+          SUPABASE_DB_URL:    ${{ secrets.SUPABASE_DB_URL }}
+          PEAK_CHECK_FORCE:   ${{ inputs.force || 'false' }}
+        run: python peak_check_standalone.py

@@ -38,7 +38,22 @@ def _get_user_email(user_id: int) -> str:
 
 
 def _get_smtp_config() -> dict:
-    """Streamlit Secrets'tan SMTP config."""
+    """SMTP config. Onceligi:
+       1) Env vars (SMTP_USER, SMTP_PASS) - GitHub Actions standalone modu
+       2) Streamlit Secrets [email] - Streamlit Cloud modu
+    """
+    import os
+    # 1) Env vars
+    env_user = os.environ.get("SMTP_USER", "").strip()
+    env_pass = os.environ.get("SMTP_PASS", "").strip()
+    if env_user and env_pass:
+        return {
+            "smtp_host": os.environ.get("SMTP_HOST", "smtp.gmail.com"),
+            "smtp_port": int(os.environ.get("SMTP_PORT", "587")),
+            "smtp_user": env_user,
+            "smtp_pass": env_pass,
+        }
+    # 2) Streamlit Secrets (Cloud modu)
     try:
         import streamlit as _st
         _s = _st.secrets.get("email", {})
