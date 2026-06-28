@@ -1418,32 +1418,49 @@ with st.sidebar:
                 else:
                     st.error("Kaydetme hatası — loglara bakın.")
 
-            st.divider()
-
-            # v2.0 asama 3a - Manuel Test butonu
-            # Mevcut portfoy + canli universe ile peak update ve threshold kontrol
-            # yapar. Mail GONDERMEZ - sadece "uyari bekleyen" tickerlari listeler.
-            # GitHub Actions workflow'u kurulmadan once mantigi test etmek icin.
+            # v2.0 asama 3a.2 - Manuel Test (autorefresh-safe)
+            # streamlit-autorefresh her 60 sn sayfayi yeniliyor. Buton state
+            # Streamlit'te sadece basildigi turda True doner, sonraki rerunlarda
+            # False. Bu yuzden sonuc render'i buton bloku DISINDA olmali,
+            # session_state'den okuyarak. Aksi halde kullanici sonucu goremez.
             st.caption("**Manuel Test** — Portföyünüzdeki varlıkların peak değerlerini "
                        "güncelleyip threshold kontrolü yapar. Mail gönderilmez.")
             if st.button("Şimdi Kontrol Et (Test)", key="alert_test_run",
                          use_container_width=True):
                 with st.spinner("Peak kontrol ediliyor..."):
-                    df_uni_test = load_universe()
-                    result = evaluate_user_alerts(_uid_for_alert, df_uni_test)
+                    try:
+                        df_uni_test = load_universe()
+                        _alert_res = evaluate_user_alerts(_uid_for_alert, df_uni_test)
+                        # Sonucu session_state'e koy, render buton DISINDA olacak
+                        from datetime import datetime as _dt_alert
+                        st.session_state["alert_test_result"] = _alert_res
+                        st.session_state["alert_test_ts"] = _dt_alert.now()
+                    except Exception as _ate:
+                        st.session_state["alert_test_error"] = str(_ate)
+                        st.session_state["alert_test_result"] = None
 
+            # Sonuc render'i (buton bloku DISINDA, session_state'den)
+            # autorefresh sayfayi yenilese bile bu blok her rerun'da calisir
+            # ve son sonucu gosterir.
+            _last_err = st.session_state.get("alert_test_error")
+            _last_res = st.session_state.get("alert_test_result")
+            _last_ts  = st.session_state.get("alert_test_ts")
+            if _last_err:
+                st.error(f"Test sirasinda hata: {_last_err}")
+            elif _last_res is not None and _last_ts is not None:
+                st.caption(f"Son kontrol: {_last_ts.strftime('%H:%M:%S')}")
                 st.success(
                     f"Kontrol tamamlandı: "
-                    f"{len(result['updated_peaks'])} peak güncellendi, "
-                    f"{len(result['alerts_pending'])} uyarı bekliyor, "
-                    f"{len(result['skipped'])} varlık atlandı."
+                    f"{len(_last_res['updated_peaks'])} peak güncellendi, "
+                    f"{len(_last_res['alerts_pending'])} uyarı bekliyor, "
+                    f"{len(_last_res['skipped'])} varlık atlandı."
                 )
 
                 # Uyari bekleyen tickerlari tablo halinde goster
-                if result["alerts_pending"]:
+                if _last_res["alerts_pending"]:
                     st.markdown("**Uyarı Bekleyen Varlıklar:**")
                     _alert_rows = []
-                    for a in result["alerts_pending"]:
+                    for a in _last_res["alerts_pending"]:
                         _alert_rows.append({
                             "Ticker":      a["ticker"],
                             "Kategori":    a["asset_type"],
@@ -1455,18 +1472,23 @@ with st.sidebar:
                             "Miktar":      f"{a['miktar']:.4f}",
                             "Toplam (TL)": f"{a['toplam_deger']:,.2f}",
                         })
-                    st.dataframe(_alert_rows, use_container_width=True, hide_index=True)
+                    if _alert_rows:
+                        st.dataframe(_alert_rows, use_container_width=True,
+                                     hide_index=True)
                 else:
                     st.caption("Şu an uyarı tetikleyen varlık yok.")
 
                 # Yeni peak yapan tickerlar
-                if result["updated_peaks"]:
-                    _peak_msgs = [f"{t} -> {p:.4f} ({s})" for t, p, s in result["updated_peaks"]]
+                if _last_res["updated_peaks"]:
+                    _peak_msgs = [
+                        f"{t} -> {p:.4f} ({s})"
+                        for t, p, s in _last_res["updated_peaks"]
+                    ]
                     st.caption("Peak güncellemeleri: " + ", ".join(_peak_msgs))
 
                 # Atlananlar
-                if result["skipped"]:
-                    _skip_msgs = [f"{t}: {r}" for t, r in result["skipped"]]
+                if _last_res["skipped"]:
+                    _skip_msgs = [f"{t}: {r}" for t, r in _last_res["skipped"]]
                     st.caption("Atlananlar: " + ", ".join(_skip_msgs))
 
             # Peak'leri Sifirla butonu
@@ -1479,6 +1501,10 @@ with st.sidebar:
                          use_container_width=True):
                 ok = reset_peaks_for_user(_uid_for_alert)
                 if ok:
+                    # Test sonucunu da temizle - eski peak kayitlari gosterilmesin
+                    st.session_state.pop("alert_test_result", None)
+                    st.session_state.pop("alert_test_ts", None)
+                    st.session_state.pop("alert_test_error", None)
                     st.success("Peak kayıtları sıfırlandı.")
                 else:
                     st.error("Sıfırlama hatası — loglara bakın.")
