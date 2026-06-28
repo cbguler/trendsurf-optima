@@ -165,6 +165,8 @@ from alert_settings import (
 from peak_tracker import (
     evaluate_user_alerts, get_user_peaks, reset_peaks_for_user,
 )
+# v2.0 asama 3b - Peak Alert Emailer (uyari maillerini gonderir)
+from peak_alert_emailer import send_peak_alert
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1475,6 +1477,44 @@ with st.sidebar:
                     if _alert_rows:
                         st.dataframe(_alert_rows, use_container_width=True,
                                      hide_index=True)
+
+                    # v2.0 asama 3b - Mail gonder butonu
+                    # Sadece alerts_pending doluyken gorunur. Mail basariyla
+                    # gonderildikten sonra her ticker icin mark_alert_sent
+                    # cagrilir, ayni peak icin tekrar mail gelmez.
+                    st.caption(
+                        f"**Bekleyen Uyarıları Mail Gönder** — Yukarıdaki "
+                        f"{len(_last_res['alerts_pending'])} uyarıyı e-posta "
+                        f"adresinize gönderir. Gönderim sonrası her ticker için "
+                        f"'alert sent' flag'i set edilir, aynı peak için tekrar "
+                        f"mail gelmez (uyarı modunuza göre)."
+                    )
+                    if st.button("Bekleyen Uyarıları Mail Gönder",
+                                 key="alert_send_email",
+                                 use_container_width=True):
+                        with st.spinner("Mail gönderiliyor..."):
+                            _alert_settings = load_alert_settings(_uid_for_alert)
+                            _mail_res = send_peak_alert(
+                                _uid_for_alert,
+                                _last_res["alerts_pending"],
+                                _alert_settings
+                            )
+                        if _mail_res.get("sent"):
+                            st.success(
+                                f"Mail gönderildi: {_mail_res.get('to')} adresine "
+                                f"{_mail_res.get('count')} uyarı "
+                                f"({_mail_res.get('marked', 0)} ticker için "
+                                f"alert flag set edildi)."
+                            )
+                            # Mail gonderildikten sonra test sonucunu temizle
+                            # (eski uyari bekliyor gibi gosterilmesin)
+                            st.session_state.pop("alert_test_result", None)
+                            st.session_state.pop("alert_test_ts", None)
+                        else:
+                            st.error(
+                                f"Mail gönderilemedi: "
+                                f"{_mail_res.get('reason', 'bilinmeyen hata')}"
+                            )
                 else:
                     st.caption("Şu an uyarı tetikleyen varlık yok.")
 
