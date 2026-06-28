@@ -13,6 +13,24 @@ st.set_page_config(page_title="TrendSurf Optima", page_icon="favicon.png", layou
 # CSS
 # ══════════════════════════════════════════════════════════════
 st.markdown("""<style>
+/* v2.0.1 - Stale (script running) opacity'yi GIZLE
+   Streamlit rerun sirasinda UI elemanlarini soluklastiriyordu (~50% opacity).
+   Autorefresh her 5 dakikada tetiklendigi icin kullanici bu bulanikligi
+   gormeye basliyordu. Bu CSS opacity'yi sabit 1.0'a kilitliyor, fade-out
+   efekti kayboluyor. Streamlit'in stale gostergesi gorsel ama hicbir
+   fonksiyonel anlam tasimiyor (data yeniden cekiliyor olsa bile UI gorunur).
+   Selektorler: hem element-container hem stApp ve block-container icin tum
+   olasi stale variantlarini hedefliyor. */
+[data-stale="true"],[data-test-stale="true"],
+.element-container[data-stale="true"],
+.stApp[data-test-script-state="running"] [data-stale="true"],
+.stApp[data-test-script-state="running"] .element-container,
+[data-testid="stAppViewContainer"][data-stale="true"],
+[data-testid="stSidebar"][data-stale="true"]{
+    opacity:1!important;
+    filter:none!important;
+    transition:none!important;
+}
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
 [data-testid="stSidebar"]{background:#d0e4ff!important;border-right:1px solid #e0eeff!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
@@ -1645,7 +1663,13 @@ df_uni=load_universe()
 # Cache hit oldugunda kullanici fark etmez, cache miss oldugunda yeni veri gelir.
 # Boylece kullanici hicbir buton tiklamadan portfoyundeki fiyatlari guncel gorur.
 if _AUTOREFRESH_OK:
-    _st_autorefresh(interval=60_000, key="trendsurf_auto_refresh", limit=None)
+    # v2.0.1 - Autorefresh interval 60sn -> 5dk
+    # Sebep: Her 60sn'de tum sayfa rerun ediliyor, bu da Streamlit'in stale
+    # opacity efektine yol acip kisa bulanikliga sebep oluyordu. 5dk daha
+    # makul: canli veri (BIST/kripto) zaten dakika hassasiyetinde degil,
+    # autorefresh esas amaci sidebar timestamp + manuel calismayan widget'lar
+    # icin gerekli minimum yenileme.
+    _st_autorefresh(interval=300_000, key="trendsurf_auto_refresh", limit=None)
 
 # v1.9.7.5 - Selective BIST refresh ACIL DEVRE DISI
 # Sebep: app sayfa render'inda selective refresh bazen takiliyor, sayfalar bos kaliyor

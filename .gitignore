@@ -29,3 +29,6 @@ venv/
 # Windows
 Thumbs.db
 desktop.ini
+# v2.0.1 - Hassas dosyalar
+.streamlit/secrets.toml
+trendsurfoptima-*.json
