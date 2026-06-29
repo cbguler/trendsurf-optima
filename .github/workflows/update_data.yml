@@ -1,34 +1,92 @@
 name: Veri Güncelle
 
+# v2.0.2 - Tam bagimsizlik refactor
+# Onceki versiyon: Sadece bos "streamlit refresh" commit'i atiyordu.
+# Worker.py Windows Task Scheduler'a tasinmisti (yfinance rate limit
+# kaygisi nedeniyle - eski memory). Sonuc: 13 Haziran'dan beri CSV
+# hic guncellenmedi, BIST fiyatlari bayatladi.
+#
+# Yeni versiyon: worker.py GitHub Actions ortaminda dogrudan calisir.
+# yfinance>=0.2.40 + borsapy hibrit yedek (live_data.py icinden) ile
+# rate limit problemi cozulmus durumda. Bilgisayar bagimliligi kaldirildi.
+#
+# Cron: TRT 04:00 (UTC 01:00). Bahri'nin tercihi - kullanici sabah
+# uyguladigi sayfayi actiginda veri zaten guncel.
+#
+# Fail-safe: worker.py basarisiz olursa workflow yine de yesil kalir
+# (timeout 30 dk - 770 BIST + TEFAS + kripto + doviz icin yeterli)
+
 on:
   schedule:
-    - cron: '0 2 * * *'   # Her gün 02:00 UTC = 05:00 TR (yaz saati)
-  workflow_dispatch:        # Manuel tetikleme butonu
+    - cron: '0 1 * * *'   # Her gun 01:00 UTC = 04:00 TRT
+  workflow_dispatch:       # Manuel tetikleme butonu
 
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+
+    permissions:
+      contents: write     # CSV'yi geri commit + push edebilmek icin
 
     steps:
       - name: Kodu indir
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0   # tam history (push icin)
 
-      - name: CSV varlık kontrolü
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas yfinance plotly streamlit requests pytefas \
+                      bcrypt borsapy psycopg2-binary openpyxl --quiet
+
+      - name: CSV oncesi durum
         run: |
           if [ -f "optimized_universe.csv" ]; then
             ROWS=$(wc -l < optimized_universe.csv)
-            echo "CSV mevcut: $ROWS satır"
+            FILE_DATE=$(stat -c %y optimized_universe.csv | cut -d' ' -f1)
+            echo "CSV mevcut: $ROWS satir (son guncelleme: $FILE_DATE)"
           else
-            echo "UYARI: optimized_universe.csv bulunamadı!"
+            echo "UYARI: optimized_universe.csv yok, worker olusturacak"
+          fi
+
+      - name: worker.py calistir (BIST + TEFAS + Kripto + Doviz + Maden)
+        run: |
+          echo "Worker baslatiliyor - $(date)"
+          python worker.py
+          echo "Worker tamamlandi - $(date)"
+        env:
+          TCMB_KEY: ${{ secrets.TCMB_KEY }}
+
+      - name: CSV sonrasi durum
+        run: |
+          if [ -f "optimized_universe.csv" ]; then
+            ROWS=$(wc -l < optimized_universe.csv)
+            echo "Worker sonrasi CSV: $ROWS satir"
+            head -1 optimized_universe.csv
+            echo "BIST orneklem (ilk 5 satir):"
+            grep "BIST," optimized_universe.csv | head -5
+          else
+            echo "HATA: worker CSV uretmedi!"
             exit 1
           fi
 
-      - name: Streamlit Cloud yenileme trigger
+      - name: CSV'yi commit + push et
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit --allow-empty -m "streamlit refresh $(date +'%Y-%m-%d %H:%M')"
-          git push
+          git add -f optimized_universe.csv
+          if git diff --cached --quiet; then
+            echo "Degisiklik yok - commit atlandi"
+          else
+            git commit -m "Veri guncelleme (otomatik) - $(date +'%Y-%m-%d %H:%M TRT')"
+            git push origin main
+            echo "CSV pushlandi"
+          fi
