@@ -43,12 +43,32 @@ IntegrityError = _PgIntegrityError
 # Connection string (Streamlit Secrets veya env) - v1.9.9.3 DEFANSIF
 # ============================================================================
 def _get_db_url() -> str:
-    """Streamlit Secrets'tan db_url'i al, yoksa env, yoksa bos string.
+    """db_url'i al. Sira: 1) env var, 2) Streamlit Secrets, 3) bos string.
 
-    v1.9.9.3 - Streamlit 1.58+ secrets API'sindeki davranis degisikligini
-    kompanse etmek icin multiple access pattern destekler. Hatalari logla.
+    v2.0.2 - Onceki versiyon Streamlit Secrets'i ONCE deniyordu, GitHub Actions
+    icin sorun: repo'ya kazara push edilmis .streamlit/secrets.toml [supabase]
+    bolumu olmadan duruyor; dict().get("db_url") None doner, str(None)='None'
+    (4 char string) truthy oldugu icin bu "gecersiz None" deger valid sanildi.
+    Yeni sira: env var ONCE -> GitHub Actions her zaman dogru oradan okur.
+    Streamlit Secrets sadece Streamlit Cloud'da fallback olarak kullanilir.
+
+    Helper: _valid_url(s) -> "None" string'i ve bos degerleri filtreler.
     """
-    # 1) Streamlit Secrets - bircok yol dene
+    def _valid_url(raw) -> str:
+        if raw is None:
+            return ""
+        s = str(raw).strip()
+        if not s or s.lower() in ("none", "null", "<none>"):
+            return ""
+        return s
+
+    # 1) Environment variable ONCE (GitHub Actions, Docker, lokal env vb.)
+    url = _valid_url(os.environ.get("SUPABASE_DB_URL", ""))
+    if url:
+        print(f"[db] _get_db_url: env SUPABASE_DB_URL OK (len={len(url)})", file=sys.stderr)
+        return url
+
+    # 2) Streamlit Secrets - bircok yol dene (Streamlit Cloud icin)
     try:
         import streamlit as st
 
@@ -57,7 +77,7 @@ def _get_db_url() -> str:
             if "supabase" in st.secrets:
                 sec_sup = st.secrets["supabase"]
                 if "db_url" in sec_sup:
-                    db_url = str(sec_sup["db_url"]).strip()
+                    db_url = _valid_url(sec_sup["db_url"])
                     if db_url:
                         print(f"[db] _get_db_url: secrets[supabase][db_url] OK (len={len(db_url)})", file=sys.stderr)
                         return db_url
@@ -69,8 +89,8 @@ def _get_db_url() -> str:
             sec = dict(st.secrets)
             sup = sec.get("supabase", {})
             if isinstance(sup, dict) or hasattr(sup, "get"):
-                db_url = (sup.get("db_url") if hasattr(sup, "get") else sup["db_url"])
-                db_url = str(db_url).strip()
+                raw = sup.get("db_url") if hasattr(sup, "get") else sup.get("db_url")
+                db_url = _valid_url(raw)
                 if db_url:
                     print(f"[db] _get_db_url: dict(secrets)[supabase][db_url] OK (len={len(db_url)})", file=sys.stderr)
                     return db_url
@@ -79,7 +99,7 @@ def _get_db_url() -> str:
 
         # Yol C: Top-level SUPABASE_DB_URL
         try:
-            db_url = str(st.secrets.get("SUPABASE_DB_URL", "")).strip()
+            db_url = _valid_url(st.secrets.get("SUPABASE_DB_URL", ""))
             if db_url:
                 print(f"[db] _get_db_url: secrets[SUPABASE_DB_URL] OK (len={len(db_url)})", file=sys.stderr)
                 return db_url
@@ -88,12 +108,6 @@ def _get_db_url() -> str:
 
     except Exception as e:
         print(f"[db] streamlit secrets erisilemez: {type(e).__name__}: {e}", file=sys.stderr)
-
-    # 2) Environment variable (GitHub Actions vb.)
-    url = os.environ.get("SUPABASE_DB_URL", "").strip()
-    if url:
-        print(f"[db] _get_db_url: env SUPABASE_DB_URL OK (len={len(url)})", file=sys.stderr)
-        return url
 
     print("[db] _get_db_url: HIC BIR YOL CALISMADI, bos string donduruluyor", file=sys.stderr)
     return ""
