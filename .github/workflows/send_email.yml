@@ -2,16 +2,24 @@ name: Scheduled Email Reports
 
 on:
   schedule:
-    # Bahri'nin istedigi saatler: hafta ici 09:00 ve 12:00 TRT (UTC+3).
-    # GitHub Actions free tier'da saat basi en yogun kuyruk; tipik gecikme
-    # 10-30 dk, agir saatlerde saatlerce surebilir. Iki taktik birden:
-    # (a) Cron'u planlanan saatten 10 dk onceden tetikle - gecikmeyi yut.
-    # (b) Saat dakikasini 0/30 yerine 7'lik off-peak'e ayarla.
+    # v2.0.2 - Her saat basi tetiklen (TRT 7/24)
+    # Bahri (veya baska kullanici) sidebar'daki E-Posta Ayarlari'ndan
+    # istedigi saati (00:00 - 23:00) secebilir. emailer_standalone.py kodu
+    # DB'den o kullanicinin saatlerini okur ve su anki TRT saati eslesirse
+    # mail gonderir, eslesmezse sessizce cikar.
     #
-    # 09:00 TRT (06:00 UTC) icin -> 08:50 TRT yani 05:50 UTC -> "50 5 * * 1-5"
-    # 12:00 TRT (09:00 UTC) icin -> 11:50 TRT yani 08:50 UTC -> "50 8 * * 1-5"
-    - cron: "50 5 * * 1-5"
-    - cron: "50 8 * * 1-5"
+    # Onceki versiyon: "50 5 * * 1-5" ve "50 8 * * 1-5" SABIT saatler
+    # ile tetikleniyordu (09:00 ve 12:00 icin 10 dk onceden). Bu kullaniciyi
+    # 2 saate kilitliyordu. Artik herhangi bir saati secebilir.
+    #
+    # GitHub Actions cron her zaman tam saatte tetiklenmez (5-15 dk gecikme
+    # tipiktir). Bu sebeple cron 0. dakikada tanimli; kod 'now_hour' kismina
+    # (saat HH) bakar, dakikayi gozardi eder. Yani saat 09:00 secen kullanici
+    # icin 09:00-09:59 araliginda gelen ilk cron mail gonderir, sonraki cron
+    # (10:00) artik now_hour=10 oldugu icin atlanir.
+    #
+    # Free tier kullanim: 24 tetikleme/gun x ~45sn = ~18 dk/gun = ~540 dk/ay
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -46,12 +54,6 @@ jobs:
           EMAIL_ADDRESS:    ${{ secrets.EMAIL_ADDRESS }}
           SMTP_USER:        ${{ secrets.SMTP_USER }}
           SMTP_PASS:        ${{ secrets.SMTP_PASS }}
-          # v1.9.0: Supabase'den portfoy okumak icin (Streamlit Cloud ile ayni DB)
           SUPABASE_DB_URL:  ${{ secrets.SUPABASE_DB_URL }}
-          # v1.9.0: Hangi kullanicinin portfoyu cekilecek (admin email)
           ADMIN_EMAIL:      ${{ secrets.ADMIN_EMAIL }}
-          # Opsiyonel - default 20000/Orta/10
-          # REPORT_BUDGET: 20000
-          # REPORT_RISK: "Orta"
-          # REPORT_MAX_ASSETS: 10
         run: python emailer_standalone.py
