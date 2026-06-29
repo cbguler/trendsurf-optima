@@ -65,7 +65,7 @@ try:
         rename_existing_maden,
         extend_maden_universe,
         refresh_fx_maden_kripto,
-        refresh_bist,
+        refresh_bist_selective,
         BORSAPY_OK,
     )
     n0 = len(df_uni)
@@ -77,18 +77,20 @@ try:
         df_uni = extend_maden_universe(df_uni)
         n2 = len(df_uni)
         df_uni = refresh_fx_maden_kripto(df_uni)
-        # BIST canli refresh: GitHub Actions container'inda network kisitlamasi
-        # yok, Streamlit Cloud iframe sandbox sorunu burada gecerli degil.
-        # Bahri'nin karari: BIST gun ici peak takibi YAPILSIN.
-        df_uni = refresh_bist(df_uni)
-        print(f"[2/4] live_data: {n0} -> filter -> {n1} -> extend -> {n2} -> overlay+BIST (borsapy aktif)")
+        # v2.0.2 optimizasyon: BIST icin refresh_bist (770 hisse, 17 dk!)
+        # cagrisini KALDIRDIK. Asagidaki "BIST selective refresh" bolumunde
+        # sadece aktif kullanicilarin portfoyundeki BIST hisseleri canli
+        # yenilenecek (genellikle 5-15 hisse, 1-3 saniye).
+        print(f"[2/4] live_data: {n0} -> filter -> {n1} -> extend -> {n2} -> overlay (borsapy aktif, BIST selective sonra)")
     else:
         print(f"[2/4] UYARI: borsapy yok, sadece filter+rename uygulandi ({n1} satir)")
 except ImportError as e:
     print(f"[2/4] HATA: live_data import edilemedi ({e}) - CSV'yi oldugu gibi kullaniyoruz")
+    refresh_bist_selective = None
 except Exception as e:
     print(f"[2/4] HATA: live_data hatasi (yok sayilir): {type(e).__name__}: {e}")
     traceback.print_exc()
+    refresh_bist_selective = None
 
 if df_uni.empty:
     print("[done] df_uni bos - kontrol yapilamiyor, cikiliyor")
@@ -110,6 +112,43 @@ except Exception as e:
 if not user_ids:
     print("[done] Aktif kullanici yok - cikiliyor")
     sys.exit(0)
+
+
+# ----------------------------------------------------------------------------
+# 2.5. BIST SELECTIVE REFRESH (v2.0.2 optimizasyon)
+# ----------------------------------------------------------------------------
+# Eski mantik: refresh_bist tum 770 BIST hisselerini cekiyordu -> 17 dakika!
+# Yeni mantik: Sadece aktif kullanicilarin portfoyundeki BIST hisselerini
+# canli refresh et. Genellikle 5-15 ticker -> 1-3 saniye.
+#
+# Buradan onceki [2/4] adiminda refresh_bist_selective import edildi
+# (basarisizsa None set edildi).
+if refresh_bist_selective is not None and not df_uni.empty:
+    try:
+        from db import get_conn
+        conn = get_conn()
+        placeholders = ",".join("?" * len(user_ids))
+        rows = conn.execute(
+            f"SELECT DISTINCT ticker FROM portfolio WHERE user_id IN ({placeholders})",
+            user_ids
+        ).fetchall()
+        # Tum portfoy ticker'lari (kategori farketmez)
+        all_portfolio_tickers = {str(r[0]).strip() for r in rows if r and r[0]}
+
+        # Sadece BIST kategorisinde olanlarla kesisim
+        bist_in_uni = set(
+            df_uni[df_uni["Kategori"] == "BIST"]["Ticker"].dropna().astype(str)
+        )
+        user_bist_tickers = sorted(all_portfolio_tickers & bist_in_uni)
+
+        if user_bist_tickers:
+            print(f"[2.5/4] BIST selective refresh: {len(user_bist_tickers)} ticker -> {user_bist_tickers[:8]}{'...' if len(user_bist_tickers) > 8 else ''}")
+            df_uni = refresh_bist_selective(df_uni, user_bist_tickers)
+        else:
+            print(f"[2.5/4] BIST selective refresh: kullanici portfoylerinde BIST ticker yok, atlandi")
+    except Exception as e:
+        print(f"[2.5/4] HATA: BIST selective refresh basarisiz (yok sayilir): {type(e).__name__}: {e}")
+        traceback.print_exc()
 
 
 # ----------------------------------------------------------------------------
