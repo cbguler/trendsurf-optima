@@ -918,13 +918,15 @@ def enrich(row,period="1y"):
                     else:
                         vol_trend = "NORMAL"
 
-                    # Skor duzeltmesi: hacim + trend kombinasyonu
+                    # v2.0.3.1: Skor duzeltmesi (hacim + trend kombinasyonu) - agresif
                     if trend == "YUKSELIS" and vol_trend == "ARTIYOR":
-                        score_adj = +3   # Saglikli yukselis
+                        score_adj = +5   # Saglikli yukselis - guclu onay
                     elif trend == "YUKSELIS" and vol_trend == "AZALIYOR":
-                        score_adj = -5   # Supheli yukselis (hacim zayif)
+                        score_adj = -10  # Supheli yukselis (hacim zayif)
                     elif trend == "DUSUS" and vol_trend == "ARTIYOR":
-                        score_adj = -2   # Guclu dusus onayi
+                        score_adj = -3   # Panik satis onayi
+                    elif trend == "DUSUS" and vol_trend == "AZALIYOR":
+                        score_adj = +2   # Dusus bitiyor olabilir
 
     final_score = max(0, min(100, round(base_score + score_adj, 1)))
 
@@ -1010,13 +1012,20 @@ def candle_fig(hist, ticker):
             else:
                 fig.add_trace(ma50_trace)
 
-        # v2.0.3: Hacim cubuklari (tek renk - lacivert)
+        # v2.0.3.1: Hacim cubuklari (mum rengiyle - mavi yukselen/lacivert dusen)
         if has_volume:
+            # Her gun icin yon: close >= open -> yukselen (mavi), aksi -> dusen (lacivert)
+            _up_color   = "#3b7dd8"   # mavi - yukselen gun
+            _down_color = "#1b2a4a"   # lacivert - dusen gun
+            _bar_colors = [
+                _up_color if (c >= o) else _down_color
+                for c, o in zip(hist["Close"], hist["Open"])
+            ]
             fig.add_trace(go.Bar(
                 x=hist.index, y=hist["Volume"],
                 name="Hacim",
-                marker=dict(color="#2c3e6b"),
-                opacity=0.7,
+                marker=dict(color=_bar_colors),
+                opacity=0.75,
                 showlegend=False
             ), row=2, col=1)
     else:
@@ -2379,6 +2388,67 @@ elif page=="Portföyüm":
                 if _fig: st.plotly_chart(_fig, use_container_width=True)
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
+
+            # v2.0.3.1: BIST varligi icin Temel Analiz blogu (kategori sayfasiyla ayni mantik)
+            _sel_cat = str(_sr["Kategori"])
+            if _sel_cat == "BIST":
+                st.divider()
+                st.subheader("Temel Analiz")
+                try:
+                    from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
+                                            score_from_fundamentals, get_kap_url)
+                    _kap_url = get_kap_url(_sel_tkr)
+
+                    with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
+                        _raw  = fetch_kap_fundamentals(_sel_tkr)
+                        _disp = fundamentals_to_display(_raw)
+                        _fund_skor = score_from_fundamentals(_raw, float(_sr["Son_Fiyat"]))
+
+                    _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
+                    _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
+                    _combined = max(0, min(100, round(_tech_with_fund + _d.get("score_adj", 0), 1)))
+                    _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
+
+                    # Kaynak bilgisi
+                    _src_note = "yfinance"
+                    if _raw.get("_kap_available"):
+                        _src_note += " + KAP"
+                    elif _raw.get("_kap_note"):
+                        _src_note += f" | KAP: {_raw['_kap_note']}"
+                    st.caption(f"Kaynak: {_src_note}")
+
+                    if _kap_url:
+                        st.caption(f"[KAP Finansal Bilgiler Sayfası]({_kap_url})")
+
+                    _ka, _kb = st.columns([2, 1])
+                    with _ka:
+                        _rows_html = "".join(
+                            f"<tr><td>{k}</td><td><b>{v}</b></td></tr>"
+                            for k, v in _disp.items()
+                        )
+                        st.markdown(
+                            f'<table class="kap-table">{_rows_html}</table>',
+                            unsafe_allow_html=True
+                        )
+                    with _kb:
+                        st.markdown('<div class="ts-card">', unsafe_allow_html=True)
+                        st.markdown("**Skor Bileşimi**")
+                        _clr = SIG_COLORS.get(_final_cls, "#666")
+                        st.markdown(f"""
+                        <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{_d['score']:.1f} / 70</b><br><br>
+                        <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{_fund_skor:.1f} / 30</b><br>
+                        <hr style='border-color:#e0e8f4;margin:10px 0'>
+                        <small style='color:#6c7a9c'>Master Skor</small><br>
+                        <b style='font-size:30px;color:{_clr}'>{_combined}</b> <small>/100</small><br><br>
+                        <span class="ts-sig {_final_cls}">{_final_lbl}</span>
+                        """, unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                except Exception as e:
+                    st.warning(f"Temel analiz yüklenemedi: {e}")
+                    st.info("Kontrol: `pip install yfinance` kurulu mu?")
 
     st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
 
