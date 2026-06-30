@@ -2146,17 +2146,30 @@ elif page=="Portföyüm":
             _skor = 0.0
         _toplam = _adet * _guncel
         _kz_pct = ((_guncel/_alis-1)*100) if _alis>0 else 0.0
+
+        # v2.0.3: Sinyal etiketi (hizli yontem - CSV verisi, yfinance cagrisi yok)
+        # Trend tahmini: Ret1M >= 0 ise YUKSELIS, degilse DUSUS
+        # (Detay panelinde MA20'ye gore daha hassas hesaplaniyor)
+        if not _match.empty:
+            _rsi_v = _sf(_row.get("RSI"), 50.0)
+            _ret1m_v = _sf(_row.get("Ret1M"), 0.0)
+            _trend_v = "YUKSELIS" if _ret1m_v >= 0 else "DUSUS"
+            _sig_lbl, _ = get_signal(_skor, _rsi_v, _trend_v)
+        else:
+            _sig_lbl = "—"
+
         _id_map[_tkr + "_" + str(pos["id"])] = pos["id"]
         _pf_rows.append({
             "Ticker":       _tkr,
             "Tarih":        _tg,
             "Miktar":       _adet,
             "Birim":        _unit,
-            "Alış (TL)":    _alis,
-            "Güncel (TL)":  _guncel,
-            "Toplam (TL)":  _toplam,
-            "K/Z (%)":      _kz_pct,
-            "Optima Skor":  _skor,
+            "Alış":         _alis,
+            "Güncel":       _guncel,
+            "Toplam":       _toplam,
+            "K/Z %":        _kz_pct,
+            "Skor":         _skor,
+            "Sinyal":       _sig_lbl,
             "_id":          pos["id"],
         })
 
@@ -2164,7 +2177,7 @@ elif page=="Portföyüm":
     df_pf = _pd2.DataFrame(_pf_rows)
     df_show = df_pf.drop(columns=["_id"])
 
-    # st.dataframe — BIST formatıyla aynı
+    # st.dataframe — Daraltilmis sutunlar + Sinyal eklendi
     _event = st.dataframe(
         df_show,
         use_container_width=True,
@@ -2172,18 +2185,30 @@ elif page=="Portföyüm":
         on_select="rerun",
         selection_mode="single-row",
         column_config={
-            "Miktar":      st.column_config.NumberColumn(format="%.4f"),
-            "Alış (TL)":  st.column_config.NumberColumn(format="%.4f"),
-            "Güncel (TL)":st.column_config.NumberColumn(format="%.4f"),
-            "Toplam (TL)":st.column_config.NumberColumn(format="%.2f"),
-            "K/Z (%)":    st.column_config.NumberColumn(format="%+.2f%%"),
-            "Optima Skor":st.column_config.NumberColumn(format="%.1f"),
+            "Ticker": st.column_config.TextColumn(width="small"),
+            "Tarih":  st.column_config.TextColumn(width="small"),
+            "Miktar": st.column_config.NumberColumn(
+                format="%.4f", width="small"),
+            "Birim":  st.column_config.TextColumn(width="small"),
+            "Alış":   st.column_config.NumberColumn(
+                format="%.4f", width="small", help="Alış fiyatı (TL)"),
+            "Güncel": st.column_config.NumberColumn(
+                format="%.4f", width="small", help="Güncel piyasa fiyatı (TL)"),
+            "Toplam": st.column_config.NumberColumn(
+                format="%.2f", width="small", help="Pozisyon toplam değeri (TL)"),
+            "K/Z %":  st.column_config.NumberColumn(
+                format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
+            "Skor":   st.column_config.NumberColumn(
+                format="%.1f", width="small", help="Optima Skoru (0-100)"),
+            "Sinyal": st.column_config.TextColumn(
+                width="medium",
+                help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
         }
     )
 
     # Toplam satırı
-    _total_val = df_pf["Toplam (TL)"].sum()
-    _total_kz  = (df_pf["Toplam (TL)"] - df_pf["Miktar"]*df_pf["Alış (TL)"]).sum()
+    _total_val = df_pf["Toplam"].sum()
+    _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
     _tcs = "+" if _total_kz>=0 else ""
     st.markdown(
