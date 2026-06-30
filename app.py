@@ -2566,10 +2566,10 @@ elif page=="Portföyüm":
                             unsafe_allow_html=True
                         )
                     with _kb:
-                        st.markdown('<div class="ts-card">', unsafe_allow_html=True)
-                        st.markdown("**Skor Bileşimi**")
                         _clr = SIG_COLORS.get(_final_cls, "#666")
                         st.markdown(f"""
+                        <div class="ts-card">
+                        <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                         <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
                         <b style='font-size:20px;color:#1b2a4a'>{_d['score']:.1f} / 70</b><br><br>
                         <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
@@ -2578,8 +2578,8 @@ elif page=="Portföyüm":
                         <small style='color:#6c7a9c'>Master Skor</small><br>
                         <b style='font-size:30px;color:{_clr}'>{_combined}</b> <small>/100</small><br><br>
                         <span class="ts-sig {_final_cls}">{_final_lbl}</span>
+                        </div>
                         """, unsafe_allow_html=True)
-                        st.markdown("</div>", unsafe_allow_html=True)
 
                 except Exception as e:
                     st.warning(f"Temel analiz yüklenemedi: {e}")
@@ -2793,10 +2793,10 @@ elif page in CAT:
                     unsafe_allow_html=True
                 )
             with kb:
-                st.markdown('<div class="ts-card">', unsafe_allow_html=True)
-                st.markdown("**Skor Bileşimi**")
                 clr = SIG_COLORS.get(final_cls, "#666")
                 st.markdown(f"""
+                <div class="ts-card">
+                <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                 <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
                 <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
                 <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
@@ -2805,8 +2805,8 @@ elif page in CAT:
                 <small style='color:#6c7a9c'>Master Skor</small><br>
                 <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
                 <span class="ts-sig {final_cls}">{final_lbl}</span>
+                </div>
                 """, unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
 
         except Exception as e:
             st.warning(f"Temel analiz yüklenemedi: {e}")
