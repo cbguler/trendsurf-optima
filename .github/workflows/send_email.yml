@@ -1,25 +1,22 @@
 name: Scheduled Email Reports
 
+# v2.0.3 - Yedekli cron tetiklemeleri (her 15 dakikada bir)
+# Onceki versiyon: "0 * * * *" (her saat basi, 24/gun) - GitHub free tier
+# tarafindan %83 oraninda skip ediliyordu, mail bazen hic gelmiyordu.
+#
+# Yeni versiyon: Her saat 4 farkli dakikada tetikleme (XX:00, XX:15, XX:30,
+# XX:45). En az birinin tutturma sansi cok yuksek.
+#
+# emailer_standalone.py v2.0.3 ile duplicate guard eklendi (email_send_log
+# tablosu). Yani XX:00'da mail gondersek, XX:15'de tekrar gondermez:
+# "[duplicate-guard] bugun bu saatte zaten gonderildi -> atlandi"
+
 on:
   schedule:
-    # v2.0.2 - Her saat basi tetiklen (TRT 7/24)
-    # Bahri (veya baska kullanici) sidebar'daki E-Posta Ayarlari'ndan
-    # istedigi saati (00:00 - 23:00) secebilir. emailer_standalone.py kodu
-    # DB'den o kullanicinin saatlerini okur ve su anki TRT saati eslesirse
-    # mail gonderir, eslesmezse sessizce cikar.
-    #
-    # Onceki versiyon: "50 5 * * 1-5" ve "50 8 * * 1-5" SABIT saatler
-    # ile tetikleniyordu (09:00 ve 12:00 icin 10 dk onceden). Bu kullaniciyi
-    # 2 saate kilitliyordu. Artik herhangi bir saati secebilir.
-    #
-    # GitHub Actions cron her zaman tam saatte tetiklenmez (5-15 dk gecikme
-    # tipiktir). Bu sebeple cron 0. dakikada tanimli; kod 'now_hour' kismina
-    # (saat HH) bakar, dakikayi gozardi eder. Yani saat 09:00 secen kullanici
-    # icin 09:00-09:59 araliginda gelen ilk cron mail gonderir, sonraki cron
-    # (10:00) artik now_hour=10 oldugu icin atlanir.
-    #
-    # Free tier kullanim: 24 tetikleme/gun x ~45sn = ~18 dk/gun = ~540 dk/ay
     - cron: "0 * * * *"
+    - cron: "15 * * * *"
+    - cron: "30 * * * *"
+    - cron: "45 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -46,7 +43,6 @@ jobs:
             echo "BIST/MADEN/DOVIZ/KRIPTO icin borsapy ile live refresh uygulanacak."
           else
             echo "UYARI: optimized_universe.csv yok"
-            echo "BIST/TEFAS bolumleri bos olabilir; DOVIZ+MADEN+KRIPTO borsapy'den gelir."
           fi
 
       - name: Send email report
