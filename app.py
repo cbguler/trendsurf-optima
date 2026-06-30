@@ -894,6 +894,14 @@ def enrich(row,period="1y"):
     vol_ratio = 0.0     # son5gun_ort / son20gun_ort
     score_adj = 0       # skor duzeltmesi (+/- puan)
 
+    # v2.0.3.2: 52H, MA50, Max Drawdown
+    week52_high = None
+    week52_low = None
+    week52_pct = None      # su anki fiyat 52H Yuksek'e yakinlik yuzdesi (0-100)
+    ma50_val = None
+    max_dd = None          # son 1Y maksimum drawdown yuzdesi (negatif sayi)
+    dd_adj = 0             # Max DD icin skor cezasi
+
     if not hist.empty:
         pr=hist["Close"].dropna() if "Close" in hist.columns else hist.iloc[:,0].dropna()
         live_rsi=calc_rsi(pr); last=float(pr.iloc[-1])
@@ -902,6 +910,33 @@ def enrich(row,period="1y"):
         ret3m=round((last/float(pr.iloc[-66])-1)*100,2) if len(pr)>=66 else 0.0
         live_vol=round(float(pr.pct_change().std()*np.sqrt(252)*100),1) if len(pr)>5 else csv_vol
         macd_v,macd_s=calc_macd(pr)
+
+        # v2.0.3.2: MA50
+        if len(pr)>=50:
+            ma50_val = float(pr.rolling(50).mean().iloc[-1])
+
+        # v2.0.3.2: 52H Yuksek / Dusuk (son 252 gun, yoksa tum data)
+        win = pr.tail(252) if len(pr) >= 252 else pr
+        if len(win) >= 20:
+            week52_high = float(win.max())
+            week52_low  = float(win.min())
+            _spread = week52_high - week52_low
+            if _spread > 0:
+                # Su anki fiyatin 52H aralıgındaki konumu (0=dip, 100=tepe)
+                week52_pct = round((last - week52_low) / _spread * 100, 1)
+
+        # v2.0.3.2: Maksimum Drawdown (son 252 gun)
+        if len(win) >= 20:
+            cummax = win.cummax()
+            dd_series = (win - cummax) / cummax * 100
+            max_dd = round(float(dd_series.min()), 1)
+            # Skor cezasi (Cevap B = B2)
+            if max_dd < -70:
+                dd_adj = -7
+            elif max_dd < -50:
+                dd_adj = -3
+            else:
+                dd_adj = 0
 
         # v2.0.3: Hacim trendi analizi
         if "Volume" in hist.columns and len(hist) >= 20:
@@ -928,11 +963,17 @@ def enrich(row,period="1y"):
                     elif trend == "DUSUS" and vol_trend == "AZALIYOR":
                         score_adj = +2   # Dusus bitiyor olabilir
 
-    final_score = max(0, min(100, round(base_score + score_adj, 1)))
+    # v2.0.3.2: Toplam skor duzeltmesi (hacim + Max DD)
+    total_adj = score_adj + dd_adj
+    final_score = max(0, min(100, round(base_score + total_adj, 1)))
 
     return dict(hist=hist,rsi=csv_rsi,trend=trend,ret1m=csv_ret1m,ret3m=ret3m,
                 vol=csv_vol,score=final_score,base_score=base_score,
-                score_adj=score_adj,vol_trend=vol_trend,vol_ratio=vol_ratio,
+                score_adj=score_adj,dd_adj=dd_adj,total_adj=total_adj,
+                vol_trend=vol_trend,vol_ratio=vol_ratio,
+                week52_high=week52_high,week52_low=week52_low,week52_pct=week52_pct,
+                ma20=float(hist["Close"].rolling(20).mean().iloc[-1]) if (not hist.empty and "Close" in hist.columns and len(hist)>=20) else None,
+                ma50=ma50_val,max_dd=max_dd,
                 macd=macd_v,macd_sig=macd_s,
                 live_rsi=live_rsi,live_vol=live_vol)
 
@@ -1065,6 +1106,86 @@ def candle_fig(hist, ticker):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=0, r=0, t=30, b=0))
     return fig
+
+
+def render_teknik_gostergeler(d, son_fiyat):
+    """v2.0.3.2: Detay panelinde Teknik Gostergeler tablosu (expander icinde).
+
+    d: enrich() ciktisi (dict)
+    son_fiyat: float - mevcut fiyat (52H yakinliği icin)
+
+    Expander varsayilan kapali; kullanici "Goster"e tiklarsa acilir.
+    Sutunlar: Gosterge | Deger
+    """
+    def _fmt(v, fmt="{:.4f}"):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "—"
+        try:
+            return fmt.format(float(v))
+        except Exception:
+            return "—"
+
+    # 52H yakinlik etiketi
+    w52h_str = _fmt(d.get("week52_high"))
+    w52l_str = _fmt(d.get("week52_low"))
+    w52_pct = d.get("week52_pct")
+    if w52_pct is not None and d.get("week52_high"):
+        if w52_pct >= 90:
+            w52_note = f"<span style='color:#27ae60;font-size:11px'>(tepeye %{w52_pct:.0f} yakin)</span>"
+        elif w52_pct <= 10:
+            w52_note = f"<span style='color:#e74c3c;font-size:11px'>(dipe %{100-w52_pct:.0f} yakin)</span>"
+        else:
+            w52_note = f"<span style='color:#6c7a9c;font-size:11px'>(araliktaki konum: %{w52_pct:.0f})</span>"
+        w52h_full = f"{w52h_str} ₺ {w52_note}"
+    else:
+        w52h_full = f"{w52h_str} ₺" if w52h_str != "—" else "—"
+
+    # Max DD - renkli
+    max_dd = d.get("max_dd")
+    if max_dd is not None:
+        dd_clr = "#e74c3c" if max_dd < -50 else "#f39c12" if max_dd < -30 else "#27ae60"
+        dd_adj = d.get("dd_adj", 0)
+        adj_note = f" <span style='color:{dd_clr};font-size:11px'>({dd_adj:+d} skor)</span>" if dd_adj != 0 else ""
+        dd_str = f"<span style='color:{dd_clr}'><b>{max_dd:.1f}%</b></span>{adj_note}"
+    else:
+        dd_str = "—"
+
+    # MA20/MA50 - MA20'ye gore trend
+    ma20_val = d.get("ma20")
+    ma50_val = d.get("ma50")
+    if ma20_val is not None:
+        ma20_clr = "#27ae60" if son_fiyat >= ma20_val else "#e74c3c"
+        ma20_str = f"<span style='color:{ma20_clr}'><b>{_fmt(ma20_val)} ₺</b></span>"
+    else:
+        ma20_str = "—"
+    if ma50_val is not None:
+        ma50_clr = "#27ae60" if son_fiyat >= ma50_val else "#e74c3c"
+        ma50_str = f"<span style='color:{ma50_clr}'><b>{_fmt(ma50_val)} ₺</b></span>"
+    else:
+        ma50_str = "—"
+
+    rows = [
+        ("MA20 (Trend Cizgisi)",     ma20_str),
+        ("MA50",                      ma50_str),
+        ("52H Yüksek",                w52h_full),
+        ("52H Düşük",                 f"{w52l_str} ₺" if w52l_str != "—" else "—"),
+        ("Max Drawdown (1Y)",         dd_str),
+        ("MACD",                      _fmt(d.get("macd"), "{:.4f}")),
+    ]
+
+    table_html = '<table class="kap-table" style="margin-top:6px">'
+    for k, v in rows:
+        table_html += f"<tr><td style='width:45%'>{k}</td><td>{v}</td></tr>"
+    table_html += '</table>'
+
+    with st.expander("Teknik Göstergeleri Göster", expanded=False):
+        st.markdown(table_html, unsafe_allow_html=True)
+        st.caption(
+            "MA: Hareketli Ortalama (fiyat MA'nın üzerinde = yukseliş trendi). "
+            "52H: Son 1 yılın en yüksek ve en düşük noktaları. "
+            "Max Drawdown: Tepe noktasından en derin dip noktasına düşüş yüzdesi. "
+            "MACD: Momentum göstergesi."
+        )
 
 
 
@@ -2378,11 +2499,25 @@ elif page=="Portföyüm":
                     f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
                 )
 
+            # v2.0.3.2: Max DD cezasi bilgisi (kullaniciya hatirlat)
+            _dd_html = ""
+            if _d.get("dd_adj", 0) != 0:
+                _dd_val = _d.get("max_dd")
+                _dd_clr = "#e74c3c"
+                _dd_html = (
+                    f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
+                    f'<b style="color:{_dd_clr}">({_d["dd_adj"]:+d} skor)</b>'
+                )
+
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}
+        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}{_dd_html}
       </span></div>''', unsafe_allow_html=True)
+
+            # v2.0.3.2: Teknik Gostergeler expander
+            render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
+
             if not _d["hist"].empty:
                 _fig = candle_fig(_d["hist"],_sel_tkr)
                 if _fig: st.plotly_chart(_fig, use_container_width=True)
@@ -2406,7 +2541,7 @@ elif page=="Portföyüm":
 
                     _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
                     _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
-                    _combined = max(0, min(100, round(_tech_with_fund + _d.get("score_adj", 0), 1)))
+                    _combined = max(0, min(100, round(_tech_with_fund + _d.get("total_adj", _d.get("score_adj", 0)), 1)))
                     _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
 
                     # Kaynak bilgisi
@@ -2587,15 +2722,27 @@ elif page in CAT:
             f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
         )
 
+    # v2.0.3.2: Max DD cezasi bilgisi
+    dd_html = ""
+    if d.get("dd_adj", 0) != 0:
+        _dd_val = d.get("max_dd")
+        dd_html = (
+            f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{_dd_val:.1f}%</b> '
+            f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
+        )
+
     st.markdown(f"""
     <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
       <span class="ts-sig {sig_cls}">{sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
         Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
         Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{d['macd']:.4f}</b>{vol_html}
+        MACD: <b>{d['macd']:.4f}</b>{vol_html}{dd_html}
       </span>
     </div>""",unsafe_allow_html=True)
+
+    # v2.0.3.2: Teknik Gostergeler expander
+    render_teknik_gostergeler(d, float(sel_row["Son_Fiyat"]))
 
     # Mum grafiği
     if not d["hist"].empty:
@@ -2621,7 +2768,7 @@ elif page in CAT:
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
             # v2.0.3: Temel analiz primi + hacim duzeltmesi
             _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-            combined = max(0, min(100, round(_tech_with_fund + d.get("score_adj", 0), 1)))
+            combined = max(0, min(100, round(_tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi
