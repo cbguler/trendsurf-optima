@@ -1,25 +1,24 @@
 name: Veri Güncelle
 
-# v2.0.2 - Tam bagimsizlik refactor
-# Onceki versiyon: Sadece bos "streamlit refresh" commit'i atiyordu.
-# Worker.py Windows Task Scheduler'a tasinmisti (yfinance rate limit
-# kaygisi nedeniyle - eski memory). Sonuc: 13 Haziran'dan beri CSV
-# hic guncellenmedi, BIST fiyatlari bayatladi.
+# v2.0.3 - 02:00 TRT (yedekli cron tetikleme)
+# Onceki versiyon: "0 1 * * *" (TRT 04:00) - GitHub free tier 04:00 yerine
+# 07:59'da tetikledi (4 saat gecikme). Bahri'nin BIST acilisi (10:00) icin
+# verinin guncel olmasi gerekiyor.
 #
-# Yeni versiyon: worker.py GitHub Actions ortaminda dogrudan calisir.
-# yfinance>=0.2.40 + borsapy hibrit yedek (live_data.py icinden) ile
-# rate limit problemi cozulmus durumda. Bilgisayar bagimliligi kaldirildi.
+# Yeni versiyon: 02:00 TRT (UTC 23:00 onceki gun) - gece yarisindan sonra
+# GitHub Actions yogunlugu cok daha az, skip ihtimali dusuk.
+# Yedekli iki cron: 02:00 ve 03:00 - en kotu ihtimalle 03:00'de calisir,
+# 10:00 BIST acilisina kadar bol bol zaman var.
 #
-# Cron: TRT 04:00 (UTC 01:00). Bahri'nin tercihi - kullanici sabah
-# uyguladigi sayfayi actiginda veri zaten guncel.
-#
-# Fail-safe: worker.py basarisiz olursa workflow yine de yesil kalir
-# (timeout 30 dk - 770 BIST + TEFAS + kripto + doviz icin yeterli)
+# Eger her iki cron tutarsa: ilki CSV'yi gunceller + push eder. Ikincisi
+# "Degisiklik yok - commit atlandi" der (worker.py ayni veriyi uretir,
+# git diff bos). Sorun yok.
 
 on:
   schedule:
-    - cron: '0 1 * * *'   # Her gun 01:00 UTC = 04:00 TRT
-  workflow_dispatch:       # Manuel tetikleme butonu
+    - cron: '0 23 * * *'   # UTC 23:00 = TRT 02:00 - Birincil
+    - cron: '0 0 * * *'    # UTC 00:00 = TRT 03:00 - Yedek
+  workflow_dispatch:
 
 jobs:
   update:
@@ -27,14 +26,14 @@ jobs:
     timeout-minutes: 30
 
     permissions:
-      contents: write     # CSV'yi geri commit + push edebilmek icin
+      contents: write
 
     steps:
       - name: Kodu indir
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN }}
-          fetch-depth: 0   # tam history (push icin)
+          fetch-depth: 0
 
       - name: Python kurulum
         uses: actions/setup-python@v5
