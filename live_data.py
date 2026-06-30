@@ -701,7 +701,11 @@ def refresh_bist_selective(df: pd.DataFrame, tickers: list) -> pd.DataFrame:
 # Tarihsel veri (OHLC) - app.py'deki _CROSS blogunu degistirir
 # ----------------------------------------------------------------------------
 def _normalize_ohlc(h) -> pd.DataFrame:
-    """borsapy'den gelen DataFrame'i Open/High/Low/Close standartina indirge."""
+    """borsapy'den gelen DataFrame'i Open/High/Low/Close[+Volume] standartina indirge.
+
+    v2.0.3: Volume kolonu varsa korunur (KRIPTO icin BtcTurk 24h hacim verir).
+    DOVIZ/MADEN icin Volume genelde yoktur veya 0'dir.
+    """
     if h is None or len(h) == 0:
         return pd.DataFrame()
     cols_lower = {c.lower(): c for c in h.columns}
@@ -709,9 +713,15 @@ def _normalize_ohlc(h) -> pd.DataFrame:
     out_cols = [cols_lower[w] for w in want if w in cols_lower]
     if len(out_cols) != 4:
         return pd.DataFrame()
+    # v2.0.3: Volume varsa ekle (opsiyonel)
+    if "volume" in cols_lower:
+        out_cols.append(cols_lower["volume"])
     out = h[out_cols].copy()
-    out.columns = ["Open", "High", "Low", "Close"]
-    out = out.dropna()
+    new_names = ["Open", "High", "Low", "Close"]
+    if "volume" in cols_lower:
+        new_names.append("Volume")
+    out.columns = new_names
+    out = out.dropna(subset=["Open", "High", "Low", "Close"])
     return out
 
 
@@ -735,7 +745,9 @@ def get_fx_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
         if not out.empty:
             divisor = _PER_N_UNITS.get(ticker.upper())
             if divisor and divisor != 1.0:
-                out = out / divisor
+                # v2.0.3: Volume varsa o satiri bolme (sadece OHLC bolunmeli)
+                ohlc_cols = [c for c in ["Open","High","Low","Close"] if c in out.columns]
+                out[ohlc_cols] = out[ohlc_cols] / divisor
         return out
     except Exception:
         return pd.DataFrame()

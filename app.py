@@ -775,7 +775,11 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
             _sym = _format_yf_symbol(ticker, category)
             _h = yf.Ticker(_sym).history(period=period, auto_adjust=True)
             if not _h.empty and len(_h) >= 5:
-                return _h[["Open","High","Low","Close"]].dropna()
+                # v2.0.3: Volume varsa ekle
+                _cols = ["Open","High","Low","Close"]
+                if "Volume" in _h.columns:
+                    _cols.append("Volume")
+                return _h[_cols].dropna(subset=["Open","High","Low","Close"])
         except Exception:
             pass
         return pd.DataFrame()
@@ -790,7 +794,11 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
         import yfinance as yf
         h = yf.Ticker(sym).history(period=period, auto_adjust=True)
         if not h.empty and len(h) >= 5:
-            return h[["Open", "High", "Low", "Close"]].dropna()
+            # v2.0.3: Volume varsa ekle (hacim subplot icin)
+            cols = ["Open", "High", "Low", "Close"]
+            if "Volume" in h.columns:
+                cols.append("Volume")
+            return h[cols].dropna(subset=["Open","High","Low","Close"])
     except Exception:
         pass
     return pd.DataFrame()
@@ -865,17 +873,27 @@ def enrich(row,period="1y"):
     (worker.py'nin yazdığı) RSI / Ret1M / Vol değerlerinden hesaplanır —
     optimizasyon tablosuyla birebir aynı.
     Grafik ve güncel teknik görünüm (MA20 trendi, MACD) histten gelir.
+
+    v2.0.3: Hacim trendi analizi (BIST/KRIPTO icin).
+    Hacim azalirken fiyat yukseliyorsa zayif onay -> skor cezasi.
+    Hacim artiyor + fiyat yukseliyorsa saglikli yukselis -> skor primi.
     """
     t=str(row["Ticker"]); cat=str(row["Kategori"]); yfs=str(row.get("YF_Symbol",""))
-    # CSV verileri — skorun TEK kaynağı
+    # CSV verileri — skorun TEK kaynağı (ham)
     csv_rsi   = float(row.get("RSI",50))
     csv_ret1m = float(row.get("Ret1M",0))
     csv_vol   = float(row.get("Vol",30) or 30)
-    score     = optima_score(csv_rsi, csv_ret1m, csv_vol)
+    base_score = optima_score(csv_rsi, csv_ret1m, csv_vol)
 
     hist=get_hist(t,yfs,cat,period)
     trend,ret3m,macd_v,macd_s="YUKSELIS" if csv_ret1m>=0 else "DUSUS",0.0,0.0,0.0
     live_rsi, live_vol = csv_rsi, csv_vol
+
+    # v2.0.3: Hacim trendi
+    vol_trend = "YOK"   # YOK / ARTIYOR / AZALIYOR / NORMAL
+    vol_ratio = 0.0     # son5gun_ort / son20gun_ort
+    score_adj = 0       # skor duzeltmesi (+/- puan)
+
     if not hist.empty:
         pr=hist["Close"].dropna() if "Close" in hist.columns else hist.iloc[:,0].dropna()
         live_rsi=calc_rsi(pr); last=float(pr.iloc[-1])
@@ -884,8 +902,36 @@ def enrich(row,period="1y"):
         ret3m=round((last/float(pr.iloc[-66])-1)*100,2) if len(pr)>=66 else 0.0
         live_vol=round(float(pr.pct_change().std()*np.sqrt(252)*100),1) if len(pr)>5 else csv_vol
         macd_v,macd_s=calc_macd(pr)
+
+        # v2.0.3: Hacim trendi analizi
+        if "Volume" in hist.columns and len(hist) >= 20:
+            vol_series = hist["Volume"].fillna(0)
+            if vol_series.sum() > 0:
+                last5_avg = float(vol_series.tail(5).mean())
+                last20_avg = float(vol_series.tail(20).mean())
+                if last20_avg > 0:
+                    vol_ratio = last5_avg / last20_avg
+                    if vol_ratio >= 1.2:
+                        vol_trend = "ARTIYOR"
+                    elif vol_ratio <= 0.8:
+                        vol_trend = "AZALIYOR"
+                    else:
+                        vol_trend = "NORMAL"
+
+                    # Skor duzeltmesi: hacim + trend kombinasyonu
+                    if trend == "YUKSELIS" and vol_trend == "ARTIYOR":
+                        score_adj = +3   # Saglikli yukselis
+                    elif trend == "YUKSELIS" and vol_trend == "AZALIYOR":
+                        score_adj = -5   # Supheli yukselis (hacim zayif)
+                    elif trend == "DUSUS" and vol_trend == "ARTIYOR":
+                        score_adj = -2   # Guclu dusus onayi
+
+    final_score = max(0, min(100, round(base_score + score_adj, 1)))
+
     return dict(hist=hist,rsi=csv_rsi,trend=trend,ret1m=csv_ret1m,ret3m=ret3m,
-                vol=csv_vol,score=score,macd=macd_v,macd_sig=macd_s,
+                vol=csv_vol,score=final_score,base_score=base_score,
+                score_adj=score_adj,vol_trend=vol_trend,vol_ratio=vol_ratio,
+                macd=macd_v,macd_sig=macd_s,
                 live_rsi=live_rsi,live_vol=live_vol)
 
 def clickable_table(df_show, key, sel_ticker=""):
@@ -918,39 +964,97 @@ def clickable_table(df_show, key, sel_ticker=""):
 
 
 def candle_fig(hist, ticker):
+    """v2.0.3: Mum grafigi + opsiyonel hacim subplot.
+
+    Volume kolonu varsa (BIST/KRIPTO) altta tek-renk hacim cubuklari gosterilir.
+    DOVIZ/MADEN/TEFAS'ta Volume yok -> eski tek-panel davranis korunur.
+    """
     if not HAS_PLOTLY or hist.empty: return None
     has_ohlc = all(c in hist.columns for c in ["Open","High","Low","Close"])
     use_candle = has_ohlc and len(hist) >= 5 and (hist["High"] - hist["Low"]).sum() > 0
-    fig = go.Figure()
+
+    # v2.0.3: Hacim var mi? (sadece anlamliysa subplot olusturalim)
+    has_volume = (use_candle and "Volume" in hist.columns
+                  and hist["Volume"].fillna(0).sum() > 0)
+
+    if has_volume:
+        from plotly.subplots import make_subplots
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            row_heights=[0.75, 0.25], vertical_spacing=0.03)
+    else:
+        fig = go.Figure()
+
     if use_candle:
-        fig.add_trace(go.Candlestick(
+        candle_trace = go.Candlestick(
             x=hist.index, open=hist.Open, high=hist.High,
             low=hist.Low, close=hist.Close, name=ticker,
             increasing_line_color="#00732f", decreasing_line_color="#b71c1c",
-            increasing_fillcolor="#e8f9ee", decreasing_fillcolor="#fde8e8"))
+            increasing_fillcolor="#e8f9ee", decreasing_fillcolor="#fde8e8")
+        if has_volume:
+            fig.add_trace(candle_trace, row=1, col=1)
+        else:
+            fig.add_trace(candle_trace)
+
         if len(hist) >= 20:
-            fig.add_trace(go.Scatter(x=hist.index, y=hist.Close.rolling(20).mean(),
-                name="MA20", line=dict(color="#1b2a4a", width=1.5, dash="dot")))
+            ma20_trace = go.Scatter(x=hist.index, y=hist.Close.rolling(20).mean(),
+                name="MA20", line=dict(color="#1b2a4a", width=1.5, dash="dot"))
+            if has_volume:
+                fig.add_trace(ma20_trace, row=1, col=1)
+            else:
+                fig.add_trace(ma20_trace)
         if len(hist) >= 50:
-            fig.add_trace(go.Scatter(x=hist.index, y=hist.Close.rolling(50).mean(),
-                name="MA50", line=dict(color="#f4a300", width=1.5, dash="dash")))
+            ma50_trace = go.Scatter(x=hist.index, y=hist.Close.rolling(50).mean(),
+                name="MA50", line=dict(color="#f4a300", width=1.5, dash="dash"))
+            if has_volume:
+                fig.add_trace(ma50_trace, row=1, col=1)
+            else:
+                fig.add_trace(ma50_trace)
+
+        # v2.0.3: Hacim cubuklari (tek renk - lacivert)
+        if has_volume:
+            fig.add_trace(go.Bar(
+                x=hist.index, y=hist["Volume"],
+                name="Hacim",
+                marker=dict(color="#2c3e6b"),
+                opacity=0.7,
+                showlegend=False
+            ), row=2, col=1)
     else:
         col = "Close" if "Close" in hist.columns else hist.columns[0]
         if hist[col].nunique() < 2:
             return None
-        fig.add_trace(go.Scatter(x=hist.index, y=hist[col], name=ticker,
+        line_trace = go.Scatter(x=hist.index, y=hist[col], name=ticker,
             line=dict(color="#1b2a4a", width=2),
-            fill="tozeroy", fillcolor="rgba(27,42,74,.07)"))
+            fill="tozeroy", fillcolor="rgba(27,42,74,.07)")
+        fig.add_trace(line_trace)
+
     # Y ekseni — fiyat aralığını otomatik ayarla (normalize 0-100 görünümünü engelle)
     close_col = hist["Close"] if "Close" in hist.columns else hist.iloc[:, 0]
     y_min = float(close_col.min()) * 0.995
     y_max = float(close_col.max()) * 1.005
-    fig.update_layout(height=380, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
-        xaxis=dict(showgrid=True, gridcolor="#eef0f7", rangeslider=dict(visible=False)),
-        yaxis=dict(showgrid=True, gridcolor="#eef0f7",
-                   range=[y_min, y_max], autorange=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
-        margin=dict(l=0, r=0, t=30, b=0))
+
+    if has_volume:
+        # 2 satirli subplot duzeni
+        fig.update_layout(
+            height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
+            margin=dict(l=0, r=0, t=30, b=0))
+        fig.update_xaxes(showgrid=True, gridcolor="#eef0f7",
+                         rangeslider=dict(visible=False), row=1, col=1)
+        fig.update_xaxes(showgrid=True, gridcolor="#eef0f7", row=2, col=1)
+        fig.update_yaxes(showgrid=True, gridcolor="#eef0f7",
+                         range=[y_min, y_max], autorange=False, row=1, col=1)
+        fig.update_yaxes(showgrid=True, gridcolor="#eef0f7",
+                         title_text="Hacim", title_font=dict(size=10, color="#6c7a9c"),
+                         row=2, col=1)
+    else:
+        # Tek panel duzeni (DOVIZ/MADEN/TEFAS)
+        fig.update_layout(height=380, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
+            xaxis=dict(showgrid=True, gridcolor="#eef0f7", rangeslider=dict(visible=False)),
+            yaxis=dict(showgrid=True, gridcolor="#eef0f7",
+                       range=[y_min, y_max], autorange=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
+            margin=dict(l=0, r=0, t=30, b=0))
     return fig
 
 
@@ -2251,10 +2355,24 @@ elif page=="Portföyüm":
             _m4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
             _m5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
             _sc = SIG_COLORS.get(_sig_cls,"#666")
+
+            # v2.0.3: Hacim trendi bilgisi (varsa)
+            _vol_html = ""
+            if _d.get("vol_trend","YOK") != "YOK":
+                _vt = _d["vol_trend"]
+                _vr = _d.get("vol_ratio", 0.0)
+                _adj = _d.get("score_adj", 0)
+                _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+                _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+                _vol_html = (
+                    f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
+                    f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+                )
+
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>
+        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}
       </span></div>''', unsafe_allow_html=True)
             if not _d["hist"].empty:
                 _fig = candle_fig(_d["hist"],_sel_tkr)
@@ -2385,13 +2503,27 @@ elif page in CAT:
     r5.metric("Yıllık Vol %",f"{d['vol']:.1f}%")
 
     sig_color=SIG_COLORS.get(sig_cls,"#666")
+
+    # v2.0.3: Hacim trendi bilgisi (varsa)
+    vol_html = ""
+    if d.get("vol_trend","YOK") != "YOK":
+        _vt = d["vol_trend"]
+        _vr = d.get("vol_ratio", 0.0)
+        _adj = d.get("score_adj", 0)
+        _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+        _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+        vol_html = (
+            f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
+            f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+        )
+
     st.markdown(f"""
     <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
       <span class="ts-sig {sig_cls}">{sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
         Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
         Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{d['macd']:.4f}</b>
+        MACD: <b>{d['macd']:.4f}</b>{vol_html}
       </span>
     </div>""",unsafe_allow_html=True)
 
@@ -2417,8 +2549,9 @@ elif page in CAT:
                 fund_skor = score_from_fundamentals(raw, float(sel_row["Son_Fiyat"]))
 
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
-            combined = min(100, round(
-                optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy), 1))
+            # v2.0.3: Temel analiz primi + hacim duzeltmesi
+            _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
+            combined = max(0, min(100, round(_tech_with_fund + d.get("score_adj", 0), 1)))
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi
