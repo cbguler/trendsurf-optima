@@ -1,16 +1,30 @@
 name: Peak Check Alert System
 
+# v2.0.3 - Akilli cron schedule (BIST yogun saatlerinde daha sik)
+# Onceki versiyon: "*/15 * * * *" (her 15 dakikada bir, 7/24)
+# Yeni versiyon: BIST aktif saatlerinde (TRT 10:00-18:00 hafta ici) yogun,
+# diger zamanlarda kripto icin daha seyrek tetikleme.
+#
+# Hesap:
+# - BIST yogun: 18 tetikleme/gun (10:00, 10:30, 11:00 ... 18:30) x 5/7 = ~64/hafta
+# - Diger saatler/gunler: 12 tetikleme/gun (2 saatte bir) x 7 = 84/hafta
+# - Toplam: ~148/hafta x 4.3 = ~636 tetikleme/ay x 1.5 dk = ~954 dk/ay
+# - Free tier 2000 dk - rahat altinda.
+#
+# Yedekli cron tetiklemeleri: her bir slot icin 2 dakika offset ile yedek
+# (XX:00 ve XX:02). GitHub skip ihtimaline karsi.
+# Peak alert flag mekanizmasi (alert_sent_for_current_peak) zaten duplicate
+# mail engelliyor - yedekli cron sorun olmaz.
+
 on:
   schedule:
-    # v2.0 Asama 4 - Her 15 dakikada bir tetiklen
-    # peak_check_standalone.py kullanici bazli check_interval_min ayarini
-    # okur ve sadece "su an kontrol zamani mi?" sorusuna evet diyenler icin
-    # peak/threshold kontrolu yapar. Hafta sonu sadece kripto uyarilari mail
-    # edilir (BIST/TEFAS/DOVIZ/MADEN piyasalari kapali).
-    #
-    # GitHub Actions cron gecikmesi tipik olarak 5-10 dk. peak_check_standalone
-    # icindeki _should_check_now fonksiyonu bu gecikmeye toleransli (10 dk).
-    - cron: "*/15 * * * *"
+    # BIST aktif saatleri: TRT 10:00-18:30 hafta ici (Pzt-Cum) - her 30 dk
+    # UTC karsiligi: 07:00-15:30 (yaz saati TR = UTC+3)
+    - cron: "0,30 7-15 * * 1-5"
+    - cron: "2,32 7-15 * * 1-5"   # Yedek (2 dk offset)
+    # Diger saatler ve hafta sonu: kripto + flag set kullanicilar - her 2 saatte
+    - cron: "0 0-6,16-23 * * *"   # UTC 00-06 ve 16-23 (TRT 03-09 ve 19-02)
+    - cron: "0 */2 * * 6,0"        # Hafta sonu her 2 saatte
   workflow_dispatch:
     inputs:
       force:
