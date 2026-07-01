@@ -1,5 +1,6 @@
 """TrendSurf Optima — Terminal v5 | streamlit run app.py"""
 import streamlit as st, pandas as pd, numpy as np, os, json, base64, time
+import streamlit.components.v1 as components
 
 try:
     import plotly.graph_objects as go, plotly.express as px
@@ -276,6 +277,64 @@ def _logo_html():
                 b64=base64.b64encode(f.read()).decode()
             return f'<div style="text-align:center;padding:6px 0 2px 0;"><img src="data:image/png;base64,{b64}" style="width:150px;"></div>'
     return '<div style="font-size:16px;font-weight:800;color:#fff;padding:8px 0;">TrendSurf Optima</div>'
+
+def _logo_splash_html():
+    """v2.0.3.5: Giris aninda 2 kez oynayan hareketli logo, sonra statik logoya doner.
+
+    Video assets/logo_animated.mp4 dosyasindan CALISMA ZAMANINDA okunup base64'e
+    cevrilir - koda gomulu (hardcoded) degil, repo'da ayri bir dosya olarak kalir.
+    Video yoksa None doner, cagiran yer statik logoya duser (guvenli fallback).
+    """
+    video_path = None
+    for p in ["assets/logo_animated.mp4", "logo_animated.mp4"]:
+        if os.path.exists(p):
+            video_path = p
+            break
+    if not video_path:
+        return None
+
+    try:
+        with open(video_path, "rb") as f:
+            vid_b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return None
+
+    # Statik logo (video bitince gecis yapilacak hedef)
+    img_tag = ""
+    for p in ["logo.png","Logo.png","LOGO.PNG"]:
+        if os.path.exists(p):
+            with open(p,"rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            img_tag = f'<img id="logoImgStatic" src="data:image/png;base64,{img_b64}" style="width:150px;display:none;">'
+            break
+
+    return f"""
+    <style>html,body{{margin:0;padding:0;background:#d0e4ff;}}</style>
+    <div style="text-align:center;padding:6px 0 2px 0;background:#d0e4ff;">
+      <video id="logoVidSplash" width="150" autoplay muted playsinline
+             style="display:block;margin:0 auto;">
+        <source src="data:video/mp4;base64,{vid_b64}" type="video/mp4">
+      </video>
+      {img_tag}
+    </div>
+    <script>
+      const vid = document.getElementById('logoVidSplash');
+      const img = document.getElementById('logoImgStatic');
+      let playCount = 0;
+      if (vid) {{
+        vid.addEventListener('ended', function() {{
+          playCount++;
+          if (playCount < 2) {{
+            vid.currentTime = 0;
+            vid.play();
+          }} else {{
+            vid.style.display = 'none';
+            if (img) {{ img.style.display = 'block'; }}
+          }}
+        }});
+      }}
+    </script>
+    """
 
 SVG_LOGO = '<div style="font-size:15px;font-weight:800;color:#fff;">TrendSurf Optima</div>'
 
@@ -1447,7 +1506,16 @@ def save_email_cfg(cfg, user_id=None):
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown(_logo_html(),unsafe_allow_html=True)
+    # v2.0.3.5: Sadece login aninda 2 kez oynayan hareketli logo, sonra statik logo
+    if not st.session_state.get("logo_splash_played", False):
+        st.session_state["logo_splash_played"] = True
+        _splash_html = _logo_splash_html()
+        if _splash_html:
+            components.html(_splash_html, height=100)
+        else:
+            st.markdown(_logo_html(), unsafe_allow_html=True)
+    else:
+        st.markdown(_logo_html(), unsafe_allow_html=True)
     # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
     # v1.9.7.4 - Saat damgasi TRT (Europe/Istanbul), UTC yerine
     import datetime as _dt_now
@@ -2166,41 +2234,15 @@ if page=="Ana Sayfa":
                 r5.metric("Yillik Vol %", f"{d['vol']:.1f}%")
 
                 sig_color = SIG_COLORS.get(sig_cls, "#666")
-
-                # v2.0.3.4: Hacim trendi bilgisi (varsa)
-                vol_html_ana = ""
-                if d.get("vol_trend","YOK") != "YOK":
-                    _vt = d["vol_trend"]
-                    _vr = d.get("vol_ratio", 0.0)
-                    _adj = d.get("score_adj", 0)
-                    _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-                    _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
-                    vol_html_ana = (
-                        f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
-                        f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
-                    )
-
-                # v2.0.3.4: Max DD cezasi bilgisi
-                dd_html_ana = ""
-                if d.get("dd_adj", 0) != 0:
-                    _dd_val = d.get("max_dd")
-                    dd_html_ana = (
-                        f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{_dd_val:.1f}%</b> '
-                        f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
-                    )
-
                 st.markdown(f"""
                 <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
                   <span class="ts-sig {sig_cls}">{sig_lbl}</span>
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
                     Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
                     Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
-                    MACD: <b>{d['macd']:.4f}</b>{vol_html_ana}{dd_html_ana}
+                    MACD: <b>{d['macd']:.4f}</b>
                   </span>
                 </div>""", unsafe_allow_html=True)
-
-                # v2.0.3.4: Teknik Gostergeler expander (diger sayfalarla tutarli)
-                render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
                     fig = candle_fig(d["hist"], sel_ana)
@@ -2224,10 +2266,9 @@ if page=="Ana Sayfa":
                                 raw, float(sel_row_ana["Son_Fiyat"]))
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
-                        # v2.0.3.4: Diger sayfalarla tutarli formul (teknik+temel primli skor + hacim/DD ayari)
-                        _tech_with_fund_ana = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-                        combined = max(0, min(100, round(
-                            _tech_with_fund_ana + d.get("total_adj", d.get("score_adj", 0)), 1)))
+                        # Master Skor: ana Optima Skoru (%70) + temel skor (%30)
+                        # Ana skor tabloda gösterilen skorla AYNI — tutarlılık korunur
+                        combined = min(100, round(d["score"] * 0.70 + fund_skor, 1))
                         final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
                         src_note = "yfinance"
                         if raw.get("_kap_available"): src_note += " + KAP"
@@ -2245,10 +2286,10 @@ if page=="Ana Sayfa":
                             clr = SIG_COLORS.get(final_cls, "#666")
                             st.markdown(f"""
                             <div class="ts-card">
-                            <b style='font-size:14px'>Skor Bileşimi</b><br><br>
-                            <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
-                            <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
+                            <b>Skor Bilesimi</b><br><br>
+                            <small style='color:#6c7a9c'>Optima Skoru (tabloyla ayni)</small><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 100</b><br><br>
+                            <small style='color:#6c7a9c'>Temel Skor</small><br>
                             <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
                             <hr style='border-color:#e0e8f4;margin:10px 0'>
                             <small style='color:#6c7a9c'>Master Skor</small><br>

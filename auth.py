@@ -110,6 +110,7 @@ def get_current_user():
 
 def logout():
     token = st.session_state.pop("auth_token", None)
+    st.session_state.pop("logo_splash_played", None)  # v2.0.3.5: sonraki girişte splash tekrar oynasın
     if token:
         conn = get_conn()
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
