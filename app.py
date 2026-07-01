@@ -1511,7 +1511,7 @@ with st.sidebar:
         st.session_state["logo_splash_played"] = True
         _splash_html = _logo_splash_html()
         if _splash_html:
-            components.html(_splash_html, height=100)
+            components.html(_splash_html, height=150)
         else:
             st.markdown(_logo_html(), unsafe_allow_html=True)
     else:
