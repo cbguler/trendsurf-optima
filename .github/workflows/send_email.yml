@@ -1,22 +1,33 @@
 name: Scheduled Email Reports
 
-# v2.0.3 - Yedekli cron tetiklemeleri (her 15 dakikada bir)
-# Onceki versiyon: "0 * * * *" (her saat basi, 24/gun) - GitHub free tier
-# tarafindan %83 oraninda skip ediliyordu, mail bazen hic gelmiyordu.
+# v2.0.3.4 - Agresif yedekli cron (her 5 dakikada bir tetikleme)
 #
-# Yeni versiyon: Her saat 4 farkli dakikada tetikleme (XX:00, XX:15, XX:30,
-# XX:45). En az birinin tutturma sansi cok yuksek.
+# Evrim:
+# v1.x:    "0 * * * *"                        (1 slot/saat, %83 skip -> mail bazen hic gelmiyordu)
+# v2.0.3:  "0,15,30,45 * * * *"               (4 slot/saat, sabah yogun saatlerde
+#                                              hepsi skip edilebiliyordu - 1 Temmuz'da
+#                                              09:00 ve 12:00 hic tetiklenmedi)
+# v2.0.3.4: "*/5 * * * *"                     (12 slot/saat, GitHub kesin 3-4 tanesini calistirir)
 #
-# emailer_standalone.py v2.0.3 ile duplicate guard eklendi (email_send_log
-# tablosu). Yani XX:00'da mail gondersek, XX:15'de tekrar gondermez:
+# NOT (1 Temmuz 2026): Repo public yapildi -> GitHub Actions artik SINIRSIZ ve
+# UCRETSIZ (private repo'da 2000 dk/ay free tier limiti asiliyordu, */5 ile
+# aylik ~7200 dk gerekiyordu). Public repo'da bu limit kalkti, guvenle
+# agresif cron kullanilabilir.
+#
+# GitHub Actions free tier'da schedule cron TAM ZAMANDA calismaz. Ozellikle sabah
+# is basi saatleri (07:00-10:00 UTC dunyada) yogun oldugu icin cron slot'lari
+# 30 dakikaya kadar geciktirilir veya tamamen skip edilir.
+#
+# 5 dakikalik pencerede 12 slot verirsek, en az 3-4'unun tutturulmasi kesin.
+# emailer_standalone.py v2.0.3'teki duplicate guard (email_send_log tablosu)
+# ayni saatte 2. mail gonderimini engeller:
 # "[duplicate-guard] bugun bu saatte zaten gonderildi -> atlandi"
+#
+# Sonuc: Mail kesin gider, duplicate gitmez.
 
 on:
   schedule:
-    - cron: "0 * * * *"
-    - cron: "15 * * * *"
-    - cron: "30 * * * *"
-    - cron: "45 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
