@@ -311,8 +311,8 @@ def _logo_splash_html():
     return f"""
     <style>html,body{{margin:0;padding:0;background:#d0e4ff;}}</style>
     <div style="text-align:center;padding:6px 0 2px 0;background:#d0e4ff;">
-      <video id="logoVidSplash" width="150" autoplay muted playsinline
-             style="display:block;margin:0 auto;">
+      <video id="logoVidSplash" width="188" autoplay muted playsinline
+             style="display:block;margin:0 auto;mix-blend-mode:multiply;">
         <source src="data:video/mp4;base64,{vid_b64}" type="video/mp4">
       </video>
       {img_tag}
