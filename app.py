@@ -1,5 +1,6 @@
 """TrendSurf Optima — Terminal v5 | streamlit run app.py"""
 import streamlit as st, pandas as pd, numpy as np, os, json, base64, time
+import streamlit.components.v1 as components
 
 try:
     import plotly.graph_objects as go, plotly.express as px
@@ -276,6 +277,66 @@ def _logo_html():
                 b64=base64.b64encode(f.read()).decode()
             return f'<div style="text-align:center;padding:6px 0 2px 0;"><img src="data:image/png;base64,{b64}" style="width:150px;"></div>'
     return '<div style="font-size:16px;font-weight:800;color:#fff;padding:8px 0;">TrendSurf Optima</div>'
+
+def _logo_splash_html():
+    """v2.0.3.5-3.7: Giris aninda 2 kez oynayan hareketli logo, sonra statik
+    logoya doner. %25 buyutulmus (188px) + mix-blend-mode:multiply ile
+    (beyazlatilmis) arka plan sidebar rengiyle (#d0e4ff) gorsel olarak kayboluyor.
+
+    NOT (2 Temmuz 2026): Bu fonksiyon Halka Arz modulu eklenirken yanlislikla
+    eski bir app.py kopyasi uzerinden calisilmasi sonucu bir ara kayboldu,
+    bugun tekrar eklendi. Video assets/logo_animated.mp4 dosyasindan CALISMA
+    ZAMANINDA okunur (koda gomulu degil, ayri dosya olarak kalir).
+    """
+    video_path = None
+    for p in ["assets/logo_animated.mp4", "logo_animated.mp4"]:
+        if os.path.exists(p):
+            video_path = p
+            break
+    if not video_path:
+        return None
+
+    try:
+        with open(video_path, "rb") as f:
+            vid_b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return None
+
+    img_tag = ""
+    for p in ["logo.png","Logo.png","LOGO.PNG"]:
+        if os.path.exists(p):
+            with open(p,"rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            img_tag = f'<img id="logoImgStatic" src="data:image/png;base64,{img_b64}" style="width:150px;display:none;">'
+            break
+
+    return f"""
+    <style>html,body{{margin:0;padding:0;background:#d0e4ff;}}</style>
+    <div style="text-align:center;padding:6px 0 2px 0;background:#d0e4ff;">
+      <video id="logoVidSplash" width="188" autoplay muted playsinline
+             style="display:block;margin:0 auto;mix-blend-mode:multiply;">
+        <source src="data:video/mp4;base64,{vid_b64}" type="video/mp4">
+      </video>
+      {img_tag}
+    </div>
+    <script>
+      const vid = document.getElementById('logoVidSplash');
+      const img = document.getElementById('logoImgStatic');
+      let playCount = 0;
+      if (vid) {{
+        vid.addEventListener('ended', function() {{
+          playCount++;
+          if (playCount < 2) {{
+            vid.currentTime = 0;
+            vid.play();
+          }} else {{
+            vid.style.display = 'none';
+            if (img) {{ img.style.display = 'block'; }}
+          }}
+        }});
+      }}
+    </script>
+    """
 
 SVG_LOGO = '<div style="font-size:15px;font-weight:800;color:#fff;">TrendSurf Optima</div>'
 
@@ -1447,7 +1508,16 @@ def save_email_cfg(cfg, user_id=None):
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown(_logo_html(),unsafe_allow_html=True)
+    # v2.0.3.5: Sadece login aninda 2 kez oynayan hareketli logo, sonra statik logo
+    if not st.session_state.get("logo_splash_played", False):
+        st.session_state["logo_splash_played"] = True
+        _splash_html = _logo_splash_html()
+        if _splash_html:
+            components.html(_splash_html, height=150)
+        else:
+            st.markdown(_logo_html(), unsafe_allow_html=True)
+    else:
+        st.markdown(_logo_html(), unsafe_allow_html=True)
     # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
     # v1.9.7.4 - Saat damgasi TRT (Europe/Istanbul), UTC yerine
     import datetime as _dt_now
@@ -2865,9 +2935,11 @@ elif page=="Halka Arz":
     # ── izahname sürecindeki şirketler) — KAP izahname bildirimlerinden ──────
     st.subheader("Yaklaşan Halka Arzlar")
     st.caption(
-        "Kaynak: KAP (Kamuyu Aydınlatma Platformu) — İzahname (SPK Onayına Sunulan) "
-        "bildirimleri. Sadece henüz BIST evreninde olmayan (yeni) şirketler gösterilir; "
-        "mevcut şirketlerin sermaye artırımı izahnameleri hariç tutulur."
+        "Kaynak: KAP (Kamuyu Aydınlatma Platformu) — İzahname bildirimleri, "
+        "iki aşama: SPK Onayına Sunulan (başvuru) ve SPK Tarafından Onaylanan "
+        "(talep toplama sürecinde/yakında). Sadece henüz BIST evreninde olmayan "
+        "(yeni) şirketler gösterilir; mevcut şirketlerin sermaye artırımı "
+        "izahnameleri hariç tutulur."
     )
     try:
         from upcoming_ipo_client import fetch_upcoming_ipos
