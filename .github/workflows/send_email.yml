@@ -1,33 +1,39 @@
 name: Scheduled Email Reports
 
-# v2.0.3.4 - Agresif yedekli cron (her 5 dakikada bir tetikleme)
+# v2.0.3.8 - Harici tetikleme: cron-job.org (2 Temmuz 2026)
 #
 # Evrim:
-# v1.x:    "0 * * * *"                        (1 slot/saat, %83 skip -> mail bazen hic gelmiyordu)
-# v2.0.3:  "0,15,30,45 * * * *"               (4 slot/saat, sabah yogun saatlerde
-#                                              hepsi skip edilebiliyordu - 1 Temmuz'da
-#                                              09:00 ve 12:00 hic tetiklenmedi)
-# v2.0.3.4: "*/5 * * * *"                     (12 slot/saat, GitHub kesin 3-4 tanesini calistirir)
+# v1.x:    "0 * * * *"           (1 slot/saat, %83 skip -> mail bazen hic gelmiyordu)
+# v2.0.3:  "0,15,30,45 * * * *"  (4 slot/saat, sabah yogun saatlerde hepsi skip
+#                                 edilebiliyordu - 1 Temmuz'da 09:00 ve 12:00 hic
+#                                 tetiklenmedi)
+# v2.0.3.4: "*/5 * * * *"        (12 slot/saat, GitHub'in kendi schedule mekanizmasi
+#                                 yine de guvenilmez cikti - 08:17-13:33 arasi 5+ saat
+#                                 hic tetiklenmedi, tam Bahri'nin 09:00/12:00 hedef
+#                                 saatlerini kapsiyordu)
+# v2.0.3.8: GitHub'in kendi schedule bloğu TAMAMEN KALDIRILDI. Bunun yerine
+#           cron-job.org (harici, ucretsiz cron servisi) her saat basi (00:00-23:00)
+#           GitHub REST API'sine POST istegi atip bu workflow'u workflow_dispatch
+#           ile tetikliyor:
+#             POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/send_email.yml/dispatches
+#             Body: {"ref":"main"}
+#             Auth: fine-grained PAT (sadece bu repo, sadece Actions:write yetkisi)
 #
-# NOT (1 Temmuz 2026): Repo public yapildi -> GitHub Actions artik SINIRSIZ ve
-# UCRETSIZ (private repo'da 2000 dk/ay free tier limiti asiliyordu, */5 ile
-# aylik ~7200 dk gerekiyordu). Public repo'da bu limit kalkti, guvenle
-# agresif cron kullanilabilir.
+# GitHub'in kendi schedule cron'u free/public tier'da dahi TAM ZAMANDA calismiyor
+# (bkz. yukaridaki basarisiz denemeler). cron-job.org disaridan API ile zorlanmis
+# tetikleme yaptigi icin bu throttling sorununu tamamen by-pass ediyor.
 #
-# GitHub Actions free tier'da schedule cron TAM ZAMANDA calismaz. Ozellikle sabah
-# is basi saatleri (07:00-10:00 UTC dunyada) yogun oldugu icin cron slot'lari
-# 30 dakikaya kadar geciktirilir veya tamamen skip edilir.
+# emailer_standalone.py'deki time-check SADECE SAATI karsilastirir (dakika degil),
+# bu yuzden saatlik tetikleme kullanicinin sectigi HERHANGI bir HH:MM degerini
+# (serbest metin girisi - E-posta Ayarlari'nda sinirlama yok) yakalamaya yeterli.
+# duplicate guard (email_send_log tablosu) ayni saatte 2. gonderimi engeller.
 #
-# 5 dakikalik pencerede 12 slot verirsek, en az 3-4'unun tutturulmasi kesin.
-# emailer_standalone.py v2.0.3'teki duplicate guard (email_send_log tablosu)
-# ayni saatte 2. mail gonderimini engeller:
-# "[duplicate-guard] bugun bu saatte zaten gonderildi -> atlandi"
+# Sonuc (2 Temmuz 2026 12:13 dogrulandi): Mail kesin ve zamaninda gidiyor.
 #
-# Sonuc: Mail kesin gider, duplicate gitmez.
+# workflow_dispatch: asagida kaliyor - hem cron-job.org'un disaridan tetiklemesi
+# hem de GitHub arayuzunden manuel "Run workflow" ile calistirilabilir.
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
