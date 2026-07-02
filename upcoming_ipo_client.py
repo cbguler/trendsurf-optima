@@ -44,15 +44,34 @@ CACHE_FILE = os.path.join(CACHE_DIR, "upcoming_ipo.json")
 CACHE_TTL  = 3600 * 12  # 12 saat — halka arz takvimi gun icinde sik degismez
 
 KAP_SEARCH_URL = "https://www.kap.org.tr/tr/bildirim-sorgu-sonuc"
-KAP_SEARCH_PARAMS = {
-    "srcbar": "Y",
-    "cmp": "Y",
-    "cat": "4",
-    "s": "4028328d5988e2630159d9aebd742fd4",  # "Izahname (SPK Onayina Sunulan)" konu ID'si
-    "st": "İzahname (SPK Onayına Sunulan)",
-    "kw": "izahname",
-    "slf": "ALL",
-}
+
+# v2.0.4.1 (2 Temmuz 2026): İki asama takip ediliyor:
+#   1) "SPK Onayına Sunulan"   -> basvuru yapildi, henuz onaylanmadi
+#   2) "SPK Tarafından Onaylanan" -> onaylandi, talep toplama surecinde/yakinda
+# (ISVEA, EKIM, GOLDA gibi sirketler 2. kategoride cikar - Bahri'nin
+# 2 Temmuz 2026'da fark ettigi eksiklik.)
+KAP_CATEGORIES = [
+    {
+        "key": "basvuru",
+        "durum_label": "Başvuru Yapıldı - SPK Onayı Bekleniyor",
+        "params": {
+            "srcbar": "Y", "cmp": "Y", "cat": "4",
+            "s": "4028328d5988e2630159d9aebd742fd4",
+            "st": "İzahname (SPK Onayına Sunulan)",
+            "kw": "izahname", "slf": "ALL",
+        },
+    },
+    {
+        "key": "onaylandi",
+        "durum_label": "Onaylandı - Talep Toplanıyor/Yakında",
+        "params": {
+            "srcbar": "Y", "cmp": "Y", "cat": "4",
+            "s": "4028328d5988e2630159d9b261b72ffe",
+            "st": "İzahname (SPK Tarafından Onaylanan)",
+            "kw": "izahname", "slf": "ALL",
+        },
+    },
+]
 
 HEADERS = {
     "User-Agent": (
@@ -97,14 +116,15 @@ def _write_cache(rows: list):
 
 # ── KAP'tan cekim ve JSON cikarma (2 Temmuz 2026'da dogrulanan yontem) ────────
 
-def _fetch_kap_html() -> Optional[str]:
+def _fetch_kap_html(params: dict) -> Optional[str]:
     try:
         import requests
-        r = requests.get(KAP_SEARCH_URL, params=KAP_SEARCH_PARAMS,
+        r = requests.get(KAP_SEARCH_URL, params=params,
                           headers=HEADERS, timeout=20)
         if r.status_code == 200 and len(r.text) > 1000:
             r.encoding = "utf-8"
-            print(f"[upcoming-ipo] KAP HTML yanit alindi: {len(r.text)} karakter")
+            print(f"[upcoming-ipo] KAP HTML yanit alindi ({params.get('st','')[:30]}): "
+                  f"{len(r.text)} karakter")
             return r.text
         print(f"[upcoming-ipo] KAP HTTP durumu: {r.status_code}, "
               f"uzunluk: {len(r.text) if r.text else 0}")
@@ -154,7 +174,9 @@ def _extract_disclosure_json(html_text: str) -> list:
 def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     """
     Yaklasan halka arzlari (henuz BIST evreninde olmayan, izahname surecindeki
-    sirketleri) DataFrame olarak dondurur.
+    sirketleri) DataFrame olarak dondurur. İKİ KAP kategorisini birlestirir:
+    "Onayina Sunulan" (basvuru asamasi) + "Tarafindan Onaylanan" (onaylandi,
+    talep toplama surecinde/yakinda).
 
     Kolonlar: Tarih, Kod, Sirket, Konu, Ozet, Durum, Detay_URL
     Bos DataFrame donebilir (veri yoksa veya hepsi mevcut sirket ise) — bu
@@ -166,62 +188,69 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
             print(f"[upcoming-ipo] Cache kullanildi: {len(cached)} satir")
             return pd.DataFrame(cached)
 
-    html_text = _fetch_kap_html()
-    if not html_text:
-        print("[upcoming-ipo] Canli cekim basarisiz — eski cache/bos donuluyor")
+    all_new_rows = []
+    any_fetch_succeeded = False
+
+    for cat in KAP_CATEGORIES:
+        html_text = _fetch_kap_html(cat["params"])
+        if not html_text:
+            print(f"[upcoming-ipo] '{cat['key']}' kategorisi cekilemedi, atlaniyor")
+            continue
+        any_fetch_succeeded = True
+
+        raw_records = _extract_disclosure_json(html_text)
+        if not raw_records:
+            print(f"[upcoming-ipo] '{cat['key']}' kategorisinde kayit bulunamadi")
+            continue
+
+        for rec in raw_records:
+            d = rec.get("disclosureBasic", {})
+            kod_raw = d.get("stockCode", "") or ""
+            summary = d.get("summary", "") or ""
+            summary_lower = summary.lower()
+
+            is_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
+            is_new_ipo = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
+                         or "pay halka arz" in summary_lower
+
+            if is_capital_increase and not is_new_ipo:
+                continue  # mevcut sirket, sermaye artirimi - atla
+            if not is_new_ipo:
+                continue  # ne yeni IPO ne sermaye artirimi ifadesi net degil - guvenli tarafta kal, atla
+
+            idx = d.get("disclosureIndex", "")
+            all_new_rows.append({
+                "Tarih":     d.get("publishDate", ""),
+                "Kod":       kod_raw,
+                "Sirket":    d.get("companyTitle", ""),
+                "Konu":      d.get("title", ""),
+                "Ozet":      summary,
+                "Durum":     cat["durum_label"],
+                "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
+            })
+
+        print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi")
+
+    if not any_fetch_succeeded:
+        print("[upcoming-ipo] Hicbir kategori cekilemedi — eski cache/bos donuluyor")
         cached = _read_cache()
         if cached is not None:
             return pd.DataFrame(cached)
         return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum","Detay_URL"])
 
-    raw_records = _extract_disclosure_json(html_text)
-    if not raw_records:
-        print("[upcoming-ipo] Kayit bulunamadi — eski cache/bos donuluyor")
-        cached = _read_cache()
-        if cached is not None:
-            return pd.DataFrame(cached)
-        return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum","Detay_URL"])
+    # Tarihe gore azalan sirala (en yeni basvuru/onay en ustte)
+    df = pd.DataFrame(all_new_rows)
+    if not df.empty:
+        try:
+            df["_sort_key"] = pd.to_datetime(df["Tarih"], format="%d.%m.%Y %H:%M:%S", errors="coerce")
+            df = df.sort_values("_sort_key", ascending=False).drop(columns=["_sort_key"])
+        except Exception:
+            pass
 
-    # v2.0.4 duzeltme (2 Temmuz 2026): BIST_TICKERS ile karsilastirma GUVENILMEZ
-    # cikti - ALNUS ve MRBAS gibi gercek yeni halka arz adaylari bile zaten
-    # BIST_TICKERS'ta (hardcoded 771 liste onceden rezerve edilmis / guncel
-    # olmayan girisler icerebiliyor). Bunun yerine KAP'in kendi "summary"
-    # metnindeki terminolojiye bakiyoruz:
-    #   "Sermaye Artırımı..." -> MEVCUT sirket, sermaye artirimi -> ELE
-    #   "Halka Arz Başvurusu..." / "Pay Halka Arz..." -> YENI aday -> GOSTER
-    new_rows = []
-    for rec in raw_records:
-        d = rec.get("disclosureBasic", {})
-        kod_raw = d.get("stockCode", "") or ""
-        summary = d.get("summary", "") or ""
-        summary_lower = summary.lower()
+    print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}")
 
-        is_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
-        is_new_ipo = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
-                     or "pay halka arz" in summary_lower
-
-        if is_capital_increase and not is_new_ipo:
-            continue  # mevcut sirket, sermaye artirimi - atla
-        if not is_new_ipo:
-            continue  # ne yeni IPO ne sermaye artirimi ifadesi net degil - guvenli tarafta kal, atla
-
-        idx = d.get("disclosureIndex", "")
-        new_rows.append({
-            "Tarih":     d.get("publishDate", ""),
-            "Kod":       kod_raw,
-            "Sirket":    d.get("companyTitle", ""),
-            "Konu":      d.get("title", ""),
-            "Ozet":      summary,
-            "Durum":     "Başvuru Yapıldı - SPK Onayı Bekleniyor",
-            "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
-        })
-
-    print(f"[upcoming-ipo] Toplam {len(raw_records)} bildirim, "
-          f"{len(raw_records) - len(new_rows)} mevcut sirket/belirsiz elendi, "
-          f"{len(new_rows)} yeni halka arz adayi kaldi")
-
-    _write_cache(new_rows)
-    return pd.DataFrame(new_rows)
+    _write_cache(df.to_dict("records"))
+    return df
 
 
 def get_upcoming_ipo_summary() -> str:
