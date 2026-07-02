@@ -1,6 +1,5 @@
 """TrendSurf Optima — Terminal v5 | streamlit run app.py"""
 import streamlit as st, pandas as pd, numpy as np, os, json, base64, time
-import streamlit.components.v1 as components
 
 try:
     import plotly.graph_objects as go, plotly.express as px
@@ -277,64 +276,6 @@ def _logo_html():
                 b64=base64.b64encode(f.read()).decode()
             return f'<div style="text-align:center;padding:6px 0 2px 0;"><img src="data:image/png;base64,{b64}" style="width:150px;"></div>'
     return '<div style="font-size:16px;font-weight:800;color:#fff;padding:8px 0;">TrendSurf Optima</div>'
-
-def _logo_splash_html():
-    """v2.0.3.5: Giris aninda 2 kez oynayan hareketli logo, sonra statik logoya doner.
-
-    Video assets/logo_animated.mp4 dosyasindan CALISMA ZAMANINDA okunup base64'e
-    cevrilir - koda gomulu (hardcoded) degil, repo'da ayri bir dosya olarak kalir.
-    Video yoksa None doner, cagiran yer statik logoya duser (guvenli fallback).
-    """
-    video_path = None
-    for p in ["assets/logo_animated.mp4", "logo_animated.mp4"]:
-        if os.path.exists(p):
-            video_path = p
-            break
-    if not video_path:
-        return None
-
-    try:
-        with open(video_path, "rb") as f:
-            vid_b64 = base64.b64encode(f.read()).decode()
-    except Exception:
-        return None
-
-    # Statik logo (video bitince gecis yapilacak hedef)
-    img_tag = ""
-    for p in ["logo.png","Logo.png","LOGO.PNG"]:
-        if os.path.exists(p):
-            with open(p,"rb") as f:
-                img_b64 = base64.b64encode(f.read()).decode()
-            img_tag = f'<img id="logoImgStatic" src="data:image/png;base64,{img_b64}" style="width:150px;display:none;">'
-            break
-
-    return f"""
-    <style>html,body{{margin:0;padding:0;background:#d0e4ff;}}</style>
-    <div style="text-align:center;padding:6px 0 2px 0;background:#d0e4ff;">
-      <video id="logoVidSplash" width="188" autoplay muted playsinline
-             style="display:block;margin:0 auto;mix-blend-mode:multiply;">
-        <source src="data:video/mp4;base64,{vid_b64}" type="video/mp4">
-      </video>
-      {img_tag}
-    </div>
-    <script>
-      const vid = document.getElementById('logoVidSplash');
-      const img = document.getElementById('logoImgStatic');
-      let playCount = 0;
-      if (vid) {{
-        vid.addEventListener('ended', function() {{
-          playCount++;
-          if (playCount < 2) {{
-            vid.currentTime = 0;
-            vid.play();
-          }} else {{
-            vid.style.display = 'none';
-            if (img) {{ img.style.display = 'block'; }}
-          }}
-        }});
-      }}
-    </script>
-    """
 
 SVG_LOGO = '<div style="font-size:15px;font-weight:800;color:#fff;">TrendSurf Optima</div>'
 
@@ -1506,16 +1447,7 @@ def save_email_cfg(cfg, user_id=None):
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    # v2.0.3.5: Sadece login aninda 2 kez oynayan hareketli logo, sonra statik logo
-    if not st.session_state.get("logo_splash_played", False):
-        st.session_state["logo_splash_played"] = True
-        _splash_html = _logo_splash_html()
-        if _splash_html:
-            components.html(_splash_html, height=150)
-        else:
-            st.markdown(_logo_html(), unsafe_allow_html=True)
-    else:
-        st.markdown(_logo_html(), unsafe_allow_html=True)
+    st.markdown(_logo_html(),unsafe_allow_html=True)
     # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
     # v1.9.7.4 - Saat damgasi TRT (Europe/Istanbul), UTC yerine
     import datetime as _dt_now
@@ -2928,6 +2860,44 @@ elif page in CAT:
 elif page=="Halka Arz":
     from datetime import datetime
     st.title("Halka Arz Takip")
+
+    # ── v2.0.4: Yaklaşan Halka Arzlar (henüz borsada işlem görmeyen, ──────────
+    # ── izahname sürecindeki şirketler) — KAP izahname bildirimlerinden ──────
+    st.subheader("Yaklaşan Halka Arzlar")
+    st.caption(
+        "Kaynak: KAP (Kamuyu Aydınlatma Platformu) — İzahname (SPK Onayına Sunulan) "
+        "bildirimleri. Sadece henüz BIST evreninde olmayan (yeni) şirketler gösterilir; "
+        "mevcut şirketlerin sermaye artırımı izahnameleri hariç tutulur."
+    )
+    try:
+        from upcoming_ipo_client import fetch_upcoming_ipos
+        with st.spinner("KAP izahname bildirimleri yükleniyor..."):
+            df_upcoming = fetch_upcoming_ipos()
+    except Exception as _uip_ex:
+        df_upcoming = pd.DataFrame()
+        st.info(
+            f"Yaklaşan halka arz verisi şu an yüklenemedi. "
+            f"(Teknik not: {_uip_ex})"
+        )
+
+    if not df_upcoming.empty:
+        st.dataframe(
+            df_upcoming[[c for c in ["Tarih","Kod","Sirket","Konu","Durum"] if c in df_upcoming.columns]],
+            use_container_width=True, hide_index=True
+        )
+        st.caption(
+            "Not: Şirket bazlı getiri tahmini sunulmaz — bu bilgilendirme "
+            "amaçlıdır, yatırım tavsiyesi değildir. Detaylı bilgi ve resmi "
+            "izahname için [KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
+            "sayfasını ziyaret edebilirsiniz."
+        )
+    else:
+        st.info("Şu anda takip edilen yeni halka arz başvurusu bulunmuyor.")
+
+    st.divider()
+
+    # ── Mevcut: XHARZ Endeks Üyeleri (borsada işlem gören, son 2 yıl) ────────
+    st.subheader("XHARZ Endeks Üyeleri")
     st.caption("BIST Halka Arz Endeksi (XHARZ) üyeleri — Borsa İstanbul Endeksler.xlsx kaynağından. Her 4 saatte bir güncellenir.")
 
     # ── Kontroller ──────────────────────────────────────────
