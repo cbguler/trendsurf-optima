@@ -209,24 +209,64 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
             summary = d.get("summary", "") or ""
             summary_lower = summary.lower()
 
-            is_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
-            is_new_ipo = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
-                         or "pay halka arz" in summary_lower
+            # v2.0.4.2 (2 Temmuz 2026): 131 kayitlik gercek "Onaylanan" verisiyle
+            # kalibre edildi. Onceki kural ("Halka Arz Basvurusu" ifadesi) sadece
+            # "Onayina Sunulan" (basvuru) asamasinda gecerliydi - GOLDA, ISVEA,
+            # ORZAX, EKIM, BETAE gibi "Onaylanan" asamasindaki gercek yeni IPO'lar
+            # bu ifadeyi HIC kullanmiyor, bunun yerine sadece "[Sirket Adi] A.S.
+            # ...Izahnamesi" diyor (cogu zaman bir araci kurum - INFO, HALKI, VKY,
+            # TSKB - uzerinden bildiriliyor, kendi stockCode'u degil).
+            #
+            # Kural (iki kategori icin de gecerli, 15/15 gercek ornekte dogrulandi):
+            #   1) "Halka Arz Başvurusu" / "Pay Halka Arz" ifadesi varsa -> YENI IPO
+            #   2) "Sermaye Artır..." ifadesi varsa (1'de degilse) -> MEVCUT sirket
+            #   3) "Varant" / "Sertifika" ifadesi varsa -> MEVCUT sirket (kendi
+            #      varant/sertifika ihraci, capraz kontrol degil)
+            #   4) Ozette "A.S." / "AS" (sirket unvani) geciyorsa VE 3 degilse -> YENI IPO
+            #   5) Digerleri -> belirsiz, guvenli tarafta kal, ELE
+            has_warrant = "varant" in summary_lower or "sertifika" in summary_lower
+            has_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
+            has_ipo_phrase = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
+                              or "pay halka arz" in summary_lower
+            has_company_suffix = bool(re.search(r'a\.?ş\.?\b', summary_lower)) \
+                                  or bool(re.search(r'a\.?o\.?\b', summary_lower))
 
-            if is_capital_increase and not is_new_ipo:
-                continue  # mevcut sirket, sermaye artirimi - atla
+            if has_ipo_phrase:
+                is_new_ipo = True
+            elif has_capital_increase:
+                is_new_ipo = False
+            elif has_company_suffix and not has_warrant:
+                is_new_ipo = True
+            else:
+                is_new_ipo = False
+
             if not is_new_ipo:
-                continue  # ne yeni IPO ne sermaye artirimi ifadesi net degil - guvenli tarafta kal, atla
+                continue
 
             idx = d.get("disclosureIndex", "")
+            related = d.get("relatedStocks", "") or ""
+
+            # v2.0.4.2: Ozette gecen sirket adini cikar (araci kurum uzerinden
+            # bildirilen IPO'larda "Sirket" alani yanlislikla araci kurumun
+            # adini gosterirdi - orn. EKIM'in bildirimi VAKIF YATIRIM üzerinden
+            # yapiliyor ama kullaniciya "EKIM" gostermek daha anlamli).
+            display_company = d.get("companyTitle", "")
+            name_match = re.search(r'^([A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü\s\.\'&,-]*?[Aa]\.?[Şş]\.?)\b', summary)
+            if name_match:
+                candidate = name_match.group(1).strip()
+                # Cok kisa veya anlamsiz eslesmeleri (orn. sadece "A.Ş.") ele
+                if len(candidate) > 8:
+                    display_company = candidate
+
             all_new_rows.append({
                 "Tarih":     d.get("publishDate", ""),
                 "Kod":       kod_raw,
-                "Sirket":    d.get("companyTitle", ""),
+                "Sirket":    display_company,
                 "Konu":      d.get("title", ""),
                 "Ozet":      summary,
                 "Durum":     cat["durum_label"],
                 "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
+                "_dedup_key": f"{kod_raw}|{related}",
             })
 
         print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi")
@@ -246,6 +286,12 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
             df = df.sort_values("_sort_key", ascending=False).drop(columns=["_sort_key"])
         except Exception:
             pass
+
+        # v2.0.4.2: Ayni IPO adayinin (ayni stockCode + relatedStocks kombinasyonu)
+        # birden fazla "Bolum" bildirimi olabilir (GOLDA icin 24 tane gibi) -
+        # sadece EN GUNCEL kaydi tut, digerleri "detay" linkinden erisilebilir.
+        if "_dedup_key" in df.columns:
+            df = df.drop_duplicates(subset="_dedup_key", keep="first").drop(columns=["_dedup_key"])
 
     print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}")
 
