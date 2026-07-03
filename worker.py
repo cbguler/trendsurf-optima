@@ -153,19 +153,47 @@ def _detect_and_register_new_bist_listings(existing_tickers: list) -> list:
         if df_ipo.empty or "Ticker" not in df_ipo.columns:
             return []
 
+        # v2.0.4.6: Diger kategorilerin (KRIPTO/DOVIZ/MADEN) ticker kodlariyla
+        # CAKISMA KORUMASI. Bugun "LINK" kodu hem BIST'te (Link Bilgisayar
+        # Sistemleri) hem KRIPTO'da (Chainlink) aynı anda kullanildigi tespit
+        # edildi - worker'in son adimindaki drop_duplicates(keep="last") BIST
+        # hissesini sessizce siliyordu (KRIPTO daha sonra islendigi icin
+        # kazaniyor). O collision ayrica giderildi (KRIPTO->CLINK), ama
+        # GELECEKTE yeni bir BIST mezunu tesaduf yoluyla baska bir kategorinin
+        # kodu ile ayni olursa (orn. yeni bir sirket "SOL" veya "TON" ticker'i
+        # ile borsaya girerse) ayni sessiz veri kaybi tekrar olusabilir. Bunu
+        # onlemek icin: cakisan kod tespit edilirse BIST tarafina ALINMAZ,
+        # log'a acikca yazilir - boylece fark edilmeden veri kaybi olmaz.
+        other_cat_codes = set()
+        try:
+            other_cat_codes |= {t.upper() for t, _ in KRIPTO}
+            other_cat_codes |= {t.upper() for t, _ in DOVIZ}
+            other_cat_codes |= {t.upper() for t, _ in MADEN}
+        except Exception:
+            pass
+
         existing_set = set(t.upper() for t in existing_tickers)
         new_rows = []
+        skipped_collisions = []
         for _, row in df_ipo.iterrows():
             t = str(row.get("Ticker", "")).strip().upper()
             if not t or len(t) < 2 or len(t) > 8 or not t.isalnum():
                 continue
             if t in existing_set:
                 continue
+            if t in other_cat_codes:
+                skipped_collisions.append(t)
+                continue
             existing_set.add(t)  # ayni calismada tekrar eklenmesin
             new_rows.append({
                 "ticker": t,
                 "company_name": str(row.get("Şirket", ""))[:200],
             })
+
+        if skipped_collisions:
+            print(f"[dinamik-evren] UYARI: {skipped_collisions} kodlari baska "
+                  f"kategorilerle (KRIPTO/DOVIZ/MADEN) cakistigi icin BIST "
+                  f"evrenine EKLENMEDI - manuel kontrol gerekebilir")
 
         if not new_rows:
             return []
@@ -196,7 +224,7 @@ def _detect_and_register_new_bist_listings(existing_tickers: list) -> list:
 KRIPTO = [
     ("BTC","BTC-USD"),("ETH","ETH-USD"),("BNB","BNB-USD"),("SOL","SOL-USD"),
     ("ADA","ADA-USD"),("XRP","XRP-USD"),("DOGE","DOGE-USD"),("DOT","DOT-USD"),
-    ("AVAX","AVAX-USD"),("LINK","LINK-USD"),("LTC","LTC-USD"),("ATOM","ATOM-USD"),
+    ("AVAX","AVAX-USD"),("CLINK","LINK-USD"),("LTC","LTC-USD"),("ATOM","ATOM-USD"),
     ("TRX","TRX-USD"),("NEAR","NEAR-USD"),("ICP","ICP-USD"),
 ("OP","OP-USD"),("INJ","INJ-USD"),("SUI","SUI20947-USD"),("TON","TON11419-USD"),
 ]
@@ -705,7 +733,7 @@ def build():
         "BTC": "Bitcoin", "ETH": "Ethereum", "BNB": "BNB",
         "SOL": "Solana", "ADA": "Cardano", "XRP": "XRP",
         "DOGE": "Dogecoin", "DOT": "Polkadot", "AVAX": "Avalanche",
-        "LINK": "Chainlink", "LTC": "Litecoin", "ATOM": "Cosmos",
+        "CLINK": "Chainlink", "LTC": "Litecoin", "ATOM": "Cosmos",
         "TRX": "TRON", "NEAR": "NEAR Protocol", "ICP": "Internet Computer",
         "OP": "Optimism", "INJ": "Injective",
         "SUI": "Sui", "TON": "Toncoin",
