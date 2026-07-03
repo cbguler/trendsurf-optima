@@ -109,9 +109,64 @@ def _write_cache(rows: list):
         pass
 
 
-# NOT: v2.0.4 ilk tasariminda BIST_TICKERS ile karsilastirma denendi ama
-# guvenilmez cikti (bkz. fetch_upcoming_ipos icindeki aciklama). Su an
-# filtreleme sadece KAP'in "summary" metnindeki terminolojiye dayaniyor.
+# v2.0.4.7 (3 Temmuz 2026): Fiyat Tespit Raporu eslestirmesi eklendi.
+# Bu AYRI bir kategori - yeni IPO ADAYI listesi UretMEZ (cunku Fiyat Tespit
+# Raporu bildirimleri mevcut sirketlerin sermaye artirimlarini da icerir,
+# izahname kadar guvenilir bir "yeni/mevcut" ayrimi yok bu kategoride).
+# Bunun yerine: yukaridaki KAP_CATEGORIES'ten zaten "yeni IPO" olarak
+# siniflandirilmis satirlara, EGER kodlari eslesirse, gercek Fiyat Tespit
+# Raporu linkini EKLER. Boylece kullanici arz fiyatinin resmi belgesine
+# tek tikla ulasabilir (otomatik fiyat/deger yorumu YAPILMAZ - Faz 2'de
+# ayri bir oturumda ele alinacak).
+FIYAT_TESPIT_PARAMS = {
+    "srcbar": "Y", "cmp": "Y", "cat": "4",
+    "s": "8aca490d4f2b6b39014f2c32b50a04bf",
+    "st": "Fiyat Tespit Raporu",
+    "kw": "fiyat tespit", "slf": "ALL",
+}
+
+
+def _fetch_fiyat_tespit_map() -> dict:
+    """Fiyat Tespit Raporu bildirimlerini ceker, her ticker kodu icin EN GUNCEL
+    bildirimin KAP linkini dondurur: {"GOLDA": {"url": ..., "tarih": ...}, ...}
+    Bir sirketin birden fazla bolumlu raporu olabilir (orn. Golda icin
+    "Sayfa 1-36" + "Sayfa 37-72") - en yeni publishDate kazanir.
+    Hata durumunda SESSIZCE bos sozluk doner - cagiran taraf link gostermez,
+    ama IPO listesi kendisi etkilenmez."""
+    try:
+        html_text = _fetch_kap_html(FIYAT_TESPIT_PARAMS)
+        if not html_text:
+            return {}
+        raw_records = _extract_disclosure_json(html_text)
+        if not raw_records:
+            return {}
+
+        code_map = {}
+        for rec in raw_records:
+            d = rec.get("disclosureBasic", {})
+            idx = d.get("disclosureIndex", "")
+            if not idx:
+                continue
+            publish_date = d.get("publishDate", "")
+            url = KAP_DETAIL_URL.format(disclosure_index=idx)
+
+            # stockCode + relatedStocks icindeki TUM kodlari cikar (virgul/boslukla ayrik)
+            raw_codes = f"{d.get('stockCode','')},{d.get('relatedStocks','')}"
+            codes = [c.strip().upper() for c in re.split(r"[,\s]+", raw_codes) if c.strip()]
+
+            for code in codes:
+                if len(code) < 2 or len(code) > 8:
+                    continue
+                existing = code_map.get(code)
+                if existing is None or publish_date > existing.get("tarih", ""):
+                    code_map[code] = {"url": url, "tarih": publish_date}
+
+        print(f"[upcoming-ipo] Fiyat Tespit Raporu: {len(raw_records)} bildirim -> "
+              f"{len(code_map)} benzersiz ticker eslesti")
+        return code_map
+    except Exception as e:
+        print(f"[upcoming-ipo] Fiyat Tespit Raporu eslestirmesi atlandi (hata): {e}")
+        return {}
 
 
 # ── KAP'tan cekim ve JSON cikarma (2 Temmuz 2026'da dogrulanan yontem) ────────
@@ -276,7 +331,7 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         cached = _read_cache()
         if cached is not None:
             return pd.DataFrame(cached)
-        return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum","Detay_URL"])
+        return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum","Detay_URL","Fiyat_Tespit_URL"])
 
     # Tarihe gore azalan sirala (en yeni basvuru/onay en ustte)
     df = pd.DataFrame(all_new_rows)
@@ -292,6 +347,28 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         # sadece EN GUNCEL kaydi tut, digerleri "detay" linkinden erisilebilir.
         if "_dedup_key" in df.columns:
             df = df.drop_duplicates(subset="_dedup_key", keep="first").drop(columns=["_dedup_key"])
+
+        # v2.0.4.7: Fiyat Tespit Raporu eslestirmesi - her satirin Kod alanindaki
+        # ticker(lar) icin gercek fiyat tespit raporu linki varsa ekle. Hata
+        # olursa (KAP erisilemez vb.) tum satirlar icin bos kalir, IPO listesi
+        # kendisi etkilenmez.
+        df["Fiyat_Tespit_URL"] = ""
+        try:
+            ft_map = _fetch_fiyat_tespit_map()
+            if ft_map:
+                def _match_fiyat_tespit(kod_raw):
+                    codes = [c.strip().upper() for c in re.split(r"[,\s]+", str(kod_raw)) if c.strip()]
+                    best = None
+                    for c in codes:
+                        hit = ft_map.get(c)
+                        if hit and (best is None or hit["tarih"] > best["tarih"]):
+                            best = hit
+                    return best["url"] if best else ""
+                df["Fiyat_Tespit_URL"] = df["Kod"].apply(_match_fiyat_tespit)
+                eslesen = (df["Fiyat_Tespit_URL"] != "").sum()
+                print(f"[upcoming-ipo] Fiyat Tespit Raporu eslesen satir sayisi: {eslesen}/{len(df)}")
+        except Exception as e:
+            print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme atlandi (hata): {e}")
 
     print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}")
 

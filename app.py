@@ -2981,14 +2981,25 @@ elif page=="Halka Arz":
         )
 
     if not df_upcoming.empty:
+        _cols_show = [c for c in ["Tarih","Kod","Sirket","Konu","Durum","Fiyat_Tespit_URL"]
+                      if c in df_upcoming.columns]
         st.dataframe(
-            df_upcoming[[c for c in ["Tarih","Kod","Sirket","Konu","Durum"] if c in df_upcoming.columns]],
-            use_container_width=True, hide_index=True
+            df_upcoming[_cols_show],
+            use_container_width=True, hide_index=True,
+            column_config={
+                "Fiyat_Tespit_URL": st.column_config.LinkColumn(
+                    "Fiyat Tespit Raporu",
+                    display_text="KAP'ta Aç",
+                    help="Resmi KAP bildirimi - arz fiyatının belirlendiği rapor (varsa)",
+                ),
+            } if "Fiyat_Tespit_URL" in df_upcoming.columns else None,
         )
         st.caption(
             "Not: Şirket bazlı getiri tahmini sunulmaz — bu bilgilendirme "
-            "amaçlıdır, yatırım tavsiyesi değildir. Detaylı bilgi ve resmi "
-            "izahname için [KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
+            "amaçlıdır, yatırım tavsiyesi değildir. \"Fiyat Tespit Raporu\" "
+            "sütunundaki link, KAP'ın resmi belgesine götürür (henüz "
+            "yayınlanmamışsa boş görünür). Detaylı bilgi için "
+            "[KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
             "sayfasını ziyaret edebilirsiniz."
         )
     else:
