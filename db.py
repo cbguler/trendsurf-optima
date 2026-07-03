@@ -157,6 +157,16 @@ class _CompatCursor:
     def fetchall(self) -> list:
         return [_CompatRow(r) for r in self._cur.fetchall()]
 
+    @property
+    def rowcount(self) -> int:
+        """v2.0.4.4: INSERT/UPDATE/DELETE sonrasi etkilenen satir sayisi.
+        Atomik 'reservation' (INSERT ... ON CONFLICT DO NOTHING) mantiginda
+        rowcount==1 -> bu cagri kazandi, rowcount==0 -> baskasi zaten almis."""
+        try:
+            return self._cur.rowcount
+        except Exception:
+            return -1
+
     def close(self):
         self._cur.close()
 

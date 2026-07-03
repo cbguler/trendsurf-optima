@@ -77,7 +77,8 @@ def _ensure_send_log_table(conn):
 
 
 def _already_sent_today(conn, user_id, send_date, send_hour):
-    """v2.0.3: Bugun bu saatte bu user'a mail gonderildi mi?"""
+    """v2.0.3: Bugun bu saatte bu user'a mail gonderildi mi? (bilgi amacli,
+    artik gate olarak _reserve_send_slot kullaniliyor)"""
     try:
         row = conn.execute(
             "SELECT 1 FROM email_send_log WHERE user_id=? AND send_date=? AND send_hour=?",
@@ -89,8 +90,59 @@ def _already_sent_today(conn, user_id, send_date, send_hour):
         return False
 
 
+def _reserve_send_slot(conn, user_id, send_date, send_hour) -> bool:
+    """v2.0.4.4: ATOMIK rezervasyon - check-then-act race condition'ini kapatir.
+
+    Onceki tasarim: once SELECT ile 'gonderildi mi' kontrol edilip, aradan
+    9-11 dakika suren BIST yenileme + mail gonderimi GECTIKTEN SONRA INSERT
+    ile kayit atiliyordu. Bu, ayni saat diliminde art arda tetiklenen (orn.
+    cron-job.org 15 dakikada bir calisirsa) run'larin HEPSININ 'henuz
+    gonderilmemis' gormesine ve HEPSININ mail gondermesine yol aciyordu
+    (3 Temmuz'da 12:32/12:44/12:48'de 3 ayri mail - iste bu bug).
+
+    Yeni tasarim: INSERT ... ON CONFLICT DO NOTHING tek basina hem kontrol
+    hem kayit gorevi gorur (PostgreSQL bunu atomik yapar). Sadece rowcount==1
+    donen TEK bir run bu saati 'kazanir', digerleri aninda (agir isleme hic
+    girmeden) cikar. Boylece tetikleme sikligi ne olursa olsun (15 dk'da bir
+    bile olsa) o saat icin sadece 1 mail gider.
+    """
+    try:
+        cur = conn.execute(
+            "INSERT INTO email_send_log (user_id, send_date, send_hour) "
+            "VALUES (?,?,?) ON CONFLICT DO NOTHING",
+            (user_id, send_date, send_hour)
+        )
+        conn.commit()
+        won = (cur.rowcount == 1)
+        if won:
+            print(f"[reservation] user_id={user_id} saat={send_hour:02d} icin slot KAZANILDI - devam ediliyor")
+        else:
+            print(f"[reservation] user_id={user_id} saat={send_hour:02d} icin slot BASKA BIR RUN TARAFINDAN ALINMIS - cikiliyor")
+        return won
+    except Exception as e:
+        print(f"[reservation] INSERT hatasi: {e} -- guvenli taraf: gonderme")
+        return False
+
+
+def _release_send_slot(conn, user_id, send_date, send_hour):
+    """v2.0.4.4: Rezervasyon alindiktan SONRA mail gonderimi basarisiz olursa
+    (SMTP hatasi vb.) slotu serbest birak - boylece ayni saat icindeki bir
+    sonraki tetiklemede tekrar denenebilir. Basarili gonderimde bu cagrilmaz,
+    kayit kalici olarak durur (gercek duplicate guard)."""
+    try:
+        conn.execute(
+            "DELETE FROM email_send_log WHERE user_id=? AND send_date=? AND send_hour=?",
+            (user_id, send_date, send_hour)
+        )
+        conn.commit()
+        print(f"[reservation] user_id={user_id} saat={send_hour:02d} slot SERBEST BIRAKILDI (gonderim basarisiz oldu, tekrar denenebilir)")
+    except Exception as e:
+        print(f"[reservation] release hatasi (yok sayilir): {e}")
+
+
 def _mark_sent_today(conn, user_id, send_date, send_hour):
-    """v2.0.3: Mail basariyla gonderildikten sonra log'a kayit at."""
+    """v2.0.3: (Artik cagrilmiyor - rezervasyon INSERT'i zaten kaydi atiyor.
+    Geriye donuk uyumluluk icin birakildi.)"""
     try:
         conn.execute(
             "INSERT INTO email_send_log (user_id, send_date, send_hour) "
@@ -174,12 +226,14 @@ def _check_user_send_time():
             print(f"[time-check] eslesme yok -> sessizce cikis")
             return None
 
-        # v2.0.3: Duplicate guard - bugun bu saatte zaten gonderdik mi?
-        if _already_sent_today(conn, user_id, today_date, now_hour):
-            print(f"[duplicate-guard] user_id={user_id} icin bugun ({today_date}) saat {now_hour:02d}'de zaten mail gonderildi -> atlandi")
+        # v2.0.4.4: ATOMIK rezervasyon - eski "SELECT ile kontrol, 9-11 dk sonra
+        # INSERT ile kayit" mantigindaki race condition kapatildi. Simdi tek
+        # bir INSERT hem kontrol hem kayit gorevi goruyor; sadece kazanan run
+        # devam ediyor, digerleri agir islemeye hic girmeden aninda cikiyor.
+        if not _reserve_send_slot(conn, user_id, today_date, now_hour):
             return None
 
-        print(f"[time-check] EŞLEŞME -> mail gonderiliyor (ilk defa bugun bu saatte)")
+        print(f"[time-check] EŞLEŞME -> mail gonderiliyor (slot rezerve edildi)")
         return {"user_id": user_id, "today_date": today_date, "now_hour": now_hour, "_bypass": False}
 
     except Exception as e:
@@ -277,29 +331,38 @@ print(f"[4/5] Rapor parametreleri: butce={budget:.0f} TL, risk={risk}, "
 # ----------------------------------------------------------------------------
 # 5. E-posta gonder (mevcut emailer.send_report kullanir)
 #    portfolio=None + user_email -> Supabase'den o kullanicinin portfoyu cekilir
+#
+# v2.0.4.4: Slot rezervasyonu ZATEN yapildi (_check_user_send_time icinde,
+# heavy islem baslamadan once). Buradaki try/except SADECE gonderim gercekten
+# BASARISIZ olursa (SMTP hatasi, exception) slotu serbest birakmak icin -
+# boylece ayni saat icindeki bir sonraki tetiklemede tekrar denenebilir.
+# Basarili gonderimde hicbir ek islem gerekmez, rezervasyon zaten kalicidir.
 # ----------------------------------------------------------------------------
 from emailer import send_report
-result = send_report(
-    df_uni=df_uni,
-    portfolio=None,           # None -> user_email ile DB'den oku
-    budget=budget,
-    risk=risk,
-    max_assets=max_assets,
-    cfg=cfg,
-    user_email=admin_email,   # None/bos ise portfoy bos kalir
-)
-print(f"[5/5] Sonuc: {result}")
-
-# v2.0.3 - Mail basariyla gonderildikten sonra duplicate guard'a kayit at
-if _send_ctx and not _send_ctx.get("_bypass"):
-    try:
-        from db import get_conn
-        _conn_log = get_conn()
-        _mark_sent_today(
-            _conn_log,
-            _send_ctx["user_id"],
-            _send_ctx["today_date"],
-            _send_ctx["now_hour"],
-        )
-    except Exception as e:
-        print(f"[send_log] mark_sent hata (yok sayilir): {e}")
+try:
+    result = send_report(
+        df_uni=df_uni,
+        portfolio=None,           # None -> user_email ile DB'den oku
+        budget=budget,
+        risk=risk,
+        max_assets=max_assets,
+        cfg=cfg,
+        user_email=admin_email,   # None/bos ise portfoy bos kalir
+    )
+    print(f"[5/5] Sonuc: {result}")
+except Exception as e:
+    print(f"[5/5] HATA: mail gonderimi basarisiz oldu: {type(e).__name__}: {e}")
+    import traceback
+    traceback.print_exc()
+    if _send_ctx and not _send_ctx.get("_bypass"):
+        try:
+            from db import get_conn
+            _release_send_slot(
+                get_conn(),
+                _send_ctx["user_id"],
+                _send_ctx["today_date"],
+                _send_ctx["now_hour"],
+            )
+        except Exception as e2:
+            print(f"[reservation] release denemesi de basarisiz (yok sayilir): {e2}")
+    sys.exit(1)
