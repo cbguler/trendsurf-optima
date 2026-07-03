@@ -91,6 +91,107 @@ BIST_TICKERS = [
 ]
 BIST_TICKERS = list(dict.fromkeys(BIST_TICKERS))  # dedup -> 771
 
+# ─── v2.0.4.5: Dinamik BIST Evreni (Parca B - Yaklasan Halka Arzlar) ────────
+# Amac: Bir sirket SPK onayindan gecip fiilen BIST'te islem gormeye
+# basladiginda (XHARZ - BIST Halka Arz Endeksi'ne dustugunde), yukaridaki
+# SABIT 771 listeye MANUEL ekleme yapmadan otomatik olarak worker'in izledigi
+# evrene katilmasi. Kalicilik icin Supabase'de bist_universe_dynamic tablosu
+# kullanilir: bir kez tespit edilen ticker, tum gelecek calismalarda buradan
+# otomatik yuklenir.
+#
+# Guvenlik prensibi: Bu blok WORKER'IN CALISMASINI ASLA ENGELLEMEMELI. Supabase
+# erisilemezse, SUPABASE_DB_URL tanimli degilse, KAP/halka_arz_client hata
+# verirse -> sessizce bos liste donup statik 771 listeyle devam edilir.
+
+def _ensure_dynamic_universe_table(conn):
+    """Tablo yoksa olustur + RLS ac (policy tanimlanmadigi icin sadece
+    service_role/postgres baglantisi erisebilir - v2.0.2 guvenlik
+    sertlestirmesiyle tutarli, anon/authenticated icin erisim YOK)."""
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bist_universe_dynamic (
+                ticker        TEXT PRIMARY KEY,
+                company_name  TEXT,
+                added_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                source        TEXT DEFAULT 'XHARZ_auto'
+            )
+        """)
+        conn.execute("ALTER TABLE bist_universe_dynamic ENABLE ROW LEVEL SECURITY")
+        conn.commit()
+    except Exception as e:
+        print(f"[dinamik-evren] tablo/RLS kurulumu atlandi (hata, muhtemelen zaten var): {e}")
+
+
+def _load_dynamic_bist_universe() -> list:
+    """Supabase'deki bist_universe_dynamic tablosundan onceki calismalarda
+    tespit edilmis (XHARZ mezunu) ticker'lari yukler. Hata durumunda
+    SESSIZCE bos liste doner."""
+    try:
+        from db import get_conn
+        conn = get_conn()
+        _ensure_dynamic_universe_table(conn)
+        rows = conn.execute("SELECT ticker FROM bist_universe_dynamic").fetchall()
+        tickers = [str(r["ticker"]).strip().upper() for r in rows if r.get("ticker")]
+        conn.close()
+        if tickers:
+            print(f"[dinamik-evren] Supabase'den {len(tickers)} dinamik BIST ticker yuklendi: {tickers}")
+        return tickers
+    except Exception as e:
+        print(f"[dinamik-evren] Supabase'den yukleme atlandi (hata): {e}")
+        return []
+
+
+def _detect_and_register_new_bist_listings(existing_tickers: list) -> list:
+    """halka_arz_client.fetch_ipo_list() ile XHARZ (BIST Halka Arz Endeksi)
+    uyelerini ceker - bunlar zaten borsada islem gormeye baslamis (mezun
+    olmus) sirketlerdir. existing_tickers'ta OLMAYANLARI yeni mezun sayar,
+    Supabase'e kalici kaydeder VE bu calismanin listesine ekler ki ayni gun
+    fiyat/skor alabilsinler. Hata durumunda SESSIZCE bos liste doner."""
+    try:
+        from halka_arz_client import fetch_ipo_list
+        df_ipo = fetch_ipo_list()
+        if df_ipo.empty or "Ticker" not in df_ipo.columns:
+            return []
+
+        existing_set = set(t.upper() for t in existing_tickers)
+        new_rows = []
+        for _, row in df_ipo.iterrows():
+            t = str(row.get("Ticker", "")).strip().upper()
+            if not t or len(t) < 2 or len(t) > 8 or not t.isalnum():
+                continue
+            if t in existing_set:
+                continue
+            existing_set.add(t)  # ayni calismada tekrar eklenmesin
+            new_rows.append({
+                "ticker": t,
+                "company_name": str(row.get("Şirket", ""))[:200],
+            })
+
+        if not new_rows:
+            return []
+
+        from db import get_conn
+        conn = get_conn()
+        _ensure_dynamic_universe_table(conn)
+        for r in new_rows:
+            try:
+                conn.execute(
+                    "INSERT INTO bist_universe_dynamic (ticker, company_name, source) "
+                    "VALUES (?,?,?) ON CONFLICT DO NOTHING",
+                    (r["ticker"], r["company_name"], "XHARZ_auto")
+                )
+            except Exception as e:
+                print(f"[dinamik-evren] {r['ticker']} kaydi basarisiz (atlandi): {e}")
+        conn.commit()
+        conn.close()
+
+        new_tickers = [r["ticker"] for r in new_rows]
+        print(f"[dinamik-evren] YENI BIST mezunu(lar) tespit edildi ve kaydedildi: {new_tickers}")
+        return new_tickers
+    except Exception as e:
+        print(f"[dinamik-evren] yeni mezun tespiti atlandi (hata): {e}")
+        return []
+
 # ─── 20 Kripto ───────────────────────────────────────────────
 KRIPTO = [
     ("BTC","BTC-USD"),("ETH","ETH-USD"),("BNB","BNB-USD"),("SOL","SOL-USD"),
@@ -504,6 +605,20 @@ def get_cross_rate_hist(ticker: str, yf_sym: str,
         return pd.Series(dtype=float)
 
 def build():
+    global BIST_TICKERS
+
+    # v2.0.4.5: Dinamik BIST evreni - Supabase'den daha once tespit edilen
+    # ticker'lari yukle, sonra XHARZ'da yeni mezun var mi kontrol et. Ikisi de
+    # BIST_TICKERS'a eklenir (statik 771 + dinamik). Herhangi bir adimda hata
+    # olursa sessizce atlanir, statik 771 ile devam edilir - worker asla cokmez.
+    _dyn_existing = _load_dynamic_bist_universe()
+    _combined = list(dict.fromkeys(BIST_TICKERS + _dyn_existing))
+    _new_grads = _detect_and_register_new_bist_listings(_combined)
+    if _new_grads or _dyn_existing:
+        BIST_TICKERS = list(dict.fromkeys(_combined + _new_grads))
+        print(f"[dinamik-evren] Toplam BIST evreni: {len(BIST_TICKERS)} "
+              f"(statik 771 + dinamik {len(BIST_TICKERS) - 771})")
+
     print("\n" + "=" * 60)
     print("  TrendSurf Optima — Evren Olusturma v7")
     print(f"  BIST: {len(BIST_TICKERS)} | Kripto: {len(KRIPTO)} | "

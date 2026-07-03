@@ -63,6 +63,7 @@ jobs:
           echo "Worker tamamlandi - $(date)"
         env:
           TCMB_KEY: ${{ secrets.TCMB_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
       - name: CSV sonrasi durum
         run: |
