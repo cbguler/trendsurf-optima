@@ -2236,15 +2236,42 @@ if page=="Ana Sayfa":
                 r5.metric("Yillik Vol %", f"{d['vol']:.1f}%")
 
                 sig_color = SIG_COLORS.get(sig_cls, "#666")
+
+                # v2.0.3: Hacim trendi bilgisi (varsa)
+                _vol_html_ana = ""
+                if d.get("vol_trend", "YOK") != "YOK":
+                    _vt = d["vol_trend"]
+                    _vr = d.get("vol_ratio", 0.0)
+                    _adj = d.get("score_adj", 0)
+                    _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+                    _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+                    _vol_html_ana = (
+                        f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
+                        f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+                    )
+
+                # v2.0.3.2: Max DD cezasi bilgisi
+                _dd_html_ana = ""
+                if d.get("dd_adj", 0) != 0:
+                    _dd_val = d.get("max_dd")
+                    _dd_clr = "#e74c3c"
+                    _dd_html_ana = (
+                        f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
+                        f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
+                    )
+
                 st.markdown(f"""
                 <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
                   <span class="ts-sig {sig_cls}">{sig_lbl}</span>
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
                     Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
                     Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
-                    MACD: <b>{d['macd']:.4f}</b>
+                    MACD: <b>{d['macd']:.4f}</b>{_vol_html_ana}{_dd_html_ana}
                   </span>
                 </div>""", unsafe_allow_html=True)
+
+                # v2.0.3.2: Teknik Gostergeler expander
+                render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
                     fig = candle_fig(d["hist"], sel_ana)
@@ -2268,9 +2295,10 @@ if page=="Ana Sayfa":
                                 raw, float(sel_row_ana["Son_Fiyat"]))
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
-                        # Master Skor: ana Optima Skoru (%70) + temel skor (%30)
-                        # Ana skor tabloda gösterilen skorla AYNI — tutarlılık korunur
-                        combined = min(100, round(d["score"] * 0.70 + fund_skor, 1))
+                        # v2.0.3.4: Portfoyum/kategori sayfalariyla ayni formul
+                        # (teknik+temel primli optima_score + hacim/DD ayari)
+                        tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
+                        combined = max(0, min(100, round(tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
                         final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
                         src_note = "yfinance"
                         if raw.get("_kap_available"): src_note += " + KAP"
@@ -2289,9 +2317,9 @@ if page=="Ana Sayfa":
                             st.markdown(f"""
                             <div class="ts-card">
                             <b>Skor Bilesimi</b><br><br>
-                            <small style='color:#6c7a9c'>Optima Skoru (tabloyla ayni)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 100</b><br><br>
-                            <small style='color:#6c7a9c'>Temel Skor</small><br>
+                            <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
+                            <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu + Kar)</small><br>
                             <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
                             <hr style='border-color:#e0e8f4;margin:10px 0'>
                             <small style='color:#6c7a9c'>Master Skor</small><br>
