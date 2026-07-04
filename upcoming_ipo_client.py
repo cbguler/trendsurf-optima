@@ -267,6 +267,8 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         if sonuc.tip == "BILINMEYEN":
             with pdfplumber.open(tmp_path) as pdf:
                 toplam_sayfa = len(pdf.pages)
+                print(f"[upcoming-ipo] Ilk {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI} sayfada eslesme yok, "
+                      f"toplam sayfa: {toplam_sayfa}, son {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI} deneniyor")
                 if toplam_sayfa > FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
                     parcalar = []
                     for sayfa in pdf.pages[-FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:]:
@@ -276,6 +278,26 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                             parcalar.append(_ocr_sayfa(sayfa))
                     metin_son = "\n\n".join(parcalar)
                     sonuc = fiyat_tespit_ayikla(metin_son)
+                    if sonuc.tip == "BILINMEYEN":
+                        # v2.0.4.15 DEBUG: son N sayfada da eslesme yoksa, ham
+                        # metnin "Pay"/"Deger"/"Arz" gecen kisimlarini loglara
+                        # yazdiriyoruz - gercek OCR ciktisini gormeden regex'i
+                        # daha fazla tahminle degistirmemek icin.
+                        print(f"[upcoming-ipo] DEBUG son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
+                              f"metin uzunlugu: {len(metin_son)} karakter")
+                        for kelime in ("Pay", "Deger", "Arz Fiyat", "Iskonto", "ISKONTO"):
+                            for m_dbg in re.finditer(re.escape(kelime), metin_son, re.IGNORECASE):
+                                baslangic = max(0, m_dbg.start() - 60)
+                                bitis = min(len(metin_son), m_dbg.end() + 60)
+                                print(f"[upcoming-ipo] DEBUG '{kelime}' civari: "
+                                      f"...{metin_son[baslangic:bitis]!r}...")
+                    else:
+                        print(f"[upcoming-ipo] Son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
+                              f"eslesme bulundu: tip={sonuc.tip}, arz_fiyati={sonuc.arz_fiyati}")
+                else:
+                    print(f"[upcoming-ipo] Toplam sayfa ({toplam_sayfa}) "
+                          f"<= {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}, son-sayfa denemesi atlandi "
+                          f"(ilk taramayla ayni sayfalar olurdu)")
 
         temel = _extract_temel_deger(metin, arz_fiyati=sonuc.arz_fiyati)
 
