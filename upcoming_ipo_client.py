@@ -218,7 +218,6 @@ def _extract_temel_deger(metin: str, arz_fiyati: Optional[float] = None) -> dict
     durumunda None doner - IPO satiri etkilenmez, sadece bu sutunlar bos kalir.
     arz_fiyati: fiyat_tespit_ayikla'nin zaten buldugu Pay Basi Deger - Hisse
     Sayisi metinde bulunamazsa Piyasa Degeri/arz_fiyati ile turetilir."""
-    print(f"[upcoming-ipo] CANARY _extract_temel_deger cagrildi, metin uzunlugu={len(metin)}, arz_fiyati={arz_fiyati}", flush=True)
     try:
         from temel_deger_hesaplama import hedef_fiyat_hesapla
         donemler = hedef_fiyat_hesapla(metin, arz_fiyati=arz_fiyati)
@@ -234,21 +233,10 @@ def _extract_temel_deger(metin: str, arz_fiyati: Optional[float] = None) -> dict
         if dv.carpan_bazli_deger is not None:
             carpan = dv.carpan_bazli_deger  # en son (en guncel donem) deger kalir
 
-    if graham is None and carpan is None:
-        # v2.0.4.18 DEBUG: ikisi de bulunamadiysa, "ozet kutusu"nun aranacagi
-        # anahtar kelimelerin (EBITDA, Net Kar, Ozkaynak, Net Borc, Hisse
-        # Sayisi) metinde gecip gecmedigini ve civarindaki ham OCR metnini
-        # loglara yazdiriyoruz - hangi etiketin nasil bozuldugunu gormeden
-        # regex'i tahminle degistirmemek icin.
-        print(f"[upcoming-ipo] DEBUG Graham/Carpan bulunamadi - metin uzunlugu: {len(metin)}", flush=True)
-        for kelime in ("EBITDA", "Net Kar", "Ozkaynak", "Net Borc", "Hisse Sayisi", "m.d"):
-            for m_dbg in re.finditer(re.escape(kelime), metin, re.IGNORECASE):
-                baslangic = max(0, m_dbg.start() - 40)
-                bitis = min(len(metin), m_dbg.end() + 80)
-                print(f"[upcoming-ipo] DEBUG-TD '{kelime}' civari: "
-                      f"...{metin[baslangic:bitis]!r}...", flush=True)
-                break  # her kelime icin sadece ilk esleşme yeterli
-
+    # Not: Graham/Carpan bulunamazsa (OCR bazi raporlarda rakamlari bile
+    # bozuyor - orn. GOLDA/TSK/TERA) sessizce None donuyoruz. Bilerek
+    # tahmini bir sayi UYDURMUYORUZ - yanlis bir finansal rakami dogruymus
+    # gibi gostermek, bos birakmaktan cok daha kotu bir sonuc olur.
     return {"graham_degeri": graham, "carpan_bazli_deger": carpan}
 
 
@@ -297,18 +285,8 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                     metin_son = "\n\n".join(parcalar)
                     sonuc = fiyat_tespit_ayikla(metin_son)
                     if sonuc.tip == "BILINMEYEN":
-                        # v2.0.4.15 DEBUG: son N sayfada da eslesme yoksa, ham
-                        # metnin "Pay"/"Deger"/"Arz" gecen kisimlarini loglara
-                        # yazdiriyoruz - gercek OCR ciktisini gormeden regex'i
-                        # daha fazla tahminle degistirmemek icin.
-                        print(f"[upcoming-ipo] DEBUG son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
-                              f"metin uzunlugu: {len(metin_son)} karakter", flush=True)
-                        for kelime in ("Pay", "Deger", "Arz Fiyat", "Iskonto", "ISKONTO"):
-                            for m_dbg in re.finditer(re.escape(kelime), metin_son, re.IGNORECASE):
-                                baslangic = max(0, m_dbg.start() - 60)
-                                bitis = min(len(metin_son), m_dbg.end() + 60)
-                                print(f"[upcoming-ipo] DEBUG '{kelime}' civari: "
-                                      f"...{metin_son[baslangic:bitis]!r}...", flush=True)
+                        print(f"[upcoming-ipo] Son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
+                              f"da eslesme yok (arz fiyati bos kalacak)", flush=True)
                     else:
                         print(f"[upcoming-ipo] Son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
                               f"eslesme bulundu: tip={sonuc.tip}, arz_fiyati={sonuc.arz_fiyati}", flush=True)
@@ -496,7 +474,6 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     Bos DataFrame donebilir (veri yoksa veya hepsi mevcut sirket ise) — bu
     HATA DEGILDIR, "su an yeni halka arz yok" olarak yorumlanmalidir.
     """
-    print(f"[upcoming-ipo] CANARY fetch_upcoming_ipos cagrildi, force_refresh={force_refresh}", flush=True)
     if not force_refresh:
         cached = _read_cache()
         if cached is not None:
