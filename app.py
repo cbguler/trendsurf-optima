@@ -3018,7 +3018,7 @@ elif page=="Halka Arz":
                 return "background-color:#fff8e1;"  # sarimsi - aralik icinde
 
         _basliklar = [
-            ("Tarih", "8%"), ("Kod", "7%"), ("Şirket", "19%"), ("Durum", "15%"),
+            ("Tarih", "9%"), ("Kod", "7%"), ("Şirket", "18%"), ("Durum", "15%"),
             ("Arz Fiyatı (TL)", "10%"), ("İskonto (%)", "8%"),
             ("Graham Değeri (TL)", "12%"), ("Çarpan Bazlı Değer (TL)", "12%"),
             ("Rapor", "9%"),
@@ -3079,6 +3079,7 @@ elif page=="Halka Arz":
         table.ha-tablo td {{ padding: 10px 12px; border-bottom: 1px solid #e3e7ec;
                               white-space: normal; word-wrap: break-word;
                               vertical-align: top; color: #1a1a1a; line-height: 1.4; }}
+        table.ha-tablo td:first-child {{ white-space: nowrap; }}
         table.ha-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
         </style>
         <div class="ha-tablo-wrap">
