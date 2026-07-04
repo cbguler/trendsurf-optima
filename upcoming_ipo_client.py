@@ -85,6 +85,37 @@ HEADERS = {
 # KAP bildirim detay sayfasi (izahname PDF eki buradan gorulebilir)
 KAP_DETAIL_URL = "https://www.kap.org.tr/tr/Bildirim/{disclosure_index}"
 
+# v2.0.4.8 (4 Temmuz 2026): Fiyat Tespit Raporu PDF ekini indirip icinden
+# arz fiyati + iskonto oranini otomatik cikaran Faz 2 entegrasyonu.
+#
+# KAP'in dahili (kimlik dogrulama gerektirmeyen, herkese acik) API'si:
+#   1) attachment-detail -> bildirimin ek dosyalarinin objId'sini verir
+#   2) file/download/{objId} -> PDF baytlarini Java byte[] serialization
+#      ile SARMALANMIS olarak doner (ilk 2 byte: 0xAC 0xED). Gercek PDF'i
+#      almak icin bu sarmalayici sokulmeli (_unwrap_java_pdf).
+#
+# Bu iki endpoint KAP'in resmi/ucretli "Veri Yayin Servisi" REST API'si
+# DEGILDIR (o, sozlesme + API key gerektirir) - bunlar kap.org.tr web
+# sitesinin kendisinin kullandigi, herkese acik dahili servislerdir.
+KAP_ATTACHMENT_DETAIL_URL = "https://www.kap.org.tr/tr/api/notification/attachment-detail/{disclosure_index}"
+KAP_FILE_DOWNLOAD_URL = "https://www.kap.org.tr/tr/api/file/download/{obj_id}"
+
+# Fiyat Tespit Raporu sonuclari (arz fiyati/iskonto) ayri bir cache'te
+# tutulur - bir bildirim ASLA degismeyecegi icin (yayinlanmis rapor sabit)
+# bu cache SURESIZ gecerlidir, CACHE_TTL uygulanmaz.
+FIYAT_TESPIT_SONUC_CACHE = os.path.join(CACHE_DIR, "fiyat_tespit_sonuclari.json")
+
+# Fiyat Tespit Raporu'nun "Degerleme Ozeti / Sonuc" tablosu bazen erken
+# (orn. ORZAX'ta 60 sayfalik raporun 8. sayfasi), bazen gec (orn. SOHO'da
+# 64 sayfalik raporun 10. VE 66. sayfasi) gorulebiliyor. Tum raporu OCR'dan
+# gecirmek (bazilari 60+ sayfa) GitHub Actions'ta pahali/yavas olacagindan,
+# once ilk N sayfa, bulunamazsa son N sayfa denenir.
+FIYAT_TESPIT_TARAMA_SAYFA_SAYISI = 15
+# Bir calistirmada en fazla kac YENI rapor indirilip islensin (guvenlik
+# siniri - ayni gun cok sayida yeni IPO bildirimi gelirse calisma suresi
+# patlamasin diye).
+FIYAT_TESPIT_MAX_YENI_ISLEME = 10
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
@@ -109,15 +140,163 @@ def _write_cache(rows: list):
         pass
 
 
+# ── Fiyat Tespit Raporu sonuc cache'i (suresiz - rapor icerigi degismez) ──────
+
+def _read_fiyat_tespit_sonuc_cache() -> dict:
+    if not os.path.exists(FIYAT_TESPIT_SONUC_CACHE):
+        return {}
+    try:
+        with open(FIYAT_TESPIT_SONUC_CACHE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_fiyat_tespit_sonuc_cache(cache: dict):
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(FIYAT_TESPIT_SONUC_CACHE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+# ── Fiyat Tespit Raporu PDF indirme ve fiyat/iskonto cikarma (v2.0.4.8) ───────
+
+def _unwrap_java_pdf(raw: bytes) -> bytes:
+    """KAP'in file/download endpoint'i PDF'i Java byte[] serialization ile
+    sarmalayarak doner (ilk 2 byte: 0xAC 0xED). Gercek PDF baytlarini cikarir.
+    Sarmalayici yoksa (ileride KAP degistirebilir) oldugu gibi dondurur."""
+    if raw[:2] != b"\xac\xed":
+        return raw
+    import struct
+    idx = raw.index(b"\x78\x70", 10)
+    arr_len = struct.unpack(">I", raw[idx + 2:idx + 6])[0]
+    return raw[idx + 6:idx + 6 + arr_len]
+
+
+def _fetch_attachment_obj_id(disclosure_index) -> Optional[str]:
+    """Bildirimin ek dosyalarindan ilkinin objId'sini alir (Fiyat Tespit
+    Raporu bildirimlerinde tipik olarak tek ek dosya vardir)."""
+    try:
+        import requests
+        url = KAP_ATTACHMENT_DETAIL_URL.format(disclosure_index=disclosure_index)
+        headers = dict(HEADERS)
+        headers["Referer"] = KAP_DETAIL_URL.format(disclosure_index=disclosure_index)
+        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        attachments = data[0].get("attachments", [])
+        if not attachments:
+            return None
+        return attachments[0].get("objId")
+    except Exception as e:
+        print(f"[upcoming-ipo] attachment-detail hatasi (idx={disclosure_index}): {e}")
+        return None
+
+
+def _download_pdf_bytes(obj_id: str) -> Optional[bytes]:
+    try:
+        import requests
+        url = KAP_FILE_DOWNLOAD_URL.format(obj_id=obj_id)
+        r = requests.get(url, headers=HEADERS, timeout=30)
+        if r.status_code != 200 or len(r.content) < 100:
+            return None
+        return _unwrap_java_pdf(r.content)
+    except Exception as e:
+        print(f"[upcoming-ipo] PDF indirme hatasi (objId={obj_id}): {e}")
+        return None
+
+
+def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
+    """PDF baytlarini gecici dosyaya yazip pdf_text_extract + fiyat_tespit_parser
+    ile isler. Once ilk N sayfa (Tip B ozetleri genelde erken sayfalarda -
+    orn. ORZAX), bulunamazsa son N sayfa (Tip A/C "Sonuc" bolumleri genelde
+    son sayfalarda - orn. SOHO, GOLDA/ISVEA) denenir. Sonuc bulunamazsa
+    tum degerler None doner - HATA DEGILDIR, IPO satiri gosterilmeye devam
+    eder, sadece fiyat/iskonto sutunlari bos kalir."""
+    bos_sonuc = {"arz_fiyati": None, "iskonto_orani": None, "tip": None}
+    try:
+        import tempfile
+        import pdfplumber
+        from pdf_text_extract import pdf_to_text, _sayfa_metin_var_mi, _ocr_sayfa
+        from fiyat_tespit_parser import fiyat_tespit_ayikla
+    except ImportError as e:
+        print(f"[upcoming-ipo] fiyat tespit parser modulleri bulunamadi: {e}")
+        return bos_sonuc
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+
+        # 1) Ilk N sayfa
+        metin = pdf_to_text(tmp_path, max_pages=FIYAT_TESPIT_TARAMA_SAYFA_SAYISI)
+        sonuc = fiyat_tespit_ayikla(metin)
+
+        # 2) Bulunamadiysa son N sayfa
+        if sonuc.tip == "BILINMEYEN":
+            with pdfplumber.open(tmp_path) as pdf:
+                toplam_sayfa = len(pdf.pages)
+                if toplam_sayfa > FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
+                    parcalar = []
+                    for sayfa in pdf.pages[-FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:]:
+                        if _sayfa_metin_var_mi(sayfa):
+                            parcalar.append(sayfa.extract_text() or "")
+                        else:
+                            parcalar.append(_ocr_sayfa(sayfa))
+                    metin_son = "\n\n".join(parcalar)
+                    sonuc = fiyat_tespit_ayikla(metin_son)
+
+        return {
+            "arz_fiyati": sonuc.arz_fiyati,
+            "iskonto_orani": sonuc.iskonto_orani,
+            "tip": sonuc.tip if sonuc.tip != "BILINMEYEN" else None,
+        }
+    except Exception as e:
+        print(f"[upcoming-ipo] Fiyat/iskonto cikarma hatasi: {e}")
+        return bos_sonuc
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+def _disclosure_fiyat_tespit_sonucunu_getir(disclosure_index, cache: dict) -> dict:
+    """Tek bir bildirim icin (cache'te yoksa) PDF'i indirip fiyat/iskonto
+    cikarir; cache'te varsa dogrudan onu doner. cache SURESIZ gecerlidir -
+    yayinlanmis bir Fiyat Tespit Raporu'nun icerigi degismez."""
+    key = str(disclosure_index)
+    if key in cache:
+        return cache[key]
+
+    sonuc = {"arz_fiyati": None, "iskonto_orani": None, "tip": None}
+    obj_id = _fetch_attachment_obj_id(disclosure_index)
+    if obj_id:
+        pdf_bytes = _download_pdf_bytes(obj_id)
+        if pdf_bytes:
+            sonuc = _extract_fiyat_ve_iskonto(pdf_bytes)
+
+    cache[key] = sonuc
+    return sonuc
+
+
+
 # v2.0.4.7 (3 Temmuz 2026): Fiyat Tespit Raporu eslestirmesi eklendi.
+# v2.0.4.8 (4 Temmuz 2026): PDF eki indirilip icinden arz fiyati/iskonto
+# otomatik cikarilmaya baslandi (yukaridaki _extract_fiyat_ve_iskonto vb.).
 # Bu AYRI bir kategori - yeni IPO ADAYI listesi UretMEZ (cunku Fiyat Tespit
 # Raporu bildirimleri mevcut sirketlerin sermaye artirimlarini da icerir,
 # izahname kadar guvenilir bir "yeni/mevcut" ayrimi yok bu kategoride).
 # Bunun yerine: yukaridaki KAP_CATEGORIES'ten zaten "yeni IPO" olarak
 # siniflandirilmis satirlara, EGER kodlari eslesirse, gercek Fiyat Tespit
-# Raporu linkini EKLER. Boylece kullanici arz fiyatinin resmi belgesine
-# tek tikla ulasabilir (otomatik fiyat/deger yorumu YAPILMAZ - Faz 2'de
-# ayri bir oturumda ele alinacak).
+# Raporu linkini VE (bulunabilirse) arz fiyati/iskonto oranini EKLER.
 FIYAT_TESPIT_PARAMS = {
     "srcbar": "Y", "cmp": "Y", "cat": "4",
     "s": "8aca490d4f2b6b39014f2c32b50a04bf",
@@ -159,7 +338,8 @@ def _fetch_fiyat_tespit_map() -> dict:
                     continue
                 existing = code_map.get(code)
                 if existing is None or publish_date > existing.get("tarih", ""):
-                    code_map[code] = {"url": url, "tarih": publish_date}
+                    code_map[code] = {"url": url, "tarih": publish_date,
+                                        "disclosure_index": idx}
 
         print(f"[upcoming-ipo] Fiyat Tespit Raporu: {len(raw_records)} bildirim -> "
               f"{len(code_map)} benzersiz ticker eslesti")
@@ -233,7 +413,9 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     "Onayina Sunulan" (basvuru asamasi) + "Tarafindan Onaylanan" (onaylandi,
     talep toplama surecinde/yakinda).
 
-    Kolonlar: Tarih, Kod, Sirket, Konu, Ozet, Durum, Detay_URL
+    Kolonlar: Tarih, Kod, Sirket, Konu, Ozet, Durum, Detay_URL, Fiyat_Tespit_URL,
+    Arz_Fiyati, Iskonto_Orani (son ikisi Fiyat Tespit Raporu PDF'inden otomatik
+    cikarilir - bulunamazsa None kalir, bu HATA DEGILDIR).
     Bos DataFrame donebilir (veri yoksa veya hepsi mevcut sirket ise) — bu
     HATA DEGILDIR, "su an yeni halka arz yok" olarak yorumlanmalidir.
     """
@@ -331,7 +513,9 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         cached = _read_cache()
         if cached is not None:
             return pd.DataFrame(cached)
-        return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum","Detay_URL","Fiyat_Tespit_URL"])
+        return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum",
+                                       "Detay_URL","Fiyat_Tespit_URL",
+                                       "Arz_Fiyati","Iskonto_Orani"])
 
     # Tarihe gore azalan sirala (en yeni basvuru/onay en ustte)
     df = pd.DataFrame(all_new_rows)
@@ -353,22 +537,59 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         # olursa (KAP erisilemez vb.) tum satirlar icin bos kalir, IPO listesi
         # kendisi etkilenmez.
         df["Fiyat_Tespit_URL"] = ""
+        df["Arz_Fiyati"] = None
+        df["Iskonto_Orani"] = None
         try:
             ft_map = _fetch_fiyat_tespit_map()
             if ft_map:
-                def _match_fiyat_tespit(kod_raw):
+                def _en_iyi_eslesme(kod_raw):
                     codes = [c.strip().upper() for c in re.split(r"[,\s]+", str(kod_raw)) if c.strip()]
                     best = None
                     for c in codes:
                         hit = ft_map.get(c)
                         if hit and (best is None or hit["tarih"] > best["tarih"]):
                             best = hit
-                    return best["url"] if best else ""
-                df["Fiyat_Tespit_URL"] = df["Kod"].apply(_match_fiyat_tespit)
+                    return best
+
+                eslesmeler = df["Kod"].apply(_en_iyi_eslesme)
+                df["Fiyat_Tespit_URL"] = eslesmeler.apply(lambda h: h["url"] if h else "")
                 eslesen = (df["Fiyat_Tespit_URL"] != "").sum()
                 print(f"[upcoming-ipo] Fiyat Tespit Raporu eslesen satir sayisi: {eslesen}/{len(df)}")
+
+                # v2.0.4.8: Eslesen raporlarin PDF'ini indirip arz fiyati/iskonto
+                # cikar. Cache'lenmis (daha once islenmis) raporlar ANINDA
+                # doner (indirme/OCR YAPILMAZ). Sadece cache'te olmayan YENI
+                # raporlar icin indirme yapilir, bu da FIYAT_TESPIT_MAX_YENI_ISLEME
+                # ile sinirlanir (bir calistirmada calisma suresi patlamasin diye).
+                ft_sonuc_cache = _read_fiyat_tespit_sonuc_cache()
+                yeni_islenen_sayisi = 0
+                cache_degisti = False
+
+                for i, hit in eslesmeler.items():
+                    if not hit:
+                        continue
+                    idx = hit.get("disclosure_index")
+                    if not idx:
+                        continue
+                    key = str(idx)
+                    if key not in ft_sonuc_cache:
+                        if yeni_islenen_sayisi >= FIYAT_TESPIT_MAX_YENI_ISLEME:
+                            continue  # bu calistirmada limit doldu, sonraki calistirmada denenir
+                        yeni_islenen_sayisi += 1
+                        cache_degisti = True
+
+                    sonuc = _disclosure_fiyat_tespit_sonucunu_getir(idx, ft_sonuc_cache)
+                    df.at[i, "Arz_Fiyati"] = sonuc.get("arz_fiyati")
+                    df.at[i, "Iskonto_Orani"] = sonuc.get("iskonto_orani")
+
+                if cache_degisti:
+                    _write_fiyat_tespit_sonuc_cache(ft_sonuc_cache)
+
+                bulunan = df["Arz_Fiyati"].notna().sum()
+                print(f"[upcoming-ipo] Arz fiyati cikarilan satir sayisi: {bulunan}/{len(df)} "
+                      f"(bu calistirmada {yeni_islenen_sayisi} yeni rapor islendi)")
         except Exception as e:
-            print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme atlandi (hata): {e}")
+            print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme/cikarma atlandi (hata): {e}")
 
     print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}")
 
