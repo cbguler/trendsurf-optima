@@ -55,42 +55,66 @@ def _tr_sayi_to_float(s: str) -> Optional[float]:
         return None
 
 
+# --- OCR toleransı: Türkçe karaktersiz (ASCII-katlanmış) eşleştirme ----------
+# Taranmış/görsel PDF'lerde Tesseract Türkçe karakterleri (ş, ı, ğ, ö, ü, ç)
+# sıklıkla bozuyor (örn. "Değer" -> "Deger", "Başına" -> "Basina"). Bu yüzden
+# etiket eşleştirmesi HER ZAMAN normalize edilmiş (ASCII-katlanmış) metin
+# üzerinde yapılır. Karakter-karakter (1-e-1) bir çeviri olduğu için string
+# uzunluğu/konumları değişmez - sayıları (rakam/noktalama) etkilemez, bu
+# yüzden normalize edilmiş metinden yakalanan sayı gruplari orijinaliyle
+# birebir aynıdır.
+_TR_NORMALIZE_MAP = str.maketrans({
+    "ş": "s", "Ş": "S", "İ": "I", "ı": "i", "I": "I",
+    "ğ": "g", "Ğ": "G", "ö": "o", "Ö": "O", "ü": "u", "Ü": "U",
+    "ç": "c", "Ç": "C",
+})
+
+
+def _normalize_tr(metin: str) -> str:
+    return metin.translate(_TR_NORMALIZE_MAP)
+
+
 _NUM = r"([\d\.,]+)"
 
 # --- TİP A: kademeli tek akış -------------------------------------------------
+# Not: etiketler ASCII-katlanmış (normalize edilmiş) yazılıyor çünkü eşleştirme
+# HER ZAMAN _normalize_tr() uygulanmış metin üzerinde yapılıyor (bkz. asağıda
+# _iskonto_bul/_tip_*_dene fonksiyonları) - bu, OCR'ın "Değer"i "Deger" olarak
+# okuduğu (Türkçe karakteri kaybettiği) durumlarda da eşleşmeyi sağlar.
 _TIP_A_ETIKETLER = [
-    r"Halka Arz Pay Başına Değer",
-    r"İskonto Sonrası\s+1\s*TL\s*Nominal Pay Değeri",
-    r"İskonto Sonrası\s+Pay\s+Değeri",
-    r"İskonto Sonrası.*?Nominal Pay Değeri",
+    r"Halka Arz Pay Basina Deger",
+    r"Iskonto Sonrasi\s+1\s*TL\s*Nominal Pay Degeri",
+    r"Iskonto Sonrasi\s+Pay\s+Degeri",
+    r"Iskonto Sonrasi.*?Nominal Pay Degeri",
 ]
 
 # --- TİP B: ağırlıklı özet tablosu (Nihai Değer satırı) ----------------------
-_TIP_B_BASLIK = r"Değerleme Özeti"
-# "Nihai" -> OCR bazen "Nihal" okuyor (ı/l karışıklığı); [iİlİ] ile tolere ediyoruz
-_TIP_B_NIHAI_SATIR = r"Niha[iİlL]\s+Değer\s+" + _NUM + r"\s+.*?" + _NUM
+_TIP_B_BASLIK = r"Degerleme Ozeti"
+# "Nihai" -> OCR bazen "Nihal"/"Nihai" -> "1" okuyor (ı/l/1 karışıklığı)
+_TIP_B_NIHAI_SATIR = r"Niha[iI1lL]\s+Deger\s+" + _NUM + r"\s+.*?" + _NUM
 
 # --- TİP C: Değerleme Sonucu tablosu (doğrudan "Halka Arz Fiyatı") -----------
-_TIP_C_BASLIK = r"Değerleme Sonucu"
-_TIP_C_ETIKET = r"Halka Arz Fiyatı\s*" + _NUM
+_TIP_C_BASLIK = r"Degerleme Sonucu"
+_TIP_C_ETIKET = r"Halka Arz Fiyati\s*" + _NUM
 
 # --- İskonto oranı (tüm tipler için ortak arama) -----------------------------
 _ISKONTO_PATTERNS = [
-    r"Halka Arz İskontosu[^%\d]*?(-?\d{1,3}[.,]?\d{0,2})\s*%",
-    r"Halka Arz İskontosu[^%\d]*?%\s*(\d{1,3}[.,]?\d{0,2})",
-    r"%\s*(\d{1,3}[.,]?\d{0,2})\s*(?:oranında )?halka arz iskontosu",
+    r"Halka Arz Iskontosu[^%\d]*?(-?\d{1,3}[.,]?\d{0,2})\s*%",
+    r"Halka Arz Iskontosu[^%\d]*?%\s*(\d{1,3}[.,]?\d{0,2})",
+    r"%\s*(\d{1,3}[.,]?\d{0,2})\s*(?:oraninda )?halka arz iskontosu",
     r"halka arz iskontosunun.*?%\s*(\d{1,3}[.,]?\d{0,2})",
     # OCR fallback: "%" karakteri taranmış PDF'lerde sıkça bozuluyor
     # (örn. "%37,00" -> "637,00" veya "37,009"). Bu yüzden yüzde işareti
     # şart koşulmadan, etiketten hemen sonraki sayıyı da kabul ediyoruz.
     # Düşük öncelikli (en son denenir) çünkü daha az güvenilir.
-    r"Halka Arz İskontosu\s*[:\-]?\s*(\d{1,3}[.,]\d{2})",
+    r"Halka Arz Iskontosu\s*[:\-]?\s*(\d{1,3}[.,]\d{2})",
 ]
 
 
 def _iskonto_bul(metin: str) -> Optional[float]:
+    metin_n = _normalize_tr(metin)
     for pat in _ISKONTO_PATTERNS:
-        m = re.search(pat, metin, re.IGNORECASE | re.DOTALL)
+        m = re.search(pat, metin_n, re.IGNORECASE | re.DOTALL)
         if m:
             val = _tr_sayi_to_float(m.group(1))
             if val is not None:
@@ -99,11 +123,12 @@ def _iskonto_bul(metin: str) -> Optional[float]:
 
 
 def _tip_a_dene(metin: str) -> Optional[FiyatTespitSonucu]:
+    metin_n = _normalize_tr(metin)
     for etiket in _TIP_A_ETIKETLER:
         # etiketten sonra gelen ilk sayısal değeri yakala (aynı satır veya
         # tablo hücresi olabileceğinden esnek boşluk/karakter toleransı)
         pat = etiket + r"[^\d\-]{0,40}" + _NUM
-        m = re.search(pat, metin, re.IGNORECASE | re.DOTALL)
+        m = re.search(pat, metin_n, re.IGNORECASE | re.DOTALL)
         if m:
             deger = _tr_sayi_to_float(m.group(1))
             if deger is not None:
@@ -120,7 +145,8 @@ def _tip_a_dene(metin: str) -> Optional[FiyatTespitSonucu]:
 def _tip_b_dene(metin: str) -> Optional[FiyatTespitSonucu]:
     # Not: "Değerleme Özeti" başlığı OCR'da bozulabileceğinden ön koşul
     # olarak aranmıyor; "Nihai Değer" satırı zaten yeterince spesifik.
-    m = re.search(_TIP_B_NIHAI_SATIR, metin, re.IGNORECASE | re.DOTALL)
+    metin_n = _normalize_tr(metin)
+    m = re.search(_TIP_B_NIHAI_SATIR, metin_n, re.IGNORECASE | re.DOTALL)
     if not m:
         return None
     # "Nihai Değer   21.183   ...   69,00" -> son yakalanan grup pay başı değeri
@@ -140,7 +166,8 @@ def _tip_c_dene(metin: str) -> Optional[FiyatTespitSonucu]:
     # renkli/arka planlı hücre olduğu için genelde eksik veya bozuk okuyor
     # (örn. "Değerleme Sonucu" -> sadece "Değerle"). "Halka Arz Fiyatı" +
     # sayı kombinasyonu tek başına zaten yeterince ayırt edici bir etiket.
-    m = re.search(_TIP_C_ETIKET, metin, re.IGNORECASE | re.DOTALL)
+    metin_n = _normalize_tr(metin)
+    m = re.search(_TIP_C_ETIKET, metin_n, re.IGNORECASE | re.DOTALL)
     if not m:
         return None
     deger = _tr_sayi_to_float(m.group(1))
