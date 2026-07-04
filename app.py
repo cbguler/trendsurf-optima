@@ -2981,67 +2981,133 @@ elif page=="Halka Arz":
         )
 
     if not df_upcoming.empty:
-        # v2.0.4.9: "Konu" sütunu kaldırıldı (Durum ile bilgi tekrarı yapıyordu,
-        # hep "İzahname..." yazıyordu) - yatay scroll'u azaltmak icin. Kalan
-        # sutunlara sabit genislik verildi, boylece container'a sigup yatay
-        # scroll ortadan kalkiyor.
-        _cols_show = [c for c in ["Tarih","Kod","Sirket","Durum",
-                                    "Arz_Fiyati","Iskonto_Orani",
-                                    "Graham_Degeri","Carpan_Bazli_Deger",
-                                    "Fiyat_Tespit_URL"]
-                      if c in df_upcoming.columns]
-        st.dataframe(
-            df_upcoming[_cols_show],
-            use_container_width=True, hide_index=True,
-            column_config={
-                "Tarih": st.column_config.TextColumn("Tarih", width="small"),
-                "Kod": st.column_config.TextColumn("Kod", width="small"),
-                "Sirket": st.column_config.TextColumn("Şirket", width="medium"),
-                "Durum": st.column_config.TextColumn("Durum", width="medium"),
-                "Arz_Fiyati": st.column_config.NumberColumn(
-                    "Arz Fiyatı (TL)",
-                    help="Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır (bulunamazsa boş kalır)",
-                    format="%.2f", width="small",
-                ),
-                "Iskonto_Orani": st.column_config.NumberColumn(
-                    "İskonto (%)",
-                    help="Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
-                    format="%.2f%%", width="small",
-                ),
-                "Graham_Degeri": st.column_config.NumberColumn(
-                    "Graham Değeri (TL)",
-                    help="Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak). Aracı kurumun değerlemesinden bağımsızdır.",
-                    format="%.2f", width="small",
-                ),
-                "Carpan_Bazli_Deger": st.column_config.NumberColumn(
-                    "Çarpan Bazlı Değer (TL)",
-                    help="Bağımsız değer — Şirket EBITDA'sı × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünmüştür. Aracı kurumun değerlemesinden bağımsızdır.",
-                    format="%.2f", width="small",
-                ),
-                "Fiyat_Tespit_URL": st.column_config.LinkColumn(
-                    "Fiyat Tespit Raporu",
-                    display_text="KAP'ta Aç",
-                    help="Resmi KAP bildirimi - arz fiyatının belirlendiği rapor (varsa)",
-                    width="small",
-                ),
-            },
+        # v2.0.4.10: st.dataframe metin sarma (word-wrap) desteklemediginden
+        # (uzun Durum/Kod metinleri "..." ile kesiliyordu, Tarih'te gereksiz
+        # saat bilgisi vardi, alt not dusuk kontrastli gorunuyordu) tablo
+        # ozel stillendirilmis bir HTML tabloya cevrildi - boylece hucre
+        # icinde tam metin sarma, okunur kontrast ve Arz Fiyati'nin bagimsiz
+        # degerlere (Graham/Carpan) gore nerede durdugunu gosteren bir
+        # "Referans Araligi" sutunu eklenebildi.
+        import html as _html
+
+        def _fmt_num(v, suffix=""):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return "—"
+            return f"{v:,.2f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        def _referans_araligi(arz, graham, carpan):
+            """Arz Fiyati'nin bagimsiz Graham/Carpan degerlerine gore nerede
+            durdugunu gosterir. Tavsiye degildir - sadece karsilastirmadir."""
+            degerler = [v for v in (graham, carpan) if v is not None and not pd.isna(v)]
+            if not degerler:
+                return "—", ""
+            alt, ust = min(degerler), max(degerler)
+            aralik_metni = f"{_fmt_num(alt)} – {_fmt_num(ust)} TL" if alt != ust else f"{_fmt_num(alt)} TL"
+            if arz is None or (isinstance(arz, float) and pd.isna(arz)):
+                return aralik_metni, ""
+            if arz < alt:
+                return aralik_metni, "background-color:#e6f4ea;"  # yesilimsi - referansin altinda
+            elif arz > ust:
+                return aralik_metni, "background-color:#fdeaea;"  # kirmizimsi - referansin ustunde
+            else:
+                return aralik_metni, "background-color:#fff8e1;"  # sarimsi - aralik icinde
+
+        _basliklar = [
+            ("Tarih", "8%"), ("Kod", "8%"), ("Şirket", "16%"), ("Durum", "14%"),
+            ("Arz Fiyatı (TL)", "8%"), ("İskonto (%)", "7%"),
+            ("Graham Değeri (TL)", "9%"), ("Çarpan Bazlı Değer (TL)", "9%"),
+            ("Referans Aralığı", "13%"), ("Fiyat Tespit Raporu", "8%"),
+        ]
+        _tooltips = [
+            "", "", "", "",
+            "Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır (bulunamazsa boş kalır)",
+            "Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
+            "Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak)",
+            "Bağımsız değer — Şirket EBITDA'sı × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünmüştür",
+            "Graham Değeri ile Çarpan Bazlı Değer'in alt-üst sınırı — Arz Fiyatı'nın bu aralığa göre konumu renkle gösterilir",
+            "",
+        ]
+
+        _rows_html = []
+        for _, r in df_upcoming.iterrows():
+            tarih_gosterim = str(r.get("Tarih", "") or "").split(" ")[0]
+            kod = _html.escape(str(r.get("Kod", "") or ""))
+            sirket = _html.escape(str(r.get("Sirket", "") or ""))
+            durum = _html.escape(str(r.get("Durum", "") or ""))
+            arz = r.get("Arz_Fiyati")
+            iskonto = r.get("Iskonto_Orani")
+            graham = r.get("Graham_Degeri")
+            carpan = r.get("Carpan_Bazli_Deger")
+            url = r.get("Fiyat_Tespit_URL", "") or ""
+            aralik_metni, arz_bg = _referans_araligi(arz, graham, carpan)
+            link_html = (f'<a href="{_html.escape(url)}" target="_blank">KAP\'ta Aç</a>'
+                         if url else "—")
+            _rows_html.append(f"""
+            <tr>
+                <td>{_html.escape(tarih_gosterim)}</td>
+                <td>{kod}</td>
+                <td>{sirket}</td>
+                <td>{durum}</td>
+                <td style="{arz_bg}">{_fmt_num(arz)}</td>
+                <td>{_fmt_num(iskonto, "%")}</td>
+                <td>{_fmt_num(graham)}</td>
+                <td>{_fmt_num(carpan)}</td>
+                <td>{_html.escape(aralik_metni)}</td>
+                <td>{link_html}</td>
+            </tr>""")
+
+        _thead = "".join(
+            f'<th style="width:{w};" title="{_html.escape(tip)}">{_html.escape(baslik)}</th>'
+            for (baslik, w), tip in zip(_basliklar, _tooltips)
         )
-        st.caption(
-            "Not: Şirket bazlı getiri tahmini sunulmaz — bu bilgilendirme "
-            "amaçlıdır, yatırım tavsiyesi değildir. Arz Fiyatı / İskonto "
-            "sütunları Fiyat Tespit Raporu PDF'inden otomatik olarak "
-            "çıkarılır; bazı raporlarda format farkı nedeniyle boş "
-            "kalabilir. Graham Değeri ve Çarpan Bazlı Değer, TrendSurf "
-            "Optima'nın raporun finansal tablolarından hesapladığı "
-            "BAĞIMSIZ değerlerdir — aracı kurumun kendi değerlemesinden "
-            "ayrıdır, ikinci bir bakış açısı sunar. İskonto oranı "
-            "yalnızca aracı kurumun hesapladığı değere göre uygulanan "
-            "indirim yüzdesidir — arz sonrası fiyat performansını "
-            "göstermez. \"Fiyat Tespit Raporu\" sütunundaki link, KAP'ın "
-            "resmi belgesine götürür (henüz yayınlanmamışsa boş görünür). "
-            "Detaylı bilgi için "
-            "[KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
-            "sayfasını ziyaret edebilirsiniz."
+
+        st.markdown(f"""
+        <style>
+        .ha-tablo-wrap {{ overflow-x: auto; }}
+        table.ha-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
+                           font-size: 13px; }}
+        table.ha-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
+                              padding: 8px 6px; font-weight: 600; white-space: normal; }}
+        table.ha-tablo td {{ padding: 7px 6px; border-bottom: 1px solid #e3e7ec;
+                              white-space: normal; word-wrap: break-word;
+                              vertical-align: top; color: #1a1a1a; }}
+        table.ha-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
+        </style>
+        <div class="ha-tablo-wrap">
+        <table class="ha-tablo">
+        <thead><tr>{_thead}</tr></thead>
+        <tbody>{"".join(_rows_html)}</tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            "<div style='color:#333333; font-size:13px; line-height:1.5; margin-top:10px;'>"
+            "<b>Nasıl okunur:</b> Arz Fiyatı hücresindeki renk, o fiyatın "
+            "<b>Referans Aralığı</b>'na (Graham Değeri ile Çarpan Bazlı Değer'in "
+            "alt-üst sınırı) göre nerede durduğunu gösterir — "
+            "<span style='background-color:#e6f4ea;'>yeşil</span>: Arz Fiyatı "
+            "referans aralığının altında (iki bağımsız modele göre görece "
+            "iskontolu), <span style='background-color:#fff8e1;'>sarı</span>: "
+            "aralık içinde, <span style='background-color:#fdeaea;'>kırmızı</span>: "
+            "aralığın üstünde (görece pahalı). Bu bir alım tavsiyesi ya da "
+            "\"bu fiyatın altından al\" önerisi değildir — sadece TrendSurf "
+            "Optima'nın kendi bağımsız modellerinin aracı kurumun arz "
+            "fiyatıyla karşılaştırmasıdır; iki model de kendi varsayımlarına "
+            "bağlıdır ve gerçek değeri garanti etmez."
+            "<br><br>"
+            "Diğer notlar: Şirket bazlı getiri tahmini sunulmaz. Arz Fiyatı / "
+            "İskonto sütunları Fiyat Tespit Raporu PDF'inden otomatik olarak "
+            "çıkarılır; bazı raporlarda format farkı nedeniyle boş kalabilir. "
+            "İskonto oranı yalnızca aracı kurumun hesapladığı değere göre "
+            "uygulanan indirim yüzdesidir — arz sonrası fiyat performansını "
+            "göstermez. \"Fiyat Tespit Raporu\" sütunundaki link, KAP'ın resmi "
+            "belgesine götürür (henüz yayınlanmamışsa boş görünür). Detaylı "
+            "bilgi için <a href='https://www.kap.org.tr/tr/bildirim-sorgu' "
+            "target='_blank'>KAP Bildirim Sorgulama</a> sayfasını ziyaret "
+            "edebilirsiniz."
+            "</div>",
+            unsafe_allow_html=True,
         )
     else:
         st.info("Şu anda takip edilen yeni halka arz başvurusu bulunmuyor.")
