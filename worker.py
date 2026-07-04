@@ -972,6 +972,22 @@ def build():
     df = df.drop_duplicates(subset=["Ticker"], keep="last").reset_index(drop=True)
     df.to_csv(OUTPUT, index=False, encoding="utf-8")
 
+    # ── v2.0.4.8: Yaklasan Halka Arzlar + Fiyat Tespit Raporu cache'i ────────
+    # Bu adim optimized_universe.csv'yi ETKILEMEZ - ayri bir cache dosyasina
+    # (upcoming_ipo_cache/*.json) yazar. app.py bu cache'i OKUR, kendisi asla
+    # PDF indirip OCR yapmaz - boylece Streamlit Cloud'da sayfa acilisi
+    # yavaslamaz. force_refresh=True: KAP izahname listesi her gece taze
+    # cekilir; PDF indirme/OCR ise kendi ic cache'i (fiyat_tespit_sonuclari.json)
+    # sayesinde sadece DAHA ONCE ISLENMEMIS raporlar icin yapilir.
+    # Hata durumunda (KAP erisilemez, tesseract kurulu degil vb.) SESSIZCE
+    # atlanir - worker asla bu yuzden cokmez, ana CSV zaten kaydedildi.
+    try:
+        from upcoming_ipo_client import fetch_upcoming_ipos
+        _df_ipo = fetch_upcoming_ipos(force_refresh=True)
+        print(f"  [Yaklasan Halka Arz] {len(_df_ipo)} kayit cache'e yazildi.")
+    except Exception as e:
+        print(f"  [Yaklasan Halka Arz] Atlaniyor (hata): {e}")
+
     print("\n" + "=" * 60)
     print(f"  TAMAM: {len(df)} varlik -> {OUTPUT}")
     for cat, cnt in df.groupby("Kategori").size().sort_values(ascending=False).items():
