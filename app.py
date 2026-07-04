@@ -2981,24 +2981,65 @@ elif page=="Halka Arz":
         )
 
     if not df_upcoming.empty:
-        _cols_show = [c for c in ["Tarih","Kod","Sirket","Konu","Durum","Fiyat_Tespit_URL"]
+        # v2.0.4.9: "Konu" sütunu kaldırıldı (Durum ile bilgi tekrarı yapıyordu,
+        # hep "İzahname..." yazıyordu) - yatay scroll'u azaltmak icin. Kalan
+        # sutunlara sabit genislik verildi, boylece container'a sigup yatay
+        # scroll ortadan kalkiyor.
+        _cols_show = [c for c in ["Tarih","Kod","Sirket","Durum",
+                                    "Arz_Fiyati","Iskonto_Orani",
+                                    "Graham_Degeri","Carpan_Bazli_Deger",
+                                    "Fiyat_Tespit_URL"]
                       if c in df_upcoming.columns]
         st.dataframe(
             df_upcoming[_cols_show],
             use_container_width=True, hide_index=True,
             column_config={
+                "Tarih": st.column_config.TextColumn("Tarih", width="small"),
+                "Kod": st.column_config.TextColumn("Kod", width="small"),
+                "Sirket": st.column_config.TextColumn("Şirket", width="medium"),
+                "Durum": st.column_config.TextColumn("Durum", width="medium"),
+                "Arz_Fiyati": st.column_config.NumberColumn(
+                    "Arz Fiyatı (TL)",
+                    help="Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır (bulunamazsa boş kalır)",
+                    format="%.2f", width="small",
+                ),
+                "Iskonto_Orani": st.column_config.NumberColumn(
+                    "İskonto (%)",
+                    help="Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
+                    format="%.2f%%", width="small",
+                ),
+                "Graham_Degeri": st.column_config.NumberColumn(
+                    "Graham Değeri (TL)",
+                    help="Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak). Aracı kurumun değerlemesinden bağımsızdır.",
+                    format="%.2f", width="small",
+                ),
+                "Carpan_Bazli_Deger": st.column_config.NumberColumn(
+                    "Çarpan Bazlı Değer (TL)",
+                    help="Bağımsız değer — Şirket EBITDA'sı × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünmüştür. Aracı kurumun değerlemesinden bağımsızdır.",
+                    format="%.2f", width="small",
+                ),
                 "Fiyat_Tespit_URL": st.column_config.LinkColumn(
                     "Fiyat Tespit Raporu",
                     display_text="KAP'ta Aç",
                     help="Resmi KAP bildirimi - arz fiyatının belirlendiği rapor (varsa)",
+                    width="small",
                 ),
-            } if "Fiyat_Tespit_URL" in df_upcoming.columns else None,
+            },
         )
         st.caption(
             "Not: Şirket bazlı getiri tahmini sunulmaz — bu bilgilendirme "
-            "amaçlıdır, yatırım tavsiyesi değildir. \"Fiyat Tespit Raporu\" "
-            "sütunundaki link, KAP'ın resmi belgesine götürür (henüz "
-            "yayınlanmamışsa boş görünür). Detaylı bilgi için "
+            "amaçlıdır, yatırım tavsiyesi değildir. Arz Fiyatı / İskonto "
+            "sütunları Fiyat Tespit Raporu PDF'inden otomatik olarak "
+            "çıkarılır; bazı raporlarda format farkı nedeniyle boş "
+            "kalabilir. Graham Değeri ve Çarpan Bazlı Değer, TrendSurf "
+            "Optima'nın raporun finansal tablolarından hesapladığı "
+            "BAĞIMSIZ değerlerdir — aracı kurumun kendi değerlemesinden "
+            "ayrıdır, ikinci bir bakış açısı sunar. İskonto oranı "
+            "yalnızca aracı kurumun hesapladığı değere göre uygulanan "
+            "indirim yüzdesidir — arz sonrası fiyat performansını "
+            "göstermez. \"Fiyat Tespit Raporu\" sütunundaki link, KAP'ın "
+            "resmi belgesine götürür (henüz yayınlanmamışsa boş görünür). "
+            "Detaylı bilgi için "
             "[KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
             "sayfasını ziyaret edebilirsiniz."
         )
