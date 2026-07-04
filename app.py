@@ -2981,24 +2981,38 @@ elif page=="Halka Arz":
         )
 
     if not df_upcoming.empty:
-        _cols_show = [c for c in ["Tarih","Kod","Sirket","Konu","Durum","Fiyat_Tespit_URL"]
+        _cols_show = [c for c in ["Tarih","Kod","Sirket","Konu","Durum",
+                                    "Arz_Fiyati","Iskonto_Orani","Fiyat_Tespit_URL"]
                       if c in df_upcoming.columns]
         st.dataframe(
             df_upcoming[_cols_show],
             use_container_width=True, hide_index=True,
             column_config={
+                "Arz_Fiyati": st.column_config.NumberColumn(
+                    "Arz Fiyatı (TL)",
+                    help="Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır (bulunamazsa boş kalır)",
+                    format="%.2f",
+                ),
+                "Iskonto_Orani": st.column_config.NumberColumn(
+                    "İskonto (%)",
+                    help="Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
+                    format="%.2f%%",
+                ),
                 "Fiyat_Tespit_URL": st.column_config.LinkColumn(
                     "Fiyat Tespit Raporu",
                     display_text="KAP'ta Aç",
                     help="Resmi KAP bildirimi - arz fiyatının belirlendiği rapor (varsa)",
                 ),
-            } if "Fiyat_Tespit_URL" in df_upcoming.columns else None,
+            },
         )
         st.caption(
             "Not: Şirket bazlı getiri tahmini sunulmaz — bu bilgilendirme "
-            "amaçlıdır, yatırım tavsiyesi değildir. \"Fiyat Tespit Raporu\" "
-            "sütunundaki link, KAP'ın resmi belgesine götürür (henüz "
-            "yayınlanmamışsa boş görünür). Detaylı bilgi için "
+            "amaçlıdır, yatırım tavsiyesi değildir. Arz Fiyatı / İskonto "
+            "sütunları Fiyat Tespit Raporu PDF'inden otomatik olarak "
+            "çıkarılır; bazı raporlarda format farkı nedeniyle boş "
+            "kalabilir. \"Fiyat Tespit Raporu\" sütunundaki link, KAP'ın "
+            "resmi belgesine götürür (henüz yayınlanmamışsa boş görünür). "
+            "Detaylı bilgi için "
             "[KAP Bildirim Sorgulama](https://www.kap.org.tr/tr/bildirim-sorgu) "
             "sayfasını ziyaret edebilirsiniz."
         )
