@@ -2998,36 +2998,37 @@ elif page=="Halka Arz":
                 return "—"
             return f"{v:,.2f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        def _referans_araligi(arz, graham, carpan):
+        def _arz_renk(arz, graham, carpan):
             """Arz Fiyati'nin bagimsiz Graham/Carpan degerlerine gore nerede
-            durdugunu gosterir. Tavsiye degildir - sadece karsilastirmadir."""
+            durdugunu renkle gosterir (yesil: altinda/iskontolu, sari: aralik
+            icinde, kirmizi: ustunde/pahali). Tavsiye degildir - sadece
+            karsilastirmadir. Not: Referans Araligi ayri bir sutun olarak
+            gosterilmiyor cunku zaten Graham Degeri ve Carpan Bazli Deger
+            sutunlari yan yana - okuyucu iki sayiyi dogrudan karsilastirabilir,
+            ayri bir sutun gereksiz tekrar oluyordu."""
             degerler = [v for v in (graham, carpan) if v is not None and not pd.isna(v)]
-            if not degerler:
-                return "—", ""
+            if not degerler or arz is None or (isinstance(arz, float) and pd.isna(arz)):
+                return ""
             alt, ust = min(degerler), max(degerler)
-            aralik_metni = f"{_fmt_num(alt)} – {_fmt_num(ust)} TL" if alt != ust else f"{_fmt_num(alt)} TL"
-            if arz is None or (isinstance(arz, float) and pd.isna(arz)):
-                return aralik_metni, ""
             if arz < alt:
-                return aralik_metni, "background-color:#e6f4ea;"  # yesilimsi - referansin altinda
+                return "background-color:#e6f4ea;"  # yesilimsi - referansin altinda
             elif arz > ust:
-                return aralik_metni, "background-color:#fdeaea;"  # kirmizimsi - referansin ustunde
+                return "background-color:#fdeaea;"  # kirmizimsi - referansin ustunde
             else:
-                return aralik_metni, "background-color:#fff8e1;"  # sarimsi - aralik icinde
+                return "background-color:#fff8e1;"  # sarimsi - aralik icinde
 
         _basliklar = [
-            ("Tarih", "7%"), ("Kod", "7%"), ("Şirket", "17%"), ("Durum", "13%"),
-            ("Arz Fiyatı (TL)", "9%"), ("İskonto (%)", "8%"),
-            ("Graham Değeri (TL)", "10%"), ("Çarpan Bazlı Değer (TL)", "10%"),
-            ("Referans Aralığı", "12%"), ("Fiyat Tespit Raporu", "7%"),
+            ("Tarih", "8%"), ("Kod", "8%"), ("Şirket", "20%"), ("Durum", "16%"),
+            ("Arz Fiyatı (TL)", "10%"), ("İskonto (%)", "9%"),
+            ("Graham Değeri (TL)", "12%"), ("Çarpan Bazlı Değer (TL)", "12%"),
+            ("Fiyat Tespit Raporu", "5%"),
         ]
         _tooltips = [
             "", "", "", "",
             "Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır (bulunamazsa boş kalır)",
             "Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
-            "Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak)",
+            "Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak). Arz Fiyatı hücresinin rengi bu değerle Çarpan Bazlı Değer'in alt-üst sınırına göre belirlenir.",
             "Bağımsız değer — Şirket EBITDA'sı × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünmüştür",
-            "Graham Değeri ile Çarpan Bazlı Değer'in alt-üst sınırı — Arz Fiyatı'nın bu aralığa göre konumu renkle gösterilir",
             "",
         ]
 
@@ -3042,7 +3043,7 @@ elif page=="Halka Arz":
             graham = r.get("Graham_Degeri")
             carpan = r.get("Carpan_Bazli_Deger")
             url = r.get("Fiyat_Tespit_URL", "") or ""
-            aralik_metni, arz_bg = _referans_araligi(arz, graham, carpan)
+            arz_bg = _arz_renk(arz, graham, carpan)
             link_html = (f'<a href="{_html.escape(url)}" target="_blank">KAP\'ta Aç</a>'
                          if url else "—")
             _rows_html.append(f"""
@@ -3055,7 +3056,6 @@ elif page=="Halka Arz":
                 <td>{_fmt_num(iskonto, "%")}</td>
                 <td>{_fmt_num(graham)}</td>
                 <td>{_fmt_num(carpan)}</td>
-                <td>{_html.escape(aralik_metni)}</td>
                 <td>{link_html}</td>
             </tr>""")
 
@@ -3068,11 +3068,11 @@ elif page=="Halka Arz":
         <style>
         .ha-tablo-wrap {{ overflow-x: auto; }}
         table.ha-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
-                           font-size: 14.5px; }}
+                           font-size: 15.5px; }}
         table.ha-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
-                              padding: 10px 12px; font-weight: 600; white-space: normal;
-                              font-size: 15px; }}
-        table.ha-tablo td {{ padding: 10px 12px; border-bottom: 1px solid #e3e7ec;
+                              padding: 11px 14px; font-weight: 600; white-space: normal;
+                              font-size: 16px; }}
+        table.ha-tablo td {{ padding: 11px 14px; border-bottom: 1px solid #e3e7ec;
                               white-space: normal; word-wrap: break-word;
                               vertical-align: top; color: #1a1a1a; line-height: 1.4; }}
         table.ha-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
@@ -3086,15 +3086,15 @@ elif page=="Halka Arz":
         """, unsafe_allow_html=True)
 
         st.markdown(
-            "<div style='color:#333333; font-size:13px; line-height:1.5; margin-top:10px;'>"
+            "<div style='color:#333333; font-size:14px; line-height:1.5; margin-top:10px;'>"
             "<b>Nasıl okunur:</b> Arz Fiyatı hücresindeki renk, o fiyatın "
-            "<b>Referans Aralığı</b>'na (Graham Değeri ile Çarpan Bazlı Değer'in "
-            "alt-üst sınırı) göre nerede durduğunu gösterir — "
+            "<b>Graham Değeri</b> ile <b>Çarpan Bazlı Değer</b>'in alt-üst "
+            "sınırına göre nerede durduğunu gösterir — "
             "<span style='background-color:#e6f4ea;'>yeşil</span>: Arz Fiyatı "
-            "referans aralığının altında (iki bağımsız modele göre görece "
+            "her ikisinin de altında (iki bağımsız modele göre görece "
             "iskontolu), <span style='background-color:#fff8e1;'>sarı</span>: "
-            "aralık içinde, <span style='background-color:#fdeaea;'>kırmızı</span>: "
-            "aralığın üstünde (görece pahalı). Bu bir alım tavsiyesi ya da "
+            "ikisinin arasında, <span style='background-color:#fdeaea;'>kırmızı</span>: "
+            "ikisinin de üstünde (görece pahalı). Bu bir alım tavsiyesi ya da "
             "\"bu fiyatın altından al\" önerisi değildir — sadece TrendSurf "
             "Optima'nın kendi bağımsız modellerinin aracı kurumun arz "
             "fiyatıyla karşılaştırmasıdır; iki model de kendi varsayımlarına "
