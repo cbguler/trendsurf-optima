@@ -194,7 +194,7 @@ def _tip_c_dene(metin: str) -> Optional[FiyatTespitSonucu]:
 # kalitesi tablo hücrelerine gore cok daha iyi oluyor. "halka arz" ifadesinden
 # sonraki (80 karaktere kadar) ilk sayı + "TL olarak" kalıbını arıyoruz.
 _TIP_D_PATTERNS = [
-    r"halka\s+arz[^\d]{0,80}" + _NUM + r"\s*TL\s+olarak",
+    r"halka\s+arz[^\d]{0,60}?(?:pay|hisse)[^\d]{0,40}" + _NUM + r"\s*TL\s+olarak",
 ]
 
 
@@ -209,7 +209,7 @@ def _tip_d_dene(metin: str) -> Optional[FiyatTespitSonucu]:
             # iskonto uygulanmadan onceki ara deger). Eslesmeden sonraki
             # ~200 karakterde "iskontosu sonras" gecerse bu sinyal olarak
             # kabul edilip bu eslesme atlanir, bir sonraki denenir.
-            sonrasi = metin_n[m.end(): m.end() + 200]
+            sonrasi = metin_n[m.end(): m.end() + 100]
             if re.search(r"iskontosu\s+sonras", sonrasi, re.IGNORECASE):
                 continue
             deger = _tr_sayi_to_float(m.group(1))
