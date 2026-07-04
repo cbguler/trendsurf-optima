@@ -53,7 +53,7 @@ KAP_SEARCH_URL = "https://www.kap.org.tr/tr/bildirim-sorgu-sonuc"
 KAP_CATEGORIES = [
     {
         "key": "basvuru",
-        "durum_label": "Başvuru Yapıldı - SPK Onayı Bekleniyor",
+        "durum_label": "Başvuru Yapıldı SPK Onayı Bekleniyor",
         "params": {
             "srcbar": "Y", "cmp": "Y", "cat": "4",
             "s": "4028328d5988e2630159d9aebd742fd4",
@@ -63,7 +63,7 @@ KAP_CATEGORIES = [
     },
     {
         "key": "onaylandi",
-        "durum_label": "Onaylandı - Talep Toplanıyor/Yakında",
+        "durum_label": "Onaylandı Talep Toplanıyor Yakında",
         "params": {
             "srcbar": "Y", "cmp": "Y", "cat": "4",
             "s": "4028328d5988e2630159d9b261b72ffe",

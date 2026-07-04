@@ -3018,10 +3018,10 @@ elif page=="Halka Arz":
                 return "background-color:#fff8e1;"  # sarimsi - aralik icinde
 
         _basliklar = [
-            ("Tarih", "8%"), ("Kod", "8%"), ("Şirket", "20%"), ("Durum", "16%"),
-            ("Arz Fiyatı (TL)", "10%"), ("İskonto (%)", "9%"),
+            ("Tarih", "8%"), ("Kod", "7%"), ("Şirket", "19%"), ("Durum", "15%"),
+            ("Arz Fiyatı (TL)", "10%"), ("İskonto (%)", "8%"),
             ("Graham Değeri (TL)", "12%"), ("Çarpan Bazlı Değer (TL)", "12%"),
-            ("Fiyat Tespit Raporu", "5%"),
+            ("Rapor", "9%"),
         ]
         _tooltips = [
             "", "", "", "",
@@ -3029,7 +3029,7 @@ elif page=="Halka Arz":
             "Halka arz iskontosu — Fiyat Tespit Raporu'ndan otomatik çıkarılmıştır",
             "Bağımsız, muhafazakar taban değer — √(22.5 × Hisse Başı Kâr × Hisse Başı Özkaynak). Arz Fiyatı hücresinin rengi bu değerle Çarpan Bazlı Değer'in alt-üst sınırına göre belirlenir.",
             "Bağımsız değer — Şirket EBITDA'sı × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünmüştür",
-            "",
+            "Fiyat Tespit Raporu — Resmi KAP bildirimi (varsa)",
         ]
 
         _rows_html = []
@@ -3066,13 +3066,17 @@ elif page=="Halka Arz":
 
         st.markdown(f"""
         <style>
+        @media (min-width: 769px) {{
+            .block-container {{ padding-left: 2rem !important; padding-right: 2rem !important;
+                                 max-width: 100% !important; }}
+        }}
         .ha-tablo-wrap {{ overflow-x: auto; }}
         table.ha-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
-                           font-size: 15.5px; }}
+                           font-size: 14.5px; }}
         table.ha-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
-                              padding: 11px 14px; font-weight: 600; white-space: normal;
-                              font-size: 16px; }}
-        table.ha-tablo td {{ padding: 11px 14px; border-bottom: 1px solid #e3e7ec;
+                              padding: 10px 12px; font-weight: 600; white-space: normal;
+                              font-size: 13.5px; line-height: 1.3; }}
+        table.ha-tablo td {{ padding: 10px 12px; border-bottom: 1px solid #e3e7ec;
                               white-space: normal; word-wrap: break-word;
                               vertical-align: top; color: #1a1a1a; line-height: 1.4; }}
         table.ha-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
