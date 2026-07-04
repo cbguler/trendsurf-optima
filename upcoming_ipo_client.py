@@ -605,6 +605,14 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
                     if not idx:
                         continue
                     key = str(idx)
+                    # v2.0.4.14: force_refresh=True iken, daha önce sonucu
+                    # BULUNAMAMIŞ (arz_fiyati=None) kayıtları cache'ten
+                    # kaldırıp yeniden denenmesini sağlıyoruz - başarılı
+                    # (arz_fiyati dolu) kayıtlara dokunmuyoruz, boşuna
+                    # yeniden indirme/OCR yapılmasın diye.
+                    if force_refresh and key in ft_sonuc_cache and ft_sonuc_cache[key].get("arz_fiyati") is None:
+                        del ft_sonuc_cache[key]
+                        cache_degisti = True
                     if key not in ft_sonuc_cache:
                         if yeni_islenen_sayisi >= FIYAT_TESPIT_MAX_YENI_ISLEME:
                             continue  # bu calistirmada limit doldu, sonraki calistirmada denenir

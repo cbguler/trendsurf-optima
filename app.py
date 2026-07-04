@@ -2969,10 +2969,13 @@ elif page=="Halka Arz":
         "(yeni) şirketler gösterilir; mevcut şirketlerin sermaye artırımı "
         "izahnameleri hariç tutulur."
     )
+    _col_baslik, _col_buton = st.columns([5, 1])
+    with _col_buton:
+        _zorla_yenile = st.button("Zorla Yenile", help="12 saatlik önbelleği atlayıp KAP'tan taze veri çeker (yavaş olabilir)")
     try:
         from upcoming_ipo_client import fetch_upcoming_ipos
         with st.spinner("KAP izahname bildirimleri yükleniyor..."):
-            df_upcoming = fetch_upcoming_ipos()
+            df_upcoming = fetch_upcoming_ipos(force_refresh=_zorla_yenile)
     except Exception as _uip_ex:
         df_upcoming = pd.DataFrame()
         st.info(
@@ -3013,10 +3016,10 @@ elif page=="Halka Arz":
                 return aralik_metni, "background-color:#fff8e1;"  # sarimsi - aralik icinde
 
         _basliklar = [
-            ("Tarih", "8%"), ("Kod", "8%"), ("Şirket", "16%"), ("Durum", "14%"),
-            ("Arz Fiyatı (TL)", "8%"), ("İskonto (%)", "7%"),
-            ("Graham Değeri (TL)", "9%"), ("Çarpan Bazlı Değer (TL)", "9%"),
-            ("Referans Aralığı", "13%"), ("Fiyat Tespit Raporu", "8%"),
+            ("Tarih", "7%"), ("Kod", "7%"), ("Şirket", "17%"), ("Durum", "13%"),
+            ("Arz Fiyatı (TL)", "9%"), ("İskonto (%)", "8%"),
+            ("Graham Değeri (TL)", "10%"), ("Çarpan Bazlı Değer (TL)", "10%"),
+            ("Referans Aralığı", "12%"), ("Fiyat Tespit Raporu", "7%"),
         ]
         _tooltips = [
             "", "", "", "",
@@ -3065,12 +3068,13 @@ elif page=="Halka Arz":
         <style>
         .ha-tablo-wrap {{ overflow-x: auto; }}
         table.ha-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
-                           font-size: 13px; }}
+                           font-size: 14.5px; }}
         table.ha-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
-                              padding: 8px 6px; font-weight: 600; white-space: normal; }}
-        table.ha-tablo td {{ padding: 7px 6px; border-bottom: 1px solid #e3e7ec;
+                              padding: 10px 12px; font-weight: 600; white-space: normal;
+                              font-size: 15px; }}
+        table.ha-tablo td {{ padding: 10px 12px; border-bottom: 1px solid #e3e7ec;
                               white-space: normal; word-wrap: break-word;
-                              vertical-align: top; color: #1a1a1a; }}
+                              vertical-align: top; color: #1a1a1a; line-height: 1.4; }}
         table.ha-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
         </style>
         <div class="ha-tablo-wrap">
