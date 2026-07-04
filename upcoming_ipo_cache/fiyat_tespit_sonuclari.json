@@ -1,0 +1,32 @@
+{
+  "1624187": {
+    "arz_fiyati": null,
+    "iskonto_orani": 20.0,
+    "tip": null
+  },
+  "1620968": {
+    "arz_fiyati": null,
+    "iskonto_orani": null,
+    "tip": null
+  },
+  "1620821": {
+    "arz_fiyati": 20.9,
+    "iskonto_orani": 27.03,
+    "tip": "A"
+  },
+  "1620810": {
+    "arz_fiyati": 69.0,
+    "iskonto_orani": null,
+    "tip": "B"
+  },
+  "1620801": {
+    "arz_fiyati": 15.0,
+    "iskonto_orani": 37.0,
+    "tip": "A"
+  },
+  "1616583": {
+    "arz_fiyati": null,
+    "iskonto_orani": 20.45,
+    "tip": null
+  }
+}
