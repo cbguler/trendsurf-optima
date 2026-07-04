@@ -182,16 +182,59 @@ def _tip_c_dene(metin: str) -> Optional[FiyatTespitSonucu]:
     )
 
 
+# --- TİP D: anlatım cümlesi (çok sütunlu tablolar OCR'da bozulunca) ----------
+# GOLDA örneğinde görüldü: iki sütunlu "Halka Arza İlişkin Bilgiler" tablosu
+# OCR tarafından "önce tüm etiketler, sonra tüm değerler" şeklinde (sütun
+# sütun) okunuyor - bu da etiketle sayıyı birbirinden yüzlerce karakter
+# uzağa düşürüyor, Tip A/B/C'nin "etiket + yakın sayı" mantığı bu durumda
+# hiç çalışmıyor. Ama raporlar genelde AYRICA duz bir anlatım cümlesiyle de
+# sonucu tekrarlıyor - örn. GOLDA: "...pay başına değer 9,20 TL olarak
+# belirlenmiş olup..." / TSK (Beta Enerji): "...halka arz birim pay fiyat,
+# 40,00 TL olarak hesaplanmıştır...". Bu cümleler duz metin oldugu icin OCR
+# kalitesi tablo hücrelerine gore cok daha iyi oluyor. "halka arz" ifadesinden
+# sonraki (80 karaktere kadar) ilk sayı + "TL olarak" kalıbını arıyoruz.
+_TIP_D_PATTERNS = [
+    r"halka\s+arz[^\d]{0,80}" + _NUM + r"\s*TL\s+olarak",
+]
+
+
+def _tip_d_dene(metin: str) -> Optional[FiyatTespitSonucu]:
+    metin_n = _normalize_tr(metin)
+    for pat in _TIP_D_PATTERNS:
+        for m in re.finditer(pat, metin_n, re.IGNORECASE | re.DOTALL):
+            # Guvenlik kontrolu: bazi raporlarda ONCE iskonto-oncesi
+            # (ara) deger anlatim cumlesiyle veriliyor, hemen ardindan
+            # "%X halka arz iskontosu sonrasi..." diye devam ediyor - bu
+            # durumda yakaladigimiz sayi YANLIS (nihai arz fiyati degil,
+            # iskonto uygulanmadan onceki ara deger). Eslesmeden sonraki
+            # ~200 karakterde "iskontosu sonras" gecerse bu sinyal olarak
+            # kabul edilip bu eslesme atlanir, bir sonraki denenir.
+            sonrasi = metin_n[m.end(): m.end() + 200]
+            if re.search(r"iskontosu\s+sonras", sonrasi, re.IGNORECASE):
+                continue
+            deger = _tr_sayi_to_float(m.group(1))
+            if deger is not None:
+                return FiyatTespitSonucu(
+                    tip="D",
+                    arz_fiyati=deger,
+                    iskonto_orani=_iskonto_bul(metin),
+                    eslesen_etiket="Anlatım cümlesi ('halka arz ... TL olarak')",
+                    ham_deger_metni=m.group(0),
+                )
+    return None
+
+
 def fiyat_tespit_ayikla(metin: str) -> FiyatTespitSonucu:
     """
     Fiyat Tespit Raporu metnini (PDF'ten çıkarılmış text) alır, arz fiyatı ve
     iskonto oranını üç bilinen tabloya göre çıkarmaya çalışır.
 
-    Öncelik sırası: C -> B -> A
+    Öncelik sırası: C -> B -> A -> D
     (C ve B daha spesifik başlıklara bağlı olduğundan yanlış pozitif riski
-    daha düşük; A en genel/gevşek eşleşme olduğundan son sırada denenir.)
+    daha düşük; A tablo-tabanlı gevşek eşleşme; D en son denenir çünkü
+    duz anlatım cümlesine dayanıyor, tablo eşleşmesi kadar spesifik değil.)
     """
-    for fn in (_tip_c_dene, _tip_b_dene, _tip_a_dene):
+    for fn in (_tip_c_dene, _tip_b_dene, _tip_a_dene, _tip_d_dene):
         sonuc = fn(metin)
         if sonuc is not None:
             return sonuc
