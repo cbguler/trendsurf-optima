@@ -232,6 +232,22 @@ def _extract_temel_deger(metin: str, arz_fiyati: Optional[float] = None) -> dict
             graham = dv.graham_degeri
         if dv.carpan_bazli_deger is not None:
             carpan = dv.carpan_bazli_deger  # en son (en guncel donem) deger kalir
+
+    if graham is None and carpan is None:
+        # v2.0.4.18 DEBUG: ikisi de bulunamadiysa, "ozet kutusu"nun aranacagi
+        # anahtar kelimelerin (EBITDA, Net Kar, Ozkaynak, Net Borc, Hisse
+        # Sayisi) metinde gecip gecmedigini ve civarindaki ham OCR metnini
+        # loglara yazdiriyoruz - hangi etiketin nasil bozuldugunu gormeden
+        # regex'i tahminle degistirmemek icin.
+        print(f"[upcoming-ipo] DEBUG Graham/Carpan bulunamadi - metin uzunlugu: {len(metin)}")
+        for kelime in ("EBITDA", "Net Kar", "Ozkaynak", "Net Borc", "Hisse Sayisi", "m.d"):
+            for m_dbg in re.finditer(re.escape(kelime), metin, re.IGNORECASE):
+                baslangic = max(0, m_dbg.start() - 40)
+                bitis = min(len(metin), m_dbg.end() + 80)
+                print(f"[upcoming-ipo] DEBUG-TD '{kelime}' civari: "
+                      f"...{metin[baslangic:bitis]!r}...")
+                break  # her kelime icin sadece ilk esleşme yeterli
+
     return {"graham_degeri": graham, "carpan_bazli_deger": carpan}
 
 
@@ -262,6 +278,7 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         # 1) Ilk N sayfa
         metin = pdf_to_text(tmp_path, max_pages=FIYAT_TESPIT_TARAMA_SAYFA_SAYISI)
         sonuc = fiyat_tespit_ayikla(metin)
+        metin_son = None
 
         # 2) Bulunamadiysa son N sayfa
         if sonuc.tip == "BILINMEYEN":
@@ -299,7 +316,14 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                           f"<= {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}, son-sayfa denemesi atlandi "
                           f"(ilk taramayla ayni sayfalar olurdu)")
 
-        temel = _extract_temel_deger(metin, arz_fiyati=sonuc.arz_fiyati)
+        # v2.0.4.18: Graham/Carpan hesaplamasi ARTIK sadece ilk N sayfayla
+        # SINIRLI DEGIL - eger son N sayfa da tarandiysa (metin_son doluysa)
+        # ikisi birlestirilip verilir. Onceden sadece 'metin' (ilk N sayfa)
+        # kullaniliyordu, bu da "ozet kutusu" ilk sayfalarda olmayan (veya
+        # son taramada bulunan) raporlarda Graham/Carpan'in hep bos kalmasina
+        # sebep oluyordu.
+        metin_birlesik = metin + ("\n\n" + metin_son if metin_son else "")
+        temel = _extract_temel_deger(metin_birlesik, arz_fiyati=sonuc.arz_fiyati)
 
         return {
             "arz_fiyati": sonuc.arz_fiyati,
@@ -632,7 +656,13 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
                     # kaldırıp yeniden denenmesini sağlıyoruz - başarılı
                     # (arz_fiyati dolu) kayıtlara dokunmuyoruz, boşuna
                     # yeniden indirme/OCR yapılmasın diye.
-                    if force_refresh and key in ft_sonuc_cache and ft_sonuc_cache[key].get("arz_fiyati") is None:
+                    # v2.0.4.18: Graham_Degeri de eksikse (arz_fiyati bulunmus
+                    # olsa bile) yine yeniden deneniyor - cunku bu iki deger
+                    # ayri asamalarda hesaplaniyor, biri bulunup digeri
+                    # bulunamamis olabilir (orn. GOLDA/TSK).
+                    if (force_refresh and key in ft_sonuc_cache and
+                            (ft_sonuc_cache[key].get("arz_fiyati") is None
+                             or ft_sonuc_cache[key].get("graham_degeri") is None)):
                         del ft_sonuc_cache[key]
                         cache_degisti = True
                     if key not in ft_sonuc_cache:
