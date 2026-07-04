@@ -194,7 +194,7 @@ def _fetch_attachment_obj_id(disclosure_index) -> Optional[str]:
             return None
         return attachments[0].get("objId")
     except Exception as e:
-        print(f"[upcoming-ipo] attachment-detail hatasi (idx={disclosure_index}): {e}")
+        print(f"[upcoming-ipo] attachment-detail hatasi (idx={disclosure_index}): {e}", flush=True)
         return None
 
 
@@ -207,7 +207,7 @@ def _download_pdf_bytes(obj_id: str) -> Optional[bytes]:
             return None
         return _unwrap_java_pdf(r.content)
     except Exception as e:
-        print(f"[upcoming-ipo] PDF indirme hatasi (objId={obj_id}): {e}")
+        print(f"[upcoming-ipo] PDF indirme hatasi (objId={obj_id}): {e}", flush=True)
         return None
 
 
@@ -218,11 +218,12 @@ def _extract_temel_deger(metin: str, arz_fiyati: Optional[float] = None) -> dict
     durumunda None doner - IPO satiri etkilenmez, sadece bu sutunlar bos kalir.
     arz_fiyati: fiyat_tespit_ayikla'nin zaten buldugu Pay Basi Deger - Hisse
     Sayisi metinde bulunamazsa Piyasa Degeri/arz_fiyati ile turetilir."""
+    print(f"[upcoming-ipo] CANARY _extract_temel_deger cagrildi, metin uzunlugu={len(metin)}, arz_fiyati={arz_fiyati}", flush=True)
     try:
         from temel_deger_hesaplama import hedef_fiyat_hesapla
         donemler = hedef_fiyat_hesapla(metin, arz_fiyati=arz_fiyati)
     except Exception as e:
-        print(f"[upcoming-ipo] Temel değer hesaplama atlandı (hata): {e}")
+        print(f"[upcoming-ipo] Temel değer hesaplama atlandı (hata): {e}", flush=True)
         return {"graham_degeri": None, "carpan_bazli_deger": None}
 
     graham = None
@@ -239,13 +240,13 @@ def _extract_temel_deger(metin: str, arz_fiyati: Optional[float] = None) -> dict
         # Sayisi) metinde gecip gecmedigini ve civarindaki ham OCR metnini
         # loglara yazdiriyoruz - hangi etiketin nasil bozuldugunu gormeden
         # regex'i tahminle degistirmemek icin.
-        print(f"[upcoming-ipo] DEBUG Graham/Carpan bulunamadi - metin uzunlugu: {len(metin)}")
+        print(f"[upcoming-ipo] DEBUG Graham/Carpan bulunamadi - metin uzunlugu: {len(metin)}", flush=True)
         for kelime in ("EBITDA", "Net Kar", "Ozkaynak", "Net Borc", "Hisse Sayisi", "m.d"):
             for m_dbg in re.finditer(re.escape(kelime), metin, re.IGNORECASE):
                 baslangic = max(0, m_dbg.start() - 40)
                 bitis = min(len(metin), m_dbg.end() + 80)
                 print(f"[upcoming-ipo] DEBUG-TD '{kelime}' civari: "
-                      f"...{metin[baslangic:bitis]!r}...")
+                      f"...{metin[baslangic:bitis]!r}...", flush=True)
                 break  # her kelime icin sadece ilk esleşme yeterli
 
     return {"graham_degeri": graham, "carpan_bazli_deger": carpan}
@@ -266,7 +267,7 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         from pdf_text_extract import pdf_to_text, _sayfa_metin_var_mi, _ocr_sayfa
         from fiyat_tespit_parser import fiyat_tespit_ayikla
     except ImportError as e:
-        print(f"[upcoming-ipo] fiyat tespit parser modulleri bulunamadi: {e}")
+        print(f"[upcoming-ipo] fiyat tespit parser modulleri bulunamadi: {e}", flush=True)
         return bos_sonuc
 
     tmp_path = None
@@ -285,7 +286,7 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
             with pdfplumber.open(tmp_path) as pdf:
                 toplam_sayfa = len(pdf.pages)
                 print(f"[upcoming-ipo] Ilk {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI} sayfada eslesme yok, "
-                      f"toplam sayfa: {toplam_sayfa}, son {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI} deneniyor")
+                      f"toplam sayfa: {toplam_sayfa}, son {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI} deneniyor", flush=True)
                 if toplam_sayfa > FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
                     parcalar = []
                     for sayfa in pdf.pages[-FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:]:
@@ -301,20 +302,20 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                         # yazdiriyoruz - gercek OCR ciktisini gormeden regex'i
                         # daha fazla tahminle degistirmemek icin.
                         print(f"[upcoming-ipo] DEBUG son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
-                              f"metin uzunlugu: {len(metin_son)} karakter")
+                              f"metin uzunlugu: {len(metin_son)} karakter", flush=True)
                         for kelime in ("Pay", "Deger", "Arz Fiyat", "Iskonto", "ISKONTO"):
                             for m_dbg in re.finditer(re.escape(kelime), metin_son, re.IGNORECASE):
                                 baslangic = max(0, m_dbg.start() - 60)
                                 bitis = min(len(metin_son), m_dbg.end() + 60)
                                 print(f"[upcoming-ipo] DEBUG '{kelime}' civari: "
-                                      f"...{metin_son[baslangic:bitis]!r}...")
+                                      f"...{metin_son[baslangic:bitis]!r}...", flush=True)
                     else:
                         print(f"[upcoming-ipo] Son-{FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}-sayfa "
-                              f"eslesme bulundu: tip={sonuc.tip}, arz_fiyati={sonuc.arz_fiyati}")
+                              f"eslesme bulundu: tip={sonuc.tip}, arz_fiyati={sonuc.arz_fiyati}", flush=True)
                 else:
                     print(f"[upcoming-ipo] Toplam sayfa ({toplam_sayfa}) "
                           f"<= {FIYAT_TESPIT_TARAMA_SAYFA_SAYISI}, son-sayfa denemesi atlandi "
-                          f"(ilk taramayla ayni sayfalar olurdu)")
+                          f"(ilk taramayla ayni sayfalar olurdu)", flush=True)
 
         # v2.0.4.18: Graham/Carpan hesaplamasi ARTIK sadece ilk N sayfayla
         # SINIRLI DEGIL - eger son N sayfa da tarandiysa (metin_son doluysa)
@@ -333,7 +334,7 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
             "carpan_bazli_deger": temel.get("carpan_bazli_deger"),
         }
     except Exception as e:
-        print(f"[upcoming-ipo] Fiyat/iskonto cikarma hatasi: {e}")
+        print(f"[upcoming-ipo] Fiyat/iskonto cikarma hatasi: {e}", flush=True)
         return bos_sonuc
     finally:
         if tmp_path:
@@ -418,10 +419,10 @@ def _fetch_fiyat_tespit_map() -> dict:
                                         "disclosure_index": idx}
 
         print(f"[upcoming-ipo] Fiyat Tespit Raporu: {len(raw_records)} bildirim -> "
-              f"{len(code_map)} benzersiz ticker eslesti")
+              f"{len(code_map)} benzersiz ticker eslesti", flush=True)
         return code_map
     except Exception as e:
-        print(f"[upcoming-ipo] Fiyat Tespit Raporu eslestirmesi atlandi (hata): {e}")
+        print(f"[upcoming-ipo] Fiyat Tespit Raporu eslestirmesi atlandi (hata): {e}", flush=True)
         return {}
 
 
@@ -435,12 +436,12 @@ def _fetch_kap_html(params: dict) -> Optional[str]:
         if r.status_code == 200 and len(r.text) > 1000:
             r.encoding = "utf-8"
             print(f"[upcoming-ipo] KAP HTML yanit alindi ({params.get('st','')[:30]}): "
-                  f"{len(r.text)} karakter")
+                  f"{len(r.text)} karakter", flush=True)
             return r.text
         print(f"[upcoming-ipo] KAP HTTP durumu: {r.status_code}, "
-              f"uzunluk: {len(r.text) if r.text else 0}")
+              f"uzunluk: {len(r.text) if r.text else 0}", flush=True)
     except Exception as e:
-        print(f"[upcoming-ipo] KAP fetch hatasi: {e}")
+        print(f"[upcoming-ipo] KAP fetch hatasi: {e}", flush=True)
     return None
 
 
@@ -469,14 +470,14 @@ def _extract_disclosure_json(html_text: str) -> list:
             return []
 
         parsed = json.loads(m.group(1))
-        print(f"[upcoming-ipo] JSON parse basarili: {len(parsed)} kayit")
+        print(f"[upcoming-ipo] JSON parse basarili: {len(parsed)} kayit", flush=True)
         return parsed
 
     except json.JSONDecodeError as e:
-        print(f"[upcoming-ipo] JSON decode hatasi: {e}")
+        print(f"[upcoming-ipo] JSON decode hatasi: {e}", flush=True)
         return []
     except Exception as e:
-        print(f"[upcoming-ipo] Parse hatasi: {e}")
+        print(f"[upcoming-ipo] Parse hatasi: {e}", flush=True)
         return []
 
 
@@ -495,10 +496,11 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     Bos DataFrame donebilir (veri yoksa veya hepsi mevcut sirket ise) — bu
     HATA DEGILDIR, "su an yeni halka arz yok" olarak yorumlanmalidir.
     """
+    print(f"[upcoming-ipo] CANARY fetch_upcoming_ipos cagrildi, force_refresh={force_refresh}", flush=True)
     if not force_refresh:
         cached = _read_cache()
         if cached is not None:
-            print(f"[upcoming-ipo] Cache kullanildi: {len(cached)} satir")
+            print(f"[upcoming-ipo] Cache kullanildi: {len(cached)} satir", flush=True)
             return pd.DataFrame(cached)
 
     all_new_rows = []
@@ -507,13 +509,13 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     for cat in KAP_CATEGORIES:
         html_text = _fetch_kap_html(cat["params"])
         if not html_text:
-            print(f"[upcoming-ipo] '{cat['key']}' kategorisi cekilemedi, atlaniyor")
+            print(f"[upcoming-ipo] '{cat['key']}' kategorisi cekilemedi, atlaniyor", flush=True)
             continue
         any_fetch_succeeded = True
 
         raw_records = _extract_disclosure_json(html_text)
         if not raw_records:
-            print(f"[upcoming-ipo] '{cat['key']}' kategorisinde kayit bulunamadi")
+            print(f"[upcoming-ipo] '{cat['key']}' kategorisinde kayit bulunamadi", flush=True)
             continue
 
         for rec in raw_records:
@@ -582,7 +584,7 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
                 "_dedup_key": f"{kod_raw}|{related}",
             })
 
-        print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi")
+        print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi", flush=True)
 
     if not any_fetch_succeeded:
         print("[upcoming-ipo] Hicbir kategori cekilemedi — eski cache/bos donuluyor")
@@ -633,7 +635,7 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
                 eslesmeler = df["Kod"].apply(_en_iyi_eslesme)
                 df["Fiyat_Tespit_URL"] = eslesmeler.apply(lambda h: h["url"] if h else "")
                 eslesen = (df["Fiyat_Tespit_URL"] != "").sum()
-                print(f"[upcoming-ipo] Fiyat Tespit Raporu eslesen satir sayisi: {eslesen}/{len(df)}")
+                print(f"[upcoming-ipo] Fiyat Tespit Raporu eslesen satir sayisi: {eslesen}/{len(df)}", flush=True)
 
                 # v2.0.4.8: Eslesen raporlarin PDF'ini indirip arz fiyati/iskonto
                 # cikar. Cache'lenmis (daha once islenmis) raporlar ANINDA
@@ -682,11 +684,11 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
 
                 bulunan = df["Arz_Fiyati"].notna().sum()
                 print(f"[upcoming-ipo] Arz fiyati cikarilan satir sayisi: {bulunan}/{len(df)} "
-                      f"(bu calistirmada {yeni_islenen_sayisi} yeni rapor islendi)")
+                      f"(bu calistirmada {yeni_islenen_sayisi} yeni rapor islendi)", flush=True)
         except Exception as e:
-            print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme/cikarma atlandi (hata): {e}")
+            print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme/cikarma atlandi (hata): {e}", flush=True)
 
-    print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}")
+    print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}", flush=True)
 
     _write_cache(df.to_dict("records"))
     return df
