@@ -14,5 +14,3 @@ psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
 pdfplumber
 pytesseract
-pdfplumber
-   pytesseract
