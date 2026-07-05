@@ -199,7 +199,7 @@ def _fetch_kap(ticker: str) -> dict:
     slug = KAP_SLUG_MAP.get(ticker.upper())
     if not slug:
         return {"_kap_available": False,
-                "_kap_note": "Bu şirket için KAP eşleştirmesi henüz yapılmadı, yfinance verileri kullanılıyor."}
+                "_kap_note": "Veri kaynağı: yfinance"}
 
     company_id = slug.split("-")[0]
     result = {"_kap_available": True}
@@ -233,7 +233,7 @@ def _fetch_kap(ticker: str) -> dict:
 
     if "_kap_source" not in result:
         result["_kap_available"] = False
-        result["_kap_note"] = "KAP şu anda yanıt vermiyor, yfinance verileri kullanılıyor."
+        result["_kap_note"] = "Veri kaynağı: yfinance"
 
     return result
 
@@ -298,7 +298,7 @@ def fetch_kap_fundamentals(ticker: str) -> dict:
         result.update(kap_data)
     else:
         result["_kap_available"] = False
-        result["_kap_note"] = "Bu şirket için KAP eşleştirmesi henüz yapılmadı, yfinance verileri kullanılıyor."
+        result["_kap_note"] = "Veri kaynağı: yfinance"
 
     return result
 
