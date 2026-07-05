@@ -2252,20 +2252,56 @@ if page=="Ana Sayfa":
         _as_kolonlar = [
             ("Kategori", "Kategori", 8),
             ("Ticker", "Ticker", 8),
-            ("Ad", "Ad", 23),
+            ("Ad", "Ad", 25),
             ("Optima Skoru", "Optima Skoru", 8),
             ("Sinyal", "Sinyal", 9),
             ("RSI", "RSI", 5),
             ("1A Getiri %", "1A Getiri %", 7),
             ("Emir Fiyatı", "Emir Fiyatı", 8),
             ("Birim", "Birim", 6),
-            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 9),
-            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 9),
+            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 8),
+            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 8),
         ]
         _as_oranlar = [w for (_, _, w) in _as_kolonlar]
 
-        _as_kolonlar = _as_kolonlar + [("__aksiyon__", "", 7)]
-        _as_oranlar = [w for (_, _, w) in _as_kolonlar]
+        # v2.0.4.37: Kullanicinin istedigi gibi: Ticker hucresinin KENDISI
+        # tiklanabilir (ek sutun/buton yok, tablo genisligini calmiyor).
+        # Ayrica her hucre kendi icerigine gore KADEMELI sigdirma uyguluyor:
+        # sayisal hucrelerde once ondalik basamak kisaltiliyor, hala
+        # sigmiyorsa SADECE o hucrenin fontu kucultuluyor; "Ad" hucresinde
+        # once satir kaydirma (wrap) deneniyor, hala sigmiyorsa SADECE o
+        # hucrenin fontu kucultuluyor. Bu, sabit/genel bir kurallandirma
+        # degil - her hucre kendi metninin uzunluguna gore ayri
+        # degerlendiriliyor, sigan hucrelere hicbir ekstra mudahale
+        # yapilmiyor. (Gercek tarayici piksel olcumu yapamadigimizdan
+        # sutun genisligine gore kalibre edilmis bir karakter-sayisi
+        # tahmini kullaniliyor - kesin degil ama kademeli mudahaleyi
+        # sadece gerektiginde devreye sokuyor.)
+        _AS_KARAKTER_ORANI = 0.85  # sutun yuzdesi -> yaklasik sigan karakter sayisi
+
+        def _as_maxchar(yuzde):
+            return max(3, int(yuzde * _AS_KARAKTER_ORANI))
+
+        def _as_sayi_hucre_render(deger_num, ondalik_max, suffix, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            for dec in range(ondalik_max, -1, -1):
+                s = _as_fmt(deger_num, suffix=suffix, ondalik=dec)
+                if len(s) <= maxchar:
+                    return s, 13.5
+            return _as_fmt(deger_num, suffix=suffix, ondalik=0), 11.0
+
+        def _as_ad_hucre_render(metin, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            if len(metin) <= maxchar:
+                return metin, 13.5, False
+            elif len(metin) <= maxchar * 2:
+                return metin, 13.5, True
+            else:
+                return metin, 11.5, True
+
+        def _as_kisa_metin_render(metin, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            return (metin, 13.5) if len(metin) <= maxchar else (metin, 11.0)
 
         st.markdown("""
         <style>
@@ -2273,17 +2309,15 @@ if page=="Ana Sayfa":
             .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
                                 max-width: 100% !important; }
         }
-        /* v2.0.4.36: Gorunmez/ust-uste bindirilen (position:absolute) buton
-           denemesi geri alindi - hem tiklama guvenilmez hale gelmisti hem de
-           (muhtemelen CSS eslesmesinin tutmadigi bir durumda) oturumu
-           bozuyordu. Artik hicbir absolute konumlandirma veya gizli buton
-           yok - her satirin sonunda sade, normal akiskan (in-flow), GORUNUR
-           kucuk bir "Incele" butonu var. Bu, Streamlit'in en temel/guvenilir
-           calisma bicimidir: sayfa navigasyonu yok, session_state'e dokunma
-           riski yok. */
         .as-hucre {
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            padding: 0 8px; font-size: 13.5px; color: #1a1a1a; line-height: 1.3;
+            padding: 0 8px; color: #1a1a1a; line-height: 1.3;
+            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
+            height: 40px; display: flex; align-items: center;
+        }
+        .as-hucre-wrap {
+            white-space: normal; overflow: hidden; line-height: 1.2;
+            padding: 4px 8px; color: #1a1a1a;
             border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
             height: 40px; display: flex; align-items: center;
         }
@@ -2297,8 +2331,23 @@ if page=="Ana Sayfa":
             height: 48px; box-sizing: border-box;
         }
         div[data-testid="stButton"] > button {
-            width: 100%; padding: 2px 4px !important; font-size: 12px !important;
-            height: 40px !important; border-radius: 4px !important;
+            width: 100%; text-align: left; background: transparent !important;
+            border: none !important; border-bottom: 1px solid #e3e7ec !important;
+            border-radius: 0 !important; padding: 0 8px !important;
+            color: #1b6ef3 !important; font-weight: 600 !important;
+            height: 40px !important; display: flex !important; align-items: center !important;
+            white-space: nowrap !important; overflow: hidden !important;
+            box-shadow: none !important; line-height: 1.3 !important;
+        }
+        div[data-testid="stButton"] > button p {
+            color: #1b6ef3 !important; white-space: nowrap !important;
+            overflow: hidden !important; text-overflow: ellipsis !important;
+        }
+        div[data-testid="stButton"] > button:hover {
+            background: #eef3fb !important;
+        }
+        div[data-testid="stButton"] > button:hover p {
+            text-decoration: underline !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -2312,27 +2361,41 @@ if page=="Ana Sayfa":
         for _ridx, r in df_opt.reset_index(drop=True).iterrows():
             _rcols = st.columns(_as_oranlar)
             for _cidx, (anahtar, _b, _w) in enumerate(_as_kolonlar):
-                if anahtar == "__aksiyon__":
-                    if _rcols[_cidx].button("İncele →", key=f"as_incele_{_ridx}", use_container_width=True):
+                v = r.get(anahtar)
+                if anahtar == "Ticker":
+                    tick_metin = str(v)
+                    if _rcols[_cidx].button(tick_metin, key=f"as_ticker_{_ridx}", use_container_width=True):
                         _yeni_secim = str(r["Ticker"])
                     continue
-                v = r.get(anahtar)
-                if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
-                    deger = str(v) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
-                elif anahtar == "Optima Skoru":
-                    deger = _as_fmt(v, ondalik=1)
+                if anahtar == "Ad":
+                    metin, font, wrap = _as_ad_hucre_render(str(v) if v is not None else "—", _w)
+                    cls = "as-hucre-wrap" if wrap else "as-hucre"
+                    _rcols[_cidx].markdown(
+                        f'<div class="{cls}" style="font-size:{font}px;" title="{_html_as.escape(str(v))}">'
+                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
+                    continue
+                if anahtar in ("Kategori", "Sinyal"):
+                    metin = str(v) if v is not None else "—"
+                    metin, font = _as_kisa_metin_render(metin, _w)
+                    _rcols[_cidx].markdown(
+                        f'<div class="as-hucre" style="font-size:{font}px;" title="{_html_as.escape(metin)}">'
+                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
+                    continue
+                if anahtar == "Optima Skoru":
+                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
                 elif anahtar == "RSI":
-                    deger = _as_fmt(v, ondalik=1)
+                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
                 elif anahtar == "1A Getiri %":
-                    deger = _as_fmt(v, suffix="%")
+                    deger, font = _as_sayi_hucre_render(v, 2, "%", _w)
                 elif anahtar == "Emir Fiyatı":
-                    deger = _as_fmt(v, ondalik=4)
+                    deger, font = _as_sayi_hucre_render(v, 4, "", _w)
                 elif anahtar == "Birim":
-                    deger = _as_fmt(v, ondalik=0)
+                    deger, font = _as_sayi_hucre_render(v, 0, "", _w)
                 else:
-                    deger = _as_fmt(v)
-                _rcols[_cidx].markdown(f'<div class="as-hucre" title="{_html_as.escape(deger)}">'
-                                        f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
+                    deger, font = _as_sayi_hucre_render(v, 2, "", _w)
+                _rcols[_cidx].markdown(
+                    f'<div class="as-hucre" style="font-size:{font}px;" title="{_html_as.escape(deger)}">'
+                    f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
