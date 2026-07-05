@@ -2118,13 +2118,41 @@ if page=="Ana Sayfa":
         adj_weights = {c: a/total_adj for c, a in adj_weights.items()}
 
     opt_rows=[]
+    karsilanamayan_kategoriler = []
     for cat, weight in adj_weights.items():
         df_c = cat_pools[cat]
         mpc  = max_per_cat_map.get(cat, 1)
         sample = df_c.head(min(mpc, len(df_c)))
         cat_bud = budget * weight
-        per = cat_bud / len(sample)
-        for _, row in sample.iterrows():
+
+        # v2.0.4.34: Esit bolusumde bir varligin payi kendi birim fiyatindan
+        # dusuk cikarsa (lot=0), o varlik oncesinde hala "onerilen" listede
+        # 0 birim/0 TL ile goruniyordu - bu hem yaniltici hem de kategoriye
+        # ayrilan butcenin bir kismini fiilen harcanmadan birakiyordu.
+        # Simdi asama asama: payini karsilayamayan varliklar kategori
+        # havuzundan cikarilip kalan butce, kalan varliklara yeniden esit
+        # dagitiliyor (feasibility/water-filling) - stabil hale gelene
+        # kadar (herkes kendi payini karsilayana kadar) tekrarlaniyor.
+        aktif = list(sample.iterrows())
+        per = 0.0
+        while aktif:
+            pay = cat_bud / len(aktif)
+            karsilayamayan = [
+                i for i, (_, row) in enumerate(aktif)
+                if (float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0) > pay
+            ]
+            if not karsilayamayan:
+                per = pay
+                break
+            aktif = [item for i, item in enumerate(aktif) if i not in karsilayamayan]
+        else:
+            per = 0.0
+
+        if not aktif:
+            karsilanamayan_kategoriler.append(cat)
+            continue
+
+        for _, row in aktif:
             skor = float(row["Optima_Skor"])
             rsi_v = float(row.get("RSI",50))
             trend_v = "YUKSELIS" if float(row.get("Ret1M",0)) >= 0 else "DUSUS"
@@ -2151,6 +2179,11 @@ if page=="Ana Sayfa":
     if elenen:
         st.info(f"Şu kategorilerde yeterli AL sinyalli varlik bulunamadigi icin "
                 f"bütçe diğer kategorilere dağıtıldı: {', '.join(elenen)}")
+    if karsilanamayan_kategoriler:
+        st.info(f"Şu kategorilerde ayrılan bütçe, havuzdaki hiçbir varlığın "
+                f"birim fiyatını karşılamadığı için o kategoriye hiç alım "
+                f"önerilemedi: {', '.join(karsilanamayan_kategoriler)}. "
+                f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
 
     if opt_rows:
         df_opt=pd.DataFrame(opt_rows)
@@ -2240,9 +2273,10 @@ if page=="Ana Sayfa":
         div[data-testid="stButton"] > button {
             width: 100%; text-align: left; background: transparent !important;
             border: none !important; border-bottom: 1px solid #e3e7ec !important;
-            border-radius: 0 !important; padding: 8px 6px !important;
+            border-radius: 0 !important; padding: 0 6px !important;
             color: #1a1a1a !important; font-size: 13.5px !important;
-            min-height: 2.4em; height: auto !important; white-space: normal !important;
+            height: 58px !important; display: flex !important; align-items: center !important;
+            white-space: normal !important;
             box-shadow: none !important; line-height: 1.3 !important;
         }
         div[data-testid="stButton"] > button p,
