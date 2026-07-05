@@ -2191,29 +2191,93 @@ if page=="Ana Sayfa":
         col_order = base_cols
         df_opt = df_opt[[c for c in col_order if c in df_opt.columns]]
 
-        col_cfg = {
-            "Ad": st.column_config.TextColumn("Ad", width="large"),
-            "Optima Skoru": st.column_config.NumberColumn("Optima Skoru", format="%.1f",
-                width="small", help="0-100 arası bileşik skor"),
-            "RSI":          st.column_config.NumberColumn(format="%.1f", width="small"),
-            "1A Getiri %":  st.column_config.NumberColumn(format="%.2f", width="small"),
-            "Emir Fiyatı":  st.column_config.NumberColumn(format="%.4f", width="small",
-                help="Güncel piyasa fiyatı — limit emir için referans alın"),
-            "Birim": st.column_config.NumberColumn("Birim", width="small",
-                help="Alınacak lot/adet sayısı"),
-            "Gerçek Tutar (₺)": st.column_config.NumberColumn("Gerçek Tutar (₺)", format="%.2f",
-                width="small", help="Lot x Fiyat — tam alım tutarı"),
-            "Hedef Tutar (₺)":  st.column_config.NumberColumn("Hedef Tutar (₺)", format="%.2f",
-                width="small", help="Kategoriye ayrılan bütçe payı"),
-        }
-
         st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Lot tam sayıya yuvarlandığından Hedef Tutar'dan küçük olabilir. "
                    "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12). Yatırım tavsiyesi değildir.")
 
-        # Tıklanabilir tablo
-        df_opt_show = df_opt.copy()
+        # v2.0.4.30: st.dataframe (satır tıklayınca detay açan eski tasarım)
+        # metin kaydırma (word-wrap) desteklemediği icin basliklar/hucreler
+        # daralamiyor ve yatay scroll hep geri geliyordu - bu, Glide Data
+        # Grid denen canvas tabanli bir bilesen oldugundan CSS ile
+        # duzeltilemeyen koklu bir kisitlama. Halka Arz/Temettu sayfalarinda
+        # oldugu gibi sabit genislikli, wrap edilebilen bir HTML tabloya
+        # gecildi. Satira tiklayip detay acma ozelligi bu yuzden asagidaki
+        # acilir listeye (selectbox) tasindi - statik HTML'den Streamlit'e
+        # geri bildirim (rerun tetikleme) gonderemedigimiz icin bu, ayni
+        # islevi koruyan en pratik yol.
+        import html as _html_as
+
+        def _as_fmt(v, suffix="", ondalik=2):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return "—"
+            return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        _as_kolonlar = [
+            ("Kategori", "Kategori", "6%"),
+            ("Ticker", "Ticker", "6%"),
+            ("Ad", "Ad", "19%"),
+            ("Optima Skoru", "Optima Skoru", "8%"),
+            ("Sinyal", "Sinyal", "9%"),
+            ("RSI", "RSI", "6%"),
+            ("1A Getiri %", "1A Getiri %", "8%"),
+            ("Emir Fiyatı", "Emir Fiyatı", "9%"),
+            ("Birim", "Birim", "6%"),
+            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", "11%"),
+            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", "11%"),
+        ]
+        _as_thead = "".join(f'<th style="width:{w};">{_html_as.escape(baslik)}</th>'
+                             for (_, baslik, w) in _as_kolonlar)
+        _as_rows = []
+        for _, r in df_opt.iterrows():
+            _tds = []
+            for anahtar, _b, _w in _as_kolonlar:
+                v = r.get(anahtar)
+                if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
+                    deger = _html_as.escape(str(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
+                elif anahtar == "Optima Skoru":
+                    deger = _as_fmt(v, ondalik=1)
+                elif anahtar == "RSI":
+                    deger = _as_fmt(v, ondalik=1)
+                elif anahtar == "1A Getiri %":
+                    deger = _as_fmt(v, suffix="%")
+                elif anahtar == "Emir Fiyatı":
+                    deger = _as_fmt(v, ondalik=4)
+                elif anahtar == "Birim":
+                    deger = _as_fmt(v, ondalik=0)
+                else:
+                    deger = _as_fmt(v)
+                _tds.append(f"<td>{deger}</td>")
+            _as_rows.append(f"<tr>{''.join(_tds)}</tr>")
+
+        st.markdown(f"""
+        <style>
+        .as-tablo-wrap {{ overflow-x: auto; }}
+        table.as-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
+                           font-size: 14px; }}
+        table.as-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
+                              padding: 8px 10px; font-weight: 600; white-space: normal;
+                              font-size: 12.5px; line-height: 1.25; }}
+        table.as-tablo td {{ padding: 8px 10px; border-bottom: 1px solid #e3e7ec;
+                              white-space: normal; word-wrap: break-word;
+                              vertical-align: top; color: #1a1a1a; line-height: 1.35; }}
+        table.as-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
+        </style>
+        <div class="as-tablo-wrap">
+        <table class="as-tablo">
+        <thead><tr>{_as_thead}</tr></thead>
+        <tbody>{"".join(_as_rows)}</tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Detay analiz için seçim — artık satıra tıklama yerine acilir liste
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        new_sel = clickable_table(df_opt_show, key="anasayfa", sel_ticker=sel_ana, col_cfg=col_cfg)
+        _as_secenekler = [""] + [f'{row["Ticker"]} — {str(row["Ad"])[:45]}' for _, row in df_opt.iterrows()]
+        _as_ticker_map = {f'{row["Ticker"]} — {str(row["Ad"])[:45]}': row["Ticker"] for _, row in df_opt.iterrows()}
+        _as_mevcut_secim = next((s for s in _as_secenekler if _as_ticker_map.get(s) == sel_ana), "")
+        _as_secili = st.selectbox("Detaylı analiz için varlık seç", _as_secenekler,
+                                    index=_as_secenekler.index(_as_mevcut_secim) if _as_mevcut_secim else 0,
+                                    key="anasayfa_detay_sec")
+        new_sel = _as_ticker_map.get(_as_secili, "")
         if new_sel and new_sel != sel_ana:
             st.session_state["sel_Ana Sayfa"] = new_sel
             st.rerun()
