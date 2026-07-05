@@ -2256,7 +2256,7 @@ if page=="Ana Sayfa":
                 # tiklayinca da detay analiz acilsin istedi. Link tum hucreyi
                 # (display:block) kapladigindan hucrenin herhangi bir
                 # noktasina tiklamak yeterli.
-                deger_link = (f'<a href="{_href}" target="_top" style="color:inherit;text-decoration:none;'
+                deger_link = (f'<a href="{_href}" target="_self" style="color:inherit;text-decoration:none;'
                                f'display:block;cursor:pointer;">{deger}</a>')
                 nowrap = "" if anahtar == "Ad" else ' class="as-nowrap"'
                 _tds.append(f"<td{nowrap}>{deger_link}</td>")
