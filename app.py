@@ -2263,15 +2263,15 @@ if page=="Ana Sayfa":
             box-shadow: none !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
-            gap: 0.35rem !important; align-items: stretch !important;
+            gap: 2px !important; align-items: stretch !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.as-baslik) > div {
-            display: flex !important;
+            display: flex !important; align-items: stretch !important;
         }
         .as-baslik {
             background-color: #0d2b4e; color: #ffffff; padding: 10px 8px;
             font-weight: 600; font-size: 12.5px; line-height: 1.25;
-            display: flex; align-items: center; width: 100%;
+            display: flex; align-items: center; width: 100%; height: 100%;
             min-height: 42px; box-sizing: border-box;
         }
         </style>
