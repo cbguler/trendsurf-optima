@@ -2248,7 +2248,6 @@ if page=="Ana Sayfa":
         col_cfg_ana = {
             "Kategori": st.column_config.TextColumn("Kategori", width="small"),
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Ad": st.column_config.TextColumn("Ad", width="large"),
             "Optima Skoru": st.column_config.NumberColumn("Optima Skoru", format="%.1f", width="small"),
             "Sinyal": st.column_config.TextColumn("Sinyal", width="small"),
             "RSI": st.column_config.NumberColumn("RSI", format="%.1f", width="small"),
@@ -2258,8 +2257,16 @@ if page=="Ana Sayfa":
             "Gerçek Tutar (₺)": st.column_config.NumberColumn("Gerçek Tutar (₺)", format="%.2f", width="small"),
             "Hedef Tutar (₺)": st.column_config.NumberColumn("Hedef Tutar (₺)", format="%.2f", width="small"),
         }
+        st.markdown("""
+        <style>
+        @media (min-width: 769px) {
+            .block-container { padding-left: 1rem !important; padding-right: 1rem !important;
+                                max-width: 100% !important; }
+        }
+        </style>
+        """, unsafe_allow_html=True)
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        df_opt_show = df_opt.reset_index(drop=True)
+        df_opt_show = df_opt.drop(columns=["Ad"], errors="ignore").reset_index(drop=True)
         _yeni_secim = clickable_table(df_opt_show, key="anasayfa_df", sel_ticker=sel_ana, col_cfg=col_cfg_ana)
 
         if _yeni_secim and _yeni_secim != sel_ana:
