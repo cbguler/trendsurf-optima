@@ -2245,11 +2245,19 @@ if page=="Ana Sayfa":
             min-height: 2.4em; height: auto !important; white-space: normal !important;
             box-shadow: none !important; line-height: 1.3 !important;
         }
-        div[data-testid="stButton"] > button p {
+        div[data-testid="stButton"] > button p,
+        div[data-testid="stButton"] > button span,
+        div[data-testid="stButton"] > button div {
+            color: #1a1a1a !important;
             white-space: normal !important; text-align: left !important; font-size: 13.5px !important;
         }
         div[data-testid="stButton"] > button:hover {
-            background: #eef3fb !important; color: #0d2b4e !important; border-color: #b9c6d9 !important;
+            background: #eef3fb !important; border-color: #b9c6d9 !important;
+        }
+        div[data-testid="stButton"] > button:hover p,
+        div[data-testid="stButton"] > button:hover span,
+        div[data-testid="stButton"] > button:hover div {
+            color: #0d2b4e !important;
         }
         div[data-testid="stButton"] > button:focus:not(:active) {
             box-shadow: none !important;
