@@ -2329,27 +2329,113 @@ if page=="Ana Sayfa":
                     except Exception as e:
                         st.warning(f"Temel analiz yuklenemedi: {e}")
 
-        # 3D-effect pasta grafiği
-        if HAS_PLOTLY:
-            cat_sum=df_opt.groupby("Kategori")["Hedef Tutar (₺)"].sum().reset_index()
-            n=len(cat_sum)
-            pull=[0.07]*n  # 3D etkisi için tüm dilimler dışarı çekilir
-            colors=["#1b2a4a","#3b9eff","#00d4aa","#f4a300","#e74c3c",
-                    "#9b59b6","#2ecc71","#e67e22","#1abc9c","#e91e63"][:n]
-            fig_pie=go.Figure(go.Pie(
-                labels=cat_sum["Kategori"],values=cat_sum["Hedef Tutar (₺)"],
-                pull=pull,hole=0.25,
-                marker=dict(colors=colors,line=dict(color="#ffffff",width=2)),
-                textinfo="label+percent",textfont=dict(size=13),
-                hovertemplate="<b>%{label}</b><br>%{value:,.2f} ₺<br>%{percent}<extra></extra>"
-            ))
-            fig_pie.update_layout(
-                title=dict(text="Kategori Dağılımı",font=dict(size=15,color="#1b2a4a")),
-                height=360,paper_bgcolor="#fff",
-                legend=dict(orientation="v",font=dict(color="#1b2a4a")),
-                margin=dict(l=0,r=0,t=50,b=0)
-            )
-            st.plotly_chart(fig_pie,use_container_width=True)
+        # v2.0.4.26: Gercek 3D pasta grafigi (once Plotly Pie + pull ile sahte
+        # "3D-effect" deniyordu - aslinda duz/2D bir donut'tu, sadece dilimler
+        # disari cekilmisti). Kullanicinin verdigi referans gorsele (parlak,
+        # kalin kesitli, gercekten hacimli 3D pasta dilimleri) uygun olmasi
+        # icin Plotly'nin native 3D pasta grafigi olmadigindan ozel bir SVG
+        # ile elips govde + kenar/govde yuzeyleri (extrusion) cizilerek
+        # gercek 3D dilim gorunumu elde edildi. Her dilim: ust yuz (aciklik
+        # rengi), on/dis govde (koyu ton) ve iki radyal yan govde (orta ton)
+        # olarak ayri path'lerle cizilir; arkadan one dogru z-sirasiyla
+        # (sin(orta_aci) kucukten buyuge) cizilerek dogru ortusme saglanir.
+        cat_sum=df_opt.groupby("Kategori")["Hedef Tutar (₺)"].sum().reset_index()
+        n=len(cat_sum)
+        colors=["#1b2a4a","#3b9eff","#00d4aa","#f4a300","#e74c3c",
+                "#9b59b6","#2ecc71","#e67e22","#1abc9c","#e91e63"][:n]
+
+        import math
+        def _3d_pasta_ton(hex_renk, faktor):
+            hex_renk = hex_renk.lstrip("#")
+            r, g, b = int(hex_renk[0:2],16), int(hex_renk[2:4],16), int(hex_renk[4:6],16)
+            if faktor >= 0:
+                r, g, b = r+(255-r)*faktor, g+(255-g)*faktor, b+(255-b)*faktor
+            else:
+                r, g, b = r*(1+faktor), g*(1+faktor), b*(1+faktor)
+            r, g, b = max(0,min(255,int(r))), max(0,min(255,int(g))), max(0,min(255,int(b)))
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        def _3d_pasta_nokta(cx, cy, rx, ry, aci_derece):
+            a = math.radians(aci_derece)
+            return cx + rx*math.cos(a), cy + ry*math.sin(a)
+
+        def _3d_pasta_svg(etiketler, degerler, renkler, genislik=700, yukseklik=380):
+            toplam = sum(degerler)
+            cx0, cy0 = genislik*0.42, yukseklik*0.44
+            rx, ry = genislik*0.235, yukseklik*0.265
+            derinlik = ry*0.34
+            disari_cekme = rx*0.085
+
+            acilar, basla = [], -90.0
+            for v in degerler:
+                bit = basla + (v/toplam)*360.0
+                acilar.append((basla, bit))
+                basla = bit
+
+            dilimler = []
+            for i, ((a0, a1), renk) in enumerate(zip(acilar, renkler)):
+                orta = (a0+a1)/2.0
+                rad = math.radians(orta)
+                ex, ey = math.cos(rad)*disari_cekme, math.sin(rad)*disari_cekme*(ry/rx)
+                dilimler.append(dict(i=i, a0=a0, a1=a1, orta=orta,
+                                      renk=renk, cx=cx0+ex, cy=cy0+ey))
+
+            sirali = sorted(dilimler, key=lambda w: math.sin(math.radians(w["orta"])))
+
+            parcalar = [f'<svg viewBox="0 0 {genislik} {yukseklik}" xmlns="http://www.w3.org/2000/svg" '
+                        f'style="width:100%;height:auto;font-family:Segoe UI,Arial,sans-serif;">']
+            parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">Kategori Dağılımı</text>')
+
+            for w in sirali:
+                a0, a1, renk, cx, cy = w["a0"], w["a1"], w["renk"], w["cx"], w["cy"]
+                buyuk_yay = 1 if (a1-a0) > 180 else 0
+                ust_renk = _3d_pasta_ton(renk, 0.14)
+                govde_renk = _3d_pasta_ton(renk, -0.34)
+                yan_renk = _3d_pasta_ton(renk, -0.18)
+
+                p0 = _3d_pasta_nokta(cx, cy, rx, ry, a0)
+                p1 = _3d_pasta_nokta(cx, cy, rx, ry, a1)
+                p0a = (p0[0], p0[1]+derinlik)
+                p1a = (p1[0], p1[1]+derinlik)
+                cxa, cya = cx, cy+derinlik
+
+                govde_yolu = (f"M {p0[0]:.2f},{p0[1]:.2f} "
+                              f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} "
+                              f"L {p1a[0]:.2f},{p1a[1]:.2f} "
+                              f"A {rx},{ry} 0 {buyuk_yay} 1 {p0a[0]:.2f},{p0a[1]:.2f} Z")
+                parcalar.append(f'<path d="{govde_yolu}" fill="{govde_renk}"/>')
+
+                yan1 = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
+                        f"L {p0a[0]:.2f},{p0a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
+                yan2 = (f"M {cx:.2f},{cy:.2f} L {p1[0]:.2f},{p1[1]:.2f} "
+                        f"L {p1a[0]:.2f},{p1a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
+                parcalar.append(f'<path d="{yan1}" fill="{yan_renk}"/>')
+                parcalar.append(f'<path d="{yan2}" fill="{yan_renk}"/>')
+
+                ust_yolu = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
+                            f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} Z")
+                parcalar.append(f'<path d="{ust_yolu}" fill="{ust_renk}" stroke="#ffffff" stroke-width="1.5">'
+                                 f'<title>{etiketler[w["i"]]}: %{degerler[w["i"]]/toplam*100:.1f}</title></path>')
+
+            for w in dilimler:
+                rad = math.radians(w["orta"])
+                lx = cx0 + math.cos(rad)*(rx*1.32)
+                ly = cy0 + math.sin(rad)*(ry*1.32) - derinlik*0.15
+                yuzde = degerler[w["i"]]/toplam*100
+                hiza = "start" if math.cos(rad) >= 0 else "end"
+                parcalar.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="12.5" fill="#1b2a4a" '
+                                 f'text-anchor="{hiza}" font-weight="600">{_html_esc(etiketler[w["i"]])}</text>')
+                parcalar.append(f'<text x="{lx:.1f}" y="{ly+15:.1f}" font-size="11.5" fill="#5a6a8a" '
+                                 f'text-anchor="{hiza}">%{yuzde:.1f}</text>')
+
+            parcalar.append("</svg>")
+            return "".join(parcalar)
+
+        import html as _html_mod
+        _html_esc = _html_mod.escape
+        st.markdown(_3d_pasta_svg(cat_sum["Kategori"].tolist(),
+                                    cat_sum["Hedef Tutar (₺)"].tolist(),
+                                    colors), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
 # PORTFÖYÜM
