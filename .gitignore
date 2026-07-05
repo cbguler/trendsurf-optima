@@ -33,3 +33,7 @@ desktop.ini
 .streamlit/secrets.toml
 trendsurfoptima-*.json
 live_data.zip 
+golda_*.py
+*_YEDEK.json
+calisma_log.txt
+merhaba.py
