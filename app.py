@@ -2249,94 +2249,168 @@ if page=="Ana Sayfa":
                 return "—"
             return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        # v2.0.4.39: Bu tabloyu st.columns()+st.button() ile kurmustuk cunku
-        # hucre tiklamasi isteniyordu - masaustunde iyi calisiyordu, ama
-        # gercek telefonda test edince st.columns() ~640-768px altinda
-        # otomatik olarak DIKEY ISTIFLENIYOR (Streamlit'in kendi, resmi
-        # olarak bilinen ve disaridan CSS ile duzeltilemeyen bir davranisi -
-        # bkz. streamlit/streamlit#2052, #6592). Sonuc: 11 sutunluk her
-        # satir, telefonda 11 satirlik dikey bir listeye donusuyordu.
-        # Kullaniciya "mobilde nasil olsun" soruldu, net bir tercih
-        # belirtilmedi; bu yuzden Halka Arz/Temettu sayfalarinda zaten
-        # kanitlanmis, hem masaustunde hem mobilde guvenilir calisan tek
-        # yontemle (duz HTML <table> + yatay kaydirma + acilir liste ile
-        # detay secimi) birlestirildi - iki ayri, birbirinden bagimsiz
-        # kirilabilecek tasarimi surdurmek yerine tek, saglam bir tasarim.
+        # v2.0.4.33: Kullanicinin acikca istedigi "herhangi bir hucreye
+        # tiklayinca detay acilsin" ozelligi, sayfa navigasyonu gerektirmeyen
+        # bir yontemle yeniden kuruldu: her hucre gercek bir st.button.
+        # Butonlar CSS ile duz tablo hucresi gibi gorunecek sekilde
+        # (kenarliksiz, arka planiz, sola hizali) yeniden stillendirildi.
+        # st.button bir Streamlit widget'i oldugundan tiklaninca normal ic
+        # rerun calisir (WebSocket uzerinden) - sayfa hic yenilenmez, bu
+        # yuzden oturum/login durumu asla bozulmaz. Ayni zamanda gercek
+        # metin kaydirma (word-wrap) da CSS ile korunuyor.
         _as_kolonlar = [
-            ("Kategori", "Kategori", "7%", ""),
-            ("Ticker", "Ticker", "7%", "nowrap"),
-            ("Ad", "Ad", "24%", ""),
-            ("Optima Skoru", "Optima Skoru", "8%", "center"),
-            ("Sinyal", "Sinyal", "9%", ""),
-            ("RSI", "RSI", "6%", "center"),
-            ("1A Getiri %", "1A Getiri %", "7%", "right"),
-            ("Emir Fiyatı", "Emir Fiyatı", "8%", "right"),
-            ("Birim", "Birim", "7%", "right"),
-            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", "8.5%", "right"),
-            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", "8.5%", "right"),
+            ("Kategori", "Kategori", 8),
+            ("Ticker", "Ticker", 8),
+            ("Ad", "Ad", 25),
+            ("Optima Skoru", "Optima Skoru", 8),
+            ("Sinyal", "Sinyal", 9),
+            ("RSI", "RSI", 5),
+            ("1A Getiri %", "1A Getiri %", 7),
+            ("Emir Fiyatı", "Emir Fiyatı", 8),
+            ("Birim", "Birim", 6),
+            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 8),
+            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 8),
         ]
-        _as_thead = "".join(
-            f'<th style="width:{w};">{_html_as.escape(baslik)}</th>'
-            for (_, baslik, w, _hiza) in _as_kolonlar
-        )
-        _as_rows = []
-        for _, r in df_opt.iterrows():
-            _tds = []
-            for anahtar, _b, _w, hiza in _as_kolonlar:
-                v = r.get(anahtar)
-                if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
-                    deger = str(v) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
-                elif anahtar == "Optima Skoru":
-                    deger = _as_fmt(v, ondalik=1)
-                elif anahtar == "RSI":
-                    deger = _as_fmt(v, ondalik=1)
-                elif anahtar == "1A Getiri %":
-                    deger = _as_fmt(v, suffix="%")
-                elif anahtar == "Emir Fiyatı":
-                    deger = _as_fmt(v, ondalik=4)
-                elif anahtar == "Birim":
-                    deger = _as_fmt(v, ondalik=0)
-                else:
-                    deger = _as_fmt(v)
-                stil = f' style="text-align:{hiza};"' if hiza in ("center", "right") else (
-                    ' class="as-nowrap"' if hiza == "nowrap" else "")
-                _tds.append(f"<td{stil}>{_html_as.escape(deger)}</td>")
-            _as_rows.append(f"<tr>{''.join(_tds)}</tr>")
+        _as_oranlar = [w for (_, _, w) in _as_kolonlar]
 
-        st.markdown(f"""
+        # v2.0.4.37: Kullanicinin istedigi gibi: Ticker hucresinin KENDISI
+        # tiklanabilir (ek sutun/buton yok, tablo genisligini calmiyor).
+        # Ayrica her hucre kendi icerigine gore KADEMELI sigdirma uyguluyor:
+        # sayisal hucrelerde once ondalik basamak kisaltiliyor, hala
+        # sigmiyorsa SADECE o hucrenin fontu kucultuluyor; "Ad" hucresinde
+        # once satir kaydirma (wrap) deneniyor, hala sigmiyorsa SADECE o
+        # hucrenin fontu kucultuluyor. Bu, sabit/genel bir kurallandirma
+        # degil - her hucre kendi metninin uzunluguna gore ayri
+        # degerlendiriliyor, sigan hucrelere hicbir ekstra mudahale
+        # yapilmiyor. (Gercek tarayici piksel olcumu yapamadigimizdan
+        # sutun genisligine gore kalibre edilmis bir karakter-sayisi
+        # tahmini kullaniliyor - kesin degil ama kademeli mudahaleyi
+        # sadece gerektiginde devreye sokuyor.)
+        _AS_KARAKTER_ORANI = 0.85  # sutun yuzdesi -> yaklasik sigan karakter sayisi
+
+        def _as_maxchar(yuzde):
+            return max(3, int(yuzde * _AS_KARAKTER_ORANI))
+
+        def _as_sayi_hucre_render(deger_num, ondalik_max, suffix, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            for dec in range(ondalik_max, -1, -1):
+                s = _as_fmt(deger_num, suffix=suffix, ondalik=dec)
+                if len(s) <= maxchar:
+                    return s, 13.5
+            return _as_fmt(deger_num, suffix=suffix, ondalik=0), 11.0
+
+        def _as_ad_hucre_render(metin, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            if len(metin) <= maxchar:
+                return metin, 13.5, False
+            elif len(metin) <= maxchar * 2:
+                return metin, 13.5, True
+            else:
+                return metin, 11.5, True
+
+        def _as_kisa_metin_render(metin, yuzde):
+            maxchar = _as_maxchar(yuzde)
+            return (metin, 13.5) if len(metin) <= maxchar else (metin, 11.0)
+
+        st.markdown("""
         <style>
-        @media (min-width: 769px) {{
-            .block-container {{ padding-left: 2rem !important; padding-right: 2rem !important;
-                                 max-width: 100% !important; }}
-        }}
-        .as-tablo-wrap {{ overflow-x: auto; }}
-        table.as-tablo {{ width: 100%; min-width: 880px; border-collapse: collapse; table-layout: fixed;
-                           font-size: 14px; }}
-        table.as-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
-                              padding: 8px 10px; font-weight: 600; white-space: normal;
-                              font-size: 12.5px; line-height: 1.25; }}
-        table.as-tablo td {{ padding: 8px 10px; border-bottom: 1px solid #e3e7ec;
-                              white-space: normal; word-wrap: break-word;
-                              vertical-align: top; color: #1a1a1a; line-height: 1.35; }}
-        table.as-tablo td.as-nowrap {{ white-space: nowrap; }}
-        table.as-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
+        @media (min-width: 769px) {
+            .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
+                                max-width: 100% !important; }
+        }
+        .as-hucre {
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            padding: 0 8px; color: #1a1a1a; line-height: 1.3;
+            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
+            height: 40px; display: flex; align-items: center;
+        }
+        .as-hucre-wrap {
+            white-space: normal; overflow: hidden; line-height: 1.2;
+            padding: 4px 8px; color: #1a1a1a;
+            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
+            height: 40px; display: flex; align-items: center;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
+            gap: 2px !important; align-items: stretch !important;
+        }
+        .as-baslik {
+            background-color: #0d2b4e; color: #ffffff; padding: 0 8px;
+            font-weight: 600; font-size: 12.5px; line-height: 1.25;
+            display: flex; align-items: center; width: 100%;
+            height: 48px; box-sizing: border-box;
+        }
+        div[data-testid="stButton"] > button {
+            width: 100%; text-align: left; background: transparent !important;
+            border: none !important; border-bottom: 1px solid #e3e7ec !important;
+            border-radius: 0 !important; padding: 0 8px !important;
+            color: #1b6ef3 !important; font-weight: 600 !important;
+            height: 40px !important; display: flex !important; align-items: center !important;
+            white-space: nowrap !important; overflow: hidden !important;
+            box-shadow: none !important; line-height: 1.3 !important;
+        }
+        div[data-testid="stButton"] > button p {
+            color: #1b6ef3 !important; white-space: nowrap !important;
+            overflow: hidden !important; text-overflow: ellipsis !important;
+        }
+        div[data-testid="stButton"] > button:hover {
+            background: #eef3fb !important;
+        }
+        div[data-testid="stButton"] > button:hover p {
+            text-decoration: underline !important;
+        }
         </style>
-        <div class="as-tablo-wrap">
-        <table class="as-tablo">
-        <thead><tr>{_as_thead}</tr></thead>
-        <tbody>{"".join(_as_rows)}</tbody>
-        </table>
-        </div>
         """, unsafe_allow_html=True)
 
+        _hcols = st.columns(_as_oranlar)
+        for _hc, (_, _baslik, _w) in zip(_hcols, _as_kolonlar):
+            _hc.markdown(f'<div class="as-baslik">{_html_as.escape(_baslik)}</div>', unsafe_allow_html=True)
+
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        _as_secenekler = [""] + [f'{row["Ticker"]} — {str(row["Ad"])[:45]}' for _, row in df_opt.iterrows()]
-        _as_ticker_map = {f'{row["Ticker"]} — {str(row["Ad"])[:45]}': row["Ticker"] for _, row in df_opt.iterrows()}
-        _as_mevcut_secim = next((s for s in _as_secenekler if _as_ticker_map.get(s) == sel_ana), "")
-        _as_secili = st.selectbox("Detaylı analiz için varlık seç", _as_secenekler,
-                                    index=_as_secenekler.index(_as_mevcut_secim) if _as_mevcut_secim else 0,
-                                    key="anasayfa_detay_sec")
-        _yeni_secim = _as_ticker_map.get(_as_secili, "")
+        _yeni_secim = None
+        for _ridx, r in df_opt.reset_index(drop=True).iterrows():
+            _rcols = st.columns(_as_oranlar)
+            for _cidx, (anahtar, _b, _w) in enumerate(_as_kolonlar):
+                v = r.get(anahtar)
+                if anahtar == "Ticker":
+                    tick_metin = str(v)
+                    if _rcols[_cidx].button(tick_metin, key=f"as_ticker_{_ridx}", use_container_width=True):
+                        _yeni_secim = str(r["Ticker"])
+                    continue
+                if anahtar == "Ad":
+                    metin, font, wrap = _as_ad_hucre_render(str(v) if v is not None else "—", _w)
+                    cls = "as-hucre-wrap" if wrap else "as-hucre"
+                    _rcols[_cidx].markdown(
+                        f'<div class="{cls}" style="font-size:{font}px;" title="{_html_as.escape(str(v))}">'
+                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
+                    continue
+                if anahtar in ("Kategori", "Sinyal"):
+                    metin = str(v) if v is not None else "—"
+                    metin, font = _as_kisa_metin_render(metin, _w)
+                    _rcols[_cidx].markdown(
+                        f'<div class="as-hucre" style="font-size:{font}px;" title="{_html_as.escape(metin)}">'
+                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
+                    continue
+                if anahtar == "Optima Skoru":
+                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
+                    hiza = "center"
+                elif anahtar == "RSI":
+                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
+                    hiza = "center"
+                elif anahtar == "1A Getiri %":
+                    deger, font = _as_sayi_hucre_render(v, 2, "%", _w)
+                    hiza = "flex-end"
+                elif anahtar == "Emir Fiyatı":
+                    deger, font = _as_sayi_hucre_render(v, 4, "", _w)
+                    hiza = "flex-end"
+                elif anahtar == "Birim":
+                    deger, font = _as_sayi_hucre_render(v, 0, "", _w)
+                    hiza = "flex-end"
+                else:
+                    deger, font = _as_sayi_hucre_render(v, 2, "", _w)
+                    hiza = "flex-end"
+                _rcols[_cidx].markdown(
+                    f'<div class="as-hucre" style="font-size:{font}px;justify-content:{hiza};" '
+                    f'title="{_html_as.escape(deger)}">{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
