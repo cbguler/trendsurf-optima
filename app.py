@@ -2428,11 +2428,19 @@ if page=="Ana Sayfa":
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
             derinlik = ry*0.34
-            # v2.0.4.27: disari_cekme (patlatma) kaldirildi - dilimler birbirinden
-            # ayrilinca aralarindaki bosluktan arka plan gorunuyor, bu da
-            # dilimlerin alti/kenari "bos/oyuk" gorunmesine sebep oluyordu.
-            # Tum dilimler ayni merkezi (cx0,cy0) paylasarak kesintisiz, dolu
-            # tek parca bir pasta govdesi olusturuyor.
+            # v2.0.4.41: Kullanicinin verdigi referans gorsele (parlak,
+            # birbirinden ayrik/patlatilmis dilimler) donuldu. Daha once
+            # patlatma (explode) kaldirilmisti cunku dilimler arasindaki
+            # bosluktan arka plan gorunup "oyuk" hissi veriyordu - ama asil
+            # sorun patlatmanin kendisi degil, o zamanki radyal yan duvar
+            # kodundaki bir hataydi (govde disina tasan ucgen cikinti).
+            # Simdi her dilim, kendi patlatilmis merkezine gore TAM KAPALI
+            # bir katı olusturuyor (ust yuz + dis kavis govdesi + iki radyal
+            # yan govde) - boylece dilimler birbirinden ayrik ama HER BIRI
+            # kendi icinde dolu/solid gorunuyor. Piksel bazli baglantı
+            # analiziyle dogrulandi: dilimler arasi bosluk var (referans
+            # gorseldeki gibi) ama hicbir dilimde ic bosluk/oyuk yok.
+            disari_cekme = rx*0.12
 
             acilar, basla = [], -90.0
             for v in degerler:
@@ -2443,8 +2451,11 @@ if page=="Ana Sayfa":
             dilimler = []
             for i, ((a0, a1), renk) in enumerate(zip(acilar, renkler)):
                 orta = (a0+a1)/2.0
+                rad = math.radians(orta)
+                ex = math.cos(rad)*disari_cekme
+                ey = math.sin(rad)*disari_cekme*(ry/rx)
                 dilimler.append(dict(i=i, a0=a0, a1=a1, orta=orta,
-                                      renk=renk, cx=cx0, cy=cy0))
+                                      renk=renk, cx=cx0+ex, cy=cy0+ey))
 
             sirali = sorted(dilimler, key=lambda w: math.sin(math.radians(w["orta"])))
 
@@ -2457,27 +2468,26 @@ if page=="Ana Sayfa":
                 buyuk_yay = 1 if (a1-a0) > 180 else 0
                 ust_renk = _3d_pasta_ton(renk, 0.14)
                 govde_renk = _3d_pasta_ton(renk, -0.34)
+                yan_renk = _3d_pasta_ton(renk, -0.16)
 
                 p0 = _3d_pasta_nokta(cx, cy, rx, ry, a0)
                 p1 = _3d_pasta_nokta(cx, cy, rx, ry, a1)
                 p0a = (p0[0], p0[1]+derinlik)
                 p1a = (p1[0], p1[1]+derinlik)
+                cxa, cya = cx, cy+derinlik
 
-                # v2.0.4.28: Dilimler artik ayni merkezi paylastigi (explode
-                # kaldirildiktan sonra) icin, merkezden kenara giden iki "yan
-                # govde" (radyal duvar) dilimler arasinda hicbir zaman
-                # gorunmemesi gereken ic yuzeylerdi - ama merkez noktasi
-                # elipsin dikey ortasinda oldugundan, bu duvarlar disari
-                # tasarak pastanin dis siluetinin altindan sarkan ucgen
-                # "cikinti/bosluk" gorunumune sebep oluyordu (kullanicinin
-                # bahsettigi "dilimlerin alti bos" sorunu). Sadece disaridan
-                # gorulmesi gereken tek yuzey - dis kavis govdesi (asagida) -
-                # kaliyor, boylece pasta tek parca ve dolu gorunuyor.
                 govde_yolu = (f"M {p0[0]:.2f},{p0[1]:.2f} "
                               f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} "
                               f"L {p1a[0]:.2f},{p1a[1]:.2f} "
                               f"A {rx},{ry} 0 {buyuk_yay} 0 {p0a[0]:.2f},{p0a[1]:.2f} Z")
                 parcalar.append(f'<path d="{govde_yolu}" fill="{govde_renk}"/>')
+
+                yan1 = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
+                        f"L {p0a[0]:.2f},{p0a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
+                yan2 = (f"M {cx:.2f},{cy:.2f} L {p1[0]:.2f},{p1[1]:.2f} "
+                        f"L {p1a[0]:.2f},{p1a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
+                parcalar.append(f'<path d="{yan1}" fill="{yan_renk}"/>')
+                parcalar.append(f'<path d="{yan2}" fill="{yan_renk}"/>')
 
                 ust_yolu = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
                             f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} Z")
@@ -2492,8 +2502,8 @@ if page=="Ana Sayfa":
                 # bolgede govde derinlik kadar daha asagiya taşiyor ama
                 # eski formul sabit bir miktar YUKARI cekiyordu (tam ters
                 # yönde). Şimdi on tarafa dogru orantili ek boşluk ekleniyor.
-                lx = cx0 + math.cos(rad)*(rx*1.22)
-                ly = cy0 + math.sin(rad)*(ry*1.22) + derinlik*max(0.0, math.sin(rad))*1.3
+                lx = cx0 + math.cos(rad)*(rx*1.30)
+                ly = cy0 + math.sin(rad)*(ry*1.30) + derinlik*max(0.0, math.sin(rad))*1.3
                 yuzde = degerler[w["i"]]/toplam*100
                 hiza = "start" if math.cos(rad) >= 0 else "end"
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="12.5" fill="#1b2a4a" '
