@@ -2364,7 +2364,11 @@ if page=="Ana Sayfa":
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
             derinlik = ry*0.34
-            disari_cekme = rx*0.085
+            # v2.0.4.27: disari_cekme (patlatma) kaldirildi - dilimler birbirinden
+            # ayrilinca aralarindaki bosluktan arka plan gorunuyor, bu da
+            # dilimlerin alti/kenari "bos/oyuk" gorunmesine sebep oluyordu.
+            # Tum dilimler ayni merkezi (cx0,cy0) paylasarak kesintisiz, dolu
+            # tek parca bir pasta govdesi olusturuyor.
 
             acilar, basla = [], -90.0
             for v in degerler:
@@ -2375,15 +2379,13 @@ if page=="Ana Sayfa":
             dilimler = []
             for i, ((a0, a1), renk) in enumerate(zip(acilar, renkler)):
                 orta = (a0+a1)/2.0
-                rad = math.radians(orta)
-                ex, ey = math.cos(rad)*disari_cekme, math.sin(rad)*disari_cekme*(ry/rx)
                 dilimler.append(dict(i=i, a0=a0, a1=a1, orta=orta,
-                                      renk=renk, cx=cx0+ex, cy=cy0+ey))
+                                      renk=renk, cx=cx0, cy=cy0))
 
             sirali = sorted(dilimler, key=lambda w: math.sin(math.radians(w["orta"])))
 
-            parcalar = [f'<svg viewBox="0 0 {genislik} {yukseklik}" xmlns="http://www.w3.org/2000/svg" '
-                        f'style="width:100%;height:auto;font-family:Segoe UI,Arial,sans-serif;">']
+            parcalar = [f'<svg viewBox="0 0 {genislik} {yukseklik}" width="100%" '
+                        f'xmlns="http://www.w3.org/2000/svg" style="font-family:Segoe UI,Arial,sans-serif;">']
             parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">Kategori Dağılımı</text>')
 
             for w in sirali:
@@ -2391,31 +2393,33 @@ if page=="Ana Sayfa":
                 buyuk_yay = 1 if (a1-a0) > 180 else 0
                 ust_renk = _3d_pasta_ton(renk, 0.14)
                 govde_renk = _3d_pasta_ton(renk, -0.34)
-                yan_renk = _3d_pasta_ton(renk, -0.18)
 
                 p0 = _3d_pasta_nokta(cx, cy, rx, ry, a0)
                 p1 = _3d_pasta_nokta(cx, cy, rx, ry, a1)
                 p0a = (p0[0], p0[1]+derinlik)
                 p1a = (p1[0], p1[1]+derinlik)
-                cxa, cya = cx, cy+derinlik
 
+                # v2.0.4.28: Dilimler artik ayni merkezi paylastigi (explode
+                # kaldirildiktan sonra) icin, merkezden kenara giden iki "yan
+                # govde" (radyal duvar) dilimler arasinda hicbir zaman
+                # gorunmemesi gereken ic yuzeylerdi - ama merkez noktasi
+                # elipsin dikey ortasinda oldugundan, bu duvarlar disari
+                # tasarak pastanin dis siluetinin altindan sarkan ucgen
+                # "cikinti/bosluk" gorunumune sebep oluyordu (kullanicinin
+                # bahsettigi "dilimlerin alti bos" sorunu). Sadece disaridan
+                # gorulmesi gereken tek yuzey - dis kavis govdesi (asagida) -
+                # kaliyor, boylece pasta tek parca ve dolu gorunuyor.
                 govde_yolu = (f"M {p0[0]:.2f},{p0[1]:.2f} "
                               f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} "
                               f"L {p1a[0]:.2f},{p1a[1]:.2f} "
-                              f"A {rx},{ry} 0 {buyuk_yay} 1 {p0a[0]:.2f},{p0a[1]:.2f} Z")
+                              f"A {rx},{ry} 0 {buyuk_yay} 0 {p0a[0]:.2f},{p0a[1]:.2f} Z")
                 parcalar.append(f'<path d="{govde_yolu}" fill="{govde_renk}"/>')
-
-                yan1 = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
-                        f"L {p0a[0]:.2f},{p0a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
-                yan2 = (f"M {cx:.2f},{cy:.2f} L {p1[0]:.2f},{p1[1]:.2f} "
-                        f"L {p1a[0]:.2f},{p1a[1]:.2f} L {cxa:.2f},{cya:.2f} Z")
-                parcalar.append(f'<path d="{yan1}" fill="{yan_renk}"/>')
-                parcalar.append(f'<path d="{yan2}" fill="{yan_renk}"/>')
 
                 ust_yolu = (f"M {cx:.2f},{cy:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
                             f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} Z")
                 parcalar.append(f'<path d="{ust_yolu}" fill="{ust_renk}" stroke="#ffffff" stroke-width="1.5">'
                                  f'<title>{etiketler[w["i"]]}: %{degerler[w["i"]]/toplam*100:.1f}</title></path>')
+
 
             for w in dilimler:
                 rad = math.radians(w["orta"])
