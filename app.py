@@ -3304,54 +3304,135 @@ elif page=="Temettü":
         st.stop()
 
     # ── Tablo ────────────────────────────────────────────────
-    col_cfg = {}
-    display_cols = ["Ticker", "Şirket"]
+    # v2.0.4.25: Halka Arz sayfasindaki gibi st.dataframe (dinamik sutun
+    # genislikleri -> yatay scroll) sabit genislikli HTML tabloya cevrildi.
+    # Ayrica Ex-Date'e 14 gun veya daha az kalan satirlar renkle vurgulaniyor
+    # (temettu hakkindan faydalanmak icin o tarihten once alinmis olmasi
+    # gerektigi icin bu "aksiyon alinabilir" bir sinyal - Halka Arz'daki
+    # Arz Fiyati renklendirmesiyle ayni mantik: bagimsiz bir sinyali goze
+    # carpacak sekilde one cikarmak).
+    import html as _html
+    from datetime import datetime as _dt, timedelta as _td
 
+    def _fmt_num(v, suffix="", ondalik=2):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "—"
+        return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def _exdate_renk(ex_date_str):
+        """Ex-Date'e 14 gun veya daha az varsa turuncumsu vurgu (yakinda
+        temettu hakki dusuyor - hisseyi elde tutmak/almak icin son gunler).
+        Tarih gecmisse renklendirme yapilmaz (zaten gecmis kayittir)."""
+        if not ex_date_str:
+            return ""
+        try:
+            d = _dt.strptime(str(ex_date_str), "%d.%m.%Y")
+            bugun = _dt.now()
+            if bugun <= d <= bugun + _td(days=14):
+                return "background-color:#fff3e0;"
+        except Exception:
+            pass
+        return ""
+
+    _kolonlar = []  # (anahtar, baslik, genislik, tooltip, hizalama)
+    if "Ticker" in df_show.columns:
+        _kolonlar.append(("Ticker", "Ticker", "6%", "", "nowrap"))
+    if "Şirket" in df_show.columns:
+        _kolonlar.append(("Şirket", "Şirket", "15%", "", ""))
     if "Son_Fiyat" in df_show.columns:
-        display_cols.append("Son_Fiyat")
-        col_cfg["Son_Fiyat"] = st.column_config.NumberColumn("Fiyat (₺)", format="%.2f")
-
+        _kolonlar.append(("Son_Fiyat", "Fiyat (₺)", "8%", "Son kapanış fiyatı", ""))
     if "div_per_share" in df_show.columns:
-        display_cols.append("div_per_share")
-        col_cfg["div_per_share"] = st.column_config.NumberColumn("Temettü/Hisse (₺)", format="%.4f")
-
+        _kolonlar.append(("div_per_share", "Temettü/Hisse (₺)", "10%",
+                           "Hisse başına ödenen/duyurulan brüt temettü tutarı (yfinance)", ""))
     if "div_yield" in df_show.columns:
-        display_cols.append("div_yield")
-        col_cfg["div_yield"] = st.column_config.NumberColumn("Temettü Verimi %", format="%.2f")
-
+        _kolonlar.append(("div_yield", "Temettü Verimi %", "9%",
+                           "Temettü/Hisse ÷ Fiyat × 100", ""))
     if "ex_date" in df_show.columns:
-        display_cols.append("ex_date")
-        col_cfg["ex_date"] = st.column_config.TextColumn("Ex-Date")
-
+        _kolonlar.append(("ex_date", "Ex-Date", "9%",
+                           "Haklardan düşme tarihi — temettüyü almak için bu tarihten önce hisseye sahip olunmalı", "nowrap"))
     if "frequency" in df_show.columns:
-        display_cols.append("frequency")
-        col_cfg["frequency"] = st.column_config.TextColumn("Sıklık")
-
+        _kolonlar.append(("frequency", "Sıklık", "6%", "Temettü ödeme sıklığı", ""))
     if "Ret1M" in df_show.columns:
-        display_cols.append("Ret1M")
-        col_cfg["Ret1M"] = st.column_config.NumberColumn("1A Getiri %", format="%.2f")
-
+        _kolonlar.append(("Ret1M", "1A Getiri %", "8%", "Son 1 aylık fiyat getirisi", ""))
     if "Optima_Skor" in df_show.columns:
-        display_cols.append("Optima_Skor")
-        col_cfg["Optima_Skor"] = st.column_config.NumberColumn("Optima Skor", format="%.1f")
-
+        _kolonlar.append(("Optima_Skor", "Optima Skor", "8%",
+                           "TrendSurf Optima bileşik puanı (0-100)", ""))
     if "Toplam_Getiri" in df_show.columns:
-        display_cols.append("Toplam_Getiri")
-        col_cfg["Toplam_Getiri"] = st.column_config.NumberColumn(
-            "Tahmini Toplam Getiri %",
-            format="%.2f",
-            help="1A Getiri % + Temettü Verimi % (gösterge, yatırım tavsiyesi değildir)"
-        )
-
+        _kolonlar.append(("Toplam_Getiri", "Tahmini Toplam Getiri %", "12%",
+                           "1 Aylık Momentum + Temettü Verimi (gösterge, yatırım tavsiyesi değildir)", ""))
     if "KAP_URL" in df_show.columns:
-        display_cols.append("KAP_URL")
-        col_cfg["KAP_URL"] = st.column_config.LinkColumn("KAP", display_text="Görüntüle")
+        _kolonlar.append(("KAP_URL", "KAP", "9%", "Kamuyu Aydınlatma Platformu şirket sayfası", ""))
 
-    tablo_df = df_show[[c for c in display_cols if c in df_show.columns]].reset_index(drop=True)
+    _thead = "".join(
+        f'<th style="width:{w};" title="{_html.escape(tip)}">{_html.escape(baslik)}</th>'
+        for (_, baslik, w, tip, _hiz) in _kolonlar
+    )
 
-    st.dataframe(tablo_df, use_container_width=True, hide_index=True, column_config=col_cfg)
+    _rows_html = []
+    for _, r in df_show.iterrows():
+        ex_date_val = r.get("ex_date") if "ex_date" in df_show.columns else None
+        exdate_bg = _exdate_renk(ex_date_val)
+        _tds = []
+        for anahtar, _baslik, _w, _tip, hiz in _kolonlar:
+            v = r.get(anahtar)
+            if anahtar in ("Ticker", "Şirket", "frequency"):
+                deger = _html.escape(str(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
+            elif anahtar == "ex_date":
+                _bos = v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).lower() == "nan"
+                deger = "—" if _bos else _html.escape(str(v))
+            elif anahtar == "div_per_share":
+                deger = _fmt_num(v, ondalik=4)
+            elif anahtar == "div_yield":
+                deger = _fmt_num(v, suffix="%")
+            elif anahtar == "Ret1M":
+                deger = _fmt_num(v, suffix="%")
+            elif anahtar == "Optima_Skor":
+                deger = _fmt_num(v, ondalik=1)
+            elif anahtar == "Toplam_Getiri":
+                deger = _fmt_num(v, suffix="%")
+            elif anahtar == "KAP_URL":
+                _bos = v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).lower() == "nan"
+                deger = ("—" if _bos else f'<a href="{_html.escape(str(v))}" target="_blank">Görüntüle</a>')
+            else:
+                deger = _fmt_num(v)
+            nowrap = "white-space:nowrap;" if hiz == "nowrap" else ""
+            bg = exdate_bg if anahtar == "ex_date" else ""
+            stil = f' style="{bg}{nowrap}"' if (bg or nowrap) else ""
+            _tds.append(f"<td{stil}>{deger}</td>")
+        _rows_html.append(f"<tr>{''.join(_tds)}</tr>")
 
-    st.caption("Tahmini Toplam Getiri = 1 Aylık Momentum + Temettü Verimi. Yatırım tavsiyesi değildir.")
+    st.markdown(f"""
+    <style>
+    @media (min-width: 769px) {{
+        .block-container {{ padding-left: 2rem !important; padding-right: 2rem !important;
+                             max-width: 100% !important; }}
+    }}
+    .tm-tablo-wrap {{ overflow-x: auto; }}
+    table.tm-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
+                       font-size: 14.5px; }}
+    table.tm-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
+                          padding: 10px 12px; font-weight: 600; white-space: normal;
+                          font-size: 13.5px; line-height: 1.3; }}
+    table.tm-tablo td {{ padding: 10px 12px; border-bottom: 1px solid #e3e7ec;
+                          white-space: normal; word-wrap: break-word;
+                          vertical-align: top; color: #1a1a1a; line-height: 1.4; }}
+    table.tm-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
+    </style>
+    <div class="tm-tablo-wrap">
+    <table class="tm-tablo">
+    <thead><tr>{_thead}</tr></thead>
+    <tbody>{"".join(_rows_html)}</tbody>
+    </table>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        "<div style='color:#333333; font-size:14px; line-height:1.5; margin-top:10px;'>"
+        "<b>Tahmini Toplam Getiri</b> = 1 Aylık Momentum + Temettü Verimi. Yatırım tavsiyesi değildir. "
+        "<span style='background-color:#fff3e0;'>Turuncu</span> vurgulu Ex-Date hücreleri, "
+        "haklardan düşme tarihine 14 gün veya daha az kaldığını gösterir."
+        "</div>", unsafe_allow_html=True
+    )
 
     # ── CSV indir ────────────────────────────────────────────
     csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
