@@ -2265,14 +2265,11 @@ if page=="Ana Sayfa":
         div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
             gap: 2px !important; align-items: stretch !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(.as-baslik) > div {
-            display: flex !important; align-items: stretch !important;
-        }
         .as-baslik {
-            background-color: #0d2b4e; color: #ffffff; padding: 10px 8px;
+            background-color: #0d2b4e; color: #ffffff; padding: 0 8px;
             font-weight: 600; font-size: 12.5px; line-height: 1.25;
-            display: flex; align-items: center; width: 100%; height: 100%;
-            min-height: 42px; box-sizing: border-box;
+            display: flex; align-items: center; width: 100%;
+            height: 48px; box-sizing: border-box;
         }
         </style>
         """, unsafe_allow_html=True)
