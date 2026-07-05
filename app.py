@@ -2200,45 +2200,77 @@ if page=="Ana Sayfa":
         # sirket isimleri) sarmalanmali, digerleri (Kategori/Ticker/Sinyal/
         # sayisal sutunlar) tek satirda kalmali - genislikler buna gore
         # yeniden dagitildi ve "Ad" disindaki tum td'lere nowrap uygulandi.
-        #
-        # Satira tiklayip detay acma: statik HTML tablo Streamlit'e dogrudan
-        # bir "tiklandi" olayi gonderemez, ama bir <a href="?secim=TICKER">
-        # linki normal bir sayfa navigasyonu (URL sorgu parametresi) tetikler
-        # ve bu, Streamlit'in st.query_params ile okuyabildigi bir seydir.
-        # Boylece acilir liste kullanmadan, dogrudan Ticker'a tiklayarak
-        # detay analiz acilabiliyor.
         import html as _html_as
-        from urllib.parse import quote as _url_quote
 
         def _as_fmt(v, suffix="", ondalik=2):
             if v is None or (isinstance(v, float) and pd.isna(v)):
                 return "—"
             return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+        # v2.0.4.33: Kullanicinin acikca istedigi "herhangi bir hucreye
+        # tiklayinca detay acilsin" ozelligi, sayfa navigasyonu gerektirmeyen
+        # bir yontemle yeniden kuruldu: her hucre gercek bir st.button.
+        # Butonlar CSS ile duz tablo hucresi gibi gorunecek sekilde
+        # (kenarliksiz, arka planiz, sola hizali) yeniden stillendirildi.
+        # st.button bir Streamlit widget'i oldugundan tiklaninca normal ic
+        # rerun calisir (WebSocket uzerinden) - sayfa hic yenilenmez, bu
+        # yuzden oturum/login durumu asla bozulmaz. Ayni zamanda gercek
+        # metin kaydirma (word-wrap) da CSS ile korunuyor.
         _as_kolonlar = [
-            ("Kategori", "Kategori", "7%"),
-            ("Ticker", "Ticker", "8%"),
-            ("Ad", "Ad", "25%"),
-            ("Optima Skoru", "Optima Skoru", "8%"),
-            ("Sinyal", "Sinyal", "9%"),
-            ("RSI", "RSI", "5%"),
-            ("1A Getiri %", "1A Getiri %", "7%"),
-            ("Emir Fiyatı", "Emir Fiyatı", "8%"),
-            ("Birim", "Birim", "5%"),
-            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", "9%"),
-            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", "9%"),
+            ("Kategori", "Kategori", 7),
+            ("Ticker", "Ticker", 8),
+            ("Ad", "Ad", 25),
+            ("Optima Skoru", "Optima Skoru", 8),
+            ("Sinyal", "Sinyal", 9),
+            ("RSI", "RSI", 5),
+            ("1A Getiri %", "1A Getiri %", 7),
+            ("Emir Fiyatı", "Emir Fiyatı", 8),
+            ("Birim", "Birim", 5),
+            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 9),
+            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 9),
         ]
-        _as_thead = "".join(f'<th style="width:{w};">{_html_as.escape(baslik)}</th>'
-                             for (_, baslik, w) in _as_kolonlar)
-        _as_rows = []
-        for _, r in df_opt.iterrows():
-            _tds = []
-            _tick = str(r.get("Ticker", ""))
-            _href = f'?secim={_url_quote(_tick)}'
-            for anahtar, _b, _w in _as_kolonlar:
+        _as_oranlar = [w for (_, _, w) in _as_kolonlar]
+
+        st.markdown("""
+        <style>
+        @media (min-width: 769px) {
+            .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
+                                max-width: 100% !important; }
+        }
+        div[data-testid="stButton"] > button {
+            width: 100%; text-align: left; background: transparent !important;
+            border: none !important; border-bottom: 1px solid #e3e7ec !important;
+            border-radius: 0 !important; padding: 8px 6px !important;
+            color: #1a1a1a !important; font-size: 13.5px !important;
+            min-height: 2.4em; height: auto !important; white-space: normal !important;
+            box-shadow: none !important; line-height: 1.3 !important;
+        }
+        div[data-testid="stButton"] > button p {
+            white-space: normal !important; text-align: left !important; font-size: 13.5px !important;
+        }
+        div[data-testid="stButton"] > button:hover {
+            background: #eef3fb !important; color: #0d2b4e !important; border-color: #b9c6d9 !important;
+        }
+        div[data-testid="stButton"] > button:focus:not(:active) {
+            box-shadow: none !important;
+        }
+        .as-baslik { background-color: #0d2b4e; color: #ffffff; padding: 8px 8px;
+                     font-weight: 600; font-size: 12.5px; line-height: 1.25; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        _hcols = st.columns(_as_oranlar)
+        for _hc, (_, _baslik, _w) in zip(_hcols, _as_kolonlar):
+            _hc.markdown(f'<div class="as-baslik">{_html_as.escape(_baslik)}</div>', unsafe_allow_html=True)
+
+        sel_ana = st.session_state.get("sel_Ana Sayfa", "")
+        _yeni_secim = None
+        for _ridx, r in df_opt.reset_index(drop=True).iterrows():
+            _rcols = st.columns(_as_oranlar)
+            for _cidx, (anahtar, _b, _w) in enumerate(_as_kolonlar):
                 v = r.get(anahtar)
                 if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
-                    deger = _html_as.escape(str(v)) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
+                    deger = str(v) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
                 elif anahtar == "Optima Skoru":
                     deger = _as_fmt(v, ondalik=1)
                 elif anahtar == "RSI":
@@ -2251,53 +2283,11 @@ if page=="Ana Sayfa":
                     deger = _as_fmt(v, ondalik=0)
                 else:
                     deger = _as_fmt(v)
-                # v2.0.4.31: sadece Ticker degil, satirdaki HER hucre tiklanabilir
-                # yapildi - kullanici herhangi bir rakama veya ticker'a
-                # tiklayinca da detay analiz acilsin istedi. Link tum hucreyi
-                # (display:block) kapladigindan hucrenin herhangi bir
-                # noktasina tiklamak yeterli.
-                deger_link = (f'<a href="{_href}" target="_self" style="color:inherit;text-decoration:none;'
-                               f'display:block;cursor:pointer;">{deger}</a>')
-                nowrap = "" if anahtar == "Ad" else ' class="as-nowrap"'
-                _tds.append(f"<td{nowrap}>{deger_link}</td>")
-            _as_rows.append(f"<tr>{''.join(_tds)}</tr>")
+                if _rcols[_cidx].button(deger, key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True):
+                    _yeni_secim = str(r["Ticker"])
 
-        st.markdown(f"""
-        <style>
-        @media (min-width: 769px) {{
-            .block-container {{ padding-left: 2rem !important; padding-right: 2rem !important;
-                                 max-width: 100% !important; }}
-        }}
-        .as-tablo-wrap {{ overflow-x: auto; }}
-        table.as-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
-                           font-size: 14px; }}
-        table.as-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
-                              padding: 8px 10px; font-weight: 600; white-space: normal;
-                              font-size: 12.5px; line-height: 1.25; }}
-        table.as-tablo td {{ padding: 0; border-bottom: 1px solid #e3e7ec;
-                              white-space: normal; word-wrap: break-word;
-                              vertical-align: top; color: #1a1a1a; line-height: 1.35; }}
-        table.as-tablo td > a {{ padding: 8px 10px; }}
-        table.as-tablo td.as-nowrap {{ white-space: nowrap; }}
-        table.as-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
-        table.as-tablo tr:hover {{ background-color: #eef3fb; }}
-        </style>
-        <div class="as-tablo-wrap">
-        <table class="as-tablo">
-        <thead><tr>{_as_thead}</tr></thead>
-        <tbody>{"".join(_as_rows)}</tbody>
-        </table>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Ticker linkine tiklaninca URL'e ?secim=TICKER eklenir; bunu okuyup
-        # session_state'e aktarip URL'i temizliyoruz (adres cubugunda kalici
-        # ?secim=... gorunmesin diye).
-        sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        _secim_param = _qp.get("secim", "")
-        if _secim_param and _secim_param != sel_ana:
-            st.session_state["sel_Ana Sayfa"] = _secim_param
-            _qp.clear()
+        if _yeni_secim and _yeni_secim != sel_ana:
+            st.session_state["sel_Ana Sayfa"] = _yeni_secim
             st.rerun()
 
         # ── Tıklanan varlığın analizi ──────────────────────────
