@@ -2270,33 +2270,36 @@ if page=="Ana Sayfa":
             .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
                                 max-width: 100% !important; }
         }
-        div[data-testid="stButton"] > button {
-            width: 100%; text-align: left; background: transparent !important;
-            border: none !important; border-bottom: 1px solid #e3e7ec !important;
-            border-radius: 0 !important; padding: 0 8px !important;
-            color: #1a1a1a !important; font-size: 13.5px !important;
-            height: 40px !important; display: flex !important; align-items: center !important;
-            white-space: nowrap !important; overflow: hidden !important;
-            box-shadow: none !important; line-height: 1.3 !important;
+        /* v2.0.4.35: Streamlit'in kendi buton etiketi (label) metnini nasil
+           sardigini disaridan CSS ile guvenilir sekilde kontrol edemedik -
+           genislik/beyaz-bosluk kurallarina ragmen bazen yine de 2 satira
+           bolunuyordu (muhtemelen Streamlit'in kendi ic stilleri kazaniyor).
+           Bu yuzden yaklasim degisti: gorunen metin artik SADECE bizim tam
+           kontrol edebildigimiz duz bir <div> (başlıkla ayni, kanitlanmis
+           yontem) - tiklamayi yakalamak icin ayni hucrenin USTUNE, tamamen
+           saydam/gorunmez bir buton bindiriliyor (position:absolute). Metnin
+           GORUNUMU ile TIKLAMANIN yakalanmasi boylece birbirinden tamamen
+           ayrildi. */
+        div[data-testid="stColumn"]:has(.as-hucre) {
+            position: relative !important;
         }
-        div[data-testid="stButton"] > button p,
-        div[data-testid="stButton"] > button span,
-        div[data-testid="stButton"] > button div {
-            color: #1a1a1a !important;
-            white-space: nowrap !important; overflow: hidden !important;
-            text-overflow: ellipsis !important; display: block !important;
-            text-align: left !important; font-size: 13.5px !important;
+        div[data-testid="stColumn"]:has(.as-hucre) div[data-testid="stButton"] {
+            position: absolute !important; inset: 0 !important; margin: 0 !important;
+            z-index: 5 !important;
         }
-        div[data-testid="stButton"] > button:hover {
-            background: #eef3fb !important; border-color: #b9c6d9 !important;
+        div[data-testid="stColumn"]:has(.as-hucre) div[data-testid="stButton"] > button {
+            width: 100% !important; height: 100% !important; opacity: 0 !important;
+            cursor: pointer !important; border: none !important; padding: 0 !important;
+            box-shadow: none !important; min-height: 0 !important;
         }
-        div[data-testid="stButton"] > button:hover p,
-        div[data-testid="stButton"] > button:hover span,
-        div[data-testid="stButton"] > button:hover div {
-            color: #0d2b4e !important;
+        div[data-testid="stColumn"]:has(.as-hucre):hover .as-hucre {
+            background-color: #eef3fb !important; color: #0d2b4e !important;
         }
-        div[data-testid="stButton"] > button:focus:not(:active) {
-            box-shadow: none !important;
+        .as-hucre {
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            padding: 0 8px; font-size: 13.5px; color: #1a1a1a; line-height: 1.3;
+            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
+            height: 40px; display: flex; align-items: center;
         }
         div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
             gap: 2px !important; align-items: stretch !important;
@@ -2334,9 +2337,11 @@ if page=="Ana Sayfa":
                     deger = _as_fmt(v, ondalik=0)
                 else:
                     deger = _as_fmt(v)
-                if _rcols[_cidx].button(deger, key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True,
-                                         help=deger if anahtar in ("Ad", "Ticker") else None):
-                    _yeni_secim = str(r["Ticker"])
+                with _rcols[_cidx]:
+                    st.markdown(f'<div class="as-hucre" title="{_html_as.escape(deger)}">'
+                                f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
+                    if st.button("", key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True):
+                        _yeni_secim = str(r["Ticker"])
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
