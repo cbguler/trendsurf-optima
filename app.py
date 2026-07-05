@@ -2264,37 +2264,23 @@ if page=="Ana Sayfa":
         ]
         _as_oranlar = [w for (_, _, w) in _as_kolonlar]
 
+        _as_kolonlar = _as_kolonlar + [("__aksiyon__", "", 7)]
+        _as_oranlar = [w for (_, _, w) in _as_kolonlar]
+
         st.markdown("""
         <style>
         @media (min-width: 769px) {
             .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
                                 max-width: 100% !important; }
         }
-        /* v2.0.4.35: Streamlit'in kendi buton etiketi (label) metnini nasil
-           sardigini disaridan CSS ile guvenilir sekilde kontrol edemedik -
-           genislik/beyaz-bosluk kurallarina ragmen bazen yine de 2 satira
-           bolunuyordu (muhtemelen Streamlit'in kendi ic stilleri kazaniyor).
-           Bu yuzden yaklasim degisti: gorunen metin artik SADECE bizim tam
-           kontrol edebildigimiz duz bir <div> (başlıkla ayni, kanitlanmis
-           yontem) - tiklamayi yakalamak icin ayni hucrenin USTUNE, tamamen
-           saydam/gorunmez bir buton bindiriliyor (position:absolute). Metnin
-           GORUNUMU ile TIKLAMANIN yakalanmasi boylece birbirinden tamamen
-           ayrildi. */
-        div[data-testid="stColumn"]:has(.as-hucre) {
-            position: relative !important;
-        }
-        div[data-testid="stColumn"]:has(.as-hucre) div[data-testid="stButton"] {
-            position: absolute !important; inset: 0 !important; margin: 0 !important;
-            z-index: 5 !important;
-        }
-        div[data-testid="stColumn"]:has(.as-hucre) div[data-testid="stButton"] > button {
-            width: 100% !important; height: 100% !important; opacity: 0 !important;
-            cursor: pointer !important; border: none !important; padding: 0 !important;
-            box-shadow: none !important; min-height: 0 !important;
-        }
-        div[data-testid="stColumn"]:has(.as-hucre):hover .as-hucre {
-            background-color: #eef3fb !important; color: #0d2b4e !important;
-        }
+        /* v2.0.4.36: Gorunmez/ust-uste bindirilen (position:absolute) buton
+           denemesi geri alindi - hem tiklama guvenilmez hale gelmisti hem de
+           (muhtemelen CSS eslesmesinin tutmadigi bir durumda) oturumu
+           bozuyordu. Artik hicbir absolute konumlandirma veya gizli buton
+           yok - her satirin sonunda sade, normal akiskan (in-flow), GORUNUR
+           kucuk bir "Incele" butonu var. Bu, Streamlit'in en temel/guvenilir
+           calisma bicimidir: sayfa navigasyonu yok, session_state'e dokunma
+           riski yok. */
         .as-hucre {
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             padding: 0 8px; font-size: 13.5px; color: #1a1a1a; line-height: 1.3;
@@ -2310,6 +2296,10 @@ if page=="Ana Sayfa":
             display: flex; align-items: center; width: 100%;
             height: 48px; box-sizing: border-box;
         }
+        div[data-testid="stButton"] > button {
+            width: 100%; padding: 2px 4px !important; font-size: 12px !important;
+            height: 40px !important; border-radius: 4px !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -2322,6 +2312,10 @@ if page=="Ana Sayfa":
         for _ridx, r in df_opt.reset_index(drop=True).iterrows():
             _rcols = st.columns(_as_oranlar)
             for _cidx, (anahtar, _b, _w) in enumerate(_as_kolonlar):
+                if anahtar == "__aksiyon__":
+                    if _rcols[_cidx].button("İncele →", key=f"as_incele_{_ridx}", use_container_width=True):
+                        _yeni_secim = str(r["Ticker"])
+                    continue
                 v = r.get(anahtar)
                 if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
                     deger = str(v) if v is not None and not (isinstance(v, float) and pd.isna(v)) else "—"
@@ -2337,11 +2331,8 @@ if page=="Ana Sayfa":
                     deger = _as_fmt(v, ondalik=0)
                 else:
                     deger = _as_fmt(v)
-                with _rcols[_cidx]:
-                    st.markdown(f'<div class="as-hucre" title="{_html_as.escape(deger)}">'
-                                f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
-                    if st.button("", key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True):
-                        _yeni_secim = str(r["Ticker"])
+                _rcols[_cidx].markdown(f'<div class="as-hucre" title="{_html_as.escape(deger)}">'
+                                        f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
