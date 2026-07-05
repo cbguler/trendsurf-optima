@@ -1038,18 +1038,26 @@ def enrich(row,period="1y"):
                 macd=macd_v,macd_sig=macd_s,
                 live_rsi=live_rsi,live_vol=live_vol)
 
-def clickable_table(df_show, key, sel_ticker=""):
-    """on_select ile satır seçimi — checkbox Streamlit'in kendi davranışı."""
-    col_cfg = {}
+def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
+    """on_select ile satır seçimi — checkbox Streamlit'in kendi davranışı.
+
+    v2.0.4.29: col_cfg parametresi eklendi. Öncesinde bu fonksiyon dışarıdan
+    sütun ayarı (genişlik, başlık, format) kabul etmiyordu - çağıran kod
+    özenle bir col_cfg sözlüğü hazırlasa bile sessizce yok sayılıyordu.
+    Şimdi disaridan verilen col_cfg, otomatik tespit edilenin üzerine yazar.
+    """
+    auto_cfg = {}
     for c in df_show.columns:
         if c in ("Son Fiyat","Fiyat","Emir Fiyati"):
-            col_cfg[c] = st.column_config.NumberColumn(format="%.4f")
+            auto_cfg[c] = st.column_config.NumberColumn(format="%.4f")
         elif c in ("1A Getiri%","1A%","Ret1M"):
-            col_cfg[c] = st.column_config.NumberColumn(format="%.2f")
+            auto_cfg[c] = st.column_config.NumberColumn(format="%.2f")
         elif c in ("Optima Skor","Skor"):
-            col_cfg[c] = st.column_config.NumberColumn(format="%.1f")
+            auto_cfg[c] = st.column_config.NumberColumn(format="%.1f")
         elif c == "RSI":
-            col_cfg[c] = st.column_config.NumberColumn(format="%.1f")
+            auto_cfg[c] = st.column_config.NumberColumn(format="%.1f")
+    if col_cfg:
+        auto_cfg.update(col_cfg)
 
     evt = st.dataframe(
         df_show,
@@ -1057,7 +1065,7 @@ def clickable_table(df_show, key, sel_ticker=""):
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
-        column_config=col_cfg,
+        column_config=auto_cfg,
         key=key,
     )
     if evt and hasattr(evt, "selection") and evt.selection.rows:
@@ -2133,8 +2141,7 @@ if page=="Ana Sayfa":
                 "RSI":rsi_v,
                 "1A Getiri %":float(row.get("Ret1M",0)),
                 "Emir Fiyatı":price,
-                "Kategori Payı %":round(weight*100,1),
-                "Lot / Adet":lot,
+                "Birim":lot,
                 "Gerçek Tutar (₺)":gercek,
                 "Hedef Tutar (₺)":round(per,2),
             })
@@ -2174,37 +2181,39 @@ if page=="Ana Sayfa":
             st.caption(f"Gelir projeksiyonu: {e}")
 
         # Birleşik tablo — sütun sırası
+        # v2.0.4.29: "Kategori Payı %" kaldırıldı (Kategori Dağılımı pasta
+        # grafiğinde zaten gösteriliyor, tabloda tekrar oluyordu). "Gelir
+        # Türü/Oranı/Yıllık Gelir" sütunları da tablodan çıkarıldı - üstteki
+        # özet metrikler (Tahmini Yıllık Pasif Gelir vb.) zaten aynı veriyi
+        # gösteriyor, df_opt_gelir'den hesaplanmaları bundan etkilenmiyor.
         base_cols = ["Kategori","Ticker","Ad","Optima Skoru","Sinyal","RSI","1A Getiri %",
-                     "Emir Fiyatı","Kategori Payı %","Lot / Adet","Gerçek Tutar (₺)","Hedef Tutar (₺)"]
-        extra_cols = [c for c in ["Gelir Türü","Gelir Oranı (%)","Yıllık Gelir (₺)"]
-                      if c in df_opt.columns]
-        col_order = base_cols + extra_cols
+                     "Emir Fiyatı","Birim","Gerçek Tutar (₺)","Hedef Tutar (₺)"]
+        col_order = base_cols
         df_opt = df_opt[[c for c in col_order if c in df_opt.columns]]
 
         col_cfg = {
+            "Ad": st.column_config.TextColumn("Ad", width="large"),
             "Optima Skoru": st.column_config.NumberColumn("Optima Skoru", format="%.1f",
-                help="0-100 arası bileşik skor"),
-            "RSI":          st.column_config.NumberColumn(format="%.1f"),
-            "1A Getiri %":  st.column_config.NumberColumn(format="%.2f"),
-            "Emir Fiyatı":  st.column_config.NumberColumn(format="%.4f",
+                width="small", help="0-100 arası bileşik skor"),
+            "RSI":          st.column_config.NumberColumn(format="%.1f", width="small"),
+            "1A Getiri %":  st.column_config.NumberColumn(format="%.2f", width="small"),
+            "Emir Fiyatı":  st.column_config.NumberColumn(format="%.4f", width="small",
                 help="Güncel piyasa fiyatı — limit emir için referans alın"),
-            "Gerçek Tutar (₺)": st.column_config.NumberColumn(format="%.2f",
-                help="Lot x Fiyat — tam alım tutarı"),
-            "Hedef Tutar (₺)":  st.column_config.NumberColumn(format="%.2f",
-                help="Kategoriye ayrılan bütçe payı"),
+            "Birim": st.column_config.NumberColumn("Birim", width="small",
+                help="Alınacak lot/adet sayısı"),
+            "Gerçek Tutar (₺)": st.column_config.NumberColumn("Gerçek Tutar (₺)", format="%.2f",
+                width="small", help="Lot x Fiyat — tam alım tutarı"),
+            "Hedef Tutar (₺)":  st.column_config.NumberColumn("Hedef Tutar (₺)", format="%.2f",
+                width="small", help="Kategoriye ayrılan bütçe payı"),
         }
-        if "Gelir Oranı (%)" in df_opt.columns:
-            col_cfg["Gelir Oranı (%)"]  = st.column_config.NumberColumn(format="%.2f")
-        if "Yıllık Gelir (₺)" in df_opt.columns:
-            col_cfg["Yıllık Gelir (₺)"] = st.column_config.NumberColumn(format="%.2f")
 
         st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Lot tam sayıya yuvarlandığından Hedef Tutar'dan küçük olabilir. "
-                   "Pasif gelir tahmini: BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12. Yatırım tavsiyesi değildir.")
+                   "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12). Yatırım tavsiyesi değildir.")
 
         # Tıklanabilir tablo
         df_opt_show = df_opt.copy()
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        new_sel = clickable_table(df_opt_show, key="anasayfa", sel_ticker=sel_ana)
+        new_sel = clickable_table(df_opt_show, key="anasayfa", sel_ticker=sel_ana, col_cfg=col_cfg)
         if new_sel and new_sel != sel_ana:
             st.session_state["sel_Ana Sayfa"] = new_sel
             st.rerun()
