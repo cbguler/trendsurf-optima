@@ -2427,29 +2427,15 @@ if page=="Ana Sayfa":
             toplam = sum(degerler)
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
-            derinlik = ry*0.18
-            # v2.0.4.41: Kullanicinin verdigi referans gorsele (parlak,
-            # birbirinden ayrik/patlatilmis dilimler) donuldu. Daha once
-            # patlatma (explode) kaldirilmisti cunku dilimler arasindaki
-            # bosluktan arka plan gorunup "oyuk" hissi veriyordu - ama asil
-            # sorun patlatmanin kendisi degil, o zamanki radyal yan duvar
-            # kodundaki bir hataydi (govde disina tasan ucgen cikinti).
-            # Simdi her dilim, kendi patlatilmis merkezine gore TAM KAPALI
-            # bir katı olusturuyor (ust yuz + dis kavis govdesi + iki radyal
-            # yan govde) - boylece dilimler birbirinden ayrik ama HER BIRI
-            # kendi icinde dolu/solid gorunuyor. Piksel bazli baglantı
-            # analiziyle dogrulandi: dilimler arasi bosluk var (referans
-            # gorseldeki gibi) ama hicbir dilimde ic bosluk/oyuk yok.
-            disari_cekme = rx*0.12
-            # v2.0.4.42: Onceki denemede TUM dilim (tepe noktasi dahil) kendi
-            # patlatma vektorune gore kaydiriliyordu - bu, tum dilimlerin
-            # ortak tepe noktasinin da birbirinden ayrilmasina, ortada kucuk
-            # bir yildiz seklinde bosluk olusmasina sebep oluyordu ("ici bos"
-            # hissi). Duzeltme: tepe noktasi ARTIK HIC KAYMIYOR (tum
-            # dilimler icin ayni, gercek merkez) - sadece dis kavis (ark)
-            # noktalari kendi patlatma vektorlerine gore kayiyor. Boylece
-            # dilimler dis kenarda ayrik gorunurken tam ortada kesintisiz
-            # birlesiyor - piksel bazli baglantı analiziyle dogrulandi.
+            derinlik = ry*0.34
+            # v2.0.4.43: Ayrik/patlatilmis dilim denemesinden (birkac
+            # revizyon) vazgecildi - kullanici defalarca test etti, dilimin
+            # ic kesit yuzeyi hicbir kalinlik degerinde dogru/dolu
+            # gorunmedi ("vazo" hissi). Bitisik (explode'suz) tasarima geri
+            # donuldu: tum dilimler ayni merkezi paylasiyor, aralarinda
+            # bosluk/kesit yuzeyi hic olmadigi icin bu sorun yapisal olarak
+            # ortaya cikamaz. Bu versiyon daha once kullanici tarafindan
+            # onaylanmisti.
 
             acilar, basla = [], -90.0
             for v in degerler:
@@ -2460,11 +2446,7 @@ if page=="Ana Sayfa":
             dilimler = []
             for i, ((a0, a1), renk) in enumerate(zip(acilar, renkler)):
                 orta = (a0+a1)/2.0
-                rad = math.radians(orta)
-                ex = math.cos(rad)*disari_cekme
-                ey = math.sin(rad)*disari_cekme*(ry/rx)
-                dilimler.append(dict(i=i, a0=a0, a1=a1, orta=orta,
-                                      renk=renk, ex=ex, ey=ey))
+                dilimler.append(dict(i=i, a0=a0, a1=a1, orta=orta, renk=renk))
 
             sirali = sorted(dilimler, key=lambda w: math.sin(math.radians(w["orta"])))
 
@@ -2472,20 +2454,14 @@ if page=="Ana Sayfa":
                         f'xmlns="http://www.w3.org/2000/svg" style="font-family:Segoe UI,Arial,sans-serif;">']
             parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">Kategori Dağılımı</text>')
 
-            tepe_x, tepe_y = cx0, cy0
-            tepe_xa, tepe_ya = cx0, cy0 + derinlik
-
             for w in sirali:
-                a0, a1, renk, ex, ey = w["a0"], w["a1"], w["renk"], w["ex"], w["ey"]
+                a0, a1, renk = w["a0"], w["a1"], w["renk"]
                 buyuk_yay = 1 if (a1-a0) > 180 else 0
                 ust_renk = _3d_pasta_ton(renk, 0.14)
                 govde_renk = _3d_pasta_ton(renk, -0.34)
-                yan_renk = _3d_pasta_ton(renk, -0.16)
 
-                p0_ = _3d_pasta_nokta(cx0, cy0, rx, ry, a0)
-                p1_ = _3d_pasta_nokta(cx0, cy0, rx, ry, a1)
-                p0 = (p0_[0]+ex, p0_[1]+ey)
-                p1 = (p1_[0]+ex, p1_[1]+ey)
+                p0 = _3d_pasta_nokta(cx0, cy0, rx, ry, a0)
+                p1 = _3d_pasta_nokta(cx0, cy0, rx, ry, a1)
                 p0a = (p0[0], p0[1]+derinlik)
                 p1a = (p1[0], p1[1]+derinlik)
 
@@ -2495,14 +2471,7 @@ if page=="Ana Sayfa":
                               f"A {rx},{ry} 0 {buyuk_yay} 0 {p0a[0]:.2f},{p0a[1]:.2f} Z")
                 parcalar.append(f'<path d="{govde_yolu}" fill="{govde_renk}"/>')
 
-                yan1 = (f"M {tepe_x:.2f},{tepe_y:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
-                        f"L {p0a[0]:.2f},{p0a[1]:.2f} L {tepe_xa:.2f},{tepe_ya:.2f} Z")
-                yan2 = (f"M {tepe_x:.2f},{tepe_y:.2f} L {p1[0]:.2f},{p1[1]:.2f} "
-                        f"L {p1a[0]:.2f},{p1a[1]:.2f} L {tepe_xa:.2f},{tepe_ya:.2f} Z")
-                parcalar.append(f'<path d="{yan1}" fill="{yan_renk}"/>')
-                parcalar.append(f'<path d="{yan2}" fill="{yan_renk}"/>')
-
-                ust_yolu = (f"M {tepe_x:.2f},{tepe_y:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
+                ust_yolu = (f"M {cx0:.2f},{cy0:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
                             f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} Z")
                 parcalar.append(f'<path d="{ust_yolu}" fill="{ust_renk}" stroke="#ffffff" stroke-width="1.5">'
                                  f'<title>{etiketler[w["i"]]}: %{degerler[w["i"]]/toplam*100:.1f}</title></path>')
