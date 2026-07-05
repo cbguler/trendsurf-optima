@@ -2194,17 +2194,21 @@ if page=="Ana Sayfa":
         st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Lot tam sayıya yuvarlandığından Hedef Tutar'dan küçük olabilir. "
                    "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12). Yatırım tavsiyesi değildir.")
 
-        # v2.0.4.30: st.dataframe (satır tıklayınca detay açan eski tasarım)
-        # metin kaydırma (word-wrap) desteklemediği icin basliklar/hucreler
-        # daralamiyor ve yatay scroll hep geri geliyordu - bu, Glide Data
-        # Grid denen canvas tabanli bir bilesen oldugundan CSS ile
-        # duzeltilemeyen koklu bir kisitlama. Halka Arz/Temettu sayfalarinda
-        # oldugu gibi sabit genislikli, wrap edilebilen bir HTML tabloya
-        # gecildi. Satira tiklayip detay acma ozelligi bu yuzden asagidaki
-        # acilir listeye (selectbox) tasindi - statik HTML'den Streamlit'e
-        # geri bildirim (rerun tetikleme) gonderemedigimiz icin bu, ayni
-        # islevi koruyan en pratik yol.
+        # v2.0.4.31: Onceki tasarimda Kategori/Ticker gibi kisa sutunlara da
+        # cok dar yuzde verilmisti, bu da "Kategori" gibi tek kelimelerin bile
+        # ortadan bolunmesine (word-wrap) sebep oluyordu. Sadece "Ad" (uzun
+        # sirket isimleri) sarmalanmali, digerleri (Kategori/Ticker/Sinyal/
+        # sayisal sutunlar) tek satirda kalmali - genislikler buna gore
+        # yeniden dagitildi ve "Ad" disindaki tum td'lere nowrap uygulandi.
+        #
+        # Satira tiklayip detay acma: statik HTML tablo Streamlit'e dogrudan
+        # bir "tiklandi" olayi gonderemez, ama bir <a href="?secim=TICKER">
+        # linki normal bir sayfa navigasyonu (URL sorgu parametresi) tetikler
+        # ve bu, Streamlit'in st.query_params ile okuyabildigi bir seydir.
+        # Boylece acilir liste kullanmadan, dogrudan Ticker'a tiklayarak
+        # detay analiz acilabiliyor.
         import html as _html_as
+        from urllib.parse import quote as _url_quote
 
         def _as_fmt(v, suffix="", ondalik=2):
             if v is None or (isinstance(v, float) and pd.isna(v)):
@@ -2212,23 +2216,25 @@ if page=="Ana Sayfa":
             return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         _as_kolonlar = [
-            ("Kategori", "Kategori", "6%"),
-            ("Ticker", "Ticker", "6%"),
-            ("Ad", "Ad", "19%"),
+            ("Kategori", "Kategori", "7%"),
+            ("Ticker", "Ticker", "8%"),
+            ("Ad", "Ad", "25%"),
             ("Optima Skoru", "Optima Skoru", "8%"),
             ("Sinyal", "Sinyal", "9%"),
-            ("RSI", "RSI", "6%"),
-            ("1A Getiri %", "1A Getiri %", "8%"),
-            ("Emir Fiyatı", "Emir Fiyatı", "9%"),
-            ("Birim", "Birim", "6%"),
-            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", "11%"),
-            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", "11%"),
+            ("RSI", "RSI", "5%"),
+            ("1A Getiri %", "1A Getiri %", "7%"),
+            ("Emir Fiyatı", "Emir Fiyatı", "8%"),
+            ("Birim", "Birim", "5%"),
+            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", "9%"),
+            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", "9%"),
         ]
         _as_thead = "".join(f'<th style="width:{w};">{_html_as.escape(baslik)}</th>'
                              for (_, baslik, w) in _as_kolonlar)
         _as_rows = []
         for _, r in df_opt.iterrows():
             _tds = []
+            _tick = str(r.get("Ticker", ""))
+            _href = f'?secim={_url_quote(_tick)}'
             for anahtar, _b, _w in _as_kolonlar:
                 v = r.get(anahtar)
                 if anahtar in ("Kategori", "Ticker", "Ad", "Sinyal"):
@@ -2245,21 +2251,36 @@ if page=="Ana Sayfa":
                     deger = _as_fmt(v, ondalik=0)
                 else:
                     deger = _as_fmt(v)
-                _tds.append(f"<td>{deger}</td>")
+                # v2.0.4.31: sadece Ticker degil, satirdaki HER hucre tiklanabilir
+                # yapildi - kullanici herhangi bir rakama veya ticker'a
+                # tiklayinca da detay analiz acilsin istedi. Link tum hucreyi
+                # (display:block) kapladigindan hucrenin herhangi bir
+                # noktasina tiklamak yeterli.
+                deger_link = (f'<a href="{_href}" style="color:inherit;text-decoration:none;'
+                               f'display:block;cursor:pointer;">{deger}</a>')
+                nowrap = "" if anahtar == "Ad" else ' class="as-nowrap"'
+                _tds.append(f"<td{nowrap}>{deger_link}</td>")
             _as_rows.append(f"<tr>{''.join(_tds)}</tr>")
 
         st.markdown(f"""
         <style>
+        @media (min-width: 769px) {{
+            .block-container {{ padding-left: 2rem !important; padding-right: 2rem !important;
+                                 max-width: 100% !important; }}
+        }}
         .as-tablo-wrap {{ overflow-x: auto; }}
         table.as-tablo {{ width: 100%; border-collapse: collapse; table-layout: fixed;
                            font-size: 14px; }}
         table.as-tablo th {{ background-color: #0d2b4e; color: #ffffff; text-align: left;
                               padding: 8px 10px; font-weight: 600; white-space: normal;
                               font-size: 12.5px; line-height: 1.25; }}
-        table.as-tablo td {{ padding: 8px 10px; border-bottom: 1px solid #e3e7ec;
+        table.as-tablo td {{ padding: 0; border-bottom: 1px solid #e3e7ec;
                               white-space: normal; word-wrap: break-word;
                               vertical-align: top; color: #1a1a1a; line-height: 1.35; }}
+        table.as-tablo td > a {{ padding: 8px 10px; }}
+        table.as-tablo td.as-nowrap {{ white-space: nowrap; }}
         table.as-tablo tr:nth-child(even) {{ background-color: #f7f9fb; }}
+        table.as-tablo tr:hover {{ background-color: #eef3fb; }}
         </style>
         <div class="as-tablo-wrap">
         <table class="as-tablo">
@@ -2269,17 +2290,14 @@ if page=="Ana Sayfa":
         </div>
         """, unsafe_allow_html=True)
 
-        # Detay analiz için seçim — artık satıra tıklama yerine acilir liste
+        # Ticker linkine tiklaninca URL'e ?secim=TICKER eklenir; bunu okuyup
+        # session_state'e aktarip URL'i temizliyoruz (adres cubugunda kalici
+        # ?secim=... gorunmesin diye).
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        _as_secenekler = [""] + [f'{row["Ticker"]} — {str(row["Ad"])[:45]}' for _, row in df_opt.iterrows()]
-        _as_ticker_map = {f'{row["Ticker"]} — {str(row["Ad"])[:45]}': row["Ticker"] for _, row in df_opt.iterrows()}
-        _as_mevcut_secim = next((s for s in _as_secenekler if _as_ticker_map.get(s) == sel_ana), "")
-        _as_secili = st.selectbox("Detaylı analiz için varlık seç", _as_secenekler,
-                                    index=_as_secenekler.index(_as_mevcut_secim) if _as_mevcut_secim else 0,
-                                    key="anasayfa_detay_sec")
-        new_sel = _as_ticker_map.get(_as_secili, "")
-        if new_sel and new_sel != sel_ana:
-            st.session_state["sel_Ana Sayfa"] = new_sel
+        _secim_param = _qp.get("secim", "")
+        if _secim_param and _secim_param != sel_ana:
+            st.session_state["sel_Ana Sayfa"] = _secim_param
+            _qp.clear()
             st.rerun()
 
         # ── Tıklanan varlığın analizi ──────────────────────────
@@ -2432,7 +2450,7 @@ if page=="Ana Sayfa":
             a = math.radians(aci_derece)
             return cx + rx*math.cos(a), cy + ry*math.sin(a)
 
-        def _3d_pasta_svg(etiketler, degerler, renkler, genislik=700, yukseklik=380):
+        def _3d_pasta_svg(etiketler, degerler, renkler, genislik=700, yukseklik=410):
             toplam = sum(degerler)
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
@@ -2496,8 +2514,13 @@ if page=="Ana Sayfa":
 
             for w in dilimler:
                 rad = math.radians(w["orta"])
-                lx = cx0 + math.cos(rad)*(rx*1.32)
-                ly = cy0 + math.sin(rad)*(ry*1.32) - derinlik*0.15
+                # v2.0.4.31: On/alt (front-facing, sin(orta)>0) dilimlerin
+                # etiketleri pastanin govdesiyle cakisiyordu, cunku o
+                # bolgede govde derinlik kadar daha asagiya taşiyor ama
+                # eski formul sabit bir miktar YUKARI cekiyordu (tam ters
+                # yönde). Şimdi on tarafa dogru orantili ek boşluk ekleniyor.
+                lx = cx0 + math.cos(rad)*(rx*1.38)
+                ly = cy0 + math.sin(rad)*(ry*1.38) + derinlik*max(0.0, math.sin(rad))*1.6
                 yuzde = degerler[w["i"]]/toplam*100
                 hiza = "start" if math.cos(rad) >= 0 else "end"
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="12.5" fill="#1b2a4a" '
