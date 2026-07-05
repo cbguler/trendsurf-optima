@@ -2383,19 +2383,25 @@ if page=="Ana Sayfa":
                     continue
                 if anahtar == "Optima Skoru":
                     deger, font = _as_sayi_hucre_render(v, 1, "", _w)
+                    hiza = "center"
                 elif anahtar == "RSI":
                     deger, font = _as_sayi_hucre_render(v, 1, "", _w)
+                    hiza = "center"
                 elif anahtar == "1A Getiri %":
                     deger, font = _as_sayi_hucre_render(v, 2, "%", _w)
+                    hiza = "flex-end"
                 elif anahtar == "Emir Fiyatı":
                     deger, font = _as_sayi_hucre_render(v, 4, "", _w)
+                    hiza = "flex-end"
                 elif anahtar == "Birim":
                     deger, font = _as_sayi_hucre_render(v, 0, "", _w)
+                    hiza = "flex-end"
                 else:
                     deger, font = _as_sayi_hucre_render(v, 2, "", _w)
+                    hiza = "flex-end"
                 _rcols[_cidx].markdown(
-                    f'<div class="as-hucre" style="font-size:{font}px;" title="{_html_as.escape(deger)}">'
-                    f'{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
+                    f'<div class="as-hucre" style="font-size:{font}px;justify-content:{hiza};" '
+                    f'title="{_html_as.escape(deger)}">{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
