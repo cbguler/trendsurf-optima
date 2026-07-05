@@ -2273,17 +2273,19 @@ if page=="Ana Sayfa":
         div[data-testid="stButton"] > button {
             width: 100%; text-align: left; background: transparent !important;
             border: none !important; border-bottom: 1px solid #e3e7ec !important;
-            border-radius: 0 !important; padding: 0 6px !important;
+            border-radius: 0 !important; padding: 0 8px !important;
             color: #1a1a1a !important; font-size: 13.5px !important;
-            height: 58px !important; display: flex !important; align-items: center !important;
-            white-space: normal !important;
+            height: 40px !important; display: flex !important; align-items: center !important;
+            white-space: nowrap !important; overflow: hidden !important;
             box-shadow: none !important; line-height: 1.3 !important;
         }
         div[data-testid="stButton"] > button p,
         div[data-testid="stButton"] > button span,
         div[data-testid="stButton"] > button div {
             color: #1a1a1a !important;
-            white-space: normal !important; text-align: left !important; font-size: 13.5px !important;
+            white-space: nowrap !important; overflow: hidden !important;
+            text-overflow: ellipsis !important; display: block !important;
+            text-align: left !important; font-size: 13.5px !important;
         }
         div[data-testid="stButton"] > button:hover {
             background: #eef3fb !important; border-color: #b9c6d9 !important;
@@ -2332,7 +2334,8 @@ if page=="Ana Sayfa":
                     deger = _as_fmt(v, ondalik=0)
                 else:
                     deger = _as_fmt(v)
-                if _rcols[_cidx].button(deger, key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True):
+                if _rcols[_cidx].button(deger, key=f"as_hucre_{_ridx}_{_cidx}", use_container_width=True,
+                                         help=deger if anahtar in ("Ad", "Ticker") else None):
                     _yeni_secim = str(r["Ticker"])
 
         if _yeni_secim and _yeni_secim != sel_ana:
