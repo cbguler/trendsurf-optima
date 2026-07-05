@@ -2236,181 +2236,31 @@ if page=="Ana Sayfa":
         st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Lot tam sayıya yuvarlandığından Hedef Tutar'dan küçük olabilir. "
                    "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12). Yatırım tavsiyesi değildir.")
 
-        # v2.0.4.31: Onceki tasarimda Kategori/Ticker gibi kisa sutunlara da
-        # cok dar yuzde verilmisti, bu da "Kategori" gibi tek kelimelerin bile
-        # ortadan bolunmesine (word-wrap) sebep oluyordu. Sadece "Ad" (uzun
-        # sirket isimleri) sarmalanmali, digerleri (Kategori/Ticker/Sinyal/
-        # sayisal sutunlar) tek satirda kalmali - genislikler buna gore
-        # yeniden dagitildi ve "Ad" disindaki tum td'lere nowrap uygulandi.
-        import html as _html_as
-
-        def _as_fmt(v, suffix="", ondalik=2):
-            if v is None or (isinstance(v, float) and pd.isna(v)):
-                return "—"
-            return f"{v:,.{ondalik}f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        # v2.0.4.33: Kullanicinin acikca istedigi "herhangi bir hucreye
-        # tiklayinca detay acilsin" ozelligi, sayfa navigasyonu gerektirmeyen
-        # bir yontemle yeniden kuruldu: her hucre gercek bir st.button.
-        # Butonlar CSS ile duz tablo hucresi gibi gorunecek sekilde
-        # (kenarliksiz, arka planiz, sola hizali) yeniden stillendirildi.
-        # st.button bir Streamlit widget'i oldugundan tiklaninca normal ic
-        # rerun calisir (WebSocket uzerinden) - sayfa hic yenilenmez, bu
-        # yuzden oturum/login durumu asla bozulmaz. Ayni zamanda gercek
-        # metin kaydirma (word-wrap) da CSS ile korunuyor.
-        _as_kolonlar = [
-            ("Kategori", "Kategori", 8),
-            ("Ticker", "Ticker", 8),
-            ("Ad", "Ad", 25),
-            ("Optima Skoru", "Optima Skoru", 8),
-            ("Sinyal", "Sinyal", 9),
-            ("RSI", "RSI", 5),
-            ("1A Getiri %", "1A Getiri %", 7),
-            ("Emir Fiyatı", "Emir Fiyatı", 8),
-            ("Birim", "Birim", 6),
-            ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 8),
-            ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 8),
-        ]
-        _as_oranlar = [w for (_, _, w) in _as_kolonlar]
-
-        # v2.0.4.37: Kullanicinin istedigi gibi: Ticker hucresinin KENDISI
-        # tiklanabilir (ek sutun/buton yok, tablo genisligini calmiyor).
-        # Ayrica her hucre kendi icerigine gore KADEMELI sigdirma uyguluyor:
-        # sayisal hucrelerde once ondalik basamak kisaltiliyor, hala
-        # sigmiyorsa SADECE o hucrenin fontu kucultuluyor; "Ad" hucresinde
-        # once satir kaydirma (wrap) deneniyor, hala sigmiyorsa SADECE o
-        # hucrenin fontu kucultuluyor. Bu, sabit/genel bir kurallandirma
-        # degil - her hucre kendi metninin uzunluguna gore ayri
-        # degerlendiriliyor, sigan hucrelere hicbir ekstra mudahale
-        # yapilmiyor. (Gercek tarayici piksel olcumu yapamadigimizdan
-        # sutun genisligine gore kalibre edilmis bir karakter-sayisi
-        # tahmini kullaniliyor - kesin degil ama kademeli mudahaleyi
-        # sadece gerektiginde devreye sokuyor.)
-        _AS_KARAKTER_ORANI = 0.85  # sutun yuzdesi -> yaklasik sigan karakter sayisi
-
-        def _as_maxchar(yuzde):
-            return max(3, int(yuzde * _AS_KARAKTER_ORANI))
-
-        def _as_sayi_hucre_render(deger_num, ondalik_max, suffix, yuzde):
-            maxchar = _as_maxchar(yuzde)
-            for dec in range(ondalik_max, -1, -1):
-                s = _as_fmt(deger_num, suffix=suffix, ondalik=dec)
-                if len(s) <= maxchar:
-                    return s, 13.5
-            return _as_fmt(deger_num, suffix=suffix, ondalik=0), 11.0
-
-        def _as_ad_hucre_render(metin, yuzde):
-            maxchar = _as_maxchar(yuzde)
-            if len(metin) <= maxchar:
-                return metin, 13.5, False
-            elif len(metin) <= maxchar * 2:
-                return metin, 13.5, True
-            else:
-                return metin, 11.5, True
-
-        def _as_kisa_metin_render(metin, yuzde):
-            maxchar = _as_maxchar(yuzde)
-            return (metin, 13.5) if len(metin) <= maxchar else (metin, 11.0)
-
-        st.markdown("""
-        <style>
-        @media (min-width: 769px) {
-            .block-container { padding-left: 2rem !important; padding-right: 2rem !important;
-                                max-width: 100% !important; }
+        # v2.0.4.40: Deneme - Ana Sayfa'yi da Portfoyum/kategori sayfalarinda
+        # zaten basariyla kullanilan native st.dataframe (clickable_table)
+        # formatina cevirdik. Bu format mobilde dagilmiyor (tek parca bir
+        # bilesen, st.columns() gibi dikey istiflenmiyor) ve satirin
+        # HERHANGI bir yerine tiklamak secim yapiyor (checkbox'a tiklamak
+        # zorunlu degil - checkbox sadece gorsel bir isaret). Risk: bu
+        # bilesen metin kaydirma (word-wrap) desteklemedigi icin dar
+        # sutunlarda eskisi gibi sikisma/kesilme olabilir - bunu canlida
+        # birlikte degerlendirecegiz.
+        col_cfg_ana = {
+            "Kategori": st.column_config.TextColumn("Kategori", width="small"),
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Ad": st.column_config.TextColumn("Ad", width="large"),
+            "Optima Skoru": st.column_config.NumberColumn("Optima Skoru", format="%.1f", width="small"),
+            "Sinyal": st.column_config.TextColumn("Sinyal", width="small"),
+            "RSI": st.column_config.NumberColumn("RSI", format="%.1f", width="small"),
+            "1A Getiri %": st.column_config.NumberColumn("1A Getiri %", format="%.2f", width="small"),
+            "Emir Fiyatı": st.column_config.NumberColumn("Emir Fiyatı", format="%.4f", width="small"),
+            "Birim": st.column_config.NumberColumn("Birim", format="%d", width="small"),
+            "Gerçek Tutar (₺)": st.column_config.NumberColumn("Gerçek Tutar (₺)", format="%.2f", width="small"),
+            "Hedef Tutar (₺)": st.column_config.NumberColumn("Hedef Tutar (₺)", format="%.2f", width="small"),
         }
-        .as-hucre {
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            padding: 0 8px; color: #1a1a1a; line-height: 1.3;
-            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
-            height: 40px; display: flex; align-items: center;
-        }
-        .as-hucre-wrap {
-            white-space: normal; overflow: hidden; line-height: 1.2;
-            padding: 4px 8px; color: #1a1a1a;
-            border-bottom: 1px solid #e3e7ec; box-sizing: border-box;
-            height: 40px; display: flex; align-items: center;
-        }
-        div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
-            gap: 2px !important; align-items: stretch !important;
-        }
-        .as-baslik {
-            background-color: #0d2b4e; color: #ffffff; padding: 0 8px;
-            font-weight: 600; font-size: 12.5px; line-height: 1.25;
-            display: flex; align-items: center; width: 100%;
-            height: 48px; box-sizing: border-box;
-        }
-        div[data-testid="stButton"] > button {
-            width: 100%; text-align: left; background: transparent !important;
-            border: none !important; border-bottom: 1px solid #e3e7ec !important;
-            border-radius: 0 !important; padding: 0 8px !important;
-            color: #1b6ef3 !important; font-weight: 600 !important;
-            height: 40px !important; display: flex !important; align-items: center !important;
-            white-space: nowrap !important; overflow: hidden !important;
-            box-shadow: none !important; line-height: 1.3 !important;
-        }
-        div[data-testid="stButton"] > button p {
-            color: #1b6ef3 !important; white-space: nowrap !important;
-            overflow: hidden !important; text-overflow: ellipsis !important;
-        }
-        div[data-testid="stButton"] > button:hover {
-            background: #eef3fb !important;
-        }
-        div[data-testid="stButton"] > button:hover p {
-            text-decoration: underline !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        _hcols = st.columns(_as_oranlar)
-        for _hc, (_, _baslik, _w) in zip(_hcols, _as_kolonlar):
-            _hc.markdown(f'<div class="as-baslik">{_html_as.escape(_baslik)}</div>', unsafe_allow_html=True)
-
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
-        _yeni_secim = None
-        for _ridx, r in df_opt.reset_index(drop=True).iterrows():
-            _rcols = st.columns(_as_oranlar)
-            for _cidx, (anahtar, _b, _w) in enumerate(_as_kolonlar):
-                v = r.get(anahtar)
-                if anahtar == "Ticker":
-                    tick_metin = str(v)
-                    if _rcols[_cidx].button(tick_metin, key=f"as_ticker_{_ridx}", use_container_width=True):
-                        _yeni_secim = str(r["Ticker"])
-                    continue
-                if anahtar == "Ad":
-                    metin, font, wrap = _as_ad_hucre_render(str(v) if v is not None else "—", _w)
-                    cls = "as-hucre-wrap" if wrap else "as-hucre"
-                    _rcols[_cidx].markdown(
-                        f'<div class="{cls}" style="font-size:{font}px;" title="{_html_as.escape(str(v))}">'
-                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
-                    continue
-                if anahtar in ("Kategori", "Sinyal"):
-                    metin = str(v) if v is not None else "—"
-                    metin, font = _as_kisa_metin_render(metin, _w)
-                    _rcols[_cidx].markdown(
-                        f'<div class="as-hucre" style="font-size:{font}px;" title="{_html_as.escape(metin)}">'
-                        f'{_html_as.escape(metin)}</div>', unsafe_allow_html=True)
-                    continue
-                if anahtar == "Optima Skoru":
-                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
-                    hiza = "center"
-                elif anahtar == "RSI":
-                    deger, font = _as_sayi_hucre_render(v, 1, "", _w)
-                    hiza = "center"
-                elif anahtar == "1A Getiri %":
-                    deger, font = _as_sayi_hucre_render(v, 2, "%", _w)
-                    hiza = "flex-end"
-                elif anahtar == "Emir Fiyatı":
-                    deger, font = _as_sayi_hucre_render(v, 4, "", _w)
-                    hiza = "flex-end"
-                elif anahtar == "Birim":
-                    deger, font = _as_sayi_hucre_render(v, 0, "", _w)
-                    hiza = "flex-end"
-                else:
-                    deger, font = _as_sayi_hucre_render(v, 2, "", _w)
-                    hiza = "flex-end"
-                _rcols[_cidx].markdown(
-                    f'<div class="as-hucre" style="font-size:{font}px;justify-content:{hiza};" '
-                    f'title="{_html_as.escape(deger)}">{_html_as.escape(deger)}</div>', unsafe_allow_html=True)
+        df_opt_show = df_opt.reset_index(drop=True)
+        _yeni_secim = clickable_table(df_opt_show, key="anasayfa_df", sel_ticker=sel_ana, col_cfg=col_cfg_ana)
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
