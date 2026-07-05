@@ -2217,15 +2217,15 @@ if page=="Ana Sayfa":
         # yuzden oturum/login durumu asla bozulmaz. Ayni zamanda gercek
         # metin kaydirma (word-wrap) da CSS ile korunuyor.
         _as_kolonlar = [
-            ("Kategori", "Kategori", 7),
+            ("Kategori", "Kategori", 8),
             ("Ticker", "Ticker", 8),
-            ("Ad", "Ad", 25),
+            ("Ad", "Ad", 23),
             ("Optima Skoru", "Optima Skoru", 8),
             ("Sinyal", "Sinyal", 9),
             ("RSI", "RSI", 5),
             ("1A Getiri %", "1A Getiri %", 7),
             ("Emir Fiyatı", "Emir Fiyatı", 8),
-            ("Birim", "Birim", 5),
+            ("Birim", "Birim", 6),
             ("Gerçek Tutar (₺)", "Gerçek Tutar (₺)", 9),
             ("Hedef Tutar (₺)", "Hedef Tutar (₺)", 9),
         ]
@@ -2262,8 +2262,18 @@ if page=="Ana Sayfa":
         div[data-testid="stButton"] > button:focus:not(:active) {
             box-shadow: none !important;
         }
-        .as-baslik { background-color: #0d2b4e; color: #ffffff; padding: 8px 8px;
-                     font-weight: 600; font-size: 12.5px; line-height: 1.25; }
+        div[data-testid="stHorizontalBlock"]:has(.as-baslik) {
+            gap: 0.35rem !important; align-items: stretch !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.as-baslik) > div {
+            display: flex !important;
+        }
+        .as-baslik {
+            background-color: #0d2b4e; color: #ffffff; padding: 10px 8px;
+            font-weight: 600; font-size: 12.5px; line-height: 1.25;
+            display: flex; align-items: center; width: 100%;
+            min-height: 42px; box-sizing: border-box;
+        }
         </style>
         """, unsafe_allow_html=True)
 
