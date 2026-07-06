@@ -1,0 +1,62 @@
+name: TEFAS Aksam Guncelle
+
+# v2.0.4.51: TEFAS fonlari akşam (~19:00-21:00 TRT) NAV yayinliyor.
+# Mevcut update_data.yml (worker.py tam calistirir - BIST+Kripto+Maden+
+# Halka Arz PDF/OCR dahil, birkac dakika surer) sadece gece TRT 02:00/
+# 03:00'de calistigi icin, aksam yayinlanan NAV ancak ertesi sabah
+# yakalaniyordu (~5-7 saat gecikme). Bu workflow SADECE TEFAS satirlarini
+# gunceller (update_tefas_evening.py), diger kategorilere dokunmaz -
+# bu yuzden cok daha hizli (worker.py'nin tamami yerine sadece TEFAS).
+#
+# Iki tetikleyici (mevcut update_data.yml'deki yedekli-cron mantigiyla
+# ayni): GitHub Actions'in kendi cron gecikmesi ihtimaline karsi.
+
+on:
+  schedule:
+    - cron: '0 17 * * *'   # UTC 17:00 = TRT 20:00 - Birincil
+    - cron: '30 17 * * *'  # UTC 17:30 = TRT 20:30 - Yedek
+  workflow_dispatch:
+
+jobs:
+  update_tefas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas pytefas openpyxl --quiet
+
+      - name: update_tefas_evening.py calistir
+        run: |
+          echo "TEFAS aksam guncellemesi baslatiliyor - $(date)"
+          python update_tefas_evening.py
+          echo "Tamamlandi - $(date)"
+
+      - name: CSV'yi commit + push et
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f optimized_universe.csv
+          if git diff --cached --quiet; then
+            echo "Degisiklik yok - commit atlandi"
+          else
+            git commit -m "TEFAS aksam guncelleme (otomatik) - $(date +'%Y-%m-%d %H:%M TRT')"
+            git push origin main
+            echo "TEFAS CSV pushlandi"
+          fi
