@@ -1,0 +1,63 @@
+name: Veri Akisi Saglik Kontrolu
+
+# v2.0.4.51: Her varlik kategorisinin (BIST/TEFAS/DOVIZ/MADEN/KRIPTO) veri
+# akisini periyodik olarak kontrol eder, bir kategori beklenenden uzun
+# sure degismiyorsa admin'e otomatik e-posta uyarisi gonderir.
+#
+# ONEMLI: SMTP_USER, SMTP_PASS, SMTP_HOST, SMTP_PORT, ADMIN_EMAIL secrets'i
+# GitHub repo Settings -> Secrets and variables -> Actions altinda tanimli
+# olmali. Eger mevcut e-posta gonderen workflow'unuzda (Scheduled Email
+# Reports) FARKLI isimler kullaniliyorsa, ya oradaki isimleri buraya
+# kopyalayin ya da asagidaki "env:" bolumundeki degiskenleri kendi
+# isimlerinizle eslestirin.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # Her 30 dakikada bir
+  workflow_dispatch:
+
+jobs:
+  health_check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas --quiet
+
+      - name: data_health_check.py calistir
+        run: python data_health_check.py
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+
+      - name: health_state.json'u commit + push et
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f health_state.json
+          if git diff --cached --quiet; then
+            echo "Degisiklik yok - commit atlandi"
+          else
+            git commit -m "Veri saglik durumu guncellendi (otomatik)"
+            git push origin main
+          fi
