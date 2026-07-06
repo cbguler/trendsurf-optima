@@ -1571,7 +1571,10 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     st.divider()
-    page=st.radio("",PAGES,label_visibility="collapsed")
+    _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
+    _pages_display = PAGES[:-1] + [_yardim_etiket]
+    _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
+    page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()
 
     st.markdown("**Portföy Bütçesi (TL)**")
@@ -3712,307 +3715,44 @@ elif page=="Makro Göstergeler":
 elif page=="Yardım":
     is_admin = _cur_user.get("is_admin", False)
 
+    # v2.0.4.45: Yardim sayfasi tamamen el kitaplarina cevrildi. Icerik,
+    # ayri .md dosyalarindan okunuyor (app.py'yi sismemesi icin) - bu
+    # dosyalar TrendSurf_Optima klasorunde app.py ile ayni dizinde
+    # bulunmali: el_kitabi_abone.md / el_kitabi_admin.md. Ayrica orijinal
+    # Word (.docx) dosyalarini indirebilmek icin bir buton da ekleniyor.
+    import os as _os_yk
+
     if is_admin:
-        st.title("Admin El Kitabi")
-        st.caption("TrendSurf Optima — Sistem Yonetici Dokumantasyonu")
-
-        with st.expander("1. Sistem Mimarisi", expanded=False):
-            st.markdown("""
-**Dosya Yapisi** — `C:/Users/bahri/Desktop/TrendSurf_Optima/`
-
-| Dosya | Aciklama |
-|-------|----------|
-| `app.py` | Ana Streamlit uygulamasi |
-| `worker.py` | Veri cekme ve evren olusturma motoru |
-| `db.py` | SQLite veritabani baglantisi |
-| `auth.py` | Kullanici kimlik dogrulama |
-| `auth_reset.py` | Sifre sifirlama |
-| `admin.py` | Admin panel fonksiyonlari |
-| `emailer.py` | E-posta rapor sistemi |
-| `bigpara_client.py` | Bigpara altin/gumus TL fiyat yedek kaynak |
-| `halka_arz_client.py` | KAP XHARZ endeks verileri |
-| `temettu_client.py` | KAP XTMTU + yfinance temettü verileri |
-| `tefas_client.py` | TEFAS fon verileri |
-| `kap_client.py` | KAP temel analiz verileri |
-| `tcmb_client.py` | TCMB doviz kuru yedek kaynak |
-| `signals.py` | Sinyal hesaplama motoru |
-| `optimized_universe.csv` | Worker ciktisi — tum varliklar |
-| `KAP_BIST.xlsx` | BIST hisse sembol/slug esleme (771 hisse) |
-| `Endeksler.xlsx` | Endeks uye listeleri (fallback) |
-
-**Veri Akisi:** `worker.py` -> `optimized_universe.csv` -> `app.py` -> kullanici
-
-**Varlik Sayilari:** BIST 610 | TEFAS 1347 | Kripto 19 | Maden 12 | Doviz 12
-""")
-
-        with st.expander("2. Veri Kaynaklari ve Yedek Mekanizmalari", expanded=False):
-            st.markdown("""
-**BIST Fiyatlari:**
-- Birincil: yfinance (.IS suffix)
-- Yedek: optimized_universe.csv son bilinen fiyat
-
-**TEFAS Fon Verileri:**
-- Birincil: TEFAS Next.js API (`www.tefas.gov.tr/api/funds/`)
-- Yedek: pytefas kutuphanesi
-
-**Maden Fiyatlari (TL bazli):**
-- Birincil: Bigpara HTML scraping (gram altin, gumus)
-- Yedek: yfinance (GC=F) x USDTRY
-
-**Doviz Kurlari:**
-- Birincil: yfinance (=X suffix)
-- Yedek: TCMB XML API — 11/12 kur
-- Son yedek: EVDS API (TCMB_KEY gerekli: 5F0yYjCHDf)
-
-**Kripto:**
-- Birincil: yfinance (BTC-USD vb.)
-- Yedek: Bigpara kripto fiyatlari
-
-**Temel Analiz (BIST):**
-- kap_client.py -> kap.org.tr sirket sayfalari
-- yfinance info (P/E, beta, dividendYield)
-
-**Halka Arz / Tetemttu:**
-- KAP RSC endpoint (Next.js) -> endeks uyeleri
-- Yedek: Endeksler.xlsx
-""")
-
-        with st.expander("3. GitHub ve Deployment", expanded=False):
-            st.markdown("""
-**GitHub Repo:** `github.com/cbguler/trendsurf-optima` (private)
-
-**Streamlit Cloud:**
-`https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app`
-
-**Streamlit Cloud Secrets** (App Settings -> Secrets):
-```
-EMAIL_USER    = "bahriguler@gmail.com"
-EMAIL_PASS    = "xxxx xxxx xxxx xxxx"
-EMAIL_ADDRESS = "bahriguler@gmail.com"
-ADMIN_EMAIL   = "bahriguler@gmail.com"
-ADMIN_PASS    = "..."
-ADMIN_NAME    = "Bahri"
-TCMB_KEY      = "5F0yYjCHDf"
-```
-
-**CSV Manuel Guncelleme:**
-```
-cd C:/Users/bahri/Desktop/TrendSurf_Optima
-python worker.py
-git add -f optimized_universe.csv
-git commit -m "veri guncelleme"
-git push origin main
-```
-
-**Task Scheduler:** Her sabah 08:00 — `guncelle_ve_push.bat`
-""")
-
-        with st.expander("4. Kullanici Yonetimi", expanded=False):
-            st.markdown("""
-**Kullanici Tipleri:**
-
-| Tip | Aciklama |
-|-----|----------|
-| `free` | Sinirli erisim |
-| `pro` | Temel ozellikler |
-| `premium` | Tum ozellikler |
-| `admin` | Sistem yoneticisi |
-
-**Yeni Abone Onaylama:** Admin Paneli -> Bekleyen Kullanicilar -> Onayla
-
-**Sifre Sifirlama:**
-- `python auth_reset.py` (lokal)
-- Veya Giris ekrani -> Sifremi Unuttum
-
-**SQLite Veritabani:** `trendsurf.db`
-- Tablolar: `users`, `sessions`, `portfolio`, `reset_tokens`
-- Streamlit Cloud'da Reboot yaparsan sifirlanir — Reboot yerine F5 kullan
-""")
-
-        with st.expander("5. E-posta Sistemi", expanded=False):
-            st.markdown("""
-**Gonderim Zamanlayici:**
-- Windows Task Scheduler: `emailler.py` — 08:30 ve 11:30
-- Manuel: Sol menu -> E-posta Ayarlari -> Simdi Gonder
-
-**Gmail App Password Yenileme:**
-1. `myaccount.google.com/apppasswords` adresine git
-2. Yeni App Password olustur (TrendSurf)
-3. Streamlit Cloud Secrets -> EMAIL_PASS guncelle
-4. `email_config.json` dosyasini da guncelle
-
-**email_config.json yapisi:**
-```json
-{
-  "address": "bahriguler@gmail.com",
-  "smtp_host": "smtp.gmail.com",
-  "smtp_port": 587,
-  "smtp_user": "bahriguler@gmail.com",
-  "smtp_pass": "uygulama sifresi",
-  "times": ["08:30", "11:30"],
-  "tcmb_key": "5F0yYjCHDf"
-}
-```
-""")
-
-        with st.expander("6. Sik Karsilasilan Sorunlar", expanded=False):
-            st.markdown("""
-| Sorun | Neden | Cozum |
-|-------|-------|-------|
-| BIST 97 hisse geliyor | GitHub Actions yfinance kisiti | worker.py lokalde calistir, push et |
-| Altin fiyati yanlis | yfinance ons/gram karisikligi | Bigpara birincil — otomatik duzelmeli |
-| Turkce karakter bozuk | KAP API encoding | latin-1 UTF-8 fix_encoding'de cozuldu |
-| E-posta gitmiyor | Streamlit Secrets eksik | EMAIL_USER/EMAIL_PASS ekle |
-| Uygulama acilamiyor | Streamlit gizlilik | share.streamlit.io -> Settings -> Public |
-| Veritabani sifirlanmis | Streamlit Cloud reboot | Beklenen davranis — F5 kullan |
-| CSV push edilemiyor | gitignore sorunu | `git add -f optimized_universe.csv` |
-""")
-
+        _md_dosya = "el_kitabi_admin.md"
+        _docx_dosya = "TrendSurf_Optima_Yonetici_El_Kitabi.docx"
+        _baslik = "Admin El Kitabı"
+        _altbaslik = "TrendSurf Optima — Sistem Mimarisi ve İşletim Kılavuzu (GİZLİ — yalnızca yönetici)"
     else:
-        st.title("Yardim — Kullanim Kilavuzu")
-        st.caption("TrendSurf Optima — Finansal Varlik Takip ve Sinyal Terminali")
+        _md_dosya = "el_kitabi_abone.md"
+        _docx_dosya = "TrendSurf_Optima_Abone_El_Kitabi.docx"
+        _baslik = "Kullanıcı El Kitabı"
+        _altbaslik = "TrendSurf Optima — Nasıl Kullanılır, Değerler Ne Anlama Gelir"
 
-        with st.expander("Baslangic — Kayit ve Giris", expanded=True):
-            st.markdown("""
-**Hesap Olusturma:**
-1. Giris ekraninda **Kayit Ol** sekmesine tiklayin
-2. Ad Soyad, e-posta ve sifrenizi girin (en az 8 karakter)
-3. Hesabiniz admin onayindan sonra aktif olur
+    st.title(_baslik)
+    st.caption(_altbaslik)
 
-**Giris Yapma:**
-- E-posta ve sifrenizle giris yapin
-- **Beni Hatirla** kutusunu isaretlerseniz otomatik giris aktif olur
+    _md_yol = _os_yk.path.join(_os_yk.path.dirname(__file__), _md_dosya)
+    _docx_yol = _os_yk.path.join(_os_yk.path.dirname(__file__), _docx_dosya)
 
-**Sifremi Unuttum:**
-- Giris ekraninda **Sifremi Unuttum** sekmesi -> e-posta adresinizi girin
-- Sifirlama baglantisi e-postaniza gelir
-""")
+    if _os_yk.path.exists(_docx_yol):
+        with open(_docx_yol, "rb") as _f:
+            st.download_button(
+                "📄 Word (.docx) olarak indir",
+                data=_f.read(),
+                file_name=_docx_dosya,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
 
-        with st.expander("Ana Sayfa — Portfoy Optimizasyonu", expanded=False):
-            st.markdown("""
-Ana Sayfa, butce ve risk tercihine gore en iyi yatirim firsatlarini listeler.
+    st.divider()
 
-**Sol Panelden Ayarlar:**
-- **Portfoy Butcesi (TL):** Yatirim dusundugunuz toplam tutar
-- **Risk Toleransi:** Cok Dusuk -> Cok Yuksek (5 seviye)
-- **Max Varlik Sayisi:** Portfoyde kac farkli varlik olsun (5-20)
-
-**Oneri Tablosu Sutunlari:**
-
-| Sutun | Aciklama |
-|-------|----------|
-| Kategori | BIST, TEFAS, Doviz, Maden, Kripto |
-| Optima Skoru | 0-100 bileşik puan |
-| Sinyal | Guclu Al / Kademeli Al / Tut Izle / Sat |
-| RSI | Goreceli guc endeksi (30 alti asiri satim, 70 uzeri asiri alim) |
-| 1A Getiri % | Son 1 aylik getiri |
-| Lot | Butcenize gore onerilen alim adedi |
-
-**Optima Skoru:** RSI Zonu (25%) + Momentum (35%) + Volatilite (15%) + Temel Analiz (25%)
-
-> Bu sistem yatirim tavsiyesi vermez. Kararlar tamamen size aittir.
-""")
-
-        with st.expander("Portfoyum — Pozisyon Takibi", expanded=False):
-            st.markdown("""
-**Yeni Pozisyon Ekleme:**
-1. **Yeni Pozisyon Ekle** bolumunu acin
-2. Listeden varlik secin
-3. Adet, Alis Maliyeti (TL) ve isterseniz Not girin
-4. **Pozisyon Ekle** butonuna tiklayin
-
-**Fiyat Girisi:** Ondalik ayirici virgul -> `6.480,00`
-
-**Portfoy Tablosu:**
-- Guncel Fiyat: Bigpara / yfinance anlık veri
-- Toplam Deger: Adet × Guncel Fiyat  
-- K/Z: (Guncel - Alis) / Alis × 100
-
-**E-posta Raporu (Sol Menu):**
-1. Alici e-posta adresinizi girin
-2. Gonderim saatlerini belirleyin
-3. **Ayarlari Kaydet** ile saatleri kaydedin
-4. **Simdi Gonder** ile anlik rapor alin
-""")
-
-        with st.expander("BIST — Turk Hisse Senetleri", expanded=False):
-            st.markdown("""
-~610 Borsa Istanbul hissesini Optima Skoru'na gore listeler.
-
-**Filtreleme:** Ticker/sirket adi ara, sinyal turune gore filtrele, RSI araligini sec
-
-**KAP Linki:** Her hissenin **Goruntule** linki KAP sirket sayfasina acar
-
-**Sayfalama:** Tabloda 50 hisse gosterilir, altta sayfa secimi yapabilirsiniz
-""")
-
-        with st.expander("TEFAS — Yatirim Fonlari", expanded=False):
-            st.markdown("""
-~1347 yatirim fonunu listeler.
-
-**Fon Turu Filtresi:** Hisse Senedi Yogun, Karma, Tahvil, Altin, Para Piyasasi vb.
-
-**Getiri Karsilastirmasi:** 1A, 3A, 6A ve 1Y getirilerini yan yana gorun
-
-**TEFAS Linki:** Her fonun linki TEFAS detay sayfasina acar
-""")
-
-        with st.expander("Doviz, Madenler, Kriptolar", expanded=False):
-            st.markdown("""
-**Doviz:** 12 TRY bazli kur — Kaynak: yfinance, yedek: TCMB XML
-
-**Madenler:** 12 emtia (Altin, Gumus, Platin, Petrol vb.)
-- Altin ve Gumus: Bigpara (gercek TL/gram Turkiye fiyati)
-- Diger: yfinance × USDTRY
-
-**Kriptolar:** 19 kripto para — BTC, ETH, BNB, SOL vb.
-- Kaynak: yfinance (USD) × USDTRY
-
-Her sayfada Optima Skoru, RSI, 1A Getiri ve guncel fiyat gosterilir.
-""")
-
-        with st.expander("Halka Arz ve Temettu", expanded=False):
-            st.markdown("""
-**Halka Arz (XHARZ):**
-- BIST Halka Arz Endeksi uyeleri — KAP'tan gunluk cekiliyor
-- Her sirketin KAP sayfasina **Goruntule** linki ile ulasabilirsiniz
-
-**Temettu (XTMTU):**
-- BIST Temettu Endeksi uyeleri + yfinance temettu verileri
-- Temettu/Hisse, Verim (%), Ex-Date, Siklik
-- Ex-Date'e gore sirali (yakin tarih uste)
-
-**CSV Indir:** Her sayfada tabloyu Excel olarak indirebilirsiniz
-""")
-
-        with st.expander("Makro Gostergeler", expanded=False):
-            st.markdown("""
-MKK Veri Analiz Platformu (vap.org.tr) baglantilari ve ozet veriler.
-
-**Kart Baglantilari:**
-- Genel Bakis, Yas Gruplari, Yerli/Yabanci Analizi
-- BIST Endeks Bazli Portfoy, Finansal Oranlar
-- REKS Risk Istahi Endeksi, MKK Aylik Bulteni
-
-Her karta tiklayin — VAP sayfasi yeni sekmede acilir.
-""")
-
-        with st.expander("Sik Sorulan Sorular", expanded=False):
-            st.markdown("""
-**Veriler ne siklikla guncellenir?**
-Her gun sabah 08:00'de otomatik guncellenir. TEFAS/Halka Arz 4 saatlik onbellekten gelir.
-
-**Optima Skoru ne anlama gelir?**
-0-100 arasi bileşik puan. 80+ Guclu Al, 60-80 Kademeli Al, 40-60 Tut Izle, 40- Sat.
-
-**Portfoy verileri kayboldu?**
-Portfoy veritabaninda saklanir. Cikis yapip tekrar giris yapin.
-
-**Uygulama yavash aciliyor?**
-Uzun sure kullanilmayinca uyku moduna giriyor. Ilk acilista 1-2 dakika normaldir.
-""")
-            if not _ex:
-                try:
-                    register_user(_asec["email"], _asec["password"], "Admin")
-                except Exception:
-                    pass
+    if _os_yk.path.exists(_md_yol):
+        with open(_md_yol, "r", encoding="utf-8") as _f:
+            _icerik = _f.read()
+        st.markdown(_icerik, unsafe_allow_html=True)
+    else:
+        st.warning(f"El kitabı içerik dosyası bulunamadı: {_md_dosya}. Bu dosyanın app.py ile aynı klasörde olduğundan emin olun.")

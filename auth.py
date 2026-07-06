@@ -26,6 +26,64 @@ def verify_password(password: str, hashed: str) -> bool:
             return hashlib.sha256((salt + password).encode()).hexdigest() == h
         return password == hashed
 
+# ── Yeni Kayit Bildirimi (Admin'e E-posta) ───────────────────────────────────
+def _notify_admin_yeni_kayit(email: str, full_name: str):
+    """Yeni bir abonelik basvurusu oldugunda admin'e bilgilendirme maili
+    gonderir. Mevcut [email] Secrets (smtp_user/smtp_pass/smtp_host/smtp_port)
+    ve ADMIN_EMAIL kullanilir - gunluk rapor sisteminde zaten kullanilan
+    ayarlarin aynisi, yeni bir secret eklemeye gerek yok.
+
+    Onemli: Bu fonksiyon HICBIR ZAMAN kayit islemini engellemez. SMTP
+    ayarlari eksikse veya gonderim basarisiz olursa sessizce gecilir -
+    kullanici yine de basariyla kayit olur, admin sadece bildirimi
+    kacirmis olur (onay panelinden yine de gorebilir).
+    """
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        _email_cfg = st.secrets.get("email", {})
+        smtp_user = _email_cfg.get("smtp_user")
+        smtp_pass = _email_cfg.get("smtp_pass")
+        smtp_host = _email_cfg.get("smtp_host", "smtp.gmail.com")
+        smtp_port = int(_email_cfg.get("smtp_port", 587))
+        admin_email = st.secrets.get("ADMIN_EMAIL")
+
+        if not (smtp_user and smtp_pass and admin_email):
+            return
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "TrendSurf Optima — Yeni Abonelik Başvurusu"
+        msg["From"] = smtp_user
+        msg["To"] = admin_email
+
+        _simdi = datetime.now().strftime("%d.%m.%Y %H:%M")
+        _html = f"""
+        <div style="font-family:Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;">
+          <h2 style="color:#0d2b4e;margin-bottom:4px;">Yeni Abonelik Başvurusu</h2>
+          <p style="color:#333;">TrendSurf Optima'ya yeni bir kayıt başvurusu geldi:</p>
+          <table style="border-collapse:collapse;width:100%;font-size:14px;">
+            <tr><td style="padding:6px 0;color:#5a6a78;width:110px;">Ad Soyad</td>
+                <td style="padding:6px 0;"><b>{full_name}</b></td></tr>
+            <tr><td style="padding:6px 0;color:#5a6a78;">E-posta</td>
+                <td style="padding:6px 0;"><b>{email}</b></td></tr>
+            <tr><td style="padding:6px 0;color:#5a6a78;">Tarih</td>
+                <td style="padding:6px 0;">{_simdi}</td></tr>
+          </table>
+          <p style="margin-top:16px;color:#333;">Onaylamak için Admin Paneli →
+          Bekleyen Kullanıcılar bölümüne gidin.</p>
+        </div>
+        """
+        msg.attach(MIMEText(_html, "html"))
+
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+    except Exception:
+        pass  # bildirim basarisiz olsa da kayit islemini asla etkileme
+
 # ── Kayit ────────────────────────────────────────────────────────────────────
 def register_user(email: str, password: str, full_name: str) -> dict:
     conn = get_conn()
@@ -35,6 +93,7 @@ def register_user(email: str, password: str, full_name: str) -> dict:
             (email.strip().lower(), hash_password(password), full_name.strip())
         )
         conn.commit()
+        _notify_admin_yeni_kayit(email.strip().lower(), full_name.strip())
         return {"ok": True, "msg": "Kaydiniz alindi. Admin onayi bekleniyor."}
     except IntegrityError:
         return {"ok": False, "msg": "Bu e-posta adresi zaten kayitli."}
