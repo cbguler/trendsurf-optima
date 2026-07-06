@@ -134,6 +134,23 @@ PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
+def _bist_seans_acik() -> bool:
+    """BIST seans saatleri icinde miyiz? (Hafta ici 10:00-18:00 TRT)
+
+    v2.0.4.50: BIST fiyatlarini otomatik canli yenilemeyi sadece bu
+    pencerede tetiklemek icin - hafta sonu/mesai disi zaten piyasa
+    kapali oldugundan CSV degeri (son kapanis) esasen dogru, gereksiz
+    API cagrisi/gecikme yaratmamak icin canli yenileme atlanir.
+    """
+    import datetime as _dt
+    try:
+        _simdi = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=3)))  # TRT = UTC+3
+    except Exception:
+        _simdi = _dt.datetime.now()
+    if _simdi.weekday() >= 5:  # 5=Cumartesi, 6=Pazar
+        return False
+    return _dt.time(10, 0) <= _simdi.time() <= _dt.time(18, 0)
+
 # ── Canli veri katmani (borsapy) - v1.6+ ─────────────────────────────────────
 from live_data import (
     filter_universe as _ld_filter_universe,
@@ -2052,6 +2069,18 @@ if page=="Ana Sayfa":
     MIN_SKOR = 60.0   # Sadece "KADEMELİ AL" ve üstü sinyaller önerilir
 
     # 1. Adım: Her kategorideki uygun varlıkları skorla ve filtrele
+    # v2.0.4.50: Optimizasyona girmeden once, BIST adaylarinin fiyatini
+    # seans saatlerinde canli yenile. Hangi hisselerin sonunda secilecegini
+    # henuz bilmiyoruz (skor/butce hesabi asagida yapiliyor), o yuzden
+    # cok genis bir ust-kume (1A getirisine gore ilk 40 BIST hissesi)
+    # canli yenileniyor - secilecek olanlari neredeyse her zaman kapsar,
+    # 40 ticker de refresh_bist_selective icin hizli (birkac saniye).
+    if _bist_seans_acik() and w.get("BIST", 0) > 0:
+        _bist_aday = (df_uni[(df_uni["Kategori"] == "BIST") & (df_uni["Son_Fiyat"] > 0)]
+                      .sort_values("Ret1M", ascending=False).head(40))
+        if not _bist_aday.empty:
+            df_uni = _ld_refresh_bist_sel(df_uni, _bist_aday["Ticker"].tolist())
+
     cat_pools = {}
     for cat, weight in w.items():
         if weight <= 0:
@@ -2603,6 +2632,20 @@ elif page=="Portföyüm":
     # Sadece 4 ana metal (gram-altin/gumus/platin, ons-altin TL) icin Harem-spesifik;
     # diger varliklarda Son_Fiyat (canlidoviz mid / yfinance last) kullanilir.
     _pf_tickers = [pos["ticker"] for pos in portfolio]
+
+    # v2.0.4.50: Portfoydeki BIST hisselerini seans saatlerinde canli
+    # yenile. refresh_bist_selective() zaten yazilmis ama hic
+    # cagrilmiyordu - kucuk ticker sayisinda (portfoy tipik olarak
+    # birkac hisse) hizli ve guvenli (1-50 ticker = 1-5sn).
+    if _bist_seans_acik():
+        _pf_bist_tickers = [
+            t for t in _pf_tickers
+            if not df_uni.loc[df_uni["Ticker"] == t, "Kategori"].empty
+            and df_uni.loc[df_uni["Ticker"] == t, "Kategori"].iloc[0] == "BIST"
+        ]
+        if _pf_bist_tickers:
+            df_uni = _ld_refresh_bist_sel(df_uni, _pf_bist_tickers)
+
     _satis_fiyatlari = _ld_portfolio_prices(df_uni, _pf_tickers)
 
     # Tablo verisi
@@ -2851,6 +2894,23 @@ elif page in CAT:
 
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
     if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
+
+    # v2.0.4.50: BIST icin manuel canli yenileme butonu. Tum 772 hisseyi
+    # otomatik/her sayfa yuklemesinde canli cekmek gecmiste denendi ve
+    # cok yavas cikti (bkz. live_data.py notlari, 380+ saniye) - o yuzden
+    # burada SADECE kullanici acikca isterse, makul bir ust sinirla (ilk
+    # 100 hisse, fiyati zaten olanlar) calisiyor.
+    if cat_code == "BIST" and _bist_seans_acik():
+        if st.button("Canlı Fiyatları Yenile (ilk 100 hisse)", key="btn_bist_canli_yenile"):
+            _hedef = df_cat[df_cat["Son_Fiyat"] > 0].head(100)["Ticker"].tolist()
+            with st.spinner(f"{len(_hedef)} hisse için canlı fiyat çekiliyor..."):
+                _t_baslangic = __import__("time").time()
+                df_uni = _ld_refresh_bist_sel(df_uni, _hedef)
+                _sure = __import__("time").time() - _t_baslangic
+            st.caption(f"Tamamlandı ({_sure:.1f} sn) — {len(_hedef)} hisse yenilendi.")
+            df_cat = df_uni[df_uni["Kategori"] == cat_code].copy()
+    elif cat_code == "BIST":
+        st.caption("Canlı yenileme sadece BIST seans saatlerinde (hafta içi 10:00-18:00) kullanılabilir.")
 
     # Optima Skoru hesapla
     df_cat["Optima_Skor"]=df_cat.apply(
