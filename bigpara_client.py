@@ -132,49 +132,71 @@ def _fetch_price_from_page(url: str, min_val: float = 0.0) -> float:
 
 # ── Maden fiyatları ───────────────────────────────────────────────────────────
 
+def _fetch_satis_fiyati_cumle(url: str) -> float:
+    """Bigpara sayfalarinda tutarli sekilde tekrar eden dogal dil cumlesini
+    hedefler: 'alış fiyatı 6.245,00 TL, satış fiyatı 6.245,94 TL seklindedir.'
+    Bu cumle, sayfanin SEO/aciklama metninin bir parcasi oldugundan JS
+    calismadan da (requests.get() ile) HTML icinde bulunuyor ve sayfadaki
+    onlarca diger sayidan (haftalik/aylik/yillik dusuk-yuksek, onceki
+    kapanislar vb.) FARKLI olarak tek ve net bir yerde geciyor - bu yuzden
+    aralik-bazli tahminden cok daha guvenilir."""
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return 0.0
+        m = re.search(
+            r'sat[ıi]ş\s*fiyat[ıi]\s*([\d\.,]+)\s*TL',
+            r.text, re.IGNORECASE
+        )
+        if m:
+            return _safe_float(m.group(1))
+    except Exception:
+        pass
+    return 0.0
+
 def _fetch_maden_bigpara() -> dict:
-    """Bigpara'dan maden TL fiyatlarını çeker."""
+    """Bigpara'dan maden TL fiyatlarını çeker.
+
+    v2.0.4.46: Onceki surum, sayfadaki "4000-15000 arasindaki ILK sayiyi"
+    alan kaba bir regex kullaniyordu. Bigpara'nin sayfasinda (Alis, Satis,
+    Onceki Hafta Kapanisi, Aylik/Yillik Dusuk-Yuksek gibi) o aralikta
+    ONLARCA sayi bulundugundan, hangisinin yakalanacagi sayfa yapisindaki
+    kucuk degisikliklere gore degisiyordu - bu da uygulamanin gunler
+    boyunca yanlis/eski bir rakamda "donmus" gorunmesine sebep oluyordu
+    (Son_Fiyat degisse bile hep BASKA yanlis bir alani okuyordu). Test
+    ettigimde istatistiksel (en sik gecen deger) yaklasim bile bu sayfada
+    yeterince kesin degildi - altin gibi dusuk oynaklikli bir varlikta
+    haftalik/aylik dusuk-yuksek degerleri de birbirine cok yakin oldugundan
+    yanlislikla "yakin" sayilip ortalamaya karisabiliyordu.
+    Duzeltme: once Bigpara'nin HER SAYFASINDA ayni sekilde tekrar eden
+    "...satis fiyati X TL seklindedir" cumlesi hedefleniyor (en guvenilir),
+    o bulunamazsa etiketli JSON alanlarina (_fetch_price_from_page), o da
+    olmazsa aralik-bazli tahmine dusuluyor.
+    """
     result = {}
 
     # Altın: gram altın TL fiyatı
-    try:
-        r = requests.get(MADEN_PAGES["ALTIN_TRY"], headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            # 4000-9999 arasında bir fiyat ara (gram altın TL aralığı)
-            nums = re.findall(r'(\d{1,2}[.,]\d{3}(?:[.,]\d{2,4})?)', r.text)
-            for n in nums:
-                val = _safe_float(n)
-                if 4000 < val < 15000:  # gram altın TL makul aralığı
-                    result["ALTIN_TRY"] = round(val, 4)
-                    break
-    except Exception as e:
-        print(f"  [Bigpara] Altın hatası: {e}")
+    val = _fetch_satis_fiyati_cumle(MADEN_PAGES["ALTIN_TRY"])
+    if not (4000 < val < 15000):
+        val = _fetch_price_from_page(MADEN_PAGES["ALTIN_TRY"], min_val=4000.0)
+    if 4000 < val < 15000:
+        result["ALTIN_TRY"] = round(val, 4)
+    elif val > 0:
+        print(f"  [Bigpara] Altın: sayfa degeri ({val}) beklenen aralik disinda, atlandi")
 
     # Gümüş: gram gümüş TL fiyatı
-    try:
-        r = requests.get(MADEN_PAGES["GUMUS_TRY"], headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            nums = re.findall(r'(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2,4})?)', r.text)
-            for n in nums:
-                val = _safe_float(n)
-                if 50 < val < 1000:  # gram gümüş TL makul aralığı
-                    result["GUMUS_TRY"] = round(val, 4)
-                    break
-    except Exception:
-        pass
+    val = _fetch_satis_fiyati_cumle(MADEN_PAGES["GUMUS_TRY"])
+    if not (50 < val < 1000):
+        val = _fetch_price_from_page(MADEN_PAGES["GUMUS_TRY"], min_val=50.0)
+    if 50 < val < 1000:
+        result["GUMUS_TRY"] = round(val, 4)
 
     # Brent petrol: TL bazlı
-    try:
-        r = requests.get(MADEN_PAGES["BRENT_TRY"], headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            nums = re.findall(r'(\d{1,4}(?:[.,]\d{2,4})?)', r.text)
-            for n in nums:
-                val = _safe_float(n)
-                if 500 < val < 10000:  # Brent TL/varil makul aralığı
-                    result["BRENT_TRY"] = round(val, 4)
-                    break
-    except Exception:
-        pass
+    val = _fetch_satis_fiyati_cumle(MADEN_PAGES["BRENT_TRY"])
+    if not (500 < val < 10000):
+        val = _fetch_price_from_page(MADEN_PAGES["BRENT_TRY"], min_val=500.0)
+    if 500 < val < 10000:
+        result["BRENT_TRY"] = round(val, 4)
 
     return result
 
