@@ -245,6 +245,7 @@ def _fetch_maden_history_summary(bp_code: str) -> tuple:
     try:
         h = bp.FX(bp_code).history(period="3mo", interval="1d")
         if h is None or h.empty:
+            print(f"  [live_data] MADEN history BOS ({bp_code}) - CSV degeri korunacak")
             return (None, 50.0, 0.0)
         # Close sutununu bul
         col = None
@@ -253,6 +254,7 @@ def _fetch_maden_history_summary(bp_code: str) -> tuple:
                 col = c
                 break
         if col is None:
+            print(f"  [live_data] MADEN history Close sutunu yok ({bp_code}), kolonlar: {list(h.columns)}")
             return (None, 50.0, 0.0)
         closes = pd.to_numeric(h[col], errors="coerce").dropna()
         if closes.empty:
@@ -260,8 +262,11 @@ def _fetch_maden_history_summary(bp_code: str) -> tuple:
         son = float(closes.iloc[-1])
         rsi = _compute_rsi(closes)
         ret = _compute_ret_1m(closes)
+        print(f"  [live_data] MADEN history OK ({bp_code}): son={son}, son_veri_tarihi={h.index[-1] if hasattr(h,'index') else '?'}")
         return (son, rsi, ret)
-    except Exception:
+    except Exception as e:
+        # v2.0.4.47: Daha once tamamen sessizdi - artik logluyoruz.
+        print(f"  [live_data] MADEN history hatasi ({bp_code}): {type(e).__name__}: {e}")
         return (None, 50.0, 0.0)
 
 
@@ -434,6 +439,7 @@ def _safe_current(bp_obj) -> float | None:
 def _fetch_live_fx_maden() -> dict:
     """borsapy'den DOVIZ + MADEN anlik fiyatlari getir. 5 dk cache."""
     if not BORSAPY_OK:
+        print("  [live_data] BORSAPY_OK=False, DOVIZ/MADEN canli fiyat atlandi")
         return {}
     out = {}
     for ticker, bp_code in _DOVIZ_TO_BP.items():
@@ -441,14 +447,22 @@ def _fetch_live_fx_maden() -> dict:
             v = _safe_current(bp.FX(bp_code))
             if v is not None:
                 out[ticker] = _normalize_fx_price(ticker, v)
-        except Exception:
+        except Exception as e:
+            # v2.0.4.47: Bu hata daha once TAMAMEN sessizdi (except: continue) -
+            # gram altin fiyati donuklugu haftalarca bu yuzden fark edilemedi.
+            # Simdi tesbihat icin logluyoruz.
+            print(f"  [live_data] DOVIZ canli fiyat hatasi ({ticker}/{bp_code}): {type(e).__name__}: {e}")
             continue
     for ticker, bp_code in _MADEN_TO_BP.items():
         try:
             v = _safe_current(bp.FX(bp_code))
             if v is not None:
                 out[ticker] = v
-        except Exception:
+                print(f"  [live_data] MADEN canli fiyat OK ({ticker}/{bp_code}): {v}")
+            else:
+                print(f"  [live_data] MADEN canli fiyat BOS/None ({ticker}/{bp_code}) - CSV degeri korunacak")
+        except Exception as e:
+            print(f"  [live_data] MADEN canli fiyat hatasi ({ticker}/{bp_code}): {type(e).__name__}: {e}")
             continue
     return out
 
@@ -606,6 +620,12 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
             mask = df["Ticker"].isin(live.keys())
             if mask.any():
                 df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
+                if "ALTIN_TRY" in live:
+                    print(f"  [live_data] refresh_fx_maden_kripto: ALTIN_TRY Son_Fiyat -> {live['ALTIN_TRY']} (canli, borsapy .current uzerinden)")
+        if "ALTIN_TRY" not in (live or {}):
+            _csv_val = df.loc[df["Ticker"] == "ALTIN_TRY", "Son_Fiyat"]
+            print(f"  [live_data] refresh_fx_maden_kripto: ALTIN_TRY canli veri YOK, CSV degeri korunuyor: "
+                  f"{_csv_val.iloc[0] if not _csv_val.empty else '?'}")
 
         # v1.8 - MADEN tickerlari icin RSI ve Ret1M'i borsapy history'den tazele
         # v1.9.4: ThreadPoolExecutor ile paralelize (5 ticker es zamanli)
@@ -636,6 +656,8 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                             continue
                         if son is not None and son > 0:
                             df.loc[row_mask, "Son_Fiyat"] = float(son)
+                            if ticker == "ALTIN_TRY":
+                                print(f"  [live_data] maden_history_parallel: ALTIN_TRY Son_Fiyat -> {son} (borsapy .history uzerinden EZILDI)")
                         df.loc[row_mask, "RSI"]   = float(rsi)
                         df.loc[row_mask, "Ret1M"] = float(ret)
 
