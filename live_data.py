@@ -457,6 +457,9 @@ def _fetch_live_fx_maden() -> dict:
             v = _safe_current(bp.FX(bp_code))
             if v is not None:
                 out[ticker] = _normalize_fx_price(ticker, v)
+                print(f"  [live_data] DOVIZ canli fiyat OK ({ticker}/{bp_code}): {out[ticker]}")
+            else:
+                print(f"  [live_data] DOVIZ canli fiyat BOS/None ({ticker}/{bp_code}) - CSV degeri korunacak")
         except Exception as e:
             print(f"  [live_data] DOVIZ canli fiyat hatasi ({ticker}/{bp_code}): {type(e).__name__}: {e}")
             continue
@@ -467,6 +470,7 @@ def _fetch_live_fx_maden() -> dict:
 def _fetch_live_kripto(tickers_key: tuple) -> dict:
     """borsapy'den kripto TRY fiyatlari getir. 5 dk cache."""
     if not BORSAPY_OK:
+        print("  [live_data] BORSAPY_OK=False, KRIPTO canli fiyat atlandi")
         return {}
     out = {}
     for t in tickers_key:
@@ -474,7 +478,11 @@ def _fetch_live_kripto(tickers_key: tuple) -> dict:
             v = _safe_current(bp.Crypto(_kripto_bp_code(t)))
             if v is not None:
                 out[t] = v
-        except Exception:
+                print(f"  [live_data] KRIPTO canli fiyat OK ({t}): {v}")
+            else:
+                print(f"  [live_data] KRIPTO canli fiyat BOS/None ({t}) - CSV degeri korunacak")
+        except Exception as e:
+            print(f"  [live_data] KRIPTO canli fiyat hatasi ({t}): {type(e).__name__}: {e}")
             continue
     return out
 
