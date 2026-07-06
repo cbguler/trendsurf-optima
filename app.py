@@ -1571,6 +1571,38 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     st.divider()
+
+    # v2.0.4.48: Gecici tanilama - gram altin fiyati gunlerdir donuk gorunme
+    # sorununu sunucu loglarina bakmadan, dogrudan ekranda teshis etmek icin.
+    # Sadece admin gorur. load_universe() cache'li oldugu icin burada erken
+    # cagirmak ekstra maliyet getirmez. Sorun cozulunce bu blok kaldirilabilir.
+    if _cur_user.get("is_admin"):
+        with st.sidebar.expander("Altın Fiyat Tanılama", expanded=False):
+            try:
+                _raw_csv = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+                _raw_altin = _raw_csv.loc[_raw_csv["Ticker"] == "ALTIN_TRY", "Son_Fiyat"]
+                st.write("CSV (ham, önbelleksiz):",
+                         float(_raw_altin.iloc[0]) if not _raw_altin.empty else "bulunamadı")
+            except Exception as e:
+                st.write("CSV okuma hatası:", str(e))
+
+            _diag_df = load_universe()
+            _post_altin = _diag_df.loc[_diag_df["Ticker"] == "ALTIN_TRY", "Son_Fiyat"]
+            st.write("df_uni (önbellekli + overlay sonrası):",
+                     float(_post_altin.iloc[0]) if not _post_altin.empty else "bulunamadı")
+
+            st.caption("load_universe() önbelleği: 10 dk. Aşağıdaki butonla zorla temizleyebilirsin.")
+            if st.button("Önbelleği temizle ve şimdi yenile", key="btn_clear_altin_cache"):
+                load_universe.clear()
+                try:
+                    from live_data import _fetch_live_fx_maden as _dbg_fx, _fetch_maden_history_summary as _dbg_hist
+                    _dbg_fx.clear()
+                    _dbg_hist.clear()
+                except Exception:
+                    pass
+                st.rerun()
+        st.divider()
+
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
     _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
@@ -1982,34 +2014,6 @@ if st.session_state.get("page_override") == "admin":
 # VERİ YÜKLE
 # ══════════════════════════════════════════════════════════════
 df_uni=load_universe()
-
-# v2.0.4.48: Gecici tanilama - gram altin fiyati gunlerdir donuk gorunme
-# sorununu sunucu loglarina bakmadan, dogrudan ekranda teshis etmek icin.
-# Sadece admin gorur. Sorun cozulunce bu blok kaldirilabilir.
-if _cur_user.get("is_admin"):
-    with st.sidebar.expander("🔧 Altın Fiyat Tanılama", expanded=False):
-        try:
-            _raw_csv = pd.read_csv(CSV_PATH, on_bad_lines="skip")
-            _raw_altin = _raw_csv.loc[_raw_csv["Ticker"] == "ALTIN_TRY", "Son_Fiyat"]
-            st.write("CSV (ham, önbelleksiz):",
-                     float(_raw_altin.iloc[0]) if not _raw_altin.empty else "bulunamadı")
-        except Exception as e:
-            st.write("CSV okuma hatası:", str(e))
-
-        _post_altin = df_uni.loc[df_uni["Ticker"] == "ALTIN_TRY", "Son_Fiyat"]
-        st.write("df_uni (önbellekli + overlay sonrası):",
-                 float(_post_altin.iloc[0]) if not _post_altin.empty else "bulunamadı")
-
-        st.caption("load_universe() önbelleği: 10 dk. Aşağıdaki butonla zorla temizleyebilirsin.")
-        if st.button("Önbelleği temizle ve şimdi yenile", key="btn_clear_altin_cache"):
-            load_universe.clear()
-            try:
-                from live_data import _fetch_live_fx_maden as _dbg_fx, _fetch_maden_history_summary as _dbg_hist
-                _dbg_fx.clear()
-                _dbg_hist.clear()
-            except Exception:
-                pass
-            st.rerun()
 
 # v1.9.7 - Otomatik veri yenileme (her 60 saniyede sessiz re-run)
 # Cache hit oldugunda kullanici fark etmez, cache miss oldugunda yeni veri gelir.
