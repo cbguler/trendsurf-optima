@@ -130,8 +130,8 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
-CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Madenler":"MADEN","Kriptolar":"KRIPTO"}
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
+CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
 def _bist_seans_acik() -> bool:
@@ -2134,9 +2134,22 @@ if page=="Ana Sayfa":
             df_c = df_uni[(df_uni["Kategori"]==cat)&(df_uni["Son_Fiyat"]>0)].copy()
         if df_c.empty:
             continue
-        df_c["Optima_Skor"] = df_c.apply(
-            lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
-                                   vol=float(r.get("Vol",30) or 30)), axis=1)
+        # v2.0.4.57: BIST icin worker.py'nin ONCEDEN hesapladigi TAM skoru
+        # (temel analiz + hacim/dususu cezasi dahil) kullan - boylece bu
+        # sayfa, Portfoyum ve Detay sayfasiyla AYNI sayiyi gosterir. Diger
+        # kategoriler icin (henuz precompute edilmedi) eski basit hesaba
+        # devam edilir.
+        if "Optima_Skor" in df_c.columns and df_c["Optima_Skor"].notna().any():
+            df_c["Optima_Skor"] = pd.to_numeric(df_c["Optima_Skor"], errors="coerce")
+            _eksik = df_c["Optima_Skor"].isna()
+            if _eksik.any():
+                df_c.loc[_eksik, "Optima_Skor"] = df_c.loc[_eksik].apply(
+                    lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
+                                           vol=float(r.get("Vol",30) or 30)), axis=1)
+        else:
+            df_c["Optima_Skor"] = df_c.apply(
+                lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
+                                       vol=float(r.get("Vol",30) or 30)), axis=1)
         # Filtre 1: Negatif getirili varlıklar elenir
         df_c = df_c[df_c["Ret1M"] > 0].copy()
         # Filtre 2: Skor eşiği — 60 altı = "TUT İZLE" veya daha kötü
@@ -2433,10 +2446,17 @@ if page=="Ana Sayfa":
                                 raw, float(sel_row_ana["Son_Fiyat"]))
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
-                        # v2.0.3.4: Portfoyum/kategori sayfalariyla ayni formul
-                        # (teknik+temel primli optima_score + hacim/DD ayari)
-                        tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-                        combined = max(0, min(100, round(tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
+                        # v2.0.4.57: Onceden hesaplanmis (worker.py, gece)
+                        # Optima_Skor varsa ONU kullan - boylece bu sayfa,
+                        # Ana Sayfa/BIST listesi/Portfoyum ile AYNI sayiyi
+                        # gosterir. Yoksa (henuz precompute edilmediyse)
+                        # eskisi gibi canli hesapla.
+                        _precomp = sel_row_ana.get("Optima_Skor")
+                        if _precomp is not None and _precomp == _precomp:
+                            combined = float(_precomp)
+                        else:
+                            tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
+                            combined = max(0, min(100, round(tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
                         final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
                         src_note = "yfinance"
                         if raw.get("_kap_available"): src_note += " + KAP"
@@ -2711,9 +2731,13 @@ elif page=="Portföyüm":
             def _sf(v,d):
                 try: fv=float(v); return d if _pd.isna(fv) else fv
                 except: return d
-            _skor = optima_score(_sf(_row.get("RSI"),50.0),
-                                  _sf(_row.get("Ret1M"),0.0),
-                                  _sf(_row.get("Vol_1Y"),30.0))
+            _precomputed = _row.get("Optima_Skor")
+            if _precomputed is not None and not _pd.isna(_precomputed):
+                _skor = float(_precomputed)
+            else:
+                _skor = optima_score(_sf(_row.get("RSI"),50.0),
+                                      _sf(_row.get("Ret1M"),0.0),
+                                      _sf(_row.get("Vol"),30.0))
         else:
             _skor = 0.0
         _toplam = _adet * _guncel
@@ -2771,6 +2795,7 @@ elif page=="Portföyüm":
             "K/Z %":  st.column_config.NumberColumn(
                 format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.NumberColumn(
+                "Optima Skor",
                 format="%.1f", width="small", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
                 width="medium",
@@ -2878,8 +2903,12 @@ elif page=="Portföyüm":
                         _fund_skor = score_from_fundamentals(_raw, float(_sr["Son_Fiyat"]))
 
                     _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
-                    _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
-                    _combined = max(0, min(100, round(_tech_with_fund + _d.get("total_adj", _d.get("score_adj", 0)), 1)))
+                    _precomp2 = _sr.get("Optima_Skor")
+                    if _precomp2 is not None and _precomp2 == _precomp2:
+                        _combined = float(_precomp2)
+                    else:
+                        _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
+                        _combined = max(0, min(100, round(_tech_with_fund + _d.get("total_adj", _d.get("score_adj", 0)), 1)))
                     _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
 
                     # Kaynak bilgisi
@@ -2953,10 +2982,20 @@ elif page in CAT:
     elif cat_code == "BIST":
         st.caption("Canlı yenileme sadece BIST seans saatlerinde (hafta içi 10:00-18:00) kullanılabilir.")
 
-    # Optima Skoru hesapla
-    df_cat["Optima_Skor"]=df_cat.apply(
-        lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
-                               vol=float(r.get("Vol",30) or 30)),axis=1)
+    # Optima Skoru hesapla (BIST icin oncelikle worker.py'nin onceden
+    # hesapladigi tam skor kullanilir - bkz. v2.0.4.57 notu, Ana Sayfa'daki
+    # ayni mantik)
+    if "Optima_Skor" in df_cat.columns and df_cat["Optima_Skor"].notna().any():
+        df_cat["Optima_Skor"] = pd.to_numeric(df_cat["Optima_Skor"], errors="coerce")
+        _eksik_c = df_cat["Optima_Skor"].isna()
+        if _eksik_c.any():
+            df_cat.loc[_eksik_c, "Optima_Skor"] = df_cat.loc[_eksik_c].apply(
+                lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
+                                       vol=float(r.get("Vol",30) or 30)), axis=1)
+    else:
+        df_cat["Optima_Skor"]=df_cat.apply(
+            lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
+                                   vol=float(r.get("Vol",30) or 30)),axis=1)
 
     # Fiyatlılar üste, fiyatsızlar alta — skor sıralı
     df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
@@ -3121,9 +3160,14 @@ elif page in CAT:
                 fund_skor = score_from_fundamentals(raw, float(sel_row["Son_Fiyat"]))
 
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
-            # v2.0.3: Temel analiz primi + hacim duzeltmesi
-            _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-            combined = max(0, min(100, round(_tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
+            # v2.0.4.57: Onceden hesaplanmis skoru tercih et (bkz. yukaridaki
+            # diger iki detay bloguyla ayni mantik)
+            _precomp3 = sel_row.get("Optima_Skor")
+            if _precomp3 is not None and _precomp3 == _precomp3:
+                combined = float(_precomp3)
+            else:
+                _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
+                combined = max(0, min(100, round(_tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi

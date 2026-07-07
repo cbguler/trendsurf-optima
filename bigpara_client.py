@@ -23,11 +23,15 @@ HEADERS = {
 }
 
 # Bigpara sayfaları → TrendSurf Ticker eşlemesi
+# v2.0.4.55: BRENT_TRY/PETROL_TRY kaldirildi - Bigpara'nin bu sayfalari
+# sadece uluslararasi ham petrol varil fiyatini (USD) gosteriyor, gercek
+# bir Turkiye TL piyasasi degil (Turkiye'deki gercek TL akaryakit piyasasi
+# rafine urunler - benzin/motorin, litre bazli, EPDK duzenlemeli - ham
+# petrolden farkli bir urun ve eşel mobil gibi mekanizmalarla ham petrol
+# fiyatina birebir bagli bile degil).
 MADEN_PAGES = {
     "ALTIN_TRY":    "https://bigpara.hurriyet.com.tr/altin/gram-altin-fiyati/",
     "GUMUS_TRY":    "https://bigpara.hurriyet.com.tr/altin/gumus-fiyatlari/",
-    "BRENT_TRY":    "https://bigpara.hurriyet.com.tr/emtia/brent-petrol-fiyatlari/",
-    "PETROL_TRY":   "https://bigpara.hurriyet.com.tr/emtia/petrol-fiyatlari/",
 }
 
 # Kripto sayfaları
@@ -191,13 +195,6 @@ def _fetch_maden_bigpara() -> dict:
     if 50 < val < 1000:
         result["GUMUS_TRY"] = round(val, 4)
 
-    # Brent petrol: TL bazlı
-    val = _fetch_satis_fiyati_cumle(MADEN_PAGES["BRENT_TRY"])
-    if not (500 < val < 10000):
-        val = _fetch_price_from_page(MADEN_PAGES["BRENT_TRY"], min_val=500.0)
-    if 500 < val < 10000:
-        result["BRENT_TRY"] = round(val, 4)
-
     return result
 
 # ── Kripto fiyatları ──────────────────────────────────────────────────────────
@@ -281,9 +278,110 @@ def _fetch_kripto_bigpara(usdtry: float = 38.0) -> dict:
 
 # ── Ana fonksiyon ─────────────────────────────────────────────────────────────
 
+# v2.0.4.55: Platin ve Paladyum icin GERCEK bir Turkiye TL piyasasi var
+# (Akbank, Papara, doviz.com gibi kurumlar gram bazinda TL alis/satis
+# yapiyor) - Bigpara'da bu sayfalar sadece USD/ons gosterdigi icin, bu
+# ikisi ozelinde doviz.com kullaniliyor (sayfa yapisi guvenilir: hem
+# tekrar eden bir cumle kalibi hem yapilandirilmis bir tablo var).
+DOVIZCOM_PAGES = {
+    "PLATIN_TRY":   "https://altin.doviz.com/gram-platin",
+    "PALADYUM_TRY": "https://altin.doviz.com/gram-paladyum",
+}
+
+def _fetch_dovizcom_gram_fiyat(url: str) -> float:
+    """doviz.com'un tekrar eden cumle kalibini hedefler:
+    '...fiyatı, anlık olarak 2.539,70 TL'ye karşılık gelmektedir.'"""
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return 0.0
+        m = re.search(
+            r'anl[ıi]k olarak[\s\S]{0,20}?([\d\.,]+)\s*TL',
+            r.text, re.IGNORECASE
+        )
+        if m:
+            return _safe_float(m.group(1))
+    except Exception:
+        pass
+    return 0.0
+
+def _fetch_platin_paladyum_dovizcom() -> dict:
+    result = {}
+    val = _fetch_dovizcom_gram_fiyat(DOVIZCOM_PAGES["PLATIN_TRY"])
+    if 500 < val < 20000:
+        result["PLATIN_TRY"] = round(val, 4)
+    val = _fetch_dovizcom_gram_fiyat(DOVIZCOM_PAGES["PALADYUM_TRY"])
+    if 500 < val < 20000:
+        result["PALADYUM_TRY"] = round(val, 4)
+    return result
+
+
+# v2.0.4.58: Truncgil Finans - ucretsiz, API anahtari gerektirmeyen, TEK
+# istekte tum degerli madenleri (+ 60 doviz + onlarca altin sikke turu)
+# yapilandirilmis JSON (Buying/Selling alanlari net) olarak veren kaynak.
+# Bahri'nin gercek bir istekle dogruladigi yanit uzerinden test edildi -
+# artik ALTIN/GUMUS/PLATIN/PALADYUM icin BIRINCIL kaynak bu. Bigpara/
+# doviz.com sentence-pattern yontemleri SADECE bu kaynak basarisiz olursa
+# devreye giren yedek olarak kaliyor.
+TRUNCGIL_URL = "https://finans.truncgil.com/v3/today.json"
+TRUNCGIL_MADEN_KEYLERI = {
+    "ALTIN_TRY":    "gram-altin",
+    "GUMUS_TRY":    "gumus",
+    "PLATIN_TRY":   "gram-platin",
+    "PALADYUM_TRY": "gram-paladyum",
+}
+
+def _safe_float_tr(s) -> float:
+    """Truncgil'in TR bicimli sayi metnini (opsiyonel '$' onekiyle) float'a cevirir.
+    '6.281,55' -> 6281.55 , '\\$4.171,20' -> 4171.20"""
+    if not s:
+        return 0.0
+    try:
+        s = str(s).strip().lstrip("$")
+        s = s.replace(".", "").replace(",", ".")
+        return float(s)
+    except Exception:
+        return 0.0
+
+def fetch_truncgil_maden() -> dict:
+    """Truncgil'den 4 degerli madeni TEK istekte ceker. Basarisiz olursa
+    bos dict doner (cagiran taraf Bigpara/doviz.com yedegine duser)."""
+    try:
+        r = requests.get(TRUNCGIL_URL, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return {}
+        data = r.json()
+        result = {}
+        for ticker, key in TRUNCGIL_MADEN_KEYLERI.items():
+            if key in data and isinstance(data[key], dict):
+                satis = _safe_float_tr(data[key].get("Selling"))
+                if satis > 0:
+                    result[ticker] = round(satis, 4)
+        return result
+    except Exception as e:
+        print(f"  [Truncgil] Maden cekimi basarisiz: {type(e).__name__}: {e}")
+        return {}
+
+def fetch_truncgil_usdtry() -> float:
+    """Truncgil'den USD/TRY satis kurunu ceker (kripto TL cevrimi vb. icin
+    gerektiginde kullanilabilir, yfinance'e alternatif/yedek)."""
+    try:
+        r = requests.get(TRUNCGIL_URL, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return 0.0
+        data = r.json()
+        if "USD" in data:
+            return _safe_float_tr(data["USD"].get("Selling"))
+    except Exception:
+        pass
+    return 0.0
+
+
 def fetch_all_bigpara(force_refresh: bool = False, usdtry: float = 38.0) -> dict:
     """
-    Bigpara'dan tüm maden ve kripto TL fiyatlarını çeker.
+    Truncgil (birincil, tum 4 maden tek istekte) + Bigpara/doviz.com
+    (yedek, sadece Truncgil'in getiremedigi icin) + kripto TL fiyatlarini
+    ceker.
     Returns: {"ALTIN_TRY": 6250.5, "BTC": 3800000.0, ...}
     """
     if not force_refresh:
@@ -291,11 +389,29 @@ def fetch_all_bigpara(force_refresh: bool = False, usdtry: float = 38.0) -> dict
         if cached:
             return cached
 
-    print("  [Bigpara] Maden ve kripto TL fiyatlari cekiliyor...")
+    print("  [Truncgil/Bigpara] Maden ve kripto TL fiyatlari cekiliyor...")
     result = {}
 
-    maden = _fetch_maden_bigpara()
-    result.update(maden)
+    truncgil_maden = fetch_truncgil_maden()
+    result.update(truncgil_maden)
+    if truncgil_maden:
+        print(f"  [Truncgil] {len(truncgil_maden)} maden fiyati alindi (birincil): {list(truncgil_maden.keys())}")
+
+    _eksik = [t for t in ("ALTIN_TRY", "GUMUS_TRY") if t not in result]
+    if _eksik:
+        maden = _fetch_maden_bigpara()
+        for t in _eksik:
+            if t in maden:
+                result[t] = maden[t]
+                print(f"  [Bigpara] {t}: yedek kaynaktan alindi")
+
+    _eksik2 = [t for t in ("PLATIN_TRY", "PALADYUM_TRY") if t not in result]
+    if _eksik2:
+        platin_paladyum = _fetch_platin_paladyum_dovizcom()
+        for t in _eksik2:
+            if t in platin_paladyum:
+                result[t] = platin_paladyum[t]
+                print(f"  [doviz.com] {t}: yedek kaynaktan alindi")
 
     kripto = _fetch_kripto_bigpara(usdtry=usdtry)
     result.update(kripto)

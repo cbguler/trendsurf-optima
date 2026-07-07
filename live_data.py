@@ -437,21 +437,36 @@ def _safe_current(bp_obj) -> float | None:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_live_fx_maden() -> dict:
-    """borsapy'den DOVIZ anlik fiyatlari getir. 5 dk cache.
+    """borsapy'den DOVIZ, Truncgil'den MADEN anlik fiyatlari getir. 5 dk cache.
 
-    v2.0.4.49: MADEN (ALTIN_TRY vb.) canli fiyat cekimi KALDIRILDI.
+    v2.0.4.49: MADEN (ALTIN_TRY vb.) canli fiyat cekimi KALDIRILMISTI.
     Kanit: admin tanilama kutusuyla dogrulandi - CSV (Bigpara, worker.py
     tarafindan her gece guncelleniyor) 6252.5 gibi taze bir deger
     gosterirken, bu fonksiyonun borsapy uzerinden (canlidoviz.com'a
     dayanan) getirdigi "canli" deger gunlerdir sabit 6277.78'de donuk
-    kaliyordu ve CSV'nin dogru degerinin uzerine yaziyordu. DOVIZ icin
-    boyle bir sorun tespit edilmedi, o yuzden DOVIZ canli cekimi
-    korunuyor.
+    kaliyordu ve CSV'nin dogru degerinin uzerine yaziyordu.
+
+    v2.0.4.58: MADEN GERI EKLENDI - bu sefer canlidoviz/borsapy DEGIL,
+    Truncgil Finans (ucretsiz, yapilandirilmis JSON, gercek veriyle test
+    edildi) kullaniliyor. Boylece Madenler de Doviz/Kripto gibi 5 dk'lik
+    hizli katmanda, GitHub Actions'i beklemeden guncelleniyor.
     """
+    out = {}
+
+    try:
+        from bigpara_client import fetch_truncgil_maden
+        truncgil_maden = fetch_truncgil_maden()
+        for ticker, v in truncgil_maden.items():
+            out[ticker] = v
+            print(f"  [live_data] MADEN canli fiyat OK ({ticker}/Truncgil): {v}")
+        if not truncgil_maden:
+            print("  [live_data] MADEN canli fiyat BOS (Truncgil) - CSV degeri korunacak")
+    except Exception as e:
+        print(f"  [live_data] MADEN canli fiyat hatasi (Truncgil): {type(e).__name__}: {e}")
+
     if not BORSAPY_OK:
         print("  [live_data] BORSAPY_OK=False, DOVIZ canli fiyat atlandi")
-        return {}
-    out = {}
+        return out
     for ticker, bp_code in _DOVIZ_TO_BP.items():
         try:
             v = _safe_current(bp.FX(bp_code))

@@ -233,11 +233,20 @@ KRIPTO = [
 
 # ─── 12 Maden / Emtia ────────────────────────────────────────
 MADEN = [
-    ("ALTIN_TRY","GC=F"),("GUMUS_TRY","SI=F"),("PLATIN_TRY","PL=F"),
-    ("PALADYUM_TRY","PA=F"),("BAKIR_TRY","HG=F"),("PETROL_TRY","CL=F"),
-    ("DOGALGAZ_TRY","NG=F"),("BRENT_TRY","BZ=F"),("BUGDAY_TRY","ZW=F"),
-    ("MISIR_TRY","ZC=F"),("SOYA_TRY","ZS=F"),("KAKAO_TRY","CC=F"),
+    ("ALTIN_TRY","GC=F"),("GUMUS_TRY","SI=F"),
+    ("PLATIN_TRY","PL=F"),("PALADYUM_TRY","PA=F"),
 ]
+# v2.0.4.55/56: Platin ve Paladyum GERI EKLENDI - arastirma sonucu
+# Akbank/Papara/doviz.com uzerinden gercek, gram bazli Turkiye TL
+# piyasalari oldugu dogrulandi (Bigpara'da yoktu ama doviz.com'da var).
+# Bu iki varlik icin bigpara_client.py artik doviz.com'u kullaniyor.
+# KRITIK: Bu ikisi icin asagidaki dongude yfinance USD*kur donusum
+# YOLU (Kademe 2) BILEREK ATLANIYOR - Bahri'nin acik ilkesi geregi
+# ("ABD piyasasi fiyatini TL'ye cevirmek, Turkiye piyasasinda gecerli
+# oldugunu varsaymak kadar mantiksiz olamaz"), sadece dogrudan Turkiye
+# kaynagi (Kademe 1) veya onceki CSV degeri (Kademe 3) kullanilir -
+# hicbir sekilde sentetik cevrim yapilmaz.
+_MADEN_SENTETIK_CEVRIM_YASAK = {"PL=F", "PA=F"}
 
 # ─── 16 Döviz (yfinance'de çalışanlar) ───────────────────────
 DOVIZ = [
@@ -495,8 +504,49 @@ def fetch_bist_names_fast(tickers: list) -> dict:
 
 
 
+def _bist_optima_score(rsi, ret1m, vol=30.0, has_fundamental=False, pb=None, pe=None, dy=None):
+    """v2.0.4.57: app.py'deki optima_score() ile BIREBIR AYNI mantik -
+    Optima Skoru artik burada (worker.py, gece bir kez) hesaplanip CSV'ye
+    yaziliyor, boylece Ana Sayfa/BIST listesi/Portfoyum/Detay sayfasi HEP
+    AYNI sayiyi okur - farkli yerlerde farkli hesaplanmadigi icin tutarsizlik
+    olusamaz. Bu iki fonksiyon senkronize tutulmali (biri degisirse digeri
+    de guncellenmeli).
+    """
+    if 40 <= rsi <= 60: rsi_s = 25
+    elif 35 <= rsi <= 65: rsi_s = 18
+    elif 30 <= rsi < 35 or 65 < rsi <= 70: rsi_s = 10
+    else: rsi_s = 0
+
+    if ret1m >= 30: mom = 35
+    elif ret1m >= 20: mom = 30
+    elif ret1m >= 10: mom = 24
+    elif ret1m >= 5: mom = 18
+    elif ret1m >= 0: mom = 10
+    elif ret1m >= -5: mom = 4
+    else: mom = 0
+
+    if vol < 20: vol_s = 15
+    elif vol < 35: vol_s = 10
+    elif vol < 55: vol_s = 5
+    else: vol_s = 0
+
+    fund_s = 0
+    if has_fundamental:
+        if pe and 0 < float(pe) < 12: fund_s += 10
+        elif pe and 0 < float(pe) < 25: fund_s += 5
+        if pb and 0 < float(pb) < 1.5: fund_s += 8
+        elif pb and 0 < float(pb) < 3: fund_s += 4
+        if dy and float(dy) > 0.08: fund_s += 7
+        elif dy and float(dy) > 0.04: fund_s += 3
+        return min(100, round(rsi_s + mom + vol_s + fund_s, 1))
+
+    raw = rsi_s + mom + vol_s
+    return min(100, round(raw * (100.0 / 75.0), 1))
+
+
 def batch_bist(tickers):
-    """Tüm BIST'i batch download ile indir — RSI + Ret1M dahil."""
+    """Tüm BIST'i batch download ile indir — RSI + Ret1M + Vol + hacim
+    trendi + max drawdown dahil (Optima Skoru'nun TUM bilesenleri)."""
     import yfinance as yf
     print(f"  BIST batch download ({len(tickers)} hisse)...")
     result = {}
@@ -510,33 +560,92 @@ def batch_bist(tickers):
             for t, sym in zip(chunk, syms):
                 try:
                     if len(syms) == 1:
-                        col = raw["Close"].dropna()
-                        if hasattr(col, "squeeze"):
-                            col = col.squeeze()
+                        sub = raw
                     else:
-                        if sym in raw.columns.get_level_values(0):
-                            col = raw[sym]["Close"].dropna()
-                            if hasattr(col, "squeeze"):
-                                col = col.squeeze()
-                        else:
-                            col = pd.Series()
+                        sub = raw[sym] if sym in raw.columns.get_level_values(0) else pd.DataFrame()
+                    col = sub["Close"].dropna() if "Close" in sub.columns else pd.Series()
+                    if hasattr(col, "squeeze"):
+                        col = col.squeeze()
                     if col.empty:
-                        result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0}
+                        result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
+                                     "score_adj": 0, "dd_adj": 0}
                         continue
                     p = round(float(col.iloc[-1]), 4)
                     rsi = calc_rsi(col)
                     ret1m = round((col.iloc[-1] / col.iloc[-22] - 1) * 100, 2) if len(col) >= 22 else 0.0
-                    # Yıllık volatilite (%)
                     rets = col.pct_change().dropna()
                     vol = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 30.0
-                    result[t] = {"price": p, "rsi": rsi, "ret1m": ret1m, "vol": vol}
-                except:
-                    result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0}
+
+                    # v2.0.4.57: Hacim trendi + Max Drawdown - app.py'nin
+                    # detay sayfasindaki mantikla BIREBIR AYNI (bkz. enrich()).
+                    score_adj, dd_adj = 0, 0
+                    trend = "YUKSELIS" if ret1m >= 0 else "DUSUS"
+                    if "Volume" in sub.columns and len(sub) >= 20:
+                        vol_series = sub["Volume"].fillna(0)
+                        if hasattr(vol_series, "squeeze"):
+                            vol_series = vol_series.squeeze()
+                        if float(vol_series.sum()) > 0:
+                            last5_avg = float(vol_series.tail(5).mean())
+                            last20_avg = float(vol_series.tail(20).mean())
+                            if last20_avg > 0:
+                                vol_ratio = last5_avg / last20_avg
+                                vol_trend = ("ARTIYOR" if vol_ratio >= 1.2 else
+                                             "AZALIYOR" if vol_ratio <= 0.8 else "NORMAL")
+                                if trend == "YUKSELIS" and vol_trend == "ARTIYOR": score_adj = +5
+                                elif trend == "YUKSELIS" and vol_trend == "AZALIYOR": score_adj = -10
+                                elif trend == "DUSUS" and vol_trend == "ARTIYOR": score_adj = -3
+                                elif trend == "DUSUS" and vol_trend == "AZALIYOR": score_adj = +2
+                    win = col.tail(252) if len(col) >= 252 else col
+                    if len(win) >= 20:
+                        cummax = win.cummax()
+                        dd_series = (win - cummax) / cummax * 100
+                        max_dd = float(dd_series.min())
+                        if max_dd < -70: dd_adj = -7
+                        elif max_dd < -50: dd_adj = -3
+
+                    result[t] = {"price": p, "rsi": rsi, "ret1m": ret1m, "vol": vol,
+                                 "score_adj": score_adj, "dd_adj": dd_adj}
+                except Exception:
+                    result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
+                                 "score_adj": 0, "dd_adj": 0}
         except Exception as e:
             print(f"  Chunk {i // chunk_size + 1} hata: {e}")
             for t in chunk:
-                result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0}
+                result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
+                             "score_adj": 0, "dd_adj": 0}
     return result
+
+
+def fetch_bist_fundamentals_parallel(tickers, max_workers=25):
+    """v2.0.4.57: Optima Skoru'nun temel analiz bileşeni (P/B, P/E, temettü
+    verimi) icin kap_client.py'yi tum BIST hisseleri icin paralel olarak
+    cagirir. Bu, gecede BIR KEZ calisir (worker.py) - boylece Ana Sayfa/
+    BIST listesi gibi sayfalar her acildiginda 772 kez bu cagriyi tekrar
+    yapmiyor (hem tutarlilik hem hiz kazanci)."""
+    from concurrent.futures import ThreadPoolExecutor
+    try:
+        from kap_client import fetch_kap_fundamentals
+    except Exception as e:
+        print(f"  [Fundamentals] kap_client import edilemedi: {e}")
+        return {}
+
+    print(f"  [Fundamentals] {len(tickers)} hisse icin P/B, P/E, temettu verimi cekiliyor...")
+    sonuc = {}
+
+    def _tek(t):
+        try:
+            raw = fetch_kap_fundamentals(t)
+            return (t, raw.get("pb_ratio"), raw.get("pe_ratio"), raw.get("div_yield"))
+        except Exception:
+            return (t, None, None, None)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        for t, pb, pe, dy in ex.map(_tek, tickers):
+            sonuc[t] = (pb, pe, dy)
+
+    ok = sum(1 for v in sonuc.values() if v[0] or v[1] or v[2])
+    print(f"  [Fundamentals] {ok}/{len(tickers)} hisse icin en az bir veri alindi.")
+    return sonuc
 
 
 def single_full(yf_sym, label="", period="1y"):
@@ -701,6 +810,8 @@ def build():
             "Ret1M":     d.get("ret1m", 0.0),
             "Vol":       d.get("vol", 30.0),
             "YF_Symbol": f"{t}.IS",
+            "_score_adj": d.get("score_adj", 0),
+            "_dd_adj":    d.get("dd_adj", 0),
         })
     ok_bist = sum(1 for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0)
     print(f"  {ok_bist}/{len(BIST_TICKERS)} fiyat alindi. "
@@ -728,6 +839,21 @@ def build():
         except Exception as _ce:
             print(f"  [cache] BIST cache atlanıyor: {_ce}")
 
+    # v2.0.4.57: Fiyati olan BIST hisseleri icin temel analiz + tam Optima
+    # Skoru hesapla. ONBELLEK TAMAMLAMASINDAN SONRA yapiliyor (yukarida) -
+    # boylece skor, cache'den tamamlanmis olsa bile GUNCEL/DOGRU RSI/Ret1M
+    # ile hesaplanir. Bu, artik uygulamanin HER YERINDE (Ana Sayfa, BIST
+    # listesi, Portfoyum, Detay sayfasi) okunacak TEK skor.
+    _bist_priced = [r["Ticker"] for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0]
+    _fundamentals = fetch_bist_fundamentals_parallel(_bist_priced)
+    for r in all_rows:
+        if r["Kategori"] != "BIST":
+            continue
+        _pb, _pe, _dy = _fundamentals.get(r["Ticker"], (None, None, None))
+        _base = _bist_optima_score(r["RSI"], r["Ret1M"], r["Vol"], True, _pb, _pe, _dy)
+        _total_adj = r.pop("_score_adj", 0) + r.pop("_dd_adj", 0)
+        r["Optima_Skor"] = max(0.0, min(100.0, round(_base + _total_adj, 1)))
+
     # ── 3. Kripto ─────────────────────────────────────────────
     KRIPTO_ADLAR = {
         "BTC": "Bitcoin", "ETH": "Ethereum", "BNB": "BNB",
@@ -739,63 +865,66 @@ def build():
         "SUI": "Sui", "TON": "Toncoin",
     }
     print(f"\n[3/4] {len(KRIPTO)} kripto varlik (toplu download)...")
-    import yfinance as yf
     from datetime import datetime, timedelta
-    kripto_start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
-    kripto_end   = datetime.now().strftime("%Y-%m-%d")
-    kripto_syms  = [yf_s for _, yf_s in KRIPTO]
-    kripto_map   = {yf_s: t for t, yf_s in KRIPTO}
 
-    try:
-        raw_k = yf.download(kripto_syms, start=kripto_start, end=kripto_end,
-                            auto_adjust=True, progress=False, group_by="ticker")
-    except Exception as e:
-        print(f"  Kripto toplu download hatasi: {e}")
-        raw_k = pd.DataFrame()
+    # v2.0.4.54: KOKTEN DUZELTME - USD fiyati alip ayri bir USD/TRY kuruyla
+    # TL'ye "cevirmek" YASAKLANDI (Bahri'nin acik talimati: iki farkli anda
+    # cekilen iki ayri verinin sentetik carpimi gercek bir piyasa fiyati
+    # degildir, gercek BTC/TRY fiyati BtcTurk'te bundan farkli olabilir).
+    # Bunun yerine borsapy'nin Crypto sinifi (BtcTurk API - GERCEK, DOGRUDAN
+    # TL cinsinden islem gören fiyat) kullaniliyor - live_data.py'deki canli
+    # overlay'in zaten guvenilir sekilde kullandigi AYNI kaynak.
+    def _kripto_bp_kod(ticker: str) -> str:
+        t = ticker.upper().strip()
+        return t if t.endswith("TRY") else f"{t}TRY"
 
     kripto_results = {}
-    for yf_s in kripto_syms:
-        t = kripto_map[yf_s]
-        try:
-            if raw_k.empty:
-                raise ValueError("bos")
-            if len(kripto_syms) == 1:
-                col = raw_k["Close"].dropna()
-            else:
-                col = raw_k[yf_s]["Close"].dropna() if yf_s in raw_k.columns.get_level_values(0) else pd.Series()
-            if hasattr(col, "squeeze"):
-                col = col.squeeze()
-            if col.empty or len(col) < 2:
-                raise ValueError("yetersiz veri")
-            p    = round(float(col.iloc[-1]), 6)
-            rsi  = calc_rsi(col)
-            ret  = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
-            rets_k = col.pct_change().dropna()
-            vol_k  = round(float(rets_k.std() * (252 ** 0.5) * 100), 1) if len(rets_k) > 10 else 60.0
-            kripto_results[yf_s] = (p, rsi, ret, vol_k)
-        except:
-            # Fallback: tek tek dene
-            p2, rsi2, ret2, vol2 = single_full(yf_s, t)
-            kripto_results[yf_s] = (p2, rsi2, ret2, vol2)
+    try:
+        import borsapy as bp
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _tek_kripto_cek(item):
+            t, _yf_s_unused = item
+            try:
+                h = bp.Crypto(_kripto_bp_kod(t)).history(period="3mo", interval="1d")
+                col = None
+                for c in ("Close", "close"):
+                    if h is not None and not h.empty and c in h.columns:
+                        col = pd.to_numeric(h[c], errors="coerce").dropna()
+                        break
+                if col is None or col.empty or len(col) < 2:
+                    raise ValueError("yetersiz veri")
+                p    = round(float(col.iloc[-1]), 6)  # DOGRUDAN TL - cevrim YOK
+                rsi  = calc_rsi(col)
+                ret  = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
+                rets_k = col.pct_change().dropna()
+                vol_k  = round(float(rets_k.std() * (252 ** 0.5) * 100), 1) if len(rets_k) > 10 else 60.0
+                return (t, p, rsi, ret, vol_k)
+            except Exception as e:
+                print(f"    [Kripto/borsapy] {t} hatasi: {type(e).__name__}: {e}")
+                return (t, 0.0, 50.0, 0.0, 30.0)
+
+        with ThreadPoolExecutor(max_workers=min(10, len(KRIPTO))) as ex:
+            sonuclar = list(ex.map(_tek_kripto_cek, KRIPTO))
+        for t, p, rsi, ret, vol_k in sonuclar:
+            kripto_results[t] = (p, rsi, ret, vol_k)
+    except Exception as e:
+        print(f"  Kripto borsapy toplu cekim hatasi: {e}")
 
     for t, yf_s in KRIPTO:
-        p, rsi, ret, vol_v = kripto_results.get(yf_s, (0.0, 50.0, 0.0, 30.0))
+        p, rsi, ret, vol_v = kripto_results.get(t, (0.0, 50.0, 0.0, 30.0))
         all_rows.append({
             "Ticker": t, "Ad": KRIPTO_ADLAR.get(t, t),
             "Kategori": "KRIPTO", "Son_Fiyat": p,
             "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
         })
     ok_k = sum(1 for r in all_rows if r["Kategori"] == "KRIPTO" and r["Son_Fiyat"] > 0)
-    print(f"  {ok_k}/{len(KRIPTO)} kripto fiyati alindi.")
+    print(f"  {ok_k}/{len(KRIPTO)} kripto fiyati alindi (dogrudan TL, BtcTurk/borsapy).")
 
     # ── 4. Maden + Döviz ─────────────────────────────────────
     MADEN_ADLAR = {
         "ALTIN_TRY": "Altin (TL)", "GUMUS_TRY": "Gumus (TL)",
         "PLATIN_TRY": "Platin (TL)", "PALADYUM_TRY": "Paladyum (TL)",
-        "BAKIR_TRY": "Bakir (TL)", "PETROL_TRY": "Ham Petrol WTI (TL)",
-        "DOGALGAZ_TRY": "Dogal Gaz (TL)", "BRENT_TRY": "Brent Petrol (TL)",
-        "BUGDAY_TRY": "Bugday (TL)", "MISIR_TRY": "Misir (TL)",
-        "SOYA_TRY": "Soya Fasulyesi (TL)", "KAKAO_TRY": "Kakao (TL)",
     }
     DOVIZ_ADLAR = {
         "USDTRY": "Amerikan Dolari / Turk Lirasi",
@@ -842,17 +971,16 @@ def build():
     try:
         from bigpara_client import fetch_all_bigpara
         bp_maden = fetch_all_bigpara(usdtry=usdtry_rate)
-        bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","BRENT_TRY","PETROL_TRY"] if bp_maden.get(k, 0) > 0)
+        bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","PLATIN_TRY","PALADYUM_TRY"] if bp_maden.get(k, 0) > 0)
         if bp_ok:
             print(f"  [Bigpara] {bp_ok} maden fiyati Bigpara'dan alindi.")
     except Exception as _bp_err:
         print(f"  [Bigpara] Atlanıyor: {_bp_err}")
 
-    # Gram dönüşüm katsayıları (ons → gram veya diğer birimler)
+    # Gram dönüşüm katsayıları (ons → gram)
     # GC=F (Altın): ons/troy ounce → gram: 1 troy oz = 31.1035 gram
     # SI=F (Gümüş): ons → gram: 1 troy oz = 31.1035 gram
-    # PL=F (Platin), PA=F (Paladyum): ons → gram
-    ONS_TO_GRAM = {"GC=F", "SI=F", "PL=F", "PA=F"}
+    ONS_TO_GRAM = {"GC=F", "SI=F"}
 
     for t, yf_s in MADEN:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0
@@ -867,7 +995,13 @@ def build():
             print(f"    [Bigpara] {t}: {p:,.4f} TL (birincil)")
 
         # Kademe 2: yfinance USD fiyatı → TRY dönüşümü
-        if p == 0.0:
+        # v2.0.4.56: PLATIN/PALADYUM icin bu kademe SADECE RSI/Ret1M/Vol
+        # (teknik gösterge) hesaplamak icin kullanilir - Son_Fiyat ASLA
+        # buradan atanmaz (Bahri'nin ilkesi: sentetik USD*kur fiyati asla
+        # goruntulenmez). Bu iki varlik icin Son_Fiyat sadece Kademe 1
+        # (doviz.com, gercek TL) veya Kademe 3'ten (onceki CSV) gelebilir.
+        _sentetik_yasak = yf_s in _MADEN_SENTETIK_CEVRIM_YASAK
+        if p == 0.0 or _sentetik_yasak:
             try:
                 if raw_m.empty:
                     raise ValueError("bos")
@@ -884,18 +1018,23 @@ def build():
                 ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
                 rets_m = col.pct_change().dropna()
                 vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
-                # USD → TRY dönüşümü + ons → gram (gerekiyorsa)
-                if yf_s in ONS_TO_GRAM:
-                    p = round(p_usd * usdtry_rate / 31.1035, 4)
-                else:
-                    p = round(p_usd * usdtry_rate, 4)
-            except Exception:
-                p2, rsi, ret, vol_v = single_full(yf_s, t)
-                if p2 > 0:
+                # USD → TRY dönüşümü + ons → gram (gerekiyorsa) - SADECE
+                # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
+                # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
+                # icin normalde girmez, ama yedek olarak burada kalir).
+                if p == 0.0 and not _sentetik_yasak:
                     if yf_s in ONS_TO_GRAM:
-                        p = round(p2 * usdtry_rate / 31.1035, 4)
+                        p = round(p_usd * usdtry_rate / 31.1035, 4)
                     else:
-                        p = round(p2 * usdtry_rate, 4)
+                        p = round(p_usd * usdtry_rate, 4)
+            except Exception:
+                if not _sentetik_yasak:
+                    p2, rsi, ret, vol_v = single_full(yf_s, t)
+                    if p2 > 0:
+                        if yf_s in ONS_TO_GRAM:
+                            p = round(p2 * usdtry_rate / 31.1035, 4)
+                        else:
+                            p = round(p2 * usdtry_rate, 4)
 
         # Kademe 3: Son CSV'den tamamla
         if p == 0.0 and os.path.exists(CSV_PATH):
