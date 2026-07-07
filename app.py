@@ -783,13 +783,22 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
     return pd.DataFrame()
 
 
+class _HistEmptyError(Exception):
+    """get_hist() basarisiz/bos sonuc verdiginde kullanilir - boylece
+    st.cache_data BU sonucu ONBELLEKLEMEZ (sadece basarili veri cache'lenir),
+    gecici bir yfinance/kaynak aksakligi 5 dakika boyunca donup kalmaz."""
+    pass
+
 @st.cache_data(ttl=300, show_spinner=False)  # v2.0.4.x: BIST yfinance cagrisi onbelleksizdi
                                               # - her rerun'da (her 5dk'lik autorefresh dahil)
                                               # tekrar canli cekiliyordu. 300s = mevcut
                                               # "5 dakikalik pencere" canli veri formuluyle
                                               # birebir ayni tazelik, DOVIZ/MADEN/KRIPTO icin
                                               # zaten var olan 900s onbellekle celismez (300<900).
-def get_hist(ticker, yf_symbol, category, period="1y"):
+                                              # v2.0.4.x+1: basarisiz sonuclar _HistEmptyError
+                                              # firlatir - Streamlit exception'i cache'lemez,
+                                              # yani gecici aksaklik her cagrida yeniden denenir.
+def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
     # TEFAS — önce yerel JSON cache, sonra pytefas, son çare sentetik
     if category == "TEFAS":
         # 1. Yerel cache dene (worker.py tarafından oluşturulur)
@@ -818,7 +827,7 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
                 return hist
         except Exception:
             pass
-        return pd.DataFrame()
+        raise _HistEmptyError()
 
     # v1.6: DOVIZ - borsapy direkt TRY cifti (capraz kur matematigi yok)
     if category == "DOVIZ":
@@ -835,7 +844,7 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
                 return _h[["Open","High","Low","Close"]].dropna()
         except Exception:
             pass
-        return pd.DataFrame()
+        raise _HistEmptyError()
 
     # v1.6: MADEN - sadece TRY-direkt gram bazli (canlidoviz.com gercek zamanli)
     if category == "MADEN":
@@ -854,7 +863,7 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
                 return _h[["Open","High","Low","Close"]].dropna()
         except Exception:
             pass
-        return pd.DataFrame()
+        raise _HistEmptyError()
 
     # v1.6: KRIPTO - borsapy direkt TRY cifti (BtcTurk gercek zamanli)
     if category == "KRIPTO":
@@ -875,7 +884,7 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
                 return _h[_cols].dropna(subset=["Open","High","Low","Close"])
         except Exception:
             pass
-        return pd.DataFrame()
+        raise _HistEmptyError()
 
     # BIST - simdilik yfinance (v1.7'de borsapy.Ticker'a gecilecek)
     from data_pipeline import _format_yf_symbol
@@ -894,7 +903,18 @@ def get_hist(ticker, yf_symbol, category, period="1y"):
             return h[cols].dropna(subset=["Open","High","Low","Close"])
     except Exception:
         pass
-    return pd.DataFrame()
+    raise _HistEmptyError()
+
+
+def get_hist(ticker, yf_symbol, category, period="1y"):
+    """Ince, onbelleksiz sarmalayici: basarili sonucu _get_hist_cached'ten
+    (5 dk onbellekli) dondurur; basarisizlik durumunda (istisna) bos
+    DataFrame dondurur - bu sayede gecici bir veri kaynagi aksakligi
+    onbellege takilip 5 dakika donup kalmaz, her cagrida yeniden denenir."""
+    try:
+        return _get_hist_cached(ticker, yf_symbol, category, period)
+    except _HistEmptyError:
+        return pd.DataFrame()
 
 def calc_rsi(s,p=14):
     s=s.dropna()
