@@ -783,6 +783,12 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
     return pd.DataFrame()
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # v2.0.4.x: BIST yfinance cagrisi onbelleksizdi
+                                              # - her rerun'da (her 5dk'lik autorefresh dahil)
+                                              # tekrar canli cekiliyordu. 300s = mevcut
+                                              # "5 dakikalik pencere" canli veri formuluyle
+                                              # birebir ayni tazelik, DOVIZ/MADEN/KRIPTO icin
+                                              # zaten var olan 900s onbellekle celismez (300<900).
 def get_hist(ticker, yf_symbol, category, period="1y"):
     # TEFAS — önce yerel JSON cache, sonra pytefas, son çare sentetik
     if category == "TEFAS":
