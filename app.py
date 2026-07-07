@@ -3010,11 +3010,14 @@ elif page in CAT:
     # ── TOP 5 ────────────────────────────────────────────────
     st.divider()
     st.subheader("En Yüksek Optima Skoru — Top 5")
-    top5=degerli.nlargest(5,"Optima_Skor")
+    # v2.0.4.x+3: Aday havuzunu biraz genis tut (precomputed skora gore ilk 15)
+    # - canli skor gece skorundan farkli cikabilir, gercek ilk 5 farkli
+    # ticker'lar olabilir. 15 satir hala ucuz (get_hist 5dk onbellekli).
+    top_candidates = degerli.nlargest(15, "Optima_Skor").copy()
+    top_candidates["Optima_Skor"] = top_candidates.apply(live_optima_score, axis=1)
+    top5 = top_candidates.nlargest(5, "Optima_Skor")
     # Top5 dataframe olarak göster — tıklanabilir
     top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    # v2.0.4.x+2: Sadece bu 5 satir icin canli skor (Detay ile ayni sayi)
-    top5_show["Optima_Skor"] = top5.apply(live_optima_score, axis=1)
     top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
     top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
     new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
@@ -3048,6 +3051,10 @@ elif page in CAT:
     # tum evren degil, boylece performans korunur ama gorunen sayi
     # Detay ile ayni (canli) olur.
     df_page_show["Optima_Skor"] = df_page.apply(live_optima_score, axis=1)
+    # v2.0.4.x+3: Canli skor gece siralamasindan sapabilir - sayfa icinde
+    # yeniden sirala (sayfalar arasi sinir hala gece skoruna gore, ama
+    # bu sayfanin kendi ici artik dogru sirali).
+    df_page_show = df_page_show.sort_values("Optima_Skor", ascending=False)
     df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
     df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
     new_sel = clickable_table(df_page_show, key=f"cat_{page}_{cur_pg}", sel_ticker=sel_now)
