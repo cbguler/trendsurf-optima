@@ -1558,33 +1558,6 @@ with st.sidebar:
             st.markdown(_logo_html(), unsafe_allow_html=True)
     else:
         st.markdown(_logo_html(), unsafe_allow_html=True)
-    # v1.9.7.1 - Canli veri indikatoru (her autorefresh'te timestamp guncellenir)
-    # v1.9.7.4 - Saat damgasi TRT (Europe/Istanbul), UTC yerine
-    import datetime as _dt_now
-    try:
-        from zoneinfo import ZoneInfo as _ZI_sb
-        _now_str = _dt_now.datetime.now(_ZI_sb("Europe/Istanbul")).strftime("%H:%M:%S")
-    except Exception:
-        # ZoneInfo yoksa: UTC+3 manuel ofset
-        _now_str = (_dt_now.datetime.utcnow() + _dt_now.timedelta(hours=3)).strftime("%H:%M:%S")
-    st.markdown(
-        '<style>'
-        '@keyframes tso_pulse { 0%,100% {opacity:1;} 50% {opacity:0.35;} }'
-        '.tso-live-dot { display:inline-block; width:8px; height:8px; '
-        '  border-radius:50%; background:#22c55e; margin-right:6px; '
-        '  animation: tso_pulse 2s ease-in-out infinite; '
-        '  box-shadow: 0 0 6px #22c55e88;}'
-        '.tso-live-box { background:#f0f7f0; border:1px solid #c5e1c5; '
-        '  border-radius:6px; padding:6px 10px; margin:6px 0 4px 0; '
-        '  font-size:11px; color:#1b2a4a; }'
-        '</style>'
-        f'<div class="tso-live-box">'
-        f'<span class="tso-live-dot"></span>'
-        f'<b>Canlı veri</b> &nbsp;•&nbsp; '
-        f'<span style="color:#4a5a7a">{_now_str}</span>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
     plan_badge = {"free":"Ucretsiz","pro":"Pro","premium":"Premium"}
     st.markdown(
         f"<small style='color:#8ca3cc'>"
@@ -1594,47 +1567,6 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     st.divider()
-
-    # v2.0.4.52: Doviz/Kripto icin ekran-uzerinde tanilama (altin sorununda
-    # ise yarayan yontemin ayni - sunucu log zamanlamasina bagimli degil).
-    # Her kategoriden CSV'de bulunan ILK ticker'i orneklem olarak kullanir
-    # (belirli bir ticker adini varsaymaz, yanlis isim riski yok).
-    if _cur_user.get("is_admin"):
-        with st.sidebar.expander("Döviz / Kripto Tanılama", expanded=False):
-            try:
-                _raw_csv2 = pd.read_csv(CSV_PATH, on_bad_lines="skip")
-            except Exception as e:
-                _raw_csv2 = None
-                st.write("CSV okuma hatası:", str(e))
-
-            _diag_df2 = load_universe()
-
-            for _kat_ad, _kat_kod in [("Döviz", "DOVIZ"), ("Kripto", "KRIPTO")]:
-                st.markdown(f"**{_kat_ad}**")
-                if _raw_csv2 is not None:
-                    _alt_raw = _raw_csv2[_raw_csv2["Kategori"] == _kat_kod]
-                    if not _alt_raw.empty:
-                        _ornek_ticker = _alt_raw["Ticker"].iloc[0]
-                        _ornek_ham = _alt_raw["Son_Fiyat"].iloc[0]
-                        st.write(f"Örnek: {_ornek_ticker} — CSV (ham): {_ornek_ham}")
-
-                        _alt_post = _diag_df2[_diag_df2["Ticker"] == _ornek_ticker]
-                        _sonra = _alt_post["Son_Fiyat"].iloc[0] if not _alt_post.empty else "bulunamadı"
-                        st.write(f"df_uni (overlay sonrası): {_sonra}")
-                    else:
-                        st.write("CSV'de bu kategoriden satır bulunamadı.")
-
-            st.caption("load_universe() önbelleği: 10 dk.")
-            if st.button("Önbelleği temizle ve şimdi yenile", key="btn_clear_fx_kripto_cache"):
-                load_universe.clear()
-                try:
-                    from live_data import _fetch_live_fx_maden as _dbg_fx2, _fetch_live_kripto as _dbg_kr2
-                    _dbg_fx2.clear()
-                    _dbg_kr2.clear()
-                except Exception:
-                    pass
-                st.rerun()
-        st.divider()
 
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
@@ -2383,11 +2315,16 @@ if page=="Ana Sayfa":
 
                 with st.spinner("Analiz yukleniyor..."):
                     d = enrich(sel_row_ana, period_val)
-                    sig_lbl, sig_cls = get_signal(d["score"], d["rsi"], d["trend"])
+                    # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
+                    # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
+                    # Canli hacim okumasi asagida sadece bilgi notu olarak kalir.
+                    _precomp_ana = sel_row_ana.get("Optima_Skor")
+                    disp_score_ana = float(_precomp_ana) if (_precomp_ana is not None and _precomp_ana == _precomp_ana) else d["score"]
+                    sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
                 r1.metric("Son Fiyat",    f"{float(sel_row_ana['Son_Fiyat']):,.4f}")
-                r2.metric("Optima Skor",  f"{d['score']:.1f}")
+                r2.metric("Optima Skor",  f"{disp_score_ana:.1f}")
                 r3.metric("RSI (14)",     f"{d['rsi']:.1f}")
                 r4.metric("1A Getiri %",  f"{d['ret1m']:+.2f}%")
                 r5.metric("Yillik Vol %", f"{d['vol']:.1f}%")
@@ -2401,7 +2338,7 @@ if page=="Ana Sayfa":
                     _vr = d.get("vol_ratio", 0.0)
                     _adj = d.get("score_adj", 0)
                     _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-                    _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+                    _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
                     _vol_html_ana = (
                         f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
                         f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -2414,7 +2351,7 @@ if page=="Ana Sayfa":
                     _dd_clr = "#e74c3c"
                     _dd_html_ana = (
                         f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
-                        f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
+                        f'<b style="color:{_dd_clr}">(canlı sinyal: {d["dd_adj"]:+d} puan)</b>'
                     )
 
                 st.markdown(f"""
@@ -2422,7 +2359,7 @@ if page=="Ana Sayfa":
                   <span class="ts-sig {sig_cls}">{sig_lbl}</span>
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
                     Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
-                    Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
+                    Optima Skor: <b>{disp_score_ana}/100</b> &nbsp;|&nbsp;
                     MACD: <b>{d['macd']:.4f}</b>{_vol_html_ana}{_dd_html_ana}
                   </span>
                 </div>""", unsafe_allow_html=True)
@@ -2846,10 +2783,13 @@ elif page=="Portföyüm":
             _pl  = st.radio("Periyot", list(_pm2.keys()), horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
                 _d = enrich(_sr, _pm2[_pl])
-                _sig_lbl, _sig_cls = get_signal(_d["score"],_d["rsi"],_d["trend"])
+                # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
+                _precomp_pf = _sr.get("Optima_Skor")
+                disp_score_pf = float(_precomp_pf) if (_precomp_pf is not None and _precomp_pf == _precomp_pf) else _d["score"]
+                _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
-            _m2.metric("Optima Skor", f"{_d['score']:.1f}")
+            _m2.metric("Optima Skor", f"{disp_score_pf:.1f}")
             _m3.metric("RSI (14)",    f"{_d['rsi']:.1f}")
             _m4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
             _m5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
@@ -2862,7 +2802,7 @@ elif page=="Portföyüm":
                 _vr = _d.get("vol_ratio", 0.0)
                 _adj = _d.get("score_adj", 0)
                 _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-                _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+                _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
                 _vol_html = (
                     f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
                     f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -2875,13 +2815,13 @@ elif page=="Portföyüm":
                 _dd_clr = "#e74c3c"
                 _dd_html = (
                     f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
-                    f'<b style="color:{_dd_clr}">({_d["dd_adj"]:+d} skor)</b>'
+                    f'<b style="color:{_dd_clr}">(canlı sinyal: {_d["dd_adj"]:+d} puan)</b>'
                 )
 
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{_d["score"]}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}{_dd_html}
+        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{disp_score_pf}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}{_dd_html}
       </span></div>''', unsafe_allow_html=True)
 
             # v2.0.3.2: Teknik Gostergeler expander
@@ -3098,11 +3038,14 @@ elif page in CAT:
 
     with st.spinner("Analiz yükleniyor..."):
         d=enrich(sel_row,period_val)
-        sig_lbl,sig_cls=get_signal(d["score"],d["rsi"],d["trend"])
+        # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
+        _precomp_cat = sel_row.get("Optima_Skor")
+        disp_score_cat = float(_precomp_cat) if (_precomp_cat is not None and _precomp_cat == _precomp_cat) else d["score"]
+        sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
     r1.metric("Son Fiyat",f"{float(sel_row['Son_Fiyat']):,.4f}")
-    r2.metric("Optima Skor",f"{d['score']:.1f}")
+    r2.metric("Optima Skor",f"{disp_score_cat:.1f}")
     r3.metric("RSI (14)",f"{d['rsi']:.1f}")
     r4.metric("1A Getiri %",f"{d['ret1m']:+.2f}%")
     r5.metric("Yıllık Vol %",f"{d['vol']:.1f}%")
@@ -3116,7 +3059,7 @@ elif page in CAT:
         _vr = d.get("vol_ratio", 0.0)
         _adj = d.get("score_adj", 0)
         _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-        _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
+        _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
         vol_html = (
             f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
             f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -3128,7 +3071,7 @@ elif page in CAT:
         _dd_val = d.get("max_dd")
         dd_html = (
             f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{_dd_val:.1f}%</b> '
-            f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
+            f'<b style="color:#e74c3c">(canlı sinyal: {d["dd_adj"]:+d} puan)</b>'
         )
 
     st.markdown(f"""
@@ -3136,7 +3079,7 @@ elif page in CAT:
       <span class="ts-sig {sig_cls}">{sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
         Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
-        Optima Skor: <b>{d['score']}/100</b> &nbsp;|&nbsp;
+        Optima Skor: <b>{disp_score_cat}/100</b> &nbsp;|&nbsp;
         MACD: <b>{d['macd']:.4f}</b>{vol_html}{dd_html}
       </span>
     </div>""",unsafe_allow_html=True)
