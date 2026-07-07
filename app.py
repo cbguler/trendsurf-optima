@@ -1589,6 +1589,47 @@ with st.sidebar:
     )
     st.divider()
 
+    # v2.0.4.52: Doviz/Kripto icin ekran-uzerinde tanilama (altin sorununda
+    # ise yarayan yontemin ayni - sunucu log zamanlamasina bagimli degil).
+    # Her kategoriden CSV'de bulunan ILK ticker'i orneklem olarak kullanir
+    # (belirli bir ticker adini varsaymaz, yanlis isim riski yok).
+    if _cur_user.get("is_admin"):
+        with st.sidebar.expander("Döviz / Kripto Tanılama", expanded=False):
+            try:
+                _raw_csv2 = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+            except Exception as e:
+                _raw_csv2 = None
+                st.write("CSV okuma hatası:", str(e))
+
+            _diag_df2 = load_universe()
+
+            for _kat_ad, _kat_kod in [("Döviz", "DOVIZ"), ("Kripto", "KRIPTO")]:
+                st.markdown(f"**{_kat_ad}**")
+                if _raw_csv2 is not None:
+                    _alt_raw = _raw_csv2[_raw_csv2["Kategori"] == _kat_kod]
+                    if not _alt_raw.empty:
+                        _ornek_ticker = _alt_raw["Ticker"].iloc[0]
+                        _ornek_ham = _alt_raw["Son_Fiyat"].iloc[0]
+                        st.write(f"Örnek: {_ornek_ticker} — CSV (ham): {_ornek_ham}")
+
+                        _alt_post = _diag_df2[_diag_df2["Ticker"] == _ornek_ticker]
+                        _sonra = _alt_post["Son_Fiyat"].iloc[0] if not _alt_post.empty else "bulunamadı"
+                        st.write(f"df_uni (overlay sonrası): {_sonra}")
+                    else:
+                        st.write("CSV'de bu kategoriden satır bulunamadı.")
+
+            st.caption("load_universe() önbelleği: 10 dk.")
+            if st.button("Önbelleği temizle ve şimdi yenile", key="btn_clear_fx_kripto_cache"):
+                load_universe.clear()
+                try:
+                    from live_data import _fetch_live_fx_maden as _dbg_fx2, _fetch_live_kripto as _dbg_kr2
+                    _dbg_fx2.clear()
+                    _dbg_kr2.clear()
+                except Exception:
+                    pass
+                st.rerun()
+        st.divider()
+
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
     _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
