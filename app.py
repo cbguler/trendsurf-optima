@@ -1090,6 +1090,27 @@ def enrich(row,period="1y"):
                 macd=macd_v,macd_sig=macd_s,
                 live_rsi=live_rsi,live_vol=live_vol)
 
+def live_optima_score(row, period="1mo"):
+    """v2.0.4.x+2: enrich()'in ayni canli hesabini (hacim/DD dahil) tek
+    bir satir icin guvenli sekilde dondurur. SADECE o an ekranda gorunen
+    (sayfalanmis/kucuk) satir kumelerine uygulanmali - tum evrene degil,
+    yoksa performans sorunu geri doner. get_hist() zaten 5 dk onbellekli
+    oldugundan tekrar gorunumler hizli olur. Basarisizlikta CSV'deki
+    onceden hesaplanmis Optima_Skor'a (veya ham optima_score()'a) duser."""
+    try:
+        d = enrich(row, period)
+        return float(d["score"])
+    except Exception:
+        pass
+    _fallback = row.get("Optima_Skor")
+    if _fallback is not None and _fallback == _fallback:
+        return float(_fallback)
+    try:
+        return float(optima_score(float(row.get("RSI", 50)), float(row.get("Ret1M", 0)),
+                                   vol=float(row.get("Vol", 30) or 30)))
+    except Exception:
+        return 0.0
+
 def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     """on_select ile satır seçimi — checkbox Streamlit'in kendi davranışı.
 
@@ -2207,7 +2228,11 @@ if page=="Ana Sayfa":
             continue
 
         for _, row in aktif:
-            skor = float(row["Optima_Skor"])
+            # v2.0.4.x+2: Bu noktada sadece SECILMIS kucuk kume (max_assets
+            # kadar) var - tum havuz degil. Canli skor (hacim/DD dahil)
+            # burada guvenle hesaplanabilir, tablo artik Detay ile ayni
+            # (canli) sayiyi gosterir.
+            skor = live_optima_score(row)
             rsi_v = float(row.get("RSI",50))
             trend_v = "YUKSELIS" if float(row.get("Ret1M",0)) >= 0 else "DUSUS"
             sig_lbl, _ = get_signal(skor, rsi_v, trend_v)
@@ -2338,8 +2363,10 @@ if page=="Ana Sayfa":
                     # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
                     # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
                     # Canli hacim okumasi asagida sadece bilgi notu olarak kalir.
-                    _precomp_ana = sel_row_ana.get("Optima_Skor")
-                    disp_score_ana = float(_precomp_ana) if (_precomp_ana is not None and _precomp_ana == _precomp_ana) else d["score"]
+                    # v2.0.4.x+2: Tablo artik canli hesapliyor (bkz. live_optima_score),
+                    # bu yuzden Detay da her zaman canli d['score']'u gosterir - ikisi
+                    # ayni enrich() mantigini kullandigi icin birebir tutarli.
+                    disp_score_ana = d["score"]
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
@@ -2358,7 +2385,7 @@ if page=="Ana Sayfa":
                     _vr = d.get("vol_ratio", 0.0)
                     _adj = d.get("score_adj", 0)
                     _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-                    _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
+                    _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                     _vol_html_ana = (
                         f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
                         f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -2371,7 +2398,7 @@ if page=="Ana Sayfa":
                     _dd_clr = "#e74c3c"
                     _dd_html_ana = (
                         f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
-                        f'<b style="color:{_dd_clr}">(canlı sinyal: {d["dd_adj"]:+d} puan)</b>'
+                        f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
                     )
 
                 st.markdown(f"""
@@ -2694,13 +2721,10 @@ elif page=="Portföyüm":
             def _sf(v,d):
                 try: fv=float(v); return d if _pd.isna(fv) else fv
                 except: return d
-            _precomputed = _row.get("Optima_Skor")
-            if _precomputed is not None and not _pd.isna(_precomputed):
-                _skor = float(_precomputed)
-            else:
-                _skor = optima_score(_sf(_row.get("RSI"),50.0),
-                                      _sf(_row.get("Ret1M"),0.0),
-                                      _sf(_row.get("Vol"),30.0))
+            # v2.0.4.x+2: Portfoy dogasi geregi kucuk (birkac varlik) -
+            # canli skoru (hacim/DD dahil) her satir icin guvenle hesapla,
+            # boylece Detay ile ayni sayiyi gosterir.
+            _skor = live_optima_score(_row)
         else:
             _skor = 0.0
         _toplam = _adet * _guncel
@@ -2804,8 +2828,9 @@ elif page=="Portföyüm":
             with st.spinner("Yükleniyor..."):
                 _d = enrich(_sr, _pm2[_pl])
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
-                _precomp_pf = _sr.get("Optima_Skor")
-                disp_score_pf = float(_precomp_pf) if (_precomp_pf is not None and _precomp_pf == _precomp_pf) else _d["score"]
+                # v2.0.4.x+2: Tablo artik canli hesapliyor, Detay da her zaman
+                # canli _d['score']'u gosterir - ikisi ayni mantik (enrich()).
+                disp_score_pf = _d["score"]
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
@@ -2822,7 +2847,7 @@ elif page=="Portföyüm":
                 _vr = _d.get("vol_ratio", 0.0)
                 _adj = _d.get("score_adj", 0)
                 _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-                _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
+                _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                 _vol_html = (
                     f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
                     f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -2835,7 +2860,7 @@ elif page=="Portföyüm":
                 _dd_clr = "#e74c3c"
                 _dd_html = (
                     f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
-                    f'<b style="color:{_dd_clr}">(canlı sinyal: {_d["dd_adj"]:+d} puan)</b>'
+                    f'<b style="color:{_dd_clr}">({_d["dd_adj"]:+d} skor)</b>'
                 )
 
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
@@ -2988,6 +3013,8 @@ elif page in CAT:
     top5=degerli.nlargest(5,"Optima_Skor")
     # Top5 dataframe olarak göster — tıklanabilir
     top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
+    # v2.0.4.x+2: Sadece bu 5 satir icin canli skor (Detay ile ayni sayi)
+    top5_show["Optima_Skor"] = top5.apply(live_optima_score, axis=1)
     top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
     top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
     new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
@@ -3017,6 +3044,10 @@ elif page in CAT:
 
     # Tıklanabilir tablo
     df_page_show = df_page[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
+    # v2.0.4.x+2: Sadece bu SAYFADAKI (max 50) satir icin canli skor -
+    # tum evren degil, boylece performans korunur ama gorunen sayi
+    # Detay ile ayni (canli) olur.
+    df_page_show["Optima_Skor"] = df_page.apply(live_optima_score, axis=1)
     df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
     df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
     new_sel = clickable_table(df_page_show, key=f"cat_{page}_{cur_pg}", sel_ticker=sel_now)
@@ -3059,8 +3090,9 @@ elif page in CAT:
     with st.spinner("Analiz yükleniyor..."):
         d=enrich(sel_row,period_val)
         # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
-        _precomp_cat = sel_row.get("Optima_Skor")
-        disp_score_cat = float(_precomp_cat) if (_precomp_cat is not None and _precomp_cat == _precomp_cat) else d["score"]
+        # v2.0.4.x+2: Tablo artik canli hesapliyor, Detay da her zaman
+        # canli d['score']'u gosterir - ikisi ayni mantik (enrich()).
+        disp_score_cat = d["score"]
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
@@ -3079,7 +3111,7 @@ elif page in CAT:
         _vr = d.get("vol_ratio", 0.0)
         _adj = d.get("score_adj", 0)
         _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
-        _adj_str = f" <b style='color:{_vol_clr}'>(canlı sinyal: {_adj:+d} puan)</b>" if _adj != 0 else ""
+        _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
         vol_html = (
             f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
             f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
@@ -3091,7 +3123,7 @@ elif page in CAT:
         _dd_val = d.get("max_dd")
         dd_html = (
             f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{_dd_val:.1f}%</b> '
-            f'<b style="color:#e74c3c">(canlı sinyal: {d["dd_adj"]:+d} puan)</b>'
+            f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
         )
 
     st.markdown(f"""
