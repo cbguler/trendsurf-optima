@@ -301,7 +301,11 @@ def _upsert(conn, sonuc):
                 "ON CONFLICT (ticker) DO UPDATE SET "
                 "kategori=EXCLUDED.kategori, skor=EXCLUDED.skor, fiyat=EXCLUDED.fiyat, "
                 "rsi=EXCLUDED.rsi, ret1m=EXCLUDED.ret1m, updated_at=now()",
-                (t, v["kategori"], v["skor"], v["fiyat"], v["rsi"], v["ret1m"]))
+                # v2.0.5.4: float() zorunlu - pandas/numpy'den gelen np.float64
+                # tipleri db katmaninda SQL'e "np.float64(...)" metni olarak
+                # gomuluyor ve PostgreSQL 'schema "np" does not exist' veriyordu.
+                (str(t), str(v["kategori"]), float(v["skor"]), float(v["fiyat"]),
+                 float(v["rsi"]), float(v["ret1m"])))
             n += 1
         except Exception as e:
             print(f"[radar] upsert hatasi ({t}): {e}")
@@ -426,21 +430,27 @@ def degerlendir_tefas(df_uni, simdi):
 
     out = {}
     df_t = df_uni[df_uni["Kategori"] == "TEFAS"]
-    if "Optima_Skor" not in df_t.columns:
-        print("[radar] TEFAS: CSV'de Optima_Skor kolonu yok, atlandi.")
-        return out
     for _, r in df_t.iterrows():
         try:
-            skor = float(r["Optima_Skor"])
-            if skor != skor:  # NaN
-                continue
             fiyat = float(r.get("Son_Fiyat", 0) or 0)
             if fiyat <= 0:
                 continue
+            rsi   = float(r.get("RSI", 50) or 50)
+            ret1m = float(r.get("Ret1M", 0) or 0)
+            vol   = float(r.get("Vol", 30) or 30)
+            # v2.0.5.4: CSV'de Optima_Skor TEFAS icin BOS geliyor (worker.py
+            # o kolonu sadece BIST icin dolduruyor; uygulama TEFAS skorunu
+            # ekranda anlik hesapliyor). Radar da ayni formulle kendisi
+            # hesaplar: skor varsa kullan, yoksa RSI/Ret1M/Vol'den uret.
+            try:
+                skor = float(r["Optima_Skor"])
+            except Exception:
+                skor = float("nan")
+            if skor != skor:  # NaN -> ayni formulle hesapla
+                skor = float(_bist_optima_score(rsi, ret1m, vol))
             out[str(r["Ticker"])] = {
                 "kategori": "TEFAS", "skor": round(skor, 1), "fiyat": fiyat,
-                "rsi": float(r.get("RSI", 50) or 50),
-                "ret1m": float(r.get("Ret1M", 0) or 0)}
+                "rsi": rsi, "ret1m": ret1m}
         except Exception:
             continue
     print(f"[radar] TEFAS aksam degerlendirmesi: {len(out)} fon (CSV'den).")
