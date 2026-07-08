@@ -404,6 +404,45 @@ def _radar_maili_gonder(yeni_alarmlar, ad_map):
         print(f"[radar] Mail gonderilemedi: {e}")
 
 
+# ─── TEFAS aksam degerlendirmesi (gunde 1) ───────────────────
+
+def degerlendir_tefas(df_uni, simdi):
+    """v2.0.5.3: TEFAS fonlari gunde BIR kez NAV aciklar - gun ici tarama
+    anlamsizdir. Bunun yerine, aksam NAV guncellemesinden (TRT 20:00/20:30,
+    update_tefas_evening.yml) SONRAKI kosuda, CSV'deki guncel skorlar okunur
+    ve BIST/Doviz ile ayni esik/sicrama kurallarindan gecirilir. Yeni veri
+    CEKILMEZ (CSV zaten taze) - sadece karsilastirilir; maliyet saniyeler.
+
+    Pencere TRT 20:40-21:40: 15 dk'lik radar araligiyla bu pencereye en az
+    bir kosu kesin duser; radar_alerts'in gun bazli dedupe'u sayesinde
+    pencereye iki kosu dussa bile ayni alarm iki kez gitmez."""
+    dk = simdi.hour * 60 + simdi.minute
+    if not ((20 * 60 + 40) <= dk <= (21 * 60 + 40)):
+        return {}
+
+    out = {}
+    df_t = df_uni[df_uni["Kategori"] == "TEFAS"]
+    if "Optima_Skor" not in df_t.columns:
+        print("[radar] TEFAS: CSV'de Optima_Skor kolonu yok, atlandi.")
+        return out
+    for _, r in df_t.iterrows():
+        try:
+            skor = float(r["Optima_Skor"])
+            if skor != skor:  # NaN
+                continue
+            fiyat = float(r.get("Son_Fiyat", 0) or 0)
+            if fiyat <= 0:
+                continue
+            out[str(r["Ticker"])] = {
+                "kategori": "TEFAS", "skor": round(skor, 1), "fiyat": fiyat,
+                "rsi": float(r.get("RSI", 50) or 50),
+                "ret1m": float(r.get("Ret1M", 0) or 0)}
+        except Exception:
+            continue
+    print(f"[radar] TEFAS aksam degerlendirmesi: {len(out)} fon (CSV'den).")
+    return out
+
+
 # ─── Ana akis ────────────────────────────────────────────────
 
 def main():
@@ -448,11 +487,14 @@ def main():
     else:
         print("[radar] BIST seansi kapali - BIST taramasi atlandi.")
 
+    # 3) TEFAS - gunde 1 (aksam NAV guncellemesi sonrasi pencere)
+    sonuc.update(degerlendir_tefas(df_uni, simdi))
+
     if not sonuc:
         print("[radar] Degerlendirilecek sonuc yok, cikiliyor.")
         return
 
-    # 3) Supabase'e yaz + radar
+    # 4) Supabase'e yaz + radar
     try:
         from db import get_conn
         conn = get_conn()
