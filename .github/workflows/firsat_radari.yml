@@ -50,3 +50,18 @@ jobs:
           SMTP_HOST:  ${{ secrets.SMTP_HOST }}
           SMTP_PORT:  ${{ secrets.SMTP_PORT }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+
+      # v2.0.5.2: Keep-alive - Streamlit Cloud, 12 saat ziyaretsiz kalan
+      # uygulamayi uyutur. cron-job.org'un duz GET'i kenar katmanindaki
+      # auth yonlendirmesine (share.streamlit.io/-/auth) takilip uygulamaya
+      # ulasamiyor; curl -L ise yonlendirme zincirini cookie'lerle takip
+      # edip GERCEK uygulamaya ulasir. Radar zaten 15 dk'da bir kostugu
+      # icin ayri bir keep-alive isine gerek kalmaz.
+      - name: Uygulamayi uyandir (keep-alive)
+        if: always()
+        continue-on-error: true
+        run: |
+          curl -sL --max-redirs 10 -c /tmp/ka_cookies -b /tmp/ka_cookies \
+               -o /dev/null -w "keep-alive HTTP %{http_code}\n" \
+               --max-time 60 \
+               https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app/
