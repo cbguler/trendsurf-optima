@@ -417,7 +417,11 @@ def degerlendir_tefas(df_uni, simdi):
     bir kosu kesin duser; radar_alerts'in gun bazli dedupe'u sayesinde
     pencereye iki kosu dussa bile ayni alarm iki kez gitmez."""
     dk = simdi.hour * 60 + simdi.minute
-    if not ((20 * 60 + 40) <= dk <= (21 * 60 + 40)):
+    # v2.0.5.3a: Manuel test icin pencere disi zorlama - workflow'u elle
+    # tetiklerken RADAR_TEFAS_ZORLA=1 ortam degiskeni verilirse pencere
+    # kontrolu atlanir (normal cron kosularinda tanimsiz oldugundan etkisiz).
+    _zorla = os.environ.get("RADAR_TEFAS_ZORLA", "") == "1"
+    if not _zorla and not ((20 * 60 + 40) <= dk <= (21 * 60 + 40)):
         return {}
 
     out = {}

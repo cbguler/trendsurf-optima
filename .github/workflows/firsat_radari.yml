@@ -17,6 +17,11 @@ on:
   schedule:
     - cron: '*/20 * * * *'   # Yedek: 20 dk'da bir (GitHub best-effort)
   workflow_dispatch:
+    inputs:
+      tefas_zorla:
+        description: 'TEFAS degerlendirmesini pencere disinda da calistir (test)'
+        required: false
+        default: '0'
 
 concurrency:
   group: firsat-radari
@@ -50,6 +55,7 @@ jobs:
           SMTP_HOST:  ${{ secrets.SMTP_HOST }}
           SMTP_PORT:  ${{ secrets.SMTP_PORT }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          RADAR_TEFAS_ZORLA: ${{ github.event.inputs.tefas_zorla || '0' }}
 
       # v2.0.5.2: Keep-alive - Streamlit Cloud, 12 saat ziyaretsiz kalan
       # uygulamayi uyutur. cron-job.org'un duz GET'i kenar katmanindaki
