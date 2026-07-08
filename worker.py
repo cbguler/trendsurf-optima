@@ -850,6 +850,14 @@ def build():
         if r["Kategori"] != "BIST":
             continue
         _pb, _pe, _dy = _fundamentals.get(r["Ticker"], (None, None, None))
+        # v2.0.5.2: Fiyati olmayan (islem gormeyen) sembol notr varsayilanlarla
+        # (RSI=50, Ret1M=0, Vol=30) 45 puan aliyordu - "veri yok" durumu
+        # "vasat skor" gibi gorunuyordu. Islem gormeyen varligin skoru 0'dir.
+        if float(r.get("Son_Fiyat", 0) or 0) <= 0:
+            r.pop("_score_adj", None); r.pop("_dd_adj", None)
+            r["Optima_Skor"] = 0.0
+            r["PB"], r["PE"], r["DY"] = _pb, _pe, _dy
+            continue
         _base = _bist_optima_score(r["RSI"], r["Ret1M"], r["Vol"], True, _pb, _pe, _dy)
         _total_adj = r.pop("_score_adj", 0) + r.pop("_dd_adj", 0)
         r["Optima_Skor"] = max(0.0, min(100.0, round(_base + _total_adj, 1)))

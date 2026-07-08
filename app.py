@@ -3026,6 +3026,11 @@ elif page in CAT:
                                    vol=float(r.get("Vol",30) or 30)),axis=1)
 
     # Fiyatlılar üste, fiyatsızlar alta — skor sıralı
+    # v2.0.5.2: Islem gormeyen (fiyatsiz) varligin skoru HER kosulda 0 -
+    # notr varsayilanlar (RSI=50/Ret1M=0/Vol=30) 45 puan uretiyordu, "veri
+    # yok" durumu vasat skor gibi gorunuyordu. CSV eski olsa bile burada
+    # sifirlanir (worker.py'ye de ayni kural eklendi).
+    df_cat.loc[df_cat["Son_Fiyat"] <= 0, "Optima_Skor"] = 0.0
     df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
     df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
     df_cat = df_cat.drop(columns=["_fiyatli"])
