@@ -359,11 +359,13 @@ def _radar_maili_gonder(yeni_alarmlar, ad_map):
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
 
-        smtp_user = os.environ.get("SMTP_USER")
-        smtp_pass = os.environ.get("SMTP_PASS")
-        smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-        admin     = os.environ.get("ADMIN_EMAIL")
+        # v2.0.5.5: Secrets tanimli-ama-BOS olabiliyor (SMTP_PORT='' ->
+        # int('') patliyordu). 'or' zinciri bos metni de varsayilana dusurur.
+        smtp_user = os.environ.get("SMTP_USER") or None
+        smtp_pass = os.environ.get("SMTP_PASS") or None
+        smtp_host = os.environ.get("SMTP_HOST") or "smtp.gmail.com"
+        smtp_port = int(os.environ.get("SMTP_PORT") or "587")
+        admin     = os.environ.get("ADMIN_EMAIL") or None
         if not (smtp_user and smtp_pass and admin):
             print("[radar] SMTP/ADMIN_EMAIL secrets eksik, mail atlanadi. "
                   f"{len(yeni_alarmlar)} alarm sadece loglandi.")

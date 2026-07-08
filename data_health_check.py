@@ -77,11 +77,13 @@ def _uyari_maili_gonder(uyarilar: list):
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
 
-        smtp_user = os.environ.get("SMTP_USER")
-        smtp_pass = os.environ.get("SMTP_PASS")
-        smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-        admin_email = os.environ.get("ADMIN_EMAIL")
+        # v2.0.5.5: Secrets tanimli-ama-BOS olabiliyor (SMTP_PORT='' ->
+        # int('') patliyordu, mail sessizce basarisiz oluyordu).
+        smtp_user = os.environ.get("SMTP_USER") or None
+        smtp_pass = os.environ.get("SMTP_PASS") or None
+        smtp_host = os.environ.get("SMTP_HOST") or "smtp.gmail.com"
+        smtp_port = int(os.environ.get("SMTP_PORT") or "587")
+        admin_email = os.environ.get("ADMIN_EMAIL") or None
 
         if not (smtp_user and smtp_pass and admin_email):
             print("[health-check] SMTP/ADMIN_EMAIL secrets eksik, mail gonderilemedi "
