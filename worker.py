@@ -942,12 +942,17 @@ def build():
     }
     print(f"\n[4/4] {len(MADEN)} maden + {len(DOVIZ)} doviz (toplu download)...")
     maden_start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
+    # v2.0.4.x: kripto_end degiskeni kripto bolumu borsapy'ye tasinirken
+    # silinmisti ama iki kullanim (maden download + doviz cross-rate)
+    # gozden kacmisti -> gece worker'i NameError ile cokuyordu.
+    # Bitis tarihi = yarin (yfinance 'end' exclusive oldugundan bugunu kapsasin).
+    maden_end = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Maden toplu
     maden_syms = [yf_s for _, yf_s in MADEN]
     maden_map  = {yf_s: t for t, yf_s in MADEN}
     try:
-        raw_m = yf.download(maden_syms, start=maden_start, end=kripto_end,
+        raw_m = yf.download(maden_syms, start=maden_start, end=maden_end,
                             auto_adjust=True, progress=False, group_by="ticker")
     except:
         raw_m = pd.DataFrame()
@@ -1064,7 +1069,7 @@ def build():
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
         if yf_s in CROSS_PAIRS:
             # Cross rate ile hesapla
-            pr = get_cross_rate_hist(t, yf_s, maden_start, kripto_end)
+            pr = get_cross_rate_hist(t, yf_s, maden_start, maden_end)
             if len(pr) >= 2:
                 p   = round(float(pr.iloc[-1]), 6)
                 rsi = calc_rsi(pr)
