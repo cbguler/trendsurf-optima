@@ -684,6 +684,42 @@ def load_universe():
     df["Son_Fiyat"]=pd.to_numeric(df["Son_Fiyat"],errors="coerce").fillna(0)
     df["RSI"]=pd.to_numeric(df["RSI"],errors="coerce").fillna(50)
     df["Ret1M"]=pd.to_numeric(df["Ret1M"],errors="coerce").fillna(0)
+    # v2.0.5: Firsat Radari overlay - GitHub Actions'in gun ici tam-evren
+    # taramasi (firsat_radari.py) Supabase intraday_scores tablosuna yazar.
+    # 45 dk'dan taze kayit varsa Optima_Skor (tum kategoriler) ve BIST icin
+    # Son_Fiyat/RSI/Ret1M CSV'nin (gece verisi) uzerine bindirilir. Boylece
+    # 772 hissenin TAMAMI en fazla ~30 dk tazelikte degerlendirilmis olur -
+    # "firsat takip etmedigim hissedeyse kacirmayayim" ilkesi. DOVIZ/MADEN/
+    # KRIPTO fiyatlari asagidaki 5-10 dk'lik canli katman tarafindan zaten
+    # daha taze yazilacagi icin burada sadece skorlari alinir.
+    try:
+        from db import get_conn
+        _rd_rows = get_conn().execute(
+            "SELECT ticker, kategori, skor, fiyat, rsi, ret1m FROM intraday_scores "
+            "WHERE updated_at > now() - interval '45 minutes'").fetchall()
+        if _rd_rows:
+            def _rv(r, k, i):
+                return r[k] if isinstance(r, dict) else r[i]
+            _rd_map = {}
+            for _r in _rd_rows:
+                _rd_map[str(_rv(_r, "ticker", 0))] = {
+                    "kategori": _rv(_r, "kategori", 1),
+                    "skor":  _rv(_r, "skor", 2),  "fiyat": _rv(_r, "fiyat", 3),
+                    "rsi":   _rv(_r, "rsi", 4),   "ret1m": _rv(_r, "ret1m", 5)}
+            _mask_rd = df["Ticker"].astype(str).isin(_rd_map.keys())
+            if _mask_rd.any():
+                if "Optima_Skor" not in df.columns:
+                    df["Optima_Skor"] = pd.NA
+                df.loc[_mask_rd, "Optima_Skor"] = df.loc[_mask_rd, "Ticker"].astype(str).map(
+                    lambda t: _rd_map[t]["skor"])
+                _mask_bist = _mask_rd & (df["Kategori"] == "BIST")
+                if _mask_bist.any():
+                    for _col, _key in (("Son_Fiyat","fiyat"),("RSI","rsi"),("Ret1M","ret1m")):
+                        df.loc[_mask_bist, _col] = df.loc[_mask_bist, "Ticker"].astype(str).map(
+                            lambda t, _k=_key: _rd_map[t][_k])
+    except Exception as _rd_err:
+        # Tablo henuz yoksa / baglanti sorunuysa sessizce CSV ile devam
+        print(f"[radar-overlay] atlandi: {_rd_err}")
     # v1.6: USD bazli emtialari evrenden cikar (Brent/WTI/Dogalgaz/tarim emtialari)
     df = _ld_filter_universe(df)
     # v1.6.1: Mevcut MADEN adlarini netlestir (ALTIN_TRY -> "Gram Altin")

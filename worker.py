@@ -853,6 +853,12 @@ def build():
         _base = _bist_optima_score(r["RSI"], r["Ret1M"], r["Vol"], True, _pb, _pe, _dy)
         _total_adj = r.pop("_score_adj", 0) + r.pop("_dd_adj", 0)
         r["Optima_Skor"] = max(0.0, min(100.0, round(_base + _total_adj, 1)))
+        # v2.0.5: Temel analiz bilesenlerini CSV'ye de yaz - Firsat Radari
+        # (firsat_radari.py) gunduz taramalarinda yfinance'i 611 kez daha
+        # yormadan ayni temel veriyle worker ile BIREBIR ayni skoru uretsin.
+        r["PB"] = _pb
+        r["PE"] = _pe
+        r["DY"] = _dy
 
     # ── 3. Kripto ─────────────────────────────────────────────
     KRIPTO_ADLAR = {

@@ -1,0 +1,52 @@
+name: Firsat Radari
+
+# v2.0.5 - Gun ici tam-evren taramasi + firsat alarmi
+#
+# - DOVIZ/MADEN/KRIPTO: her kosuda (7/24)
+# - BIST (772 hisse tam tarama): script kendi icinde seans kontrolu yapar
+#   (hafta ici TRT 10:00-18:30), seans disinda BIST kismini atlar.
+# - Sonuclar git'e DEGIL Supabase'e (intraday_scores) yazilir -
+#   repo commit gurultusu olusmaz, uygulama tek sorguyla okur.
+#
+# GitHub cron'un bilinen gecikme/atlama sorunu nedeniyle (bkz. update_data.yml
+# gecmisi) asil tetikleyici cron-job.org olacak (workflow_dispatch + PAT,
+# mevcut "Veri Guncelle" tetikleyicisiyle ayni yontem). Asagidaki schedule
+# yedek olarak durur.
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'   # Yedek: 20 dk'da bir (GitHub best-effort)
+  workflow_dispatch:
+
+concurrency:
+  group: firsat-radari
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas yfinance borsapy psycopg2-binary streamlit requests --quiet
+
+      - name: Firsat Radari calistir
+        run: python firsat_radari.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SMTP_USER:  ${{ secrets.SMTP_USER }}
+          SMTP_PASS:  ${{ secrets.SMTP_PASS }}
+          SMTP_HOST:  ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:  ${{ secrets.SMTP_PORT }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
