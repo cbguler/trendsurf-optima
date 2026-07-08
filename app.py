@@ -2264,11 +2264,10 @@ if page=="Ana Sayfa":
             continue
 
         for _, row in aktif:
-            # v2.0.4.x+2: Bu noktada sadece SECILMIS kucuk kume (max_assets
-            # kadar) var - tum havuz degil. Canli skor (hacim/DD dahil)
-            # burada guvenle hesaplanabilir, tablo artik Detay ile ayni
-            # (canli) sayiyi gosterir.
-            skor = live_optima_score(row)
+            # v2.0.5.1: Skorun tek kaynagi Firsat Radari destekli Optima_Skor
+            # (load_universe overlay) - tablo/Top5/Detay ile birebir ayni.
+            _rs = row.get("Optima_Skor")
+            skor = float(_rs) if (_rs is not None and _rs == _rs) else live_optima_score(row)
             rsi_v = float(row.get("RSI",50))
             trend_v = "YUKSELIS" if float(row.get("Ret1M",0)) >= 0 else "DUSUS"
             sig_lbl, _ = get_signal(skor, rsi_v, trend_v)
@@ -2399,10 +2398,12 @@ if page=="Ana Sayfa":
                     # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
                     # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
                     # Canli hacim okumasi asagida sadece bilgi notu olarak kalir.
-                    # v2.0.4.x+2: Tablo artik canli hesapliyor (bkz. live_optima_score),
-                    # bu yuzden Detay da her zaman canli d['score']'u gosterir - ikisi
-                    # ayni enrich() mantigini kullandigi icin birebir tutarli.
-                    disp_score_ana = d["score"]
+                    # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (load_universe
+                    # overlay'i sel_row'a yansimis durumda). Detay basligi da ayni
+                    # sayiyi gosterir -> tablo = detay birebir esit. Radar yoksa
+                    # (tablo bos / 45dk'dan eski) canli enrich() skoruna duser.
+                    _rd_ana = sel_row_ana.get("Optima_Skor")
+                    disp_score_ana = float(_rd_ana) if (_rd_ana is not None and _rd_ana == _rd_ana) else d["score"]
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
@@ -2757,10 +2758,10 @@ elif page=="Portföyüm":
             def _sf(v,d):
                 try: fv=float(v); return d if _pd.isna(fv) else fv
                 except: return d
-            # v2.0.4.x+2: Portfoy dogasi geregi kucuk (birkac varlik) -
-            # canli skoru (hacim/DD dahil) her satir icin guvenle hesapla,
-            # boylece Detay ile ayni sayiyi gosterir.
-            _skor = live_optima_score(_row)
+            # v2.0.5.1: Skorun tek kaynagi Firsat Radari destekli Optima_Skor
+            # (load_universe overlay) - tablo/Top5/Detay ile birebir ayni.
+            _rs_pf = _row.get("Optima_Skor")
+            _skor = float(_rs_pf) if (_rs_pf is not None and not _pd.isna(_rs_pf)) else live_optima_score(_row)
         else:
             _skor = 0.0
         _toplam = _adet * _guncel
@@ -2864,9 +2865,9 @@ elif page=="Portföyüm":
             with st.spinner("Yükleniyor..."):
                 _d = enrich(_sr, _pm2[_pl])
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
-                # v2.0.4.x+2: Tablo artik canli hesapliyor, Detay da her zaman
-                # canli _d['score']'u gosterir - ikisi ayni mantik (enrich()).
-                disp_score_pf = _d["score"]
+                # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
+                _rd_pf = _sr.get("Optima_Skor")
+                disp_score_pf = float(_rd_pf) if (_rd_pf is not None and _rd_pf == _rd_pf) else _d["score"]
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
@@ -3046,12 +3047,12 @@ elif page in CAT:
     # ── TOP 5 ────────────────────────────────────────────────
     st.divider()
     st.subheader("En Yüksek Optima Skoru — Top 5")
-    # v2.0.4.x+3: Aday havuzunu biraz genis tut (precomputed skora gore ilk 15)
-    # - canli skor gece skorundan farkli cikabilir, gercek ilk 5 farkli
-    # ticker'lar olabilir. 15 satir hala ucuz (get_hist 5dk onbellekli).
-    top_candidates = degerli.nlargest(15, "Optima_Skor").copy()
-    top_candidates["Optima_Skor"] = top_candidates.apply(live_optima_score, axis=1)
-    top5 = top_candidates.nlargest(5, "Optima_Skor")
+    # v2.0.5.1: Top 5 dogrudan radar destekli Optima_Skor'dan (load_universe
+    # overlay). Onceki "ilk 15 adayi canli hesapla" yontemi kaldirildi -
+    # Firsat Radari zaten TUM evreni ayni formulle taradigindan gereksiz,
+    # ayrica buyuk tabloyla ayni kaynagi kullanmak siralama tutarliligini
+    # garanti eder.
+    top5 = degerli.nlargest(5, "Optima_Skor")
     # Top5 dataframe olarak göster — tıklanabilir
     top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
     top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
@@ -3072,44 +3073,24 @@ elif page in CAT:
                   df_cat["Ad"].str.contains(srch.strip(),case=False,na=False))
             df_cat=df_cat[mask]
 
-    # Sayfalama
-    page_size = 50
-    pg_key = f"tbl_pg_{page}"
-    if pg_key not in st.session_state:
-        st.session_state[pg_key] = 0
-    cur_pg  = st.session_state[pg_key]
-    df_page = df_cat.iloc[cur_pg*page_size:(cur_pg+1)*page_size]
+    # v2.0.5.1: Sayfalama KALDIRILDI - 772 varligin tamami tek listede.
+    # st.dataframe satirlari sanallastirarak cizdigi icin 772 satir hizli
+    # render edilir (kaydirma ile gezilir). Skor kaynagi artik Firsat
+    # Radari (load_universe'te overlay, 15 dk'da bir tam-evren, worker
+    # formulunun birebir aynisi) oldugu icin sayfa-ici canli hesap
+    # (live_optima_score, 50 satir) da kaldirildi - hem 772 satirda
+    # yapilamazdi hem de kuresel siralamayi bozuyordu (skor sayfa icinde
+    # azalirken sonraki sayfada artiyordu). Tek kaynak = tutarli siralama.
     sel_now = st.session_state.get(f"sel_{page}", "")
 
-    # Tıklanabilir tablo
-    df_page_show = df_page[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    # v2.0.4.x+2: Sadece bu SAYFADAKI (max 50) satir icin canli skor -
-    # tum evren degil, boylece performans korunur ama gorunen sayi
-    # Detay ile ayni (canli) olur.
-    df_page_show["Optima_Skor"] = df_page.apply(live_optima_score, axis=1)
-    # v2.0.4.x+3: Canli skor gece siralamasindan sapabilir - sayfa icinde
-    # yeniden sirala (sayfalar arasi sinir hala gece skoruna gore, ama
-    # bu sayfanin kendi ici artik dogru sirali).
-    df_page_show = df_page_show.sort_values("Optima_Skor", ascending=False)
+    df_page_show = df_cat[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
     df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
     df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
-    new_sel = clickable_table(df_page_show, key=f"cat_{page}_{cur_pg}", sel_ticker=sel_now)
+    st.caption(f"{len(df_cat)} varlik - Optima Skoruna gore sirali")
+    new_sel = clickable_table(df_page_show, key=f"cat_{page}_full", sel_ticker=sel_now)
     if new_sel and new_sel != sel_now:
         st.session_state[f"sel_{page}"] = new_sel
         st.rerun()
-
-    # Sayfa navigasyonu
-    total_pages = max(1, -(-len(df_cat) // page_size))
-    if total_pages > 1:
-        nav1, nav2, nav3 = st.columns([1,2,1])
-        with nav1:
-            if cur_pg > 0 and st.button("Onceki", key=f"pg_prev_{page}"):
-                st.session_state[pg_key] = cur_pg - 1; st.rerun()
-        with nav2:
-            st.caption(f"Sayfa {cur_pg+1} / {total_pages}  ({len(df_cat)} varlik)")
-        with nav3:
-            if cur_pg < total_pages-1 and st.button("Sonraki", key=f"pg_next_{page}"):
-                st.session_state[pg_key] = cur_pg + 1; st.rerun()
 
     # ── DETAY ANALİZ ─────────────────────────────────────────
     sel=st.session_state.get(f"sel_{page}")
@@ -3133,9 +3114,9 @@ elif page in CAT:
     with st.spinner("Analiz yükleniyor..."):
         d=enrich(sel_row,period_val)
         # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
-        # v2.0.4.x+2: Tablo artik canli hesapliyor, Detay da her zaman
-        # canli d['score']'u gosterir - ikisi ayni mantik (enrich()).
-        disp_score_cat = d["score"]
+        # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
+        _rd_cat = sel_row.get("Optima_Skor")
+        disp_score_cat = float(_rd_cat) if (_rd_cat is not None and _rd_cat == _rd_cat) else d["score"]
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
