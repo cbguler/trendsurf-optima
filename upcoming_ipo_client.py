@@ -543,9 +543,21 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
             # adini gosterirdi - orn. EKIM'in bildirimi VAKIF YATIRIM üzerinden
             # yapiliyor ama kullaniciya "EKIM" gostermek daha anlamli).
             display_company = d.get("companyTitle", "")
-            name_match = re.search(r'^([A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü\s\.\'&,-]*?[Aa]\.?[Şş]\.?)\b', summary)
+            # v2.0.5.7: Sonlandirici olarak "A.S." yaninda "Anonim Sirketi" de
+            # kabul edilir. Onceki regex sadece A.S. aradigi icin, unvani
+            # "... Anonim Sirketi" ile biten sirketlerde (orn. Saat ve Saat)
+            # ilk A.S.'yi ta duyuru metnindeki "Borsa Istanbul A.S"de bulup
+            # aradaki her seyi isim saniyordu.
+            name_match = re.search(
+                r'^([A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü\s\.\'&,-]*?'
+                r'(?:[Aa]\.?[Şş]\.?|Anonim Şirket(?:i)?|[Aa]\.?[Oo]\.?))\b', summary)
             if name_match:
                 candidate = name_match.group(1).strip()
+                # v2.0.5.7: Duyuru kaliplarindan tasan kuyruklari kes
+                # (orn. "... A.S. Paylarinin Halka Arzina Iliskin ...")
+                candidate = re.split(
+                    r'\s+(?:Paylar[ıi]n[ıi]n|Pay\s+Halka|Halka\s+Arz[ıi]na)\b',
+                    candidate)[0].strip()
                 # Cok kisa veya anlamsiz eslesmeleri (orn. sadece "A.Ş.") ele
                 if len(candidate) > 8:
                     display_company = candidate
