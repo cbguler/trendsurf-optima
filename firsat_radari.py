@@ -278,13 +278,13 @@ def tara_fx_maden_kripto(df_uni):
 
 def _onceki_skorlari_al(conn):
     try:
-        rows = conn.execute("SELECT ticker, skor FROM intraday_scores").fetchall()
+        rows = conn.execute("SELECT ticker, skor, updated_at FROM intraday_scores").fetchall()
         onceki = {}
         for r in rows:
             if isinstance(r, dict):
-                onceki[r["ticker"]] = float(r["skor"] or 0)
+                onceki[r["ticker"]] = (float(r["skor"] or 0), r.get("updated_at"))
             else:
-                onceki[r[0]] = float(r[1] or 0)
+                onceki[r[0]] = (float(r[1] or 0), r[2] if len(r) > 2 else None)
         return onceki
     except Exception as e:
         print(f"[radar] onceki skorlar okunamadi (ilk kosu olabilir): {e}")
@@ -316,15 +316,43 @@ def _upsert(conn, sonuc):
     print(f"[radar] Supabase intraday_scores: {n} satir guncellendi.")
 
 
+SICRAMA_TAZELIK_SAAT = 6.0  # BIST'te sicrama kiyasi icin onceki olcumun azami yasi
+
+
 def _radar_tetikleyicileri(sonuc, onceki, ad_map):
-    """Esik kesisi ve sicrama alarmlari."""
+    """Esik kesisi ve sicrama alarmlari.
+
+    v2.0.5.9: BIST'te 'sicrama' alarmi yalnizca onceki olcum TAZE ise
+    (SICRAMA_TAZELIK_SAAT'ten yeni) uretilir. Sabahin ilk seans taramasi
+    dun aksamki degerle kiyaslandiginda gece boyu biriken hareketler ve
+    metodoloji degisiklikleri (orn. 09.07 sabahi temel analiz bileseninin
+    radara ilk kez dahil olmasi) 37 varlikli alarm yagmuru uretti - bunlar
+    gercek 'gun ici sicrama' sinyali degildir. 'Esik' alarmi bu korumadan
+    ETKILENMEZ (gercekten 75 ustune cikan varlik sabah da bildirilir).
+    DOVIZ/MADEN/KRIPTO 7/24 tarandigi icin dogal olarak hep taze; TEFAS
+    gunde bir degerlendirilir, gun-asiri kiyas onun dogasidir - koruma
+    sadece BIST'e uygulanir."""
+    simdi = _trt_simdi()
     tetik = []
     for t, v in sonuc.items():
-        eski = onceki.get(t)
+        kayit = onceki.get(t)
+        eski = kayit[0] if kayit else None
+        eski_ts = kayit[1] if kayit else None
         yeni = v["skor"]
         if yeni >= RADAR_ESIK and (eski is None or eski < RADAR_ESIK):
             tetik.append((t, "esik", yeni, eski, v))
         elif eski is not None and (yeni - eski) >= RADAR_SICRAMA:
+            if v.get("kategori") == "BIST" and eski_ts is not None:
+                try:
+                    ts = eski_ts
+                    if ts.tzinfo is None:
+                        from datetime import timezone as _tz
+                        ts = ts.replace(tzinfo=_tz.utc)
+                    gecen_saat = (simdi - ts.astimezone(simdi.tzinfo)).total_seconds() / 3600
+                    if gecen_saat > SICRAMA_TAZELIK_SAAT:
+                        continue  # bayat kiyas - sicrama alarmi uretme
+                except Exception:
+                    pass  # zaman kiyasi yapilamadiysa alarmi engelleme
             tetik.append((t, "sicrama", yeni, eski, v))
     return tetik
 
