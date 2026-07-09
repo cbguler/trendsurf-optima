@@ -46,11 +46,17 @@ STATE_PATH = os.path.join(BASE_DIR, "health_state.json")
 TRT = timezone(timedelta(hours=3))
 
 KATEGORI_AYARLARI = {
-    "BIST":   {"esik_saat": 0.5, "sadece_seans": True},
-    "DOVIZ":  {"esik_saat": 0.5, "sadece_seans": False},
-    "KRIPTO": {"esik_saat": 0.5, "sadece_seans": False},
-    "TEFAS":  {"esik_saat": 30,  "sadece_seans": False},
-    "MADEN":  {"esik_saat": 30,  "sadece_seans": False},
+    # v2.0.5.6: Firsat Radari mimarisi sonrasi kaynak ayrimi.
+    # DOVIZ/KRIPTO/MADEN gun ici tazeligi artik CSV'de DEGIL, radar'in
+    # 15 dk'da bir yazdigi Supabase intraday_scores tablosunda yasiyor -
+    # CSV'yi izlemek yanlis alarm uretiyordu (CSV gece worker'inda guncellenir).
+    # BIST de seans icinde radar'dan izlenir. TEFAS gunde 1 NAV acikladigi
+    # icin CSV takibi dogru olmaya devam ediyor.
+    "BIST":   {"esik_saat": 1.0, "sadece_seans": True,  "kaynak": "supabase"},
+    "DOVIZ":  {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
+    "KRIPTO": {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
+    "MADEN":  {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
+    "TEFAS":  {"esik_saat": 30,  "sadece_seans": False, "kaynak": "csv"},
 }
 
 
@@ -59,6 +65,28 @@ def _bist_seans_acik(simdi: datetime) -> bool:
         return False
     return simdi.time() >= datetime.strptime("10:00", "%H:%M").time() and \
            simdi.time() <= datetime.strptime("18:00", "%H:%M").time()
+
+
+def _supabase_tazelik():
+    """v2.0.5.6: intraday_scores'tan kategori bazinda en taze updated_at.
+    Radar her 15 dk'da bir yazar; bir kategorinin son yazimi esigi asarsa
+    radar zinciri (cron-job -> Actions -> script -> Supabase) kopmus demektir.
+    Donus: {kategori: datetime} veya None (Supabase'e ulasilamadi)."""
+    try:
+        from db import get_conn
+        rows = get_conn().execute(
+            "SELECT kategori, MAX(updated_at) AS son FROM intraday_scores "
+            "GROUP BY kategori").fetchall()
+        out = {}
+        for r in rows:
+            k = r["kategori"] if isinstance(r, dict) else r[0]
+            v = r["son"] if isinstance(r, dict) else r[1]
+            if k is not None and v is not None:
+                out[str(k)] = v
+        return out
+    except Exception as e:
+        print(f"[health-check] Supabase intraday_scores okunamadi: {e}")
+        return None
 
 
 def _imza_hesapla(df: pd.DataFrame, kategori: str):
@@ -139,12 +167,51 @@ def main():
             state = {}
 
     uyarilar = []
+    tazelik = _supabase_tazelik()
 
     for kategori, ayar in KATEGORI_AYARLARI.items():
         if ayar["sadece_seans"] and not _bist_seans_acik(simdi):
             print(f"[health-check] {kategori}: seans disi, kontrol atlandi.")
             continue
 
+        # ── v2.0.5.6: Supabase kaynakli kategoriler (radar tazeligi) ──
+        if ayar.get("kaynak") == "supabase":
+            if tazelik is None:
+                # Supabase'in kendisine ulasilamamasi ayri (tek) bir uyaridir
+                if not any("Supabase" in u for u in uyarilar):
+                    uyarilar.append("<b>Supabase</b>: intraday_scores tablosuna "
+                                    "ulasilamadi - radar tazeligi dogrulanamiyor")
+                continue
+            son = tazelik.get(kategori)
+            if son is None:
+                # BIST seans disi radar taramaz; kayit hic yoksa ilk kurulumdur
+                print(f"[health-check] {kategori}: intraday_scores'ta kayit yok "
+                      f"(radar bu kategoriyi henuz yazmamis olabilir).")
+                continue
+            try:
+                if son.tzinfo is None:
+                    from datetime import timezone as _tz
+                    son = son.replace(tzinfo=_tz.utc)
+                gecen_saat = (simdi - son.astimezone(TRT)).total_seconds() / 3600
+            except Exception as e:
+                print(f"[health-check] {kategori}: zaman kiyasi hatasi: {e}")
+                continue
+            # BIST icin seans baslangic toleransi: radar ilk taramasini
+            # yapana kadar (10:00-11:00) dunku son yazim normaldir.
+            if kategori == "BIST" and simdi.time() < datetime.strptime("11:00", "%H:%M").time():
+                print(f"[health-check] {kategori}: seans acilis toleransi, atlandi.")
+                continue
+            if gecen_saat > ayar["esik_saat"]:
+                uyarilar.append(
+                    f"<b>{kategori}</b>: radar {gecen_saat:.1f} saattir Supabase'e "
+                    f"yazmiyor (eşik: {ayar['esik_saat']:.1f} saat) - "
+                    f"cron-job/Actions zincirini kontrol edin")
+                print(f"[health-check] {kategori}: UYARI - radar {gecen_saat:.1f}sa yazmiyor")
+            else:
+                print(f"[health-check] {kategori}: OK (radar son yazim {gecen_saat:.2f}sa once)")
+            continue
+
+        # ── CSV kaynakli kategoriler (TEFAS - gece/aksam guncellenir) ──
         imza, adet = _imza_hesapla(df, kategori)
         if imza is None:
             uyarilar.append(f"<b>{kategori}</b>: kategori CSV'de hiç bulunamadı (0 satır)")

@@ -39,11 +39,12 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          pip install pandas --quiet
+          pip install pandas psycopg2-binary --quiet
 
       - name: data_health_check.py calistir
         run: python data_health_check.py
         env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
