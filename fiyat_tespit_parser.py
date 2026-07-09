@@ -82,9 +82,15 @@ _NUM = r"([\d\.,]+)"
 # _iskonto_bul/_tip_*_dene fonksiyonları) - bu, OCR'ın "Değer"i "Deger" olarak
 # okuduğu (Türkçe karakteri kaybettiği) durumlarda da eşleşmeyi sağlar.
 _TIP_A_ETIKETLER = [
+    # v2.0.5.8 (TERA): "Halka Arz Iskontosu Sonrasi Pay Degeri" - en spesifik
+    # etiket, ilk sirada denenir. "Iskonto(su)?" toleransi: TERA "Iskontosu"
+    # yaziyor, onceki desen sadece "Iskonto" bekledigi icin eslesmiyordu.
+    # "Pay Degeri" capasi sarttir - ayni tabloda hemen ustte
+    # "Iskontosu Sonrasi OZKAYNAK Degeri 28.000.000.000" satiri var,
+    # gevsek bir desen milyarlik ozkaynagi fiyat sanirdi.
+    r"Iskonto(?:su)?\s+Sonrasi\s+Pay\s+Degeri",
     r"Halka Arz Pay Basina Deger",
     r"Iskonto Sonrasi\s+1\s*TL\s*Nominal Pay Degeri",
-    r"Iskonto Sonrasi\s+Pay\s+Degeri",
     r"Iskonto Sonrasi.*?Nominal Pay Degeri",
 ]
 
@@ -128,8 +134,19 @@ def _tip_a_dene(metin: str) -> Optional[FiyatTespitSonucu]:
         # etiketten sonra gelen ilk sayısal değeri yakala (aynı satır veya
         # tablo hücresi olabileceğinden esnek boşluk/karakter toleransı)
         pat = etiket + r"[^\d\-]{0,40}" + _NUM
-        m = re.search(pat, metin_n, re.IGNORECASE | re.DOTALL)
-        if m:
+        for m in re.finditer(pat, metin_n, re.IGNORECASE | re.DOTALL):
+            # v2.0.5.8: Iskonto-oncesi deger korumasi (Tip D'deki korumanin
+            # aynisi). TERA ornegi: "...pay basina degeri 87,54 TL olarak
+            # hesaplanmistir. %20 halka arz iskontosu sonrasi ... 70,00 TL..."
+            # - "Halka Arz Pay Basina Deger" etiketi burada iskonto ONCESI
+            # 87,54'u yakalar. Eslesmeden hemen sonra "iskontosu sonras"
+            # geciyorsa bu ara degerdir, atlanir. Zaten iskonto-sonrasi olan
+            # etiketlerde (adi "Iskonto(su) Sonrasi..." ile baslayanlar) bu
+            # kosul dogal olarak tetiklenmez.
+            if not etiket.lower().startswith(r"iskonto"):
+                sonrasi = metin_n[m.end(): m.end() + 120]
+                if re.search(r"iskontosu\s+sonras", sonrasi, re.IGNORECASE):
+                    continue
             deger = _tr_sayi_to_float(m.group(1))
             if deger is not None:
                 return FiyatTespitSonucu(
@@ -195,6 +212,12 @@ def _tip_c_dene(metin: str) -> Optional[FiyatTespitSonucu]:
 # sonraki (80 karaktere kadar) ilk sayı + "TL olarak" kalıbını arıyoruz.
 _TIP_D_PATTERNS = [
     r"halka\s+arz[^\d]{0,60}?(?:pay|hisse)[^\d]{0,40}" + _NUM + r"\s*TL\s+olarak",
+    # v2.0.5.8 (TERA): "%20 halka arz iskontosu sonrasi ve pay basina deger
+    # ise virgulden sonra ikinci basamaga yuvarlanarak 70,00 TL olarak
+    # hesaplanmistir" - iskonto SONRASI oldugu cumlede acikca yazdigi icin
+    # ara-deger korumasi gerektirmez; pencere genis tutuldu (aradaki
+    # "virgulden sonra ikinci basamaga yuvarlanarak" ifadesi uzun).
+    r"halka\s+arz\s+iskontosu\s+sonras[^\d]{0,110}?" + _NUM + r"\s*TL\s+olarak",
 ]
 
 

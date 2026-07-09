@@ -325,10 +325,20 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
 def _disclosure_fiyat_tespit_sonucunu_getir(disclosure_index, cache: dict) -> dict:
     """Tek bir bildirim icin (cache'te yoksa) PDF'i indirip fiyat/iskonto
     cikarir; cache'te varsa dogrudan onu doner. cache SURESIZ gecerlidir -
-    yayinlanmis bir Fiyat Tespit Raporu'nun icerigi degismez."""
+    yayinlanmis bir Fiyat Tespit Raporu'nun icerigi degismez.
+
+    v2.0.5.8 istisnasi: cache'teki sonucun arz_fiyati BOS ise yeniden
+    denenir. Boylece parser'a eklenen yeni desenler (orn. TERA'nin Tip
+    'Iskontosu Sonrasi Pay Degeri' etiketi) eski null sonuclara da geriye
+    donuk uygulanir - onceden null bir kez yazildi mi sonsuza dek donuk
+    kaliyordu. Maliyet sinirli: null satir sayisi az ve her kosuda zaten
+    FIYAT_TESPIT_MAX_YENI_ISLEME siniri gecerli."""
     key = str(disclosure_index)
-    if key in cache:
+    if key in cache and cache[key].get("arz_fiyati") is not None:
         return cache[key]
+    if key in cache:
+        print(f"[upcoming-ipo] {key}: cache'te arz_fiyati bos - "
+              f"guncel parser ile yeniden deneniyor", flush=True)
 
     sonuc = {"arz_fiyati": None, "iskonto_orani": None, "tip": None,
               "graham_degeri": None, "carpan_bazli_deger": None}
@@ -337,6 +347,14 @@ def _disclosure_fiyat_tespit_sonucunu_getir(disclosure_index, cache: dict) -> di
         pdf_bytes = _download_pdf_bytes(obj_id)
         if pdf_bytes:
             sonuc = _extract_fiyat_ve_iskonto(pdf_bytes)
+
+    # v2.0.5.8: Yeniden denemede eski sonuctaki dolu alanlari (orn. iskonto)
+    # yeni sonuc bosaltmasin - alan bazinda birlestir.
+    if key in cache:
+        eski = cache[key]
+        for alan in sonuc:
+            if sonuc[alan] is None and eski.get(alan) is not None:
+                sonuc[alan] = eski[alan]
 
     cache[key] = sonuc
     return sonuc
