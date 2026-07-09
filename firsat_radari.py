@@ -72,6 +72,13 @@ warnings.filterwarnings("ignore")
 CSV_PATH      = "optimized_universe.csv"
 RADAR_ESIK    = float(os.environ.get("RADAR_ESIK", "75"))
 RADAR_SICRAMA = float(os.environ.get("RADAR_SICRAMA", "10"))
+# v2.0.6.2: Sicrama alarmi ANLAMLILIK TABANI. Basamakli skor formulunde
+# (RSI/momentum bantlari + hacim isareti) kucuk bir fiyat hareketi birkac
+# bandi ayni anda atlatip +10 uretebilir - 14->24 gibi dusuk skorlar
+# arasindaki sicramalar firsat degil, bant gecisi gurultusudur. Sicrama
+# alarmi yalnizca YENI skor bu tabanin uzerindeyse gonderilir (KRDMB
+# 14->24 elenir, AYGAZ 49->63 gecer). Esik alarmi (75+) etkilenmez.
+RADAR_SICRAMA_TABAN = float(os.environ.get("RADAR_SICRAMA_TABAN", "55"))
 
 
 # ─── Zaman / seans yardimcilari ──────────────────────────────
@@ -353,7 +360,8 @@ def _radar_tetikleyicileri(sonuc, onceki, ad_map):
         yeni = v["skor"]
         if yeni >= RADAR_ESIK and (eski is None or eski < RADAR_ESIK):
             tetik.append((t, "esik", yeni, eski, v))
-        elif eski is not None and (yeni - eski) >= RADAR_SICRAMA:
+        elif (eski is not None and (yeni - eski) >= RADAR_SICRAMA
+              and yeni >= RADAR_SICRAMA_TABAN):
             if v.get("kategori") == "BIST" and eski_ts is not None:
                 try:
                     ts = eski_ts
