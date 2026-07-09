@@ -93,6 +93,170 @@ def _tek_sayi_bul(metin: str, etiket_pattern: str, pencere: int = 60) -> Optiona
 _DONEM_ETIKETLERI = ["2023", "2024", "2025", "2026T"]
 
 
+# ── v2.0.6: FORMAT-2 - tam finansal tablolu raporlar (TERA tarzi) ─────────────
+# Bazi raporlarda (orn. Tera Yatirim / SA-RA) ozet kutusu HIC yok; bunun
+# yerine tam Bilanço + Gelir Tablosu (cok sutunlu, donem basliklariyla) ve
+# FD/FAVOK carpan tablolari var. Format-2 SADECE ozet-kutusu yontemi hicbir
+# sonuc uretemediginde denenir - mevcut davranisi degistirmez.
+#
+# Guvenlik ilkesi: sutun sayisi ile tablo tarih basligi BIREBIR hizalanmadan
+# hicbir rakam kullanilmaz - hizalama tutmuyorsa None doner (yanlis finansal
+# rakam basmak, bos birakmaktan cok daha kotudur).
+
+_F2_TR_MAP = str.maketrans({
+    "ş": "s", "Ş": "S", "İ": "I", "ı": "i",
+    "ğ": "g", "Ğ": "G", "ö": "o", "Ö": "O", "ü": "u", "Ü": "U",
+    "ç": "c", "Ç": "C",
+    # Sapkali harfler (orn. "Donem KÂRI/Zarari") - v2.0.6
+    "â": "a", "Â": "A", "î": "i", "Î": "I", "û": "u", "Û": "U",
+})
+
+_F2_TARIH = r"\d{2}\.\d{2}\.\d{4}"
+
+
+def _f2_tarih_dizileri(norm: str) -> list:
+    """Metindeki 'tablo tarih basligi' dizilerini bulur: art arda gelen
+    >=3 tarih tokeni. Donus: [(baslangic_pozisyonu, [tarih, ...]), ...]"""
+    diziler = []
+    for m in re.finditer(r"(?:%s[\s|]{0,6}){3,}" % _F2_TARIH, norm):
+        tarihler = re.findall(_F2_TARIH, m.group(0))
+        diziler.append((m.start(), tarihler))
+    return diziler
+
+
+def _f2_satir_sayilari(norm: str, pos: int, pencere: int = 300, adet: int = 8) -> list:
+    """pos'tan (etiket sonu) itibaren tablo satiri sayilarini toplar;
+    sayi olmayan ilk token'da durur (dipnot sizmasini engeller)."""
+    kalan = norm[pos: pos + pencere]
+    sonuc = []
+    for tok in kalan.split():
+        if len(sonuc) >= adet:
+            break
+        if re.fullmatch(_SAYI, tok):
+            v = _tr_sayi_to_float(tok)
+            if v is not None:
+                sonuc.append(v)
+                continue
+        break
+    return sonuc
+
+
+def _f2_ltm_net_kar(norm: str) -> Optional[float]:
+    """Gelir tablosundaki 'Donem Kari/Zarari' satirindan LTM (son 12 ay)
+    net kar hesaplar: LTM = SonTamYil - GecenYilAraDonem + SonAraDonem.
+    Satirin sayilari, ait oldugu tablonun tarih basligiyla BIREBIR ayni
+    adette olmali ve baslikta [31.12.(Y-1), ara(Y-1), ara(Y)] uclusu
+    bulunmali - aksi halde None (tahmin yok)."""
+    tarih_dizileri = _f2_tarih_dizileri(norm)
+    if not tarih_dizileri:
+        return None
+
+    for m in re.finditer(r"Donem(?:\s+Net)?\s+Kari\s*/\s*Zarari", norm, re.IGNORECASE):
+        sayilar = _f2_satir_sayilari(norm, m.end())
+        if len(sayilar) < 4:
+            continue
+        # Bu satirdan ONCEKI en yakin tarih basligi bu tablonun basligidir
+        onceki = [d for d in tarih_dizileri if d[0] < m.start()]
+        if not onceki:
+            continue
+        tarihler = onceki[-1][1]
+        if len(tarihler) != len(sayilar):
+            continue  # hizalama tutmuyor - bu satiri kullanma
+
+        # Tarihleri (gun, ay, yil) olarak coz
+        try:
+            parsed = [tuple(int(x) for x in t.split(".")) for t in tarihler]
+        except Exception:
+            continue
+        # Son sutun bir ARA donem olmali (ay != 12)
+        g_son, a_son, y_son = parsed[-1]
+        if a_son == 12:
+            continue
+        # Ayni gun/ay, bir onceki yil ara donemi ve (y_son-1) tam yili bul
+        idx_ara_onceki = idx_tam_yil = None
+        for i, (g, a, y) in enumerate(parsed[:-1]):
+            if (g, a) == (g_son, a_son) and y == y_son - 1:
+                idx_ara_onceki = i
+            if (g, a) == (31, 12) and y == y_son - 1:
+                idx_tam_yil = i
+        if idx_ara_onceki is None or idx_tam_yil is None:
+            continue
+
+        return sayilar[idx_tam_yil] - sayilar[idx_ara_onceki] + sayilar[-1]
+    return None
+
+
+def _f2_carpan_ozkaynak_medyani(norm: str) -> Optional[float]:
+    """FD/FAVOK carpan tablolarindan (yurtici/yurtdisi benzerler) her
+    tablonun urettigi Ozkaynak Degeri'ni toplar, MEDYANini dondurur.
+    Satir bicimi: 'FD / FAVOK <carpan> <FAVOK> <Ozkaynak Degeri> ...'"""
+    degerler = []
+    for m in re.finditer(r"FD\s*/\s*FAVOK", norm, re.IGNORECASE):
+        sayilar = _f2_satir_sayilari(norm, m.end(), pencere=120, adet=3)
+        if len(sayilar) < 3:
+            continue
+        carpan, favok, ozk = sayilar[0], sayilar[1], sayilar[2]
+        # Makullluk suzgeci: carpan kucuk bir kat sayi, FAVOK/Ozkaynak buyuk TL
+        if 0 < carpan < 100 and favok > 1e6 and ozk > 1e6:
+            degerler.append(ozk)
+    if not degerler:
+        return None
+    degerler.sort()
+    n = len(degerler)
+    return degerler[n // 2] if n % 2 else (degerler[n//2 - 1] + degerler[n//2]) / 2
+
+
+def _format2_hesapla(metin: str) -> Optional["DonemDegerleme"]:
+    """Format-2 ana akisi. Basari kosullari saglanmazsa None."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    # 1) Pay adedi (tek degerli, guvenli capalar). "Halka Arz EDILECEK Pay
+    # Adedi" satirina yanlislikla takilmamak icin lookbehind korumasi var.
+    hisse = _tek_sayi_bul(norm, r"(?<!Edilecek )Pay\s+Adedi")
+    if not hisse:
+        hisse = _tek_sayi_bul(norm, r"Halka\s+Arz\s+Oncesi\s+Odenmis\s+Sermaye")
+    if not hisse or hisse < 1_000_000:
+        return None
+
+    # 2) Bilanco ozkaynagi: BUYUK HARF 'OZKAYNAKLAR' satiri (degerleme
+    # tablolarindaki 'Ozkaynak Degeri' ile karismaz), satirin SON sayisi
+    # = en guncel donem. (case-sensitive arama bilincli.)
+    ozkaynak = None
+    m_ozk = re.search(r"OZKAYNAKLAR\b", norm)
+    if m_ozk:
+        sayilar = _f2_satir_sayilari(norm, m_ozk.end())
+        if sayilar and sayilar[-1] > 1e6:
+            ozkaynak = sayilar[-1]
+
+    # 3) LTM net kar (tarih basligiyla hizalanarak)
+    ltm_net_kar = _f2_ltm_net_kar(norm)
+
+    # 4) Carpan bazli deger (FD/FAVOK tablolarinin medyan ozkaynagi / pay adedi)
+    carpan_ozk = _f2_carpan_ozkaynak_medyani(norm)
+
+    dv = DonemDegerleme(donem_etiketi="LTM (Format-2)")
+    dv.notlar.append("Format-2: ozet kutusu yok, tam finansal tablolardan cikarildi")
+
+    if carpan_ozk:
+        dv.carpan_bazli_deger = carpan_ozk / hisse
+        dv.notlar.append("Carpan: rapor FD/FAVOK tablolarinin medyan Ozkaynak Degeri / Pay Adedi")
+
+    if ltm_net_kar is not None and ozkaynak:
+        dv.net_kar_mtl = ltm_net_kar / 1_000_000
+        dv.eps = ltm_net_kar / hisse
+        dv.bvps = ozkaynak / hisse
+        if dv.eps > 0 and dv.bvps > 0:
+            dv.graham_degeri = math.sqrt(22.5 * dv.eps * dv.bvps)
+            dv.notlar.append("Graham: Net Kar = LTM (son tam yil - gecen yil ara donem "
+                             "+ son ara donem), Ozkaynak = bilanco en guncel donem")
+        else:
+            dv.notlar.append("Graham: negatif EPS/BVPS")
+
+    if dv.graham_degeri is None and dv.carpan_bazli_deger is None:
+        return None
+    return dv
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -200,6 +364,17 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
     for dv in sonuclar:
         if dv.graham_degeri is None and "Graham" not in " ".join(dv.notlar):
             dv.notlar.append("Graham: bu dönem için hesaplanmadı (bkz. en son açıklanan dönem)")
+
+    # ── v2.0.6: FORMAT-2 YEDEGI ──────────────────────────────────────────
+    # Ozet kutusu yontemi hicbir deger uretemediyse (TERA gibi ozet kutusuz,
+    # tam finansal tablolu raporlar) Format-2 denenir. Ozet kutusu kismen
+    # bile sonuc urettiyse Format-2 HIC devreye girmez - mevcut davranis
+    # birebir korunur.
+    if not any(d.graham_degeri is not None or d.carpan_bazli_deger is not None
+               for d in sonuclar):
+        f2 = _format2_hesapla(metin)
+        if f2 is not None:
+            sonuclar.append(f2)
 
     return sonuclar
 

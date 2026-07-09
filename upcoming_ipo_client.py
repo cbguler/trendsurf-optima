@@ -304,6 +304,37 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         metin_birlesik = metin + ("\n\n" + metin_son if metin_son else "")
         temel = _extract_temel_deger(metin_birlesik, arz_fiyati=sonuc.arz_fiyati)
 
+        # v2.0.6: ORTA SAYFA DENEMESI (Format-2). TERA gibi raporlarda tam
+        # Bilanco/Gelir Tablosu belgenin ORTASINDA (orn. 83 sayfalik raporda
+        # s.63-66) - ilk+son 15 taramasi bunlari hic gormuyor. Ilk+son
+        # tarama Graham/Carpan uretemediyse, orta sayfalarin YALNIZCA metin
+        # katmani olanlari (OCR YOK - maliyet dusuk, taranmis sayfalar
+        # atlanir) okunup yeniden denenir.
+        if temel.get("graham_degeri") is None and temel.get("carpan_bazli_deger") is None:
+            try:
+                with pdfplumber.open(tmp_path) as pdf:
+                    n = len(pdf.pages)
+                    if n > 2 * FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
+                        orta_parcalar = []
+                        for sayfa in pdf.pages[FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
+                                               n - FIYAT_TESPIT_TARAMA_SAYFA_SAYISI]:
+                            try:
+                                if _sayfa_metin_var_mi(sayfa):
+                                    orta_parcalar.append(sayfa.extract_text() or "")
+                            except Exception:
+                                continue
+                        if orta_parcalar:
+                            print(f"[upcoming-ipo] Orta {len(orta_parcalar)} sayfa "
+                                  f"(yalnizca metin katmanli) Format-2 icin tarandi", flush=True)
+                            temel2 = _extract_temel_deger(
+                                metin_birlesik + "\n\n" + "\n\n".join(orta_parcalar),
+                                arz_fiyati=sonuc.arz_fiyati)
+                            for k in temel:
+                                if temel[k] is None:
+                                    temel[k] = temel2.get(k)
+            except Exception as e:
+                print(f"[upcoming-ipo] Orta sayfa denemesi hatasi: {e}", flush=True)
+
         return {
             "arz_fiyati": sonuc.arz_fiyati,
             "iskonto_orani": sonuc.iskonto_orani,

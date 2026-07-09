@@ -152,7 +152,10 @@ def tara_bist(tickers, fund_map):
     print(f"[radar] BIST tam tarama: {len(tickers)} hisse...")
     out = {}
     chunk_size = 200
+    import time as _time
     for i in range(0, len(tickers), chunk_size):
+        if i > 0:
+            _time.sleep(3)  # v2.0.6: parcalar arasi nefes - hiz siniri baskisini azaltir
         chunk = tickers[i:i + chunk_size]
         syms = [f"{t}.IS" for t in chunk]
         try:
@@ -170,7 +173,16 @@ def tara_bist(tickers, fund_map):
                 col = sub["Close"].dropna() if "Close" in sub.columns else pd.Series(dtype=float)
                 if hasattr(col, "squeeze"):
                     col = col.squeeze()
-                if col.empty or len(col) < 2:
+                # v2.0.6: VERI KALITE KAPISI. yfinance, 15 dk'da bir 772
+                # hisselik toplu indirmede zaman zaman KISMI gecmis donduruyor
+                # (hiz siniri). 22 gunden kisa seri -> Ret1M hesaplanamaz (0
+                # sayilir) -> skor sacma dusuk yazilir -> sonraki tam-verili
+                # kosuda "sicrama" gorunur (09.07 gun boyu alarm seli).
+                # Kismi verili hisse BU KOSUDA HIC YAZILMAZ - Supabase'deki
+                # onceki saglam deger korunur, salinim kaynaginda biter.
+                # (22 gunden kisa gecmisi olan YENI hisseler radar kapsami
+                # disinda kalir; onlari gece worker'inin CSV skoru tasir.)
+                if col.empty or len(col) < 22:
                     continue
                 p     = round(float(col.iloc[-1]), 4)
                 rsi   = calc_rsi(col)
