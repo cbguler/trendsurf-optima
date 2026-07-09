@@ -71,16 +71,29 @@ def _supabase_tazelik():
     """v2.0.5.6: intraday_scores'tan kategori bazinda en taze updated_at.
     Radar her 15 dk'da bir yazar; bir kategorinin son yazimi esigi asarsa
     radar zinciri (cron-job -> Actions -> script -> Supabase) kopmus demektir.
-    Donus: {kategori: datetime} veya None (Supabase'e ulasilamadi)."""
+    Donus: {kategori: datetime} veya None (Supabase'e ulasilamadi).
+
+    v2.0.6.3: Baglanti 10 sn / sorgu 15 sn zaman siniri. Supabase arizasinda
+    (09.07 'investigating a technical issue') baglanti askida kalinca is,
+    workflow'un 5 dk sinirina takilip GitHub'dan 'cancelled' maili
+    uretiyordu - simdi hizla pes edip kendi 'ulasilamadi' uyarimizi
+    uretiyoruz (asagida uyarilar listesine dusuyor)."""
     try:
-        from db import get_conn
-        rows = get_conn().execute(
-            "SELECT kategori, MAX(updated_at) AS son FROM intraday_scores "
-            "GROUP BY kategori").fetchall()
+        import psycopg2
+        conn = psycopg2.connect(
+            os.environ["SUPABASE_DB_URL"],
+            connect_timeout=10,
+            options="-c statement_timeout=15000")
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT kategori, MAX(updated_at) FROM intraday_scores "
+                        "GROUP BY kategori")
+            rows = cur.fetchall()
+        finally:
+            conn.close()
         out = {}
         for r in rows:
-            k = r["kategori"] if isinstance(r, dict) else r[0]
-            v = r["son"] if isinstance(r, dict) else r[1]
+            k, v = r[0], r[1]
             if k is not None and v is not None:
                 out[str(k)] = v
         return out
