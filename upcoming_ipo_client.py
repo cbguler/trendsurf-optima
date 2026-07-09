@@ -314,17 +314,23 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
             try:
                 with pdfplumber.open(tmp_path) as pdf:
                     n = len(pdf.pages)
-                    if n > 2 * FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
+                    if n > FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
+                        # v2.0.6.1: Fiyat ILK 15 sayfada bulunduysa son-15
+                        # taramasi hic yapilmamis olur (metin_son bos) -
+                        # oysa FD/FAVOK carpan tablolari genelde raporun
+                        # SONUNDADIR (TERA s.82). metin_son bossa kalan TUM
+                        # sayfalar (orta+son), doluysa yalnizca orta taranir.
+                        bitis = (n if not metin_son
+                                 else n - FIYAT_TESPIT_TARAMA_SAYFA_SAYISI)
                         orta_parcalar = []
-                        for sayfa in pdf.pages[FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:
-                                               n - FIYAT_TESPIT_TARAMA_SAYFA_SAYISI]:
+                        for sayfa in pdf.pages[FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:bitis]:
                             try:
                                 if _sayfa_metin_var_mi(sayfa):
                                     orta_parcalar.append(sayfa.extract_text() or "")
                             except Exception:
                                 continue
                         if orta_parcalar:
-                            print(f"[upcoming-ipo] Orta {len(orta_parcalar)} sayfa "
+                            print(f"[upcoming-ipo] Kalan {len(orta_parcalar)} sayfa "
                                   f"(yalnizca metin katmanli) Format-2 icin tarandi", flush=True)
                             temel2 = _extract_temel_deger(
                                 metin_birlesik + "\n\n" + "\n\n".join(orta_parcalar),
