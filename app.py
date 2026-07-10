@@ -516,6 +516,13 @@ def render_auth_gate():
                         # v1.9.9.2 - Hem localStorage hem email cookie yaz (components.v1.html ile)
                         # Email cookie 90 gun, localStorage token 90 gun (DB token suresi ile ayni)
                         if remember:
+                            # v2.0.7.2 - Beni Hatirla KALICI oturum: token artik
+                            # tso_auth CEREZINE yazilir. localStorage'i Python
+                            # tarafinda geri OKUYACAK mekanizma yoktu (v1.9.9.x
+                            # denemeleri iframe sandbox'a takildi); cerezleri ise
+                            # st.context.cookies sunucu tarafinda dogrudan okur -
+                            # asagida "cerezden oturum geri yukleme" blogu bkz.
+                            # Parent cookie yazimi ts_rem_email ile zaten kanitli.
                             _tok_safe = res["token"].replace("'","").replace('"','')
                             _em_safe = email.replace("'","").replace('"','')
                             _stc_v1.html(f"""
@@ -525,6 +532,10 @@ def render_auth_gate():
                               window.parent.sessionStorage.setItem('tso_logged_in', '1');
                               var d = new Date();
                               d.setTime(d.getTime() + 90*24*60*60*1000);
+                              window.parent.document.cookie = "tso_auth=" +
+                                  encodeURIComponent('{_tok_safe}') +
+                                  ";expires=" + d.toUTCString() +
+                                  ";path=/;SameSite=Lax;Secure";
                               window.parent.document.cookie = "ts_rem_email=" +
                                   encodeURIComponent('{_em_safe}') +
                                   ";expires=" + d.toUTCString() +
@@ -533,7 +544,20 @@ def render_auth_gate():
                             }} catch(e) {{ console.log('[tso] save err:', e); }}
                             </script>
                             """, height=0)
-                            print(f"[auth] Beni Hatirla aktif: 90 gun localStorage + email cookie")
+                            print(f"[auth] Beni Hatirla aktif: 90 gun tso_auth cerezi + email cookie")
+                        else:
+                            # v2.0.7.2 - Beni Hatirla ISARETSIZ: eski bir tso_auth
+                            # cerezi kalmissa temizle - kullanici "hatirlama"
+                            # dediginde tam sayfa yenilemede eski oturum geri
+                            # yuklenmesin.
+                            _stc_v1.html("""
+                            <script>
+                            try {
+                              window.parent.document.cookie =
+                                  "tso_auth=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                            } catch(e) {}
+                            </script>
+                            """, height=0)
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -600,6 +624,25 @@ def render_auth_gate():
 # Beni Hatirla: onceki token ile otomatik giris
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
+
+# v2.0.7.2 - Beni Hatirla: tarayici CEREZINDEN oturumu geri yukle.
+# st.context.cookies (Streamlit >= 1.37) gercek tarayici cerezlerini sunucu
+# tarafinda okur - iframe sandbox sorunu YOKTUR. Login'de yazilan tso_auth
+# cerezi burada okunur; token'in gecerliligi/suresi zaten get_current_user()
+# icinde DB'den dogrulanir (gecersizse sessizce dusurulur, giris ekrani
+# gelir). Ayni olu token'i her rerun'da yeniden denememek icin bir kez
+# denenen deger session_state'te isaretlenir.
+if "auth_token" not in st.session_state:
+    try:
+        _ctx = getattr(st, "context", None)
+        _cerezler = getattr(_ctx, "cookies", None) if _ctx is not None else None
+        _tok_cerez = _cerezler.get("tso_auth") if _cerezler else None
+        if _tok_cerez and st.session_state.get("_tso_cerez_denenen") != _tok_cerez:
+            st.session_state["_tso_cerez_denenen"] = _tok_cerez
+            st.session_state["auth_token"] = _tok_cerez
+            print("[auth] tso_auth cerezinden oturum geri yukleme denendi")
+    except Exception as _ck_ex:
+        print(f"[auth] cerez okuma atlandi: {_ck_ex}")
 
 # v1.9.9.3 - Beni Hatirla yapilanmasi:
 #   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
@@ -2034,6 +2077,8 @@ with st.sidebar:
         try {
           window.parent.localStorage.removeItem('tso_auth_token');
           window.parent.sessionStorage.removeItem('tso_logged_in');
+          window.parent.document.cookie =
+              "tso_auth=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
           window.parent.document.cookie =
               "ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
           console.log('[tso] auth cleared from browser');
