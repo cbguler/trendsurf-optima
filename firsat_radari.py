@@ -203,7 +203,22 @@ def tara_bist(tickers, fund_map):
                     vs = sub["Volume"].fillna(0)
                     if hasattr(vs, "squeeze"):
                         vs = vs.squeeze()
-                    if float(vs.sum()) > 0:
+                    # v2.0.7.1: BUGUNUN KISMI HACIM CUBUGU DISLANIR. Seans
+                    # icinde gunun cubugu henuz tamamlanmadigi icin sabah l5
+                    # ortalamasini asagi cekiyor (vr<0.8 -> YUKSELIS'te -10),
+                    # gun boyu hacim biriktikce bilesen -10'dan +5'e donuyor
+                    # ve gercek olmayan +10..15 puanlik 'sicrama' alarmlari
+                    # uretiyordu (10.07 sabahi 8 varlik, hepsi bu desende).
+                    # Fiyat/RSI/Ret1M canli kalir; hacim trendi ise her zaman
+                    # TAMAMLANMIS gunlerle hesaplanir - gece worker'inin
+                    # gordugu seriyle de birebir ayni.
+                    try:
+                        _son = vs.index[-1]
+                        if hasattr(_son, "date") and _son.date() >= _trt_simdi().date():
+                            vs = vs.iloc[:-1]
+                    except Exception:
+                        pass
+                    if len(vs) >= 20 and float(vs.sum()) > 0:
                         l5, l20 = float(vs.tail(5).mean()), float(vs.tail(20).mean())
                         if l20 > 0:
                             vr = l5 / l20

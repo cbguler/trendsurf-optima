@@ -584,7 +584,21 @@ def batch_bist(tickers):
                         vol_series = sub["Volume"].fillna(0)
                         if hasattr(vol_series, "squeeze"):
                             vol_series = vol_series.squeeze()
-                        if float(vol_series.sum()) > 0:
+                        # v2.0.7.1: Bugunun KISMI hacim cubugu dislanir -
+                        # firsat_radari.py ile birebir ayni koruma. Gece
+                        # kosusunda son cubuk zaten tamamlanmis oldugundan
+                        # davranis degismez; worker gunduz manuel
+                        # calistirilirsa da skor sapmaz.
+                        try:
+                            import datetime as _dt
+                            _son = vol_series.index[-1]
+                            _trt_bugun = _dt.datetime.now(
+                                _dt.timezone(_dt.timedelta(hours=3))).date()
+                            if hasattr(_son, "date") and _son.date() >= _trt_bugun:
+                                vol_series = vol_series.iloc[:-1]
+                        except Exception:
+                            pass
+                        if len(vol_series) >= 20 and float(vol_series.sum()) > 0:
                             last5_avg = float(vol_series.tail(5).mean())
                             last20_avg = float(vol_series.tail(20).mean())
                             if last20_avg > 0:
