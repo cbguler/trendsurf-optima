@@ -22,14 +22,25 @@ Konum: C:/Users/bahri/Desktop/TrendSurf_Optima/
 | tefas_client.py                                                                        | TEFAS fon verileri                                                            |
 | tcmb_client.py                                                                         | TCMB döviz kuru yedek kaynağı                                                 |
 | signals.py                                                                             | Sinyal/Optima Skoru hesaplama motoru                                          |
+| firsat_radari.py                                                                       | Fırsat Radarı — 15 dk'lık tarama + alarm e-postaları (GitHub Actions)         |
+| data_health_check.py                                                                   | Veri akışı sağlık kontrolü — kategori tazeliği izleme + admin uyarı maili     |
+| update_tefas_evening.py                                                                | TEFAS akşam NAV güncellemesi (TRT 20:00/20:30 cron)                           |
+| pdf_text_extract.py                                                                    | PDF → metin (pdfplumber + gerektiğinde Türkçe OCR)                            |
+| temel_deger_hesaplama.py                                                               | Graham + Çarpan Bazlı Değer — özet kutusu ve Format-2 (LTM) metodolojisi      |
 | data_pipeline.py                                                                       | Veri pipeline orkestratör                                                     |
 
 ## 1.2 Veri Dosyaları
 
 - optimized_universe.csv — Worker çıktısı, tüm varlıklar (~2.157 satır)
 
+- upcoming_ipo_cache/upcoming_ipo.json — Yaklaşan halka arz listesi
+  önbelleği (12 saat TTL)
+
 - upcoming_ipo_cache/fiyat_tespit_sonuclari.json — Halka Arz PDF analiz
-  önbelleği
+  önbelleği (süresiz; kalıcı kopyası Supabase ipo_valuations'ta)
+
+- health_state.json — sağlık kontrolünün kategori imza/zaman durumu
+  (her koşuda Actions tarafından commit edilir)
 
 - KAP_BIST.xlsx — BIST hisse sembol/slug eşleme
 
@@ -39,8 +50,8 @@ Konum: C:/Users/bahri/Desktop/TrendSurf_Optima/
 
 | **Kategori** | **Adet**      |
 |--------------|---------------|
-| BIST         | ~770 hisse    |
-| TEFAS        | ~1.348 fon    |
+| BIST         | 772 hisse     |
+| TEFAS        | ~1.347 fon    |
 | Kripto       | 18            |
 | Maden        | 11            |
 | Döviz        | 12 TRY çapraz |
@@ -90,10 +101,11 @@ işleme yapmaz).</p></td>
 ## 2.1 Fiyat Tespit Raporu Ayrıştırma Mimarisi
 
 fiyat_tespit_parser.py, KAP'ta yayınlanan Fiyat Tespit Raporu PDF'lerini
-üç farklı tabloya ayrıştırabilir (Tip A: Gedik/Halk Yatırım kademeli
-akış tablosu, Tip B: İnfo Yatırım ağırlıklı özet, Tip C: İntegral/SOHO
-doğrudan "Halka Arz Fiyatı" ifadesi, Tip D: anlatım cümlesinden
-çıkarım). Raporun metne çevrilmesi önce pdfplumber ile denenir; metin
+beş farklı desene ayrıştırabilir (Tip A: Gedik/Halk Yatırım kademeli
+akış tablosu — iskonto-ÖNCESİ değer tuzağına karşı korumalı, Tip B:
+İnfo Yatırım ağırlıklı özet, Tip C: İntegral/SOHO doğrudan "Halka Arz
+Fiyatı" ifadesi, Tip D: anlatım cümlesinden çıkarım, Tip E: "İskonto(su)
+Sonrası Pay Değeri" etiketi — TERA örneği). Raporun metne çevrilmesi önce pdfplumber ile denenir; metin
 çıkmazsa (taranmış/görüntü sayfa) Tesseract OCR (Türkçe dil paketi)
 devreye girer.
 
@@ -101,6 +113,15 @@ temel_deger_hesaplama mantığı, raporun "özet kutusu"ndan (Gelir Özeti +
 Bilanço + Çarpanlar) bağımsız olarak Graham Sayısı ve Çarpan Bazlı Değer
 hesaplar — aracı kurumun kendi değerlemesinden tamamen ayrı, ikinci bir
 bakış açısı sunar.
+
+Özet kutusu olmayan raporlar için Format-2 (v2.0.6): tam finansal
+tablolardan LTM (son 12 ay) metodolojisi uygulanır — son 12 ay = son tam
+yıl − geçen yıl ara dönem + son ara dönem; kalemler tablo tarih
+başlığıyla hizalanmak zorundadır. Çarpan Bazlı Değer, FD/FAVÖK
+tablolarının medyan Özkaynak Değeri / Pay Adedi olarak hesaplanır.
+Belgenin ortasındaki sayfalar yalnızca metin katmanlıysa taranır (orta
+sayfalarda OCR yapılmaz — maliyet kontrolü). Doğrulanmış üretim örneği
+(TERA): Arz 70,00 / İskonto %20 / Graham 26,39 / Çarpan 91,27.
 
 <table>
 <colgroup>
@@ -117,21 +138,105 @@ değiştirmeyin.</p></td>
 </tbody>
 </table>
 
-# 3. GitHub ve Deployment
+# 3. Fırsat Radarı ve Veri Sağlığı
 
-## 3.1 GitHub Repo
+## 3.1 Fırsat Radarı Mimarisi (firsat_radari.py)
+
+Akış: cron-job.org (~15 dk) → GitHub Actions firsat_radari.yml
+(workflow_dispatch, PAT ile) → firsat_radari.py taraması → Supabase
+intraday_scores tablosuna UPSERT. GitHub'ın kendi cron'u yalnızca yedek
+tetikleyicidir (*/20, best-effort). Skor formülü worker.py ile birebir
+aynıdır (hacim/DD düzeltmesi + CSV'den PB/PE/DY temel bileşeni) — bu
+sayede uygulamadaki skor ile alarm skoru hiçbir zaman ayrışmaz.
+
+| **Kapsam**          | **Pencere**                                    |
+|---------------------|-------------------------------------------------|
+| BIST (772)          | Seans içi, hafta içi TRT 10:00-18:30            |
+| Döviz/Maden/Kripto  | 7/24                                            |
+| TEFAS               | Günde 1 kez, TRT 20:40-21:40 penceresi          |
+
+TEFAS taramasını pencere dışında test etmek için workflow elle
+`tefas_zorla=1` girdisiyle çalıştırılır (`RADAR_TEFAS_ZORLA=1`).
+TEFAS penceresindeki koşu, diğer koşulardan belirgin uzun sürer
+(~4 dk'ya karşı ~1 dk) — Actions listesinde bu süre farkı, TEFAS
+taramasının çalıştığının hızlı bir göstergesidir.
+
+## 3.2 Alarm Sistemi
+
+Alarm e-postaları ADMIN_EMAIL'e gider. İki tetik: eşik (skor 75'i
+aşağıdan kesince) ve sıçrama (önceki ölçüme göre +10 puan). Üç filtre:
+
+- **Veri kalite kapısı** — 22 günden kısa geçmişle gelen hisse o koşuda
+  yazılmaz (yfinance hız sınırı salınımının ürettiği sahte sıçramaları
+  keser).
+
+- **Tazelik koruması** — BIST'te önceki ölçüm 6 saatten eskiyse sıçrama
+  alarmı üretilmez (seans açılışında dünkü skora kıyas engellenir).
+
+- **Anlamlılık tabanı** — sıçrama yalnızca yeni skor ≥ 55 ise alarm
+  üretir (5→18 gibi alçak bölge sıçramaları elenir).
+
+Günlük tekrar koruması: radar_alerts tablosu, ON CONFLICT ile aynı gün
+aynı varlık + aynı alarm türünü bir kez geçirir. Hedef alarm hacmi:
+günde 0-2.
+
+| **Secret (Actions)** | **Varsayılan** | **Anlamı**                        |
+|----------------------|----------------|------------------------------------|
+| RADAR_ESIK           | 75             | Eşik alarmı sınırı                 |
+| RADAR_SICRAMA        | 10             | Sıçrama alarmı puan farkı          |
+| RADAR_SICRAMA_TABAN  | 55             | Sıçramanın alarm sayılacağı taban  |
+
+## 3.3 Keep-Alive
+
+Streamlit Cloud, ziyaret edilmeyen uygulamayı uyutur. Uyandırma, radar
+workflow'una gömülü `curl -L` adımıyla yapılır (yönlendirme zincirini
+cookie'lerle takip ettiği için auth katmanını geçer; cron-job.org'un
+düz GET'i bunu başaramıyordu). Ayrı bir cron-job keep-alive işi YOKTUR —
+eski "TrendSurf Keep-Alive" işi silindi.
+
+## 3.4 Veri Akışı Sağlık Kontrolü (data_health_check.py)
+
+health_check.yml her 30 dakikada bir (GitHub schedule) çalışır; bir
+kategori beklenenden uzun süre güncellenmiyorsa ADMIN_EMAIL'e uyarı
+gönderir. v2.0.6.x itibarıyla kaynak ayrımı:
+
+- BIST / DOVIZ / KRIPTO / MADEN tazeliği Supabase intraday_scores
+  tablosundaki updated_at'ten izlenir (eşik 1 saat; BIST yalnızca seans
+  içi kontrol edilir, 11:00 öncesi açılış toleransı vardır).
+
+- TEFAS, CSV imzasından izlenir (eşik 30 saat — günde 1 NAV).
+
+Supabase bağlantısı 10 sn / sorgu 15 sn zaman sınırlıdır: Supabase
+arızasında iş askıda kalıp GitHub'dan "cancelled" maili üretmek yerine
+hızla kendi "ulaşılamadı" uyarısını üretir. Koşu sonunda
+health_state.json repoya commit edilir.
+
+## 3.5 Halka Arz Kalıcı Katmanı (ipo_valuations) — v2.0.6.4
+
+Zorla Yenile/worker'ın çıkardığı Arz Fiyatı/İskonto/Graham/Çarpan
+değerleri Supabase ipo_valuations tablosuna UPSERT edilir ve okumada
+yerel null alanların üzerine bindirilir. Kurallar: null asla dolu
+değeri ezmez (SQL COALESCE + alan bazlı merge); Supabase erişilemezse
+davranış eskisiyle aynıdır (fail-soft). Bu katman, Streamlit Cloud
+yeniden başlatmalarında değerlerin kaybolması sorununu kapattı (gece
+worker'ının Actions ortamında PDF çıkarımı başarısız olduğundan repo
+cache'i null kalıyordu). Şema: ipo_valuations.sql.
+
+# 4. GitHub ve Deployment
+
+## 4.1 GitHub Repo
 
 github.com/cbguler/trendsurf-optima — kamuya açık (public) repo. Git
 geçmişi, sızan GCP servis hesabı bilgilerini temizlemek için
 filter-branch ile yeniden yazılmıştır.
 
-## 3.2 Streamlit Cloud
+## 4.2 Streamlit Cloud
 
 Uygulama URL'si, share.streamlit.io panelinden özelleştirilebilir alt
 alan adı ile yayınlanır (örn. https://trendsurfoptima.streamlit.app).
 Panel özelliği: Settings → General → App URL.
 
-## 3.3 Streamlit Cloud Secrets
+## 4.3 Streamlit Cloud Secrets
 
 - ADMIN_EMAIL, ADMIN_PASS, ADMIN_NAME — admin otomatik seed
 
@@ -141,7 +246,19 @@ Panel özelliği: Settings → General → App URL.
 
 - TCMB_KEY — TCMB EVDS API anahtarı
 
-## 3.4 Zamanlanmış Görevler (Scheduler)
+GitHub Actions Secrets (repo → Settings → Secrets and variables):
+
+- SUPABASE_DB_URL, SMTP_USER / SMTP_PASS / SMTP_HOST / SMTP_PORT,
+  ADMIN_EMAIL — worker/radar/sağlık kontrolü/e-posta işleri için
+
+- GH_TOKEN (PAT) — cron-job.org'un workflow_dispatch tetiklemesi ve
+  Actions içi commit/push için. Temmuz 2026'da yenilendi (eskisi sohbet
+  kaydına sızdığı için iptal edildi) — sızıntı şüphesinde derhal iptal
+  edip yenisini hem GitHub hem cron-job.org tarafında güncelleyin.
+
+- RADAR_ESIK / RADAR_SICRAMA / RADAR_SICRAMA_TABAN — bkz. 3.2
+
+## 4.4 Zamanlanmış Görevler (Scheduler)
 
 GitHub Actions'ın kendi cron zamanlayıcısı, sık aralıklarla (15 dk altı)
 tetiklemelerde güvenilir çalışmadığından, harici bir zamanlayıcı
@@ -153,9 +270,12 @@ kendi cron throttling'i aşılır.
 |-----------------------------|-------------------------------------|------------------------------------------------|
 | send_email.yml              | Günlük portföy raporu               | Kullanıcı ayarına göre, saatte 4 kontrol slotu |
 | peak_check.yml              | Kâr realizasyonu kontrolü           | Her 15 dakika (cron-job.org tetikli)           |
-| update_data.yml / worker.py | Evren verisi + Halka Arz PDF işleme | Gece TRT 02:00/03:00                           |
+| update_data.yml / worker.py | Evren verisi + Halka Arz PDF işleme | Gece TRT 02:00/03:00 (yedekli çift cron)       |
+| firsat_radari.yml           | Fırsat Radarı taraması + keep-alive | ~15 dk cron-job.org; yedek GitHub cron 20 dk   |
+| update_tefas_evening.yml    | TEFAS akşam NAV güncellemesi        | TRT 20:00 (yedek 20:30) GitHub cron            |
+| health_check.yml            | Veri akışı sağlık kontrolü          | Her 30 dakika (GitHub cron)                    |
 
-## 3.5 Güvenlik Notları
+## 4.5 Güvenlik Notları
 
 - Supabase Row Level Security (RLS) aktif — her kullanıcı yalnızca kendi
   verisine erişir.
@@ -166,7 +286,7 @@ kendi cron throttling'i aşılır.
 - .gitignore: venv, cache, secrets, \*.json, live_data.zip, debug/gecici
   dosyalar (golda\_\*.py, \*\_YEDEK.json vb.)
 
-## 3.6 Git Çakışma Çözümü
+## 4.6 Git Çakışma Çözümü
 
 - Push reddedilirse: git fetch origin → git pull origin main (merge)
   veya gerekiyorsa git reset --hard origin/main
@@ -177,9 +297,9 @@ kendi cron throttling'i aşılır.
 - Tek dosya politikası: app.py — asla app_v15/v16 gibi kopya dosyalar
   oluşturulmaz.
 
-# 4. Kullanıcı Yönetimi
+# 5. Kullanıcı Yönetimi
 
-## 4.1 Kullanıcı Plan Tipleri
+## 5.1 Kullanıcı Plan Tipleri
 
 | **Tip** | **Açıklama**                         |
 |---------|--------------------------------------|
@@ -188,7 +308,7 @@ kendi cron throttling'i aşılır.
 | premium | Pro + kâr realizasyonu uyarı sistemi |
 | admin   | Sistem yöneticisi, tüm yetkiler      |
 
-## 4.2 Yeni Abone Onaylama
+## 5.2 Yeni Abone Onaylama
 
 1.  Admin Paneli → Bekleyen Kullanıcılar bölümüne gidin.
 
@@ -197,7 +317,7 @@ kendi cron throttling'i aşılır.
 3.  "Onayla" butonuna basın — is_active = TRUE olur, kullanıcı giriş
     yapabilir.
 
-## 4.3 Supabase Tabloları (Özet)
+## 5.3 Supabase Tabloları (Özet)
 
 | **Tablo**       | **İçerik**                                                            |
 |-----------------|-----------------------------------------------------------------------|
@@ -208,6 +328,9 @@ kendi cron throttling'i aşılır.
 | email_settings  | Günlük rapor saatleri                                                 |
 | alert_settings  | Kâr realizasyonu uyarı tercihleri                                     |
 | peak_tracker    | Peak (tepe fiyat) takibi — composite key (user_id, ticker)            |
+| intraday_scores | Fırsat Radarı gün içi skorları (kategori bazlı updated_at ile)        |
+| radar_alerts    | Radar alarm günlük dedupe kaydı (ON CONFLICT)                         |
+| ipo_valuations  | Halka Arz değerleme kalıcı katmanı (v2.0.6.4, null dolu değeri ezmez) |
 
 <table>
 <colgroup>
@@ -223,9 +346,9 @@ taşınmıştır.</p></td>
 </tbody>
 </table>
 
-# 5. E-posta Sistemi
+# 6. E-posta Sistemi
 
-## 5.1 Günlük Rapor Sistemi
+## 6.1 Günlük Rapor Sistemi
 
 - emailer.py — Streamlit'ten manuel "Şimdi Gönder"
 
@@ -235,7 +358,7 @@ taşınmıştır.</p></td>
 - email_send_log tablosu — atomik INSERT ON CONFLICT ile mükerrer
   gönderim koruması
 
-## 5.2 Kâr Realizasyonu Uyarı Maili
+## 6.2 Kâr Realizasyonu Uyarı Maili
 
 - peak_alert_emailer.py — HTML mail formatı + SMTP gönderim
 
@@ -244,7 +367,7 @@ taşınmıştır.</p></td>
 - mark_alert_sent — mail gönderildikten sonra peak_tracker'da flag set
   edilir
 
-## 5.3 Gmail App Password Yenileme
+## 6.3 Gmail App Password Yenileme
 
 1.  myaccount.google.com/apppasswords adresine gidin.
 
@@ -254,7 +377,7 @@ taşınmıştır.</p></td>
 
 4.  GitHub Actions Secrets → SMTP_PASS güncelleyin (her iki yer de).
 
-# 6. Sık Karşılaşılan Sorunlar
+# 7. Sık Karşılaşılan Sorunlar
 
 | **Sorun**                           | **Sebep**                                                                  | **Çözüm**                                                               |
 |-------------------------------------|----------------------------------------------------------------------------|-------------------------------------------------------------------------|
@@ -267,8 +390,11 @@ taşınmıştır.</p></td>
 | Halka Arz Graham/Çarpan boş         | OCR kalitesi düşük rapor                                                   | Beklenen/güvenli davranış — manuel düzeltme yapılmaz                    |
 | Peak check çalışmıyor               | cron-job.org tetiklemesi kesilmiş olabilir                                 | cron-job.org panelinden job durumunu kontrol edin                       |
 | Ana Sayfa tablosu mobilde dağılıyor | st.columns() ~640px altında dikey istifleniyor (Streamlit platform kısıtı) | st.dataframe (clickable_table) formatı kullanılır, mobilde dağılmaz     |
+| Radar alarmı hiç gelmiyor           | cron-job.org tetiklemesi kesik / Actions hatalı / eşikler yüksek           | cron-job.org paneli → Actions koşuları → radar_alerts tablosu sırasıyla |
+| Halka Arz değerleri yeniden başlatınca kayboluyordu | Yerel cache Streamlit Cloud yeniden başlatmasında sıfırlanıyordu | v2.0.6.4'te çözüldü — ipo_valuations kalıcı katmanı (bkz. 3.5)          |
+| BNB/CLINK/ICP fiyatı gelmiyor       | BtcTurk 400 hatası (kalıcı görünüyor)                                      | Açık madde — kaynak/kod eşlemesi incelenecek; fiyatsız varlık skoru 0   |
 
-## 6.1 Manuel CSV Güncelleme
+## 7.1 Manuel CSV Güncelleme
 
 Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
@@ -280,7 +406,38 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
 - git commit -m "veri guncelleme" && git push origin main
 
-# 7. Versiyon Geçmişi (Özet)
+# 8. Versiyon Geçmişi (Özet)
+
+**v2.0.5.x – v2.0.7 (Temmuz 2026) — Fırsat Radarı ve Kalıcılık Dönemi**
+
+- Fırsat Radarı (firsat_radari.py): BIST 772 seans içi 15 dk'da bir,
+  döviz/maden/kripto 7/24, TEFAS akşam penceresi — Supabase
+  intraday_scores'a UPSERT; skor formülü worker.py ile birebir
+
+- Alarm sistemi: eşik 75 + sıçrama +10 (taban 55); veri kalite kapısı
+  (22 gün), tazelik koruması (6 saat), günlük dedupe (radar_alerts)
+
+- Uygulama: skor TEK kaynak (tablo=Top5=AnaSayfa=Portföy=Detay); BIST
+  772 tek liste, sayfalama kaldırıldı; fiyatsız varlık skoru 0; get_hist
+  5 dk cache (başarısız sonuç cache'lenmez); "Canlı veri" kutusu ve
+  "Döviz/Kripto Tanılama" kaldırıldı, "Sistem Tanılama" duruyor
+
+- Keep-alive radar workflow'una gömüldü (curl -L); cron-job
+  "TrendSurf Keep-Alive" işi silindi
+
+- data_health_check.py v2.0.6.3: BIST/DOVIZ/KRIPTO/MADEN tazeliği
+  Supabase'ten (1 saat eşik), TEFAS CSV'den (30 saat); bağlantı/sorgu
+  zaman sınırlı
+
+- worker.py: kripto_end NameError düzeltildi (gece çöküşü bitti);
+  PB/PE/DY CSV'ye yazılıyor; yfinance>=0.2.60
+
+- Halka Arz: Tip E fiyat deseni, Tip A iskonto-öncesi tuzak koruması,
+  Graham Format-2 (LTM), şirket adı "Anonim Şirketi" düzeltmesi;
+  v2.0.6.4 ipo_valuations kalıcı katmanı — değerler yeniden
+  başlatmalarda artık kaybolmuyor
+
+- Güvenlik: PAT yenilendi (eskisi sohbete sızdığı için iptal)
 
 **v2.0.4.x (Temmuz 2026) — Halka Arz, Tablo ve Mobil Uyum Dönemi**
 

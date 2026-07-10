@@ -829,7 +829,10 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         print("[upcoming-ipo] Hicbir kategori cekilemedi — eski cache/bos donuluyor")
         cached = _read_cache()
         if cached is not None:
-            return pd.DataFrame(cached)
+            # v2.0.7: Bu yedek yol da Supabase overlay'inden gecer - KAP'in
+            # tamamen erisilemez oldugu anda Zorla Yenile'ye basilirsa bile
+            # kalici katmandaki degerler bos gosterilmez.
+            return _supabase_degerleri_df_e_uygula(pd.DataFrame(cached))
         return pd.DataFrame(columns=["Tarih","Kod","Sirket","Konu","Ozet","Durum",
                                        "Detay_URL","Fiyat_Tespit_URL",
                                        "Arz_Fiyati","Iskonto_Orani",

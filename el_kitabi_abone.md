@@ -167,6 +167,11 @@ Sistem dört faktörü ağırlıklı olarak birleştirir:
 - Temel Analiz — %25 ağırlık. P/E, beta, temettü verimi (BIST için KAP
   verisi).
 
+Skor, uygulama genelinde tek kaynaktan gelir: Ana Sayfa önerileri, BIST
+listesi, Portföyüm ve detay sayfası, aynı varlık için her zaman aynı
+Optima Skoru'nu gösterir. Fırsat Radarı'nın alarm e-postaları da (bkz.
+Bölüm 6) aynı formülü kullanır.
+
 ## 3.5 Kategori Dağılımı (Pasta Grafiği)
 
 Tablonun altındaki 3 boyutlu pasta grafiği, önerilen portföyünüzün
@@ -372,12 +377,89 @@ Cumartesi/Pazar günleri BIST, TEFAS, Döviz ve Maden piyasaları kapalı
 olduğundan, sistem hafta sonu sadece kripto varlıklar için kontrol
 yapar.
 
-# 6. BIST — Türk Hisse Senetleri
+# 6. Fırsat Radarı ve Alarm E-postaları
 
-Yaklaşık 770 Borsa İstanbul hissesini Optima Skoru'na göre sıralı
-listeler.
+Fırsat Radarı, siz uygulamada olmasanız bile arka planda çalışan bir
+tarama sistemidir: BIST'teki 772 hissenin tamamını seans saatlerinde 15
+dakikada bir; döviz, değerli maden ve kripto varlıkları 7/24; TEFAS
+fonlarını ise her akşam NAV açıklandıktan sonra otomatik olarak
+değerlendirir. Amaç, takip etmediğiniz bir varlıkta koşullar
+ilginçleştiğinde bunu gözden kaçırmamanızdır.
 
-## 6.1 Hisse Detayı
+## 6.1 Alarm E-postası Ne Anlama Gelir?
+
+İki durumda e-posta alırsınız:
+
+- **Eşik alarmı** — bir varlığın Optima Skoru 75 eşiğini aşağıdan
+  yukarı kestiğinde.
+
+- **Sıçrama alarmı** — bir önceki ölçüme göre skor en az 10 puan artıp
+  55'in üzerine çıktığında.
+
+Aynı varlık için aynı gün aynı tür alarm yalnızca bir kez gönderilir.
+
+## 6.2 Alarm Bir "Al" Sinyali DEĞİLDİR
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#fff4e5;border-left:5px solid #e08a00;padding:14px 16px;border-radius:4px;"><p><strong>⚠ Önce Bunu Okuyun</strong></p>
+<p>Alarm e-postası, "bu varlık yükselecek, yatırım yapın" anlamına
+GELMEZ. Söylediği şudur: "Bu varlığın geçmiş verilerden hesaplanan
+matematiksel özeti, formülün ilginç saydığı bölgeye girdi — gelin
+kendiniz inceleyin."</p></td>
+</tr>
+</tbody>
+</table>
+
+- **Skor geriye bakar:** bileşenleri (RSI, 1 aylık getiri, volatilite,
+  temel oranlar, hacim eğilimi) olmuş şeyleri ölçer. Yüksek momentum,
+  yükselişin süreceğini değil, yaşanmış olduğunu gösterir; sinyal
+  geldiğinde hareketin önemli kısmı geride kalmış olabilir.
+
+- **Skor bantlarla çalışır:** küçük bir fiyat hareketi birden fazla
+  bandı aynı anda atlatıp sıçrama üretebilir; bant geçişleri geri de
+  dönebilir.
+
+- **Skorun görmediği şeyler vardır:** şirket haberleri, KAP
+  açıklamaları, sektörel/makro gelişmeler, likidite ve sizin risk
+  kapasiteniz.
+
+## 6.3 Doğru Kullanım
+
+Alarm geldiğinde:
+
+1.  Uygulamada varlığın detayına girin — grafik, hacim, teknik
+    göstergeler ve Temel Analiz bölümünü inceleyin.
+
+2.  KAP/haber kaynaklarından hareketin nedenini araştırın.
+
+3.  Kendi kriterleriniz ve risk yönetiminizle (pozisyon büyüklüğü,
+    zarar-kes) kararınızı KENDİNİZ verin.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Radar Bir Ön Eleme Hunisidir</strong></p>
+<p>Nihai karar her zaman yatırımcıya aittir. Bu sistem yatırım tavsiyesi
+vermez.</p></td>
+</tr>
+</tbody>
+</table>
+
+# 7. BIST — Türk Hisse Senetleri
+
+Borsa İstanbul'daki 772 hissenin tamamını tek bir tabloda, Optima
+Skoru'na göre sıralı listeler — sayfalama yoktur; en güçlü sinyaller
+her zaman en üsttedir.
+
+## 7.1 Hisse Detayı
 
 - Her hissenin linki Detaylı Analiz sayfasına açılır.
 
@@ -401,12 +483,12 @@ dakika gecikmeyle sisteme yansır.</p></td>
 </tbody>
 </table>
 
-# 7. TEFAS — Yatırım Fonları
+# 8. TEFAS — Yatırım Fonları
 
 Binlerce yatırım fonunu Türkiye Elektronik Fon Alım Satım Platformu
 (TEFAS) verileriyle listeler.
 
-## 7.1 Fon Türü Filtresi
+## 8.1 Fon Türü Filtresi
 
 - Hisse Senedi Yoğun Fonlar
 
@@ -420,31 +502,31 @@ Binlerce yatırım fonunu Türkiye Elektronik Fon Alım Satım Platformu
 
 - Serbest Fonlar
 
-## 7.2 Getiri Karşılaştırması
+## 8.2 Getiri Karşılaştırması
 
 Her fon için 1 Aylık, 3 Aylık, 6 Aylık ve 1 Yıllık getiriler yan yana
 görüntülenir — performans karşılaştırması tek bakışta yapılabilir.
 
-## 7.3 TEFAS Detayı
+## 8.3 TEFAS Detayı
 
 Her fonun detay sayfasında Teknik Analiz raporları, Teknik Göstergeler,
 Mum Grafiği, Getiri ve risk analizleri ile fon karnesi, portföy dağılımı
 ve son işlem fiyatı görülebilir.
 
-# 8. Döviz, Madenler ve Kriptolar
+# 9. Döviz, Madenler ve Kriptolar
 
-## 8.1 Döviz
+## 9.1 Döviz
 
 - 12 TRY bazlı kur izlenir: USD, EUR, GBP, CHF, JPY ve diğerleri.
 
-## 8.2 Madenler
+## 9.2 Madenler
 
 - 10 maden: Altın (Gram), Gümüş (Gram), Platin, Paladyum, Bakır vb.
 
 - Gram altın ve gram gümüş için doğrudan TL/gram Türkiye fiyatı
   kullanılır.
 
-## 8.3 Kriptolar
+## 9.3 Kriptolar
 
 - 18 kripto para: BTC, ETH, SOL, ADA, ATOM, AVAX, DOT, MATIC, TON vb.
 
@@ -456,14 +538,14 @@ ve son işlem fiyatı görülebilir.
 - Kriptoların da BIST'de olduğu gibi işlem hacimleri grafikte
   gösterilmektedir.
 
-# 9. Halka Arz — Yaklaşan ve Devam Eden IPO'lar
+# 10. Halka Arz — Yaklaşan ve Devam Eden IPO'lar
 
 Bu sayfa, Borsa İstanbul'da halka arz süreci devam eden veya yakında
 başlayacak şirketleri, KAP (Kamuyu Aydınlatma Platformu) üzerinden
 otomatik olarak takip eder. Şirketin resmi Fiyat Tespit Raporu
 yayınlandığında, sistem bu raporu otomatik indirip analiz eder.
 
-## 9.1 Tablo Sütunları
+## 10.1 Tablo Sütunları
 
 | **Sütun**               | **Açıklama**                                                                                  |
 |-------------------------|-----------------------------------------------------------------------------------------------|
@@ -477,7 +559,7 @@ yayınlandığında, sistem bu raporu otomatik indirip analiz eder.
 | Çarpan Bazlı Değer (TL) | Sektör çarpanlarına göre hesaplanan bağımsız değer tahmini                                    |
 | Rapor                   | Fiyat Tespit Raporu'nun KAP'taki orijinaline link                                             |
 
-## 9.2 Arz Fiyatı Renklendirmesi Nasıl Okunur?
+## 10.2 Arz Fiyatı Renklendirmesi Nasıl Okunur?
 
 "Arz Fiyatı" hücresi, Graham Değeri ve Çarpan Bazlı Değer ile
 karşılaştırılarak otomatik renklendirilir:
@@ -506,14 +588,14 @@ halka arzların ilk gün ortalama istatistikleri gösterilir.</p></td>
 </tbody>
 </table>
 
-## 9.3 Bazı Şirketlerde Graham/Çarpan Değeri Neden Boş?
+## 10.3 Bazı Şirketlerde Graham/Çarpan Değeri Neden Boş?
 
 Fiyat Tespit Raporları KAP'ta genellikle taranmış (OCR gerektiren) PDF
 formatında yayınlanır. Bazı raporların görüntü kalitesi düşük olduğunda,
 sistem yanlış bir rakam üretip sizi yanıltmaktansa, o alanı bilinçli
 olarak boş bırakır. Bu, bir hata değil, güvenlik önlemidir.
 
-## 9.4 "Zorla Yenile" Butonu
+## 10.4 "Zorla Yenile" Butonu
 
 Sistem, Fiyat Tespit Raporlarını her gece otomatik olarak arka planda
 işler. Yeni bir rapor yayınlandığında veya bir önceki işlemede hata
@@ -521,13 +603,17 @@ oluştuğunda, bu butonla manuel olarak yeniden işleme tetiklenebilir.
 Buton, daha önce başarıyla işlenmiş kayıtları atlayıp sadece
 eksik/hatalı olanları tekrar dener.
 
-# 10. Temettü Takip
+Başarıyla çıkarılan değerler kalıcı bir katmanda (veritabanı) saklanır:
+uygulama yeniden başlasa bile daha önce hesaplanmış Arz Fiyatı, İskonto,
+Graham ve Çarpan değerleri kaybolmaz, ilk açılışta otomatik geri gelir.
+
+# 11. Temettü Takip
 
 BIST Temettü Endeksi (XTMTU) üyesi — düzenli nakit temettü dağıtan —
 şirketleri, temettü getirisi ve fiyat momentumunu bir arada göstererek
 karşılaştırmanızı sağlar.
 
-## 10.1 Tablo Sütunları
+## 11.1 Tablo Sütunları
 
 | **Sütun**               | **Açıklama**                                          |
 |-------------------------|-------------------------------------------------------|
@@ -535,14 +621,14 @@ karşılaştırmanızı sağlar.
 | Fiyat (₺)               | Son kapanış fiyatı                                    |
 | Temettü/Hisse (₺)       | Hisse başına ödenen/duyurulan brüt temettü tutarı     |
 | Temettü Verimi %        | Temettü/Hisse ÷ Fiyat × 100                           |
-| Ex-Date                 | Haklardan düşme tarihi (bkz. 10.2)                    |
+| Ex-Date                 | Haklardan düşme tarihi (bkz. 11.2)                    |
 | Sıklık                  | Temettü ödeme sıklığı (Yıllık, Yarı Yıllık vb.)       |
 | 1A Getiri %             | Son 1 aylık fiyat getirisi                            |
 | Optima Skor             | TrendSurf Optima bileşik puanı                        |
 | Tahmini Toplam Getiri % | 1 Aylık Momentum + Temettü Verimi (kaba bir gösterge) |
 | KAP                     | Şirketin KAP sayfasına link                           |
 
-## 10.2 Ex-Date Nedir, Neden Önemli?
+## 11.2 Ex-Date Nedir, Neden Önemli?
 
 Ex-Date (haklardan düşme tarihi), temettüyü almak için hisseye en geç ne
 zamana kadar sahip olmanız gerektiğini belirtir. Temettüyü almak için
@@ -563,7 +649,7 @@ işaret eder.</p></td>
 </tbody>
 </table>
 
-## 10.3 Bu Tabloyu Nasıl Kullanabilirsiniz? — Üç Yöntem
+## 11.3 Bu Tabloyu Nasıl Kullanabilirsiniz? — Üç Yöntem
 
 - **1. Temettü geliri hesabı:** Portföy Bütçesi × Temettü Verimi % = o
   hisseye yatırılırsa yıllık beklenen brüt nakit temettü tutarı (stopaj
@@ -577,7 +663,7 @@ işaret eder.</p></td>
   yanıltıcı olabilir — bazen düşen fiyat verimi yapay olarak şişirir.
   Optima Skor ve 1A Getiri sütunlarıyla birlikte değerlendirin.
 
-# 11. Makro Göstergeler
+# 12. Makro Göstergeler
 
 MKK Veri Analiz Platformu (vap.org.tr) bağlantıları ve özet veriler.
 
@@ -597,7 +683,7 @@ MKK Veri Analiz Platformu (vap.org.tr) bağlantıları ve özet veriler.
 
 Her karta tıklayınca ilgili VAP sayfası yeni sekmede açılır.
 
-# 12. Terimler Sözlüğü — Değerler Ne Anlama Gelir?
+# 13. Terimler Sözlüğü — Değerler Ne Anlama Gelir?
 
 Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 ölçtüğünü ve nasıl okunması gerektiğini açıklar.
@@ -621,12 +707,15 @@ Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 | Peak (Tepe Fiyat)                                          | Kâr realizasyonu uyarı sisteminin izlediği, bir varlığın şimdiye kadar gördüğü en yüksek fiyat. Bu tepeden belirlediğiniz oranda düşüş olduğunda uyarı tetiklenir.                                                                                                 |
 | Sinyal (Güçlü Al / Kademeli Al / Tut-İzle / Sat / Net Sat) | Optima Skoru'nun kategorik karşılığıdır; yüksekten düşüğe doğru sıralanır: Güçlü Al, Kademeli Al, Tut-İzle, Sat, Net Sat.                                                                                                                                          |
 
-# 13. Sık Sorulan Sorular
+# 14. Sık Sorulan Sorular
 
 **Veriler ne sıklıkla güncellenir?**
 
-Fiyat verileri gün içinde düzenli aralıklarla otomatik güncellenir.
-TEFAS/Halka Arz gibi daha az sık değişen veriler birkaç saatlik
+BIST fiyat ve skorları seans saatlerinde (hafta içi 10:00-18:30)
+yaklaşık 15 dakikada bir; döviz, maden ve kripto 7/24 yaklaşık 15
+dakikada bir; TEFAS fonları her akşam NAV açıklandıktan sonra günde bir
+kez güncellenir. Temel analiz verileri (P/E, temettü vb.) gece
+yenilenir. Halka Arz gibi daha az sık değişen veriler birkaç saatlik
 önbellekten gelir.
 
 **Portföy verilerim kayboldu, neden?**
@@ -644,6 +733,12 @@ gelene kadar birkaç dakika ile bir saat arası gecikme olabilir.
 
 Uyarı tekrar modunuza bağlıdır: "Peak Kırıldıkça" modunda aynı tepe için
 bir kez, yeni bir tepe oluşursa tekrar gelir.
+
+**Fırsat Radarı'ndan alarm geldi — hemen almalı mıyım?**
+
+Hayır. Alarm bir "al" sinyali değil, bir inceleme davetidir; skor
+geçmişe bakar ve şirket haberlerini görmez. Ayrıntı için Bölüm 6'ya
+bakın.
 
 **Hafta sonu BIST hissem düşse mail gelir mi?**
 
