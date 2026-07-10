@@ -1,5 +1,5 @@
 """
-upcoming_ipo_client.py — TrendSurf Optima v2.0.4
+upcoming_ipo_client.py — TrendSurf Optima v2.0.6.4
 Yaklasan Halka Arzlar (henuz borsada islem gormeyen, izahname surecindeki
 sirketler) icin KAP "Bildirim Sorgulama" sonuclarini ceker.
 
@@ -33,6 +33,17 @@ Kademeli veri cekme:
   Kademe 1 — KAP HTML fetch + RSC-gomulu JSON regex/parse (dogrulanmis yontem)
   Kademe 2 — Yerel cache (son basarili cekim, en fazla 12 saat eski)
   Kademe 3 — Bos liste (hata durumunda worker.py/app.py CRASH ETMEZ)
+
+v2.0.6.4 (10 Temmuz 2026): Supabase kalici katmani (ipo_valuations tablosu).
+Sorun: Zorla Yenile ile hesaplanan arz fiyati/Graham/Carpan degerleri yalnizca
+konteynerin YEREL dosyasina (upcoming_ipo_cache/*.json) yaziliyordu; Streamlit
+Cloud yeniden baslayinca dosyalar repodan sifirlaniyor ve repodaki cache gece
+worker'inin Actions ortaminda basarisiz olan cikarimi yuzunden null kaliyordu -
+degerler her yeniden baslatmada kayboluyordu. Cozum: basarili (dolu) sonuclar
+Supabase'e UPSERT edilir ve okumada yerel null alanlarin uzerine bindirilir.
+Kurallar: (1) null ASLA dolu degeri ezmez (SQL'de COALESCE + alan bazli merge),
+(2) Supabase erisilemezse davranis eskisiyle birebir ayni (fail-soft),
+(3) yalnizca en az bir alani dolu kayitlar yazilir.
 """
 import os, json, time, re
 from typing import Optional
@@ -117,6 +128,165 @@ FIYAT_TESPIT_TARAMA_SAYFA_SAYISI = 15
 FIYAT_TESPIT_MAX_YENI_ISLEME = 10
 
 
+# ── v2.0.6.4: Supabase kalici katmani (ipo_valuations) ───────────────────────
+# Yayinlanmis bir Fiyat Tespit Raporu'nun icerigi degismez; bu yuzden bir kez
+# dogru cikarilan deger kalicidir. Yerel JSON cache konteyner omruyle sinirli
+# oldugundan dolu sonuclar Supabase'de saklanir. Baglanti/sorgu zaman sinirli
+# (data_health_check v2.0.6.3 dersinden: Supabase arizasinda askida kalinmaz).
+
+IPO_VALUATIONS_ALANLAR = ("arz_fiyati", "iskonto_orani", "tip",
+                          "graham_degeri", "carpan_bazli_deger")
+
+# Sayfa her aciliste Supabase'e gitmemek icin kisa omurlu modul ici memo.
+_SUPABASE_MEMO = {"ts": 0.0, "data": None}
+_SUPABASE_MEMO_TTL = 600  # 10 dk
+
+
+def _supabase_conn():
+    """Zaman sinirli Supabase baglantisi; kurulamazsa None (fail-soft).
+    URL cozumu db.py._get_db_url ile ortak: once env SUPABASE_DB_URL
+    (GitHub Actions), sonra Streamlit secrets (Streamlit Cloud)."""
+    try:
+        from db import _get_db_url
+        url = _get_db_url()
+    except Exception:
+        url = os.environ.get("SUPABASE_DB_URL", "") or ""
+    if not url:
+        return None
+    try:
+        import psycopg2
+        return psycopg2.connect(url, connect_timeout=10,
+                                options="-c statement_timeout=15000")
+    except Exception as e:
+        print(f"[upcoming-ipo] Supabase baglantisi kurulamadi: {e}", flush=True)
+        return None
+
+
+def _supabase_sonuclari_oku(memo_kullan: bool = True) -> dict:
+    """ipo_valuations -> {disclosure_index(str): {alan: deger}}.
+    Hata durumunda bos dict (davranis Supabase'siz halle ayni kalir)."""
+    if memo_kullan and _SUPABASE_MEMO["data"] is not None and \
+            (time.time() - _SUPABASE_MEMO["ts"]) < _SUPABASE_MEMO_TTL:
+        return _SUPABASE_MEMO["data"]
+    conn = _supabase_conn()
+    if conn is None:
+        return _SUPABASE_MEMO["data"] or {}
+    out = {}
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT disclosure_index, arz_fiyati, iskonto_orani, tip, "
+            "graham_degeri, carpan_bazli_deger FROM ipo_valuations")
+        for r in cur.fetchall():
+            out[str(r[0])] = {
+                "arz_fiyati":         float(r[1]) if r[1] is not None else None,
+                "iskonto_orani":      float(r[2]) if r[2] is not None else None,
+                "tip":                r[3],
+                "graham_degeri":      float(r[4]) if r[4] is not None else None,
+                "carpan_bazli_deger": float(r[5]) if r[5] is not None else None,
+            }
+        _SUPABASE_MEMO["data"] = out
+        _SUPABASE_MEMO["ts"] = time.time()
+    except Exception as e:
+        print(f"[upcoming-ipo] Supabase ipo_valuations okunamadi: {e}", flush=True)
+        return _SUPABASE_MEMO["data"] or {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return out
+
+
+def _supabase_sonuclari_yaz(cache: dict):
+    """En az bir alani dolu kayitlari UPSERT eder. COALESCE(EXCLUDED.alan,
+    ipo_valuations.alan): yeni deger doluysa yazilir, null ise MEVCUT DEGER
+    KORUNUR - null asla dolu degeri ezmez (kirmizi cizgi)."""
+    rows = [(k,
+             v.get("arz_fiyati"), v.get("iskonto_orani"), v.get("tip"),
+             v.get("graham_degeri"), v.get("carpan_bazli_deger"))
+            for k, v in cache.items()
+            if isinstance(v, dict) and
+            any(v.get(a) is not None for a in IPO_VALUATIONS_ALANLAR)]
+    if not rows:
+        return
+    conn = _supabase_conn()
+    if conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        cur.executemany("""
+            INSERT INTO ipo_valuations
+              (disclosure_index, arz_fiyati, iskonto_orani, tip,
+               graham_degeri, carpan_bazli_deger, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (disclosure_index) DO UPDATE SET
+              arz_fiyati         = COALESCE(EXCLUDED.arz_fiyati,         ipo_valuations.arz_fiyati),
+              iskonto_orani      = COALESCE(EXCLUDED.iskonto_orani,      ipo_valuations.iskonto_orani),
+              tip                = COALESCE(EXCLUDED.tip,                ipo_valuations.tip),
+              graham_degeri      = COALESCE(EXCLUDED.graham_degeri,      ipo_valuations.graham_degeri),
+              carpan_bazli_deger = COALESCE(EXCLUDED.carpan_bazli_deger, ipo_valuations.carpan_bazli_deger),
+              updated_at         = NOW()
+        """, rows)
+        conn.commit()
+        # Memo'yu gecersiz kil - bir sonraki okuma taze veriyi alsin.
+        _SUPABASE_MEMO["data"] = None
+        print(f"[upcoming-ipo] Supabase ipo_valuations: {len(rows)} kayit "
+              f"UPSERT edildi.", flush=True)
+    except Exception as e:
+        print(f"[upcoming-ipo] Supabase ipo_valuations yazilamadi: {e}", flush=True)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _url_disclosure_index(url) -> Optional[str]:
+    """'https://www.kap.org.tr/tr/Bildirim/1624187' -> '1624187'."""
+    if not url:
+        return None
+    son = str(url).rstrip("/").rsplit("/", 1)[-1]
+    return son if son.isdigit() else None
+
+
+def _supabase_degerleri_df_e_uygula(df: pd.DataFrame) -> pd.DataFrame:
+    """Cache'ten donen listede (12 saatlik erken-donus yolu dahil) BOS kalan
+    deger kolonlarini Supabase'deki dolu degerlerle doldurur. Yereldeki dolu
+    deger her zaman korunur (taze parser sonucu > eski kayit)."""
+    if df.empty or "Fiyat_Tespit_URL" not in df.columns:
+        return df
+    kolon_map = {"Arz_Fiyati": "arz_fiyati", "Iskonto_Orani": "iskonto_orani",
+                 "Graham_Degeri": "graham_degeri",
+                 "Carpan_Bazli_Deger": "carpan_bazli_deger"}
+    # Hicbir deger eksik degilse Supabase'e hic gitme.
+    eksik_var = any(
+        col in df.columns and df[col].isna().any() for col in kolon_map)
+    if not eksik_var:
+        return df
+    sb = _supabase_sonuclari_oku()
+    if not sb:
+        return df
+    doldurulan = 0
+    for i, row in df.iterrows():
+        idx = _url_disclosure_index(row.get("Fiyat_Tespit_URL"))
+        if not idx or idx not in sb:
+            continue
+        kayit = sb[idx]
+        for col, alan in kolon_map.items():
+            if col not in df.columns:
+                continue
+            mevcut = df.at[i, col]
+            if (mevcut is None or (isinstance(mevcut, float) and pd.isna(mevcut))) \
+                    and kayit.get(alan) is not None:
+                df.at[i, col] = kayit[alan]
+                doldurulan += 1
+    if doldurulan:
+        print(f"[upcoming-ipo] Supabase'den {doldurulan} bos alan dolduruldu.",
+              flush=True)
+    return df
+
+
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
 def _read_cache() -> Optional[list]:
@@ -143,13 +313,29 @@ def _write_cache(rows: list):
 # ── Fiyat Tespit Raporu sonuc cache'i (suresiz - rapor icerigi degismez) ──────
 
 def _read_fiyat_tespit_sonuc_cache() -> dict:
-    if not os.path.exists(FIYAT_TESPIT_SONUC_CACHE):
-        return {}
+    cache = {}
+    if os.path.exists(FIYAT_TESPIT_SONUC_CACHE):
+        try:
+            with open(FIYAT_TESPIT_SONUC_CACHE, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+    # v2.0.6.4: Supabase'deki dolu alanlar yerel null'larin uzerine bindirilir.
+    # Yereldeki dolu deger korunur (taze parser sonucu eski kaydi ezmez).
+    # Boylece daha once basariyla cikarilmis bir deger icin PDF yeniden
+    # indirilmez ve konteyner sifirlansa da deger kaybolmaz.
     try:
-        with open(FIYAT_TESPIT_SONUC_CACHE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        sb = _supabase_sonuclari_oku()
+        for key, kayit in sb.items():
+            if key not in cache or not isinstance(cache.get(key), dict):
+                cache[key] = dict(kayit)
+                continue
+            for alan in IPO_VALUATIONS_ALANLAR:
+                if cache[key].get(alan) is None and kayit.get(alan) is not None:
+                    cache[key][alan] = kayit[alan]
+    except Exception as e:
+        print(f"[upcoming-ipo] Supabase overlay atlandi (hata): {e}", flush=True)
+    return cache
 
 
 def _write_fiyat_tespit_sonuc_cache(cache: dict):
@@ -159,6 +345,11 @@ def _write_fiyat_tespit_sonuc_cache(cache: dict):
             json.dump(cache, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+    # v2.0.6.4: Dolu sonuclar kalici katmana da yazilir (fail-soft).
+    try:
+        _supabase_sonuclari_yaz(cache)
+    except Exception as e:
+        print(f"[upcoming-ipo] Supabase yazimi atlandi (hata): {e}", flush=True)
 
 
 # ── Fiyat Tespit Raporu PDF indirme ve fiyat/iskonto cikarma (v2.0.4.8) ───────
@@ -533,7 +724,11 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         cached = _read_cache()
         if cached is not None:
             print(f"[upcoming-ipo] Cache kullanildi: {len(cached)} satir", flush=True)
-            return pd.DataFrame(cached)
+            # v2.0.6.4: Erken-donus yolunda da Supabase kalici katmani
+            # uygulanir - repodan gelen cache'te (deploy sonrasi ilk acilis)
+            # deger kolonlari null olabilir; daha once basariyla hesaplanmis
+            # degerler burada geri doldurulur. Zorla Yenile'ye gerek kalmaz.
+            return _supabase_degerleri_df_e_uygula(pd.DataFrame(cached))
 
     all_new_rows = []
     any_fetch_succeeded = False
