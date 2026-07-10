@@ -8,10 +8,10 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1624219",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1624187",
-    "Arz_Fiyati": null,
-    "Iskonto_Orani": null,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
+    "Arz_Fiyati": 70.0,
+    "Iskonto_Orani": 20.0,
+    "Graham_Degeri": 26.393558652655315,
+    "Carpan_Bazli_Deger": 91.2742831775
   },
   {
     "Tarih": "02.07.2026 23:26:34",
@@ -78,10 +78,10 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1620809",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620810",
-    "Arz_Fiyati": null,
+    "Arz_Fiyati": 69.0,
     "Iskonto_Orani": null,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
+    "Graham_Degeri": 28.958768568986443,
+    "Carpan_Bazli_Deger": 104.53094462540716
   },
   {
     "Tarih": "25.06.2026 20:27:51",
