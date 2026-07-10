@@ -149,6 +149,14 @@ tetikleyicidir (*/20, best-effort). Skor formülü worker.py ile birebir
 aynıdır (hacim/DD düzeltmesi + CSV'den PB/PE/DY temel bileşeni) — bu
 sayede uygulamadaki skor ile alarm skoru hiçbir zaman ayrışmaz.
 
+Hacim trendi bileşeni (son 5 gün / son 20 gün ortalaması) YALNIZCA
+TAMAMLANMIŞ günlerle hesaplanır — bugünün kısmi hacim çubuğu dışlanır
+(v2.0.7.1). Aksi halde sabah saatlerinde düşük görünen günlük hacim,
+bileşeni −10'a çekip gün boyu biriktikçe +5'e döndürüyor ve hisse
+başına 15 puana kadar yapay "sıçrama" alarmı üretiyordu (10 Temmuz
+sabahı 8 varlık, tamamı bu desende). Fiyat/RSI/momentum canlı kalır;
+aynı koruma worker.py'de de vardır (formül paritesi).
+
 | **Kapsam**          | **Pencere**                                    |
 |---------------------|-------------------------------------------------|
 | BIST (772)          | Seans içi, hafta içi TRT 10:00-18:30            |
@@ -385,7 +393,7 @@ taşınmıştır.</p></td>
 | Altın fiyatı yanlış                 | yfinance ons/gram karışıklığı                                              | Bigpara birincil kaynak — otomatik düzelmeli                            |
 | Türkçe karakter bozuk               | KAP API encoding                                                           | fix_encoding (latin-1 → UTF-8) çözümü                                   |
 | E-posta gitmiyor                    | SMTP Secrets eksik/yanlış                                                  | Streamlit + GitHub Actions Secrets kontrol                              |
-| Login beni unutuyor                 | Her push sonrası Streamlit Cloud redeploy tüm oturumları sıfırlar          | Beklenen davranış — push sonrası ilk girişte normal                     |
+| Login beni unutuyor                 | v2.0.7.2 öncesi: redeploy/yenileme oturumu düşürüyordu                     | v2.0.7.2'de çözüldü — tso_auth çerezi + st.context.cookies geri yükleme |
 | Database connection error           | Supabase pooler 6543 yanlış                                                | SUPABASE_DB_URL kontrol                                                 |
 | Halka Arz Graham/Çarpan boş         | OCR kalitesi düşük rapor                                                   | Beklenen/güvenli davranış — manuel düzeltme yapılmaz                    |
 | Peak check çalışmıyor               | cron-job.org tetiklemesi kesilmiş olabilir                                 | cron-job.org panelinden job durumunu kontrol edin                       |
@@ -393,6 +401,7 @@ taşınmıştır.</p></td>
 | Radar alarmı hiç gelmiyor           | cron-job.org tetiklemesi kesik / Actions hatalı / eşikler yüksek           | cron-job.org paneli → Actions koşuları → radar_alerts tablosu sırasıyla |
 | Halka Arz değerleri yeniden başlatınca kayboluyordu | Yerel cache Streamlit Cloud yeniden başlatmasında sıfırlanıyordu | v2.0.6.4'te çözüldü — ipo_valuations kalıcı katmanı (bkz. 3.5)          |
 | BNB/CLINK/ICP fiyatı gelmiyor       | BtcTurk 400 hatası (kalıcı görünüyor)                                      | Açık madde — kaynak/kod eşlemesi incelenecek; fiyatsız varlık skoru 0   |
+| Uygulama "Oh no" + Segmentation fault | Sürümü sabitlenmemiş bir bağımlılığın bozuk yeni sürümü (örn. 10 Tem 2026: pyarrow 25.0.0, st.dataframe'de segfault) | Stabil ve çöken deploy loglarının paket listelerini karşılaştır; değişen paketi requirements.txt'te eski sürüme sabitle. Kod revert'i işe yaramıyorsa suçlu bağımlılıktır |
 
 ## 7.1 Manuel CSV Güncelleme
 
@@ -408,7 +417,23 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
 # 8. Versiyon Geçmişi (Özet)
 
-**v2.0.5.x – v2.0.7 (Temmuz 2026) — Fırsat Radarı ve Kalıcılık Dönemi**
+**v2.0.5.x – v2.0.7.x (Temmuz 2026) — Fırsat Radarı ve Kalıcılık Dönemi**
+
+- v2.0.7.3: pyarrow==24.0.0 ve websockets==16.0 sabitlendi — 10
+  Temmuz'da yayınlanan pyarrow 25.0.0, st.dataframe serileştirmesinde
+  Segmentation fault üreterek uygulamayı her etkileşimde çökertti
+  (giriş ekranı tablosuz olduğu için açılıyordu). Teşhis, stabil ve
+  çöken deploy loglarının paket karşılaştırmasıyla kondu; kod
+  değişikliklerinin suçu yoktu
+
+- v2.0.7.2: Beni Hatırla kalıcı oturum — 90 günlük token tso_auth
+  çerezine yazılır, açılışta st.context.cookies ile sunucu tarafında
+  geri okunur (iframe sandbox'a takılan localStorage denemelerinin
+  yerine). Sayfa yenileme ve push sonrası redeploy artık oturumu
+  düşürmez; çıkışta çerez temizlenir
+
+- v2.0.7.1: Skorun hacim trendi bileşeninde bugünün kısmi çubuğu
+  dışlandı — sabah/gün içi yapay sıçrama alarmları giderildi (bkz. 3.1)
 
 - Fırsat Radarı (firsat_radari.py): BIST 772 seans içi 15 dk'da bir,
   döviz/maden/kripto 7/24, TEFAS akşam penceresi — Supabase
