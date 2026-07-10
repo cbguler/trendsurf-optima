@@ -10,6 +10,12 @@ beautifulsoup4>=4.12.0
 bcrypt>=4.0.0
 Pillow
 borsapy>=0.10.0
+# v2.0.7.3 (10 Temmuz 2026): websockets 16.1 (ayni gun yayinlandi) Streamlit
+# Cloud'da (Python 3.14) Segmentation fault uretiyor - uygulama her
+# etkilesimde cokuyordu. 16.0 (Ocak 2026) sabah boyunca sorunsuzdu.
+# Ustteki surum duzelene kadar SABIT kalacak; kaldirmadan once 16.2+ ile
+# test edilmeli.
+websockets==16.0
 psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
 pdfplumber

@@ -44,7 +44,7 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          pip install pandas yfinance borsapy psycopg2-binary streamlit requests --quiet
+          pip install pandas yfinance borsapy websockets==16.0 psycopg2-binary streamlit requests --quiet
 
       - name: Firsat Radari calistir
         run: python firsat_radari.py

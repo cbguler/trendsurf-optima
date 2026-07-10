@@ -55,7 +55,7 @@ jobs:
         run: |
           pip install --upgrade pip --quiet
           pip install pandas yfinance plotly streamlit requests pytefas \
-                      bcrypt borsapy psycopg2-binary openpyxl \
+                      bcrypt borsapy websockets==16.0 psycopg2-binary openpyxl \
                       pdfplumber pytesseract --quiet
 
       - name: CSV oncesi durum
