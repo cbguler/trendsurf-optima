@@ -10,11 +10,15 @@ beautifulsoup4>=4.12.0
 bcrypt>=4.0.0
 Pillow
 borsapy>=0.10.0
-# v2.0.7.3 (10 Temmuz 2026): websockets 16.1 (ayni gun yayinlandi) Streamlit
-# Cloud'da (Python 3.14) Segmentation fault uretiyor - uygulama her
-# etkilesimde cokuyordu. 16.0 (Ocak 2026) sabah boyunca sorunsuzdu.
-# Ustteki surum duzelene kadar SABIT kalacak; kaldirmadan once 16.2+ ile
-# test edilmeli.
+# v2.0.7.3 (10 Temmuz 2026): SEGFAULT SABITLEMELERI.
+# Asil suclu: pyarrow 25.0.0 (10 Temmuz'da cikti) - Streamlit'in
+# st.dataframe serilestirmesinde Segmentation fault uretiyor; giris
+# ekrani calisiyor, ilk tablo cizen sayfada uygulama cokuyordu. Sabahki
+# stabil deploylar pyarrow 24.0.0 ile kosuyordu (log karsilastirmasiyla
+# dogrulandi). websockets 16.1 de ayni gun ciktigi icin once o
+# suphelenildi ve sabitlendi; masum olabilir ama zararsiz, ikisi de
+# SABIT kaliyor. Kaldirmadan once yeni surumlerle test edilmeli.
+pyarrow==24.0.0
 websockets==16.0
 psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
