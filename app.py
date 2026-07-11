@@ -2931,7 +2931,7 @@ elif page=="Portföyüm":
                 format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.NumberColumn(
                 "Optima Skor",
-                format="%.1f", width="medium", help="Optima Skoru (0-100)"),
+                format="%.1f", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
                 width="medium",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
@@ -2953,7 +2953,7 @@ elif page=="Portföyüm":
         ("Ticker", 1), ("Tarih", 1), ("Miktar", 1), ("Birim", 1),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
-        ("", 1), ("", 1.5), ("", 1.5),
+        ("", 1), ("", 1.2), ("", 1.5),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
