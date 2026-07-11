@@ -1861,20 +1861,26 @@ with st.sidebar:
             a_fml = _fml_keys[_fml_labels.index(a_fml_lbl)]
 
             # Kaydet butonu
-            if st.button("Uyarı Ayarlarını Kaydet", key="alert_save",
-                         use_container_width=True):
-                ok = save_alert_settings(_uid_for_alert, {
-                    "threshold_pct":      float(a_thr),
-                    "kar_only":           bool(a_kar_only),
-                    "check_interval_min": int(a_intv),
-                    "alert_mode":         a_mode,
-                    "emir_formul":        a_fml,
-                    "enabled":            bool(a_enabled),
-                })
-                if ok:
-                    st.success("Uyarı ayarları kaydedildi. (Supabase'de kalıcı)")
-                else:
-                    st.error("Kaydetme hatası — loglara bakın.")
+            with st.container(border=True):
+                st.caption("**Uyarı Ayarlarını Kaydet** — yukarıdaki eşik, kâr koşulu, "
+                           "kontrol sıklığı, uyarı modu ve emir fiyatı formülü "
+                           "ayarlarınızı kalıcı olarak kaydeder (Supabase).")
+                if st.button("Uyarı Ayarlarını Kaydet", key="alert_save",
+                             use_container_width=True):
+                    ok = save_alert_settings(_uid_for_alert, {
+                        "threshold_pct":      float(a_thr),
+                        "kar_only":           bool(a_kar_only),
+                        "check_interval_min": int(a_intv),
+                        "alert_mode":         a_mode,
+                        "emir_formul":        a_fml,
+                        "enabled":            bool(a_enabled),
+                    })
+                    if ok:
+                        st.success("Uyarı ayarları kaydedildi. (Supabase'de kalıcı)")
+                    else:
+                        st.error("Kaydetme hatası — loglara bakın.")
+
+            st.divider()
 
             # v2.0 asama 3a.2 - Manuel Test (autorefresh-safe)
             # streamlit-autorefresh her 60 sn sayfayi yeniliyor. Buton state
@@ -1988,22 +1994,26 @@ with st.sidebar:
                     st.caption("Atlananlar: " + ", ".join(_skip_msgs))
 
             # Peak'leri Sifirla butonu
-            # help= parametresi Streamlit'in button rendering'ini farklilastiriyor
-            # (silik/okunmaz hale getiriyor); aciklamayi caption olarak yaziyoruz.
-            st.caption("**Tüm Peak'leri Sıfırla** — DB'deki tüm peak kayıtlarınızı "
-                       "siler. Bir sonraki kontrolde mevcut fiyatlardan yeni "
-                       "peak başlatılır.")
-            if st.button("Tüm Peak'leri Sıfırla", key="alert_peak_reset",
-                         use_container_width=True):
-                ok = reset_peaks_for_user(_uid_for_alert)
-                if ok:
-                    # Test sonucunu da temizle - eski peak kayitlari gosterilmesin
-                    st.session_state.pop("alert_test_result", None)
-                    st.session_state.pop("alert_test_ts", None)
-                    st.session_state.pop("alert_test_error", None)
-                    st.success("Peak kayıtları sıfırlandı.")
-                else:
-                    st.error("Sıfırlama hatası — loglara bakın.")
+            # v2.0.7.13 - "Simdi Kontrol Et" butonuyle karisiyordu (Bahri geri
+            # bildirimi): sadece divider() yeterli ayrim yaratmiyordu. Gorunur
+            # SINIRLI KUTU (border=True) icine alindi - artik hangi metnin
+            # hangi butona ait oldugu goz onunde acikca ayrisir.
+            st.divider()
+            with st.container(border=True):
+                st.caption("**Tüm Peak'leri Sıfırla** — DB'deki tüm peak kayıtlarınızı "
+                           "siler. Bir sonraki kontrolde mevcut fiyatlardan yeni "
+                           "peak başlatılır.")
+                if st.button("Tüm Peak'leri Sıfırla", key="alert_peak_reset",
+                             use_container_width=True):
+                    ok = reset_peaks_for_user(_uid_for_alert)
+                    if ok:
+                        # Test sonucunu da temizle - eski peak kayitlari gosterilmesin
+                        st.session_state.pop("alert_test_result", None)
+                        st.session_state.pop("alert_test_ts", None)
+                        st.session_state.pop("alert_test_error", None)
+                        st.success("Peak kayıtları sıfırlandı.")
+                    else:
+                        st.error("Sıfırlama hatası — loglara bakın.")
 
             # Bilgilendirme
             st.caption(
