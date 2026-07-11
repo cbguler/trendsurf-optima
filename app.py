@@ -636,6 +636,18 @@ if "auth_token" not in st.session_state:
     try:
         _ctx = getattr(st, "context", None)
         _cerezler = getattr(_ctx, "cookies", None) if _ctx is not None else None
+        # v2.0.7.4 - TANILAMA: st.context.cookies'in Streamlit Cloud'da
+        # bu tarayici/proxy kombinasyonunda ne dondugunu bir kez logla.
+        # Sadece anahtar isimlerini yaz (token degerini degil - guvenlik).
+        if not st.session_state.get("_tso_cerez_tanilama_yapildi"):
+            st.session_state["_tso_cerez_tanilama_yapildi"] = True
+            if _cerezler is None:
+                print("[auth-debug] st.context.cookies mevcut degil (None) - "
+                      "Streamlit surumu cok eski olabilir")
+            else:
+                print(f"[auth-debug] st.context.cookies anahtarlari: "
+                      f"{list(_cerezler.keys())} (tso_auth var mi: "
+                      f"{'tso_auth' in _cerezler})")
         _tok_cerez = _cerezler.get("tso_auth") if _cerezler else None
         if _tok_cerez and st.session_state.get("_tso_cerez_denenen") != _tok_cerez:
             st.session_state["_tso_cerez_denenen"] = _tok_cerez
