@@ -2459,18 +2459,20 @@ if page=="Ana Sayfa":
         df_opt_show = df_opt.drop(columns=["Ad"], errors="ignore").reset_index(drop=True)
         _yeni_secim = clickable_table(df_opt_show, key="anasayfa_df", sel_ticker=sel_ana, col_cfg=col_cfg_ana)
 
-        # v2.0.7.22 - Hedef Tutar kaldirildi (Bahri'nin talebi): kafa karistiran
-        # teorik referans sutunuydu, gercek satin alma karari zaten Tutar
-        # uzerinden veriliyordu. Artik sadece Tutar toplami + butce kullanimi.
+        # v2.0.7.24 - Siralama degistirildi (Bahri'nin talebi): Bütçe
+        # Kullanımı once, Toplam Tutar en sona (en saga) alindi - boylece
+        # tablonun en sagindaki "Tutar (₺)" sutununun devami gibi hizalaniyor.
+        # "Tutar" etiketi "Toplam Tutar" olarak degistirildi.
         _toplam_gercek = df_opt["Tutar (₺)"].sum()
         st.markdown(
             f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
             f"display:flex;justify-content:space-between;'>"
             f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM</b>"
             f"<span style='font-size:14px;'>"
-            f"Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
-            f"&nbsp;&nbsp;|&nbsp;&nbsp;Bütçe Kullanımı: <b style='color:#1b2a4a;'>"
-            f"{(_toplam_gercek/budget*100 if budget>0 else 0):.1f}%</b></span></div>",
+            f"Bütçe Kullanımı: <b style='color:#1b2a4a;'>"
+            f"{(_toplam_gercek/budget*100 if budget>0 else 0):.1f}%</b>"
+            f"&nbsp;&nbsp;|&nbsp;&nbsp;Toplam Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
+            f"</span></div>",
             unsafe_allow_html=True
         )
 
