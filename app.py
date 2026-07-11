@@ -10,22 +10,6 @@ except: HAS_PLOTLY = False
 st.set_page_config(page_title="TrendSurf Optima", page_icon="favicon.png", layout="wide",
                    initial_sidebar_state="expanded")
 
-# v2.0.7.6 - GECICI TANILAMA PANELI (Beni Hatirla / st.context.cookies testi).
-# Loglarda print() cikmiyordu - bu yuzden bilgiyi dogrudan ekranda gosteriyoruz.
-# SORUN COZULUNCE BU BLOK TAMAMEN SILINECEK.
-with st.expander("🔧 GECICI TANILAMA (Beni Hatirla testi) - is bitince silinecek", expanded=True):
-    st.write("**auth_token session_state'te mi:**", "auth_token" in st.session_state)
-    try:
-        _tani_ctx = getattr(st, "context", None)
-        st.write("**st.context objesi:**", repr(_tani_ctx))
-        _tani_cerezler = getattr(_tani_ctx, "cookies", None) if _tani_ctx is not None else None
-        st.write("**cerezler objesi:**", repr(_tani_cerezler))
-        if _tani_cerezler is not None:
-            st.write("**cerez anahtarlari:**", list(_tani_cerezler.keys()))
-            st.write("**tso_auth var mi:**", "tso_auth" in _tani_cerezler)
-    except Exception as _tani_ex:
-        st.write("**HATA:**", repr(_tani_ex))
-
 # ══════════════════════════════════════════════════════════════
 # CSS
 # ══════════════════════════════════════════════════════════════
@@ -641,33 +625,53 @@ def render_auth_gate():
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
 
-# v2.0.7.2 - Beni Hatirla: tarayici CEREZINDEN oturumu geri yukle.
-# st.context.cookies (Streamlit >= 1.37) gercek tarayici cerezlerini sunucu
-# tarafinda okur - iframe sandbox sorunu YOKTUR. Login'de yazilan tso_auth
-# cerezi burada okunur; token'in gecerliligi/suresi zaten get_current_user()
-# icinde DB'den dogrulanir (gecersizse sessizce dusurulur, giris ekrani
-# gelir). Ayni olu token'i her rerun'da yeniden denememek icin bir kez
-# denenen deger session_state'te isaretlenir.
-print(f"[auth-debug] cerez blogu calisti - auth_token session_state'te mi: "
-      f"{'auth_token' in st.session_state}")
+# v2.0.7.7 - Beni Hatirla FALLBACK: st.context.cookies bu Streamlit Cloud
+# kurulumunda cerezleri GORMUYOR (v2.0.7.6 ekran-ici tanilama panelinde
+# kanitlandi - giris hemen sonrasi bile "cerez anahtarlari: []" donuyor,
+# yani sorun sadece okuma zamanlamasinda degil, temelde calismiyor).
+# Bu yuzden ayni yontem TERK EDILDI. Yerine, email autofill'de zaten
+# KANITLANMIS calisan istemci-tarafi cerez okuma + URL query param
+# teknigi kullaniliyor: JS tso_auth cerezini okur, "_ta" query param'ina
+# ekleyip sayfayi bu parametreyle yeniden yukler; Python asagida "_ta"yi
+# okuyup session_state'e yazar, token'in gecerliligi get_current_user()
+# icinde DB'den dogrulanir. Token URL'de kalici kalmasin diye okunduktan
+# hemen sonra history.replaceState ile temizlenir.
+_ta_param = st.query_params.get("_ta", "")
+if _ta_param and "auth_token" not in st.session_state:
+    st.session_state["auth_token"] = _ta_param
+    st.session_state["_tso_cerez_denenen"] = _ta_param
+    print("[auth] tso_auth URL parametresinden oturum geri yukleme denendi")
+    _stc_v1.html("""
+    <script>
+    try {
+      var u = new URL(window.parent.location.href);
+      u.searchParams.delete('_ta');
+      window.parent.history.replaceState({}, '', u.toString());
+    } catch(e) { console.log('tso _ta temizleme err:', e); }
+    </script>
+    """, height=0)
+
 if "auth_token" not in st.session_state:
-    try:
-        _ctx = getattr(st, "context", None)
-        print(f"[auth-debug] st.context: {_ctx!r}")
-        _cerezler = getattr(_ctx, "cookies", None) if _ctx is not None else None
-        print(f"[auth-debug] cerezler objesi: {_cerezler!r}")
-        if _cerezler is not None:
-            print(f"[auth-debug] cerez anahtarlari: {list(_cerezler.keys())} "
-                  f"(tso_auth var mi: {'tso_auth' in _cerezler})")
-        _tok_cerez = _cerezler.get("tso_auth") if _cerezler else None
-        if _tok_cerez and st.session_state.get("_tso_cerez_denenen") != _tok_cerez:
-            st.session_state["_tso_cerez_denenen"] = _tok_cerez
-            st.session_state["auth_token"] = _tok_cerez
-            print("[auth] tso_auth cerezinden oturum geri yukleme denendi")
-    except Exception as _ck_ex:
-        import traceback
-        print(f"[auth] cerez okuma HATA: {_ck_ex!r}")
-        traceback.print_exc()
+    _stc_v1.html("""
+    <script>
+    (function() {
+        try {
+          var loc = window.parent.location;
+          if (loc.search.indexOf('_ta=') !== -1) return;  // zaten eklenmis
+          var v = "; " + window.parent.document.cookie;
+          var p = v.split("; tso_auth=");
+          if (p.length === 2) {
+            var tok = decodeURIComponent(p.pop().split(";")[0]);
+            if (tok) {
+              var u = new URL(loc.href);
+              u.searchParams.set("_ta", tok);
+              loc.href = u.toString();
+            }
+          }
+        } catch(e) { console.log('tso auth restore err:', e); }
+    })();
+    </script>
+    """, height=0)
 
 # v1.9.9.3 - Beni Hatirla yapilanmasi:
 #   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
