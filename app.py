@@ -2700,53 +2700,58 @@ elif page=="Portföyüm":
             labels       = df_uni_copy["_label"].tolist()
             tickers_list = df_uni_copy["Ticker"].tolist()
             cats_list    = df_uni_copy["Kategori"].tolist()
-            sel_label = st.selectbox("Varlık", labels, key="pf_varlik_sel")
-            idx_sel   = labels.index(sel_label)
-            pt        = tickers_list[idx_sel]
-            pt_cat    = cats_list[idx_sel]
-            _pm       = df_uni[df_uni["Ticker"] == pt]
-            auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
-            f_c1, f_c2, f_c3, f_c4 = st.columns([1.2, 0.9, 0.8, 1.2])
-            with f_c1:
-                import datetime as _dt
-                satin_tarih = st.date_input("Satın Alma Tarihi", value=_dt.date.today(),
-                                            key="pf_tarih", format="DD.MM.YYYY")
-            with f_c2:
-                pa_str = st.text_input("Birim (miktar)", value="1", key="pf_adet",
-                                       placeholder="Örn: 5,06")
-                try:    pa = parse_tr(pa_str)
-                except: pa = 0.0
-            with f_c3:
-                # v1.9.11 - Otomatik Birim Turu (UX)
-                # Default kategoriye gore (BIST->Lot, MADEN gram->Gram, vs).
-                # Key ticker'a baglandigi icin yeni varlik secildikce dropdown
-                # uygun default'a doner. Kullanici manuel de degistirebilir.
-                _unit_opts = ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
-                _def_unit  = _default_unit_for(pt, pt_cat)
-                _def_idx   = _unit_opts.index(_def_unit) if _def_unit in _unit_opts else 0
-                unit_type = st.selectbox("Birim Türü", _unit_opts,
-                                          index=_def_idx,
-                                          key=f"pf_unit_{pt}")
-            with f_c4:
-                _ph = fmt_tr(auto_price,4) if auto_price>0 else "Örn: 6.277,08"
-                pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
-                                       key="pf_maliyet", placeholder=_ph)
-                try:    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
-                except: pm = auto_price
-            if auto_price>0 and pa>0:
-                st.caption(f"Güncel piyasa fiyatı: {fmt_tr(auto_price,4)} TL"
-                           f"  |  Tahmini toplam: {fmt_tr(pa*auto_price)} TL")
-            pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
-                                    placeholder="Örn: İlk alım, uzun vadeli")
-            if st.button("EKLE", use_container_width=True, key="pf_ekle"):
-                if pa > 0:
-                    add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note,
-                                       purchase_date=satin_tarih.strftime("%Y-%m-%d"),
-                                       unit_type=unit_type)
-                    st.success(f"{pt} eklendi — {fmt_tr(pa,4)} {unit_type} @ {fmt_tr(pm,4)} TL")
-                    st.rerun()
-                else:
-                    st.warning("Birim 0'dan büyük olmalı.")
+            sel_label = st.selectbox("Varlık", labels, index=None,
+                                     placeholder="Varlık ara veya seç...",
+                                     key="pf_varlik_sel")
+            if sel_label is None:
+                st.caption("Eklemek istediğiniz varlığı yukarıdan seçin.")
+            else:
+                idx_sel   = labels.index(sel_label)
+                pt        = tickers_list[idx_sel]
+                pt_cat    = cats_list[idx_sel]
+                _pm       = df_uni[df_uni["Ticker"] == pt]
+                auto_price = float(_pm["Son_Fiyat"].iloc[0]) if not _pm.empty and float(_pm["Son_Fiyat"].iloc[0]) > 0 else 0.0
+                f_c1, f_c2, f_c3, f_c4 = st.columns([1.2, 0.9, 0.8, 1.2])
+                with f_c1:
+                    import datetime as _dt
+                    satin_tarih = st.date_input("Satın Alma Tarihi", value=_dt.date.today(),
+                                                key="pf_tarih", format="DD.MM.YYYY")
+                with f_c2:
+                    pa_str = st.text_input("Birim (miktar)", value="1", key="pf_adet",
+                                           placeholder="Örn: 5,06")
+                    try:    pa = parse_tr(pa_str)
+                    except: pa = 0.0
+                with f_c3:
+                    # v1.9.11 - Otomatik Birim Turu (UX)
+                    # Default kategoriye gore (BIST->Lot, MADEN gram->Gram, vs).
+                    # Key ticker'a baglandigi icin yeni varlik secildikce dropdown
+                    # uygun default'a doner. Kullanici manuel de degistirebilir.
+                    _unit_opts = ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
+                    _def_unit  = _default_unit_for(pt, pt_cat)
+                    _def_idx   = _unit_opts.index(_def_unit) if _def_unit in _unit_opts else 0
+                    unit_type = st.selectbox("Birim Türü", _unit_opts,
+                                              index=_def_idx,
+                                              key=f"pf_unit_{pt}")
+                with f_c4:
+                    _ph = fmt_tr(auto_price,4) if auto_price>0 else "Örn: 6.277,08"
+                    pm_str = st.text_input("Alış Fiyatı (birim, TL)", value="",
+                                           key="pf_maliyet", placeholder=_ph)
+                    try:    pm = parse_tr(pm_str) if pm_str.strip() else auto_price
+                    except: pm = auto_price
+                if auto_price>0 and pa>0:
+                    st.caption(f"Güncel piyasa fiyatı: {fmt_tr(auto_price,4)} TL"
+                               f"  |  Tahmini toplam: {fmt_tr(pa*auto_price)} TL")
+                pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
+                                        placeholder="Örn: İlk alım, uzun vadeli")
+                if st.button("EKLE", use_container_width=True, key="pf_ekle"):
+                    if pa > 0:
+                        add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note,
+                                           purchase_date=satin_tarih.strftime("%Y-%m-%d"),
+                                           unit_type=unit_type)
+                        st.success(f"{pt} eklendi — {fmt_tr(pa,4)} {unit_type} @ {fmt_tr(pm,4)} TL")
+                        st.rerun()
+                    else:
+                        st.warning("Birim 0'dan büyük olmalı.")
 
     if not portfolio:
         st.info("Henüz pozisyon yok. Yukarıdan ekleyebilirsin.")
