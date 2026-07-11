@@ -3,11 +3,16 @@ dividend_engine.py — Temettü ve Pasif Gelir Hesaplama Motoru
 TrendSurf Optima için tüm varlık sınıflarından beklenen geliri hesaplar.
 
 Gelir türleri:
-  BIST    → Temettü (yfinance dividendRate / dividendYield)
-  KRIPTO  → Staking / Proof-of-Stake getirisi (sabit oran tablosu)
-  TEFAS   → Fon getirisi (1M return × 12 = annualize yaklaşımı)
-  DÖVİZ   → Faiz farkı (gösterge — TCMB politika faizi bazlı)
-  MADEN   → Gelir yok (sadece sermaye kazancı)
+  BIST    → Temettü (yfinance dividendRate / dividendYield) — GERÇEK veri
+  KRIPTO  → Staking / Proof-of-Stake getirisi (sabit oran tablosu) — GERÇEK veri
+  TEFAS   → Fon getirisi (1A getiri × 12 bileşik = yıllıklandırma) — SPEKÜLATİF (trend)
+  DÖVİZ   → Fiyat trendi (1A getiri × 12 bileşik = yıllıklandırma) — SPEKÜLATİF (trend)
+  MADEN   → Fiyat trendi (1A getiri × 12 bileşik = yıllıklandırma) — SPEKÜLATİF (trend)
+
+v2.0.7.23 - TEFAS/DÖVİZ/MADEN artık AYNI trend-bazlı yıllıklandırma yöntemini
+kullanıyor (Bahri'nin talebi: "sadece TEFAS için olacaksa taraftar değilim").
+Sadece BIST ve KRIPTO gerçek/sabit oranlı veriye dayanır; diğer üçü kısa
+vadeli fiyat momentumunun basit bir projeksiyonudur, yatırım tavsiyesi değildir.
 """
 
 import pandas as pd
@@ -176,17 +181,21 @@ def calc_portfolio_income(portfolio: list, df_universe: pd.DataFrame) -> pd.Data
             else:
                 gelir_turu = "Fon getirisi (veri yok)"
 
-        elif cat == "DOVIZ":
-            # Carry trade / faiz farkı — gösterge
-            if "TRY" in ticker:
-                # TL'ye çevrilebilecek döviz → TL mevduat faiziyle kıyasla
-                gelir_oran = 0.0   # Kur farkı → sermaye kazancı
-                gelir_turu = "Kur farkı (sermaye kazancı)"
+        elif cat in ("DOVIZ", "MADEN"):
+            # v2.0.7.23 - TUTARLILIK: Bu fonksiyon (gercek portfoy geliri)
+            # su an app.py'den cagrilmiyor ama tutarlilik icin ayni kural
+            # burada da uygulaniyor - TEFAS'takiyle ayni trend-bazli
+            # yillıklandirma, sadece BIST/KRIPTO'daki gercek sabit oranli
+            # veriler ozel kalir.
+            ret1m = float(row.get("Ret1M", 0))
+            if ret1m > 0:
+                gelir_oran = round(((1 + ret1m/100)**12 - 1) * 100, 2)
+                yillik_try = round(toplam * gelir_oran / 100, 2)
+                kat_lbl = "Döviz" if cat == "DOVIZ" else "Değerli Maden"
+                gelir_turu = f"{kat_lbl} Fiyat Trendi (spekülatif)"
             else:
-                gelir_turu = "Faiz farkı (gösterge)"
-
-        elif cat == "MADEN":
-            gelir_turu = "Gelir yok (sadece sermaye kazancı)"
+                kat_lbl = "Döviz" if cat == "DOVIZ" else "Değerli Maden"
+                gelir_turu = f"{kat_lbl} (getiri verisi yok)"
 
         toplam_getiri = round(kz_pct + gelir_oran, 2)
 
@@ -225,9 +234,18 @@ def calc_optimization_income(df_opt: pd.DataFrame, df_universe: pd.DataFrame,
     for _, row in df_out.iterrows():
         ticker   = str(row.get("Ticker", ""))
         cat      = str(row.get("Kategori", ""))
-        hedef    = float(row.get("Hedef Tutar (₺)", 0))
+        # v2.0.7.23 - IKI SUTUN ADI HATASI DUZELTILDI (Bahri'nin 11 Temmuz
+        # bulgusu): (1) "Hedef Tutar (₺)" sutunu kaldirildi, "Tutar (₺)"
+        # kullanilmali. (2) "Lot / Adet" sutunu app.py'de HICBIR ZAMAN bu
+        # isimle var olmadi - gercek adi "Birim". Bu ikinci hata yuzunden
+        # BIST temettu geliri (asagida lot*div_per_share) HER ZAMAN 0
+        # cikiyordu (row.get varsayilan deger donuyordu) - yani onceki
+        # "Tahmini Yillik Pasif Gelir" neredeyse tamamen TEFAS'in spekulatif
+        # yillıklandirmasindan geliyordu, gercek temettu hic katkida
+        # bulunmuyordu.
+        tutar    = float(row.get("Tutar (₺)", 0))
         cur_p    = float(row.get("Emir Fiyatı", 0))
-        lot      = int(row.get("Lot / Adet", 0))
+        lot      = int(row.get("Birim", 0))
 
         gelir = 0.0; oran = 0.0; tur = "—"
 
@@ -240,7 +258,7 @@ def calc_optimization_income(df_opt: pd.DataFrame, df_universe: pd.DataFrame,
         elif cat == "KRIPTO":
             stk = get_kripto_staking(ticker, cur_p)
             if stk["stakeable"]:
-                gelir = round(hedef * stk["apy"] / 100, 2)
+                gelir = round(tutar * stk["apy"] / 100, 2)
                 oran  = stk["apy"]
                 tur   = f"Staking %{stk['apy']:.1f}"
 
@@ -250,9 +268,27 @@ def calc_optimization_income(df_opt: pd.DataFrame, df_universe: pd.DataFrame,
                 ret1m = float(match.iloc[0].get("Ret1M", 0))
                 if ret1m > 0:
                     ann  = round(((1 + ret1m/100)**12 - 1) * 100, 2)
-                    gelir = round(hedef * ann / 100, 2)
+                    gelir = round(tutar * ann / 100, 2)
                     oran  = ann
-                    tur   = "Fon Getirisi"
+                    tur   = "Fon Getirisi (trend, spekülatif)"
+
+        elif cat in ("DOVIZ", "MADEN"):
+            # v2.0.7.23 - TUTARLILIK (Bahri'nin talebi): "pasif gelir tahmini"
+            # sadece TEFAS'a ozel bir yontem olmamali - gercek sabit oranli
+            # bir gelir kaynagi olmayan TUM kategorilerde AYNI trend-bazli
+            # yillıklandirma (1A getiri -> bileşik yıllık) tutarli sekilde
+            # uygulanir. Boylece metodoloji BIST/KRIPTO (gercek veri) disinda
+            # her yerde ayni mantikla calisir, TEFAS ozel bir durum olmaktan
+            # cikar.
+            match = df_universe[df_universe["Ticker"] == ticker]
+            if not match.empty:
+                ret1m = float(match.iloc[0].get("Ret1M", 0))
+                if ret1m > 0:
+                    ann  = round(((1 + ret1m/100)**12 - 1) * 100, 2)
+                    gelir = round(tutar * ann / 100, 2)
+                    oran  = ann
+                    kat_lbl = "Döviz" if cat == "DOVIZ" else "Değerli Maden"
+                    tur   = f"{kat_lbl} Fiyat Trendi (spekülatif)"
 
         yillik_gelir_list.append(gelir)
         gelir_oran_list.append(oran)

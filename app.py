@@ -2336,8 +2336,7 @@ if page=="Ana Sayfa":
                 "1A Getiri %":float(row.get("Ret1M",0)),
                 "Emir Fiyatı":price,
                 "Birim":lot,
-                "Gerçek Tutar (₺)":gercek,
-                "Hedef Tutar (₺)":round(per,2),
+                "Tutar (₺)":gercek,
                 "_gercek_fiyat": float(row.get("Son_Fiyat",0)) > 0,
             })
 
@@ -2353,7 +2352,7 @@ if page=="Ana Sayfa":
                 f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
 
     # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
-    # sayiya yuvarlandigi icin her varlikta Hedef Tutar'dan az kalan bir
+    # sayiya yuvarlandigi icin her varlikta Tutar'dan az kalan bir
     # artik olusuyordu ve bu artik toplamda kullanilmadan kaliyordu (orn.
     # 20.000 TL butcede Gercek Tutar toplami 19.831 TL'de kaliyordu). Mantik:
     # kullanicinin elinde YATIRIMA AYRILACAK gercek bir tutar var - onemli
@@ -2365,7 +2364,7 @@ if page=="Ana Sayfa":
     # tekrarlanir) dagitilir. Sadece MEVCUT secili varliklara ek lot eklenir
     # - Max Varlik Sayisi kisitini bozmaz, yeni varlik eklemez.
     if opt_rows:
-        _kalan_butce = budget - sum(r["Gerçek Tutar (₺)"] for r in opt_rows)
+        _kalan_butce = budget - sum(r["Tutar (₺)"] for r in opt_rows)
         _skor_sirali = sorted(
             [r for r in opt_rows if r.get("_gercek_fiyat")],
             key=lambda r: -r["Optima Skoru"])
@@ -2376,7 +2375,7 @@ if page=="Ana Sayfa":
                 _fiyat = r["Emir Fiyatı"]
                 if _fiyat > 0 and _fiyat <= _kalan_butce:
                     r["Birim"] += 1
-                    r["Gerçek Tutar (₺)"] = round(r["Gerçek Tutar (₺)"] + _fiyat, 2)
+                    r["Tutar (₺)"] = round(r["Tutar (₺)"] + _fiyat, 2)
                     _kalan_butce = round(_kalan_butce - _fiyat, 2)
                     _ilerleme = True
 
@@ -2415,16 +2414,18 @@ if page=="Ana Sayfa":
         # özet metrikler (Tahmini Yıllık Pasif Gelir vb.) zaten aynı veriyi
         # gösteriyor, df_opt_gelir'den hesaplanmaları bundan etkilenmiyor.
         base_cols = ["Kategori","Ticker","Ad","Optima Skoru","Sinyal","RSI","1A Getiri %",
-                     "Emir Fiyatı","Birim","Gerçek Tutar (₺)","Hedef Tutar (₺)"]
+                     "Emir Fiyatı","Birim","Tutar (₺)"]
         col_order = base_cols
         df_opt = df_opt[[c for c in col_order if c in df_opt.columns]]
 
-        st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Kategori içi eşit bölüşümden artan bakiye, "
+        st.caption("Tutar = Lot x Emir Fiyatı. Kategori içi eşit bölüşümden artan bakiye, "
                    "Optima Skoru en yüksek varlıklara ek lot olarak dağıtılarak bütçenin mümkün "
-                   "olduğunca tamamı kullanılır (Hedef Tutar, yuvarlama öncesi teorik eşit payı gösterir). "
-                   "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | "
-                   "TEFAS 1A getirisi x 12 — bu sonuncusu gerçek gelir değil, kısa vadeli getirinin basit "
-                   "yıllıklandırılmasıdır). Yatırım tavsiyesi değildir.")
+                   "olduğunca tamamı kullanılır. "
+                   "Pasif gelir tahmini üstteki özet metriklerde gösterilir — BIST (temettü) ve "
+                   "Kripto (staking APY) GERÇEK verilere dayanır; TEFAS, Döviz ve Değerli Maden "
+                   "için ise gerçek/sabit bir gelir kaynağı olmadığından tutarlı bir yöntemle "
+                   "1 aylık getiri bileşik olarak yıllıklandırılır — bu SPEKÜLATİF bir trend "
+                   "projeksiyonudur, gerçek gelir garantisi değildir. Yatırım tavsiyesi değildir.")
 
         # v2.0.4.40: Deneme - Ana Sayfa'yi da Portfoyum/kategori sayfalarinda
         # zaten basariyla kullanilan native st.dataframe (clickable_table)
@@ -2444,8 +2445,7 @@ if page=="Ana Sayfa":
             "1A Getiri %": st.column_config.NumberColumn("1A Getiri %", format="%.2f", width="small"),
             "Emir Fiyatı": st.column_config.NumberColumn("Emir Fiyatı", format="%.4f", width="small"),
             "Birim": st.column_config.NumberColumn("Birim", format="%d", width="small"),
-            "Gerçek Tutar (₺)": st.column_config.NumberColumn("Gerçek Tutar (₺)", format="%.2f", width="small"),
-            "Hedef Tutar (₺)": st.column_config.NumberColumn("Hedef Tutar (₺)", format="%.2f", width="small"),
+            "Tutar (₺)": st.column_config.NumberColumn("Tutar (₺)", format="%.2f", width="small"),
         }
         st.markdown("""
         <style>
@@ -2459,17 +2459,16 @@ if page=="Ana Sayfa":
         df_opt_show = df_opt.drop(columns=["Ad"], errors="ignore").reset_index(drop=True)
         _yeni_secim = clickable_table(df_opt_show, key="anasayfa_df", sel_ticker=sel_ana, col_cfg=col_cfg_ana)
 
-        # v2.0.7.21 - Gercek/Hedef Tutar toplamlari (Bahri'nin talebi):
-        # Butce kullanim verimliligini bir bakista gormek icin.
-        _toplam_gercek = df_opt["Gerçek Tutar (₺)"].sum()
-        _toplam_hedef  = df_opt["Hedef Tutar (₺)"].sum()
+        # v2.0.7.22 - Hedef Tutar kaldirildi (Bahri'nin talebi): kafa karistiran
+        # teorik referans sutunuydu, gercek satin alma karari zaten Tutar
+        # uzerinden veriliyordu. Artik sadece Tutar toplami + butce kullanimi.
+        _toplam_gercek = df_opt["Tutar (₺)"].sum()
         st.markdown(
             f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
             f"display:flex;justify-content:space-between;'>"
             f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM</b>"
             f"<span style='font-size:14px;'>"
-            f"Gerçek Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
-            f"&nbsp;&nbsp;|&nbsp;&nbsp;Hedef Tutar: <b style='color:#1b2a4a;'>{_toplam_hedef:,.2f} ₺</b>"
+            f"Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
             f"&nbsp;&nbsp;|&nbsp;&nbsp;Bütçe Kullanımı: <b style='color:#1b2a4a;'>"
             f"{(_toplam_gercek/budget*100 if budget>0 else 0):.1f}%</b></span></div>",
             unsafe_allow_html=True
@@ -2625,7 +2624,7 @@ if page=="Ana Sayfa":
         # rengi), on/dis govde (koyu ton) ve iki radyal yan govde (orta ton)
         # olarak ayri path'lerle cizilir; arkadan one dogru z-sirasiyla
         # (sin(orta_aci) kucukten buyuge) cizilerek dogru ortusme saglanir.
-        cat_sum=df_opt.groupby("Kategori")["Hedef Tutar (₺)"].sum().reset_index()
+        cat_sum=df_opt.groupby("Kategori")["Tutar (₺)"].sum().reset_index()
         n=len(cat_sum)
         colors=["#1b2a4a","#3b9eff","#00d4aa","#f4a300","#e74c3c",
                 "#9b59b6","#2ecc71","#e67e22","#1abc9c","#e91e63"][:n]
@@ -2722,7 +2721,7 @@ if page=="Ana Sayfa":
         import html as _html_mod
         _html_esc = _html_mod.escape
         st.markdown(_3d_pasta_svg(cat_sum["Kategori"].tolist(),
-                                    cat_sum["Hedef Tutar (₺)"].tolist(),
+                                    cat_sum["Tutar (₺)"].tolist(),
                                     colors), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
