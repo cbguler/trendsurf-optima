@@ -2850,7 +2850,7 @@ elif page=="Portföyüm":
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
-        selection_mode="single-row",
+        selection_mode="multi-row",
         column_config={
             "Ticker": st.column_config.TextColumn(width="small"),
             "Tarih":  st.column_config.TextColumn(width="small"),
@@ -2889,9 +2889,18 @@ elif page=="Portföyüm":
         unsafe_allow_html=True
     )
 
-    # Seçili satır — Sil + Analiz
+    # Seçili satır(lar) — Coklu ise toplu Sil, tekli ise Sil + Analiz
     _sel = _event.selection.rows if hasattr(_event,"selection") else []
-    if _sel:
+    if len(_sel) > 1:
+        _sel_tickers = [_pf_rows[i]["Ticker"] for i in _sel]
+        _sel_ids     = [_pf_rows[i]["_id"] for i in _sel]
+        st.info(f"{len(_sel)} varlık seçildi: " + ", ".join(_sel_tickers))
+        if st.button(f"Seçilen {len(_sel)} Varlığı Sil", type="secondary",
+                     key="pf_sil_coklu"):
+            for _sid in _sel_ids:
+                delete_portfolio_item(_sid)
+            st.rerun()
+    elif _sel:
         _si  = _sel[0]
         _row_data = _pf_rows[_si]
         _sel_tkr  = _row_data["Ticker"]
