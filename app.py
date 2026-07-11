@@ -2938,22 +2938,27 @@ elif page=="Portföyüm":
         }
     )
 
-    # Toplam satırı — v2.0.7.25 (Bahri'nin talebi): Toplam Portföy Değeri ve
-    # K/Z toplami, tablodaki "Toplam" ve "K/Z" sutunlarinin ALTINA denk
-    # gelecek sekilde hizalandi (native st.dataframe oldugu icin piksel
-    # piksel degil, ayni sutun agirliklariyla flexbox yaklasik hizalama).
-    # Iki deger de ARTIK AYNI font boyutunda (onceden Toplam daha buyuktu).
+    # Toplam satırı — v2.0.7.28 (Bahri'nin talebi): Onceki versiyonda
+    # "TOPLAM PORTFOY DEGERI" etiketi AYNI satirda soldan yer kapladigi
+    # icin butun rakam satiri saga kayiyor, sutun agirliklari dogru olsa
+    # bile hizalama tutmuyordu. Cozum: etiket AYRI bir ust satira alindi,
+    # rakam satiri artik tablonun sol kenariyla AYNI noktadan basliyor -
+    # boylece sutun agirliklari gercekten karsilik gelen sutunlarin
+    # ALTINA denk geliyor (native dataframe oldugu icin yine de piksel
+    # piksel garanti degil, ama onceki halden cok daha yakin).
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
     _tcs = "+" if _total_kz>=0 else ""
-    # Sutun sirasi/agirliklari tablodakiyle ayni (small=1, medium=1.5)
+    # Sutun sirasi/agirliklari tablodaki fiili genisliklerle (ekran
+    # goruntusunden olculdu) uyumlu: checkbox kucuk, veri sutunlari esit,
+    # Optima Skor biraz genis, Sinyal en genis.
     _footer_kolonlar = [
-        ("", 0.4),      # checkbox sutunu spaceri
+        ("", 0.45),     # checkbox sutunu spaceri
         ("Ticker", 1), ("Tarih", 1), ("Miktar", 1), ("Birim", 1),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
-        ("", 1), ("", 1.2), ("", 1.5),
+        ("", 1), ("", 1.2), ("", 1.9),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
@@ -2965,11 +2970,11 @@ elif page=="Portföyüm":
             _icerik = ""
         _footer_html += f"<div style='flex:{_w};text-align:right;padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
     st.markdown(
-        f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
-        f"display:flex;align-items:center;'>"
-        f"<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;"
-        f"margin-right:8px;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        f"<div style='flex:1;display:flex;flex-wrap:nowrap;'>{_footer_html}</div></div>",
+        f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:2px;'>"
+        f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        f"</div>"
+        f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"
+        f"{_footer_html}</div>",
         unsafe_allow_html=True
     )
 
