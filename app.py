@@ -2338,6 +2338,7 @@ if page=="Ana Sayfa":
                 "Birim":lot,
                 "Gerçek Tutar (₺)":gercek,
                 "Hedef Tutar (₺)":round(per,2),
+                "_gercek_fiyat": float(row.get("Son_Fiyat",0)) > 0,
             })
 
     # Elenen kategorileri bildir
@@ -2350,6 +2351,34 @@ if page=="Ana Sayfa":
                 f"birim fiyatını karşılamadığı için o kategoriye hiç alım "
                 f"önerilemedi: {', '.join(karsilanamayan_kategoriler)}. "
                 f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
+
+    # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
+    # sayiya yuvarlandigi icin her varlikta Hedef Tutar'dan az kalan bir
+    # artik olusuyordu ve bu artik toplamda kullanilmadan kaliyordu (orn.
+    # 20.000 TL butcede Gercek Tutar toplami 19.831 TL'de kaliyordu). Mantik:
+    # kullanicinin elinde YATIRIMA AYRILACAK gercek bir tutar var - onemli
+    # olan bu paranin GERCEKTE ne kadari karsiliginda varlik alinabildigi,
+    # teorik hedef degil. Bu yuzden tum kategorilerin secimleri belirlendik-
+    # ten SONRA, kalan (harcanmamis) butce, Optima Skoru en yuksek secili
+    # varliklardan baslayarak sirayla birer LOT daha eklenerek (round-robin,
+    # kalan butce hicbir secili varligin fiyatini karsilayamayana kadar
+    # tekrarlanir) dagitilir. Sadece MEVCUT secili varliklara ek lot eklenir
+    # - Max Varlik Sayisi kisitini bozmaz, yeni varlik eklemez.
+    if opt_rows:
+        _kalan_butce = budget - sum(r["Gerçek Tutar (₺)"] for r in opt_rows)
+        _skor_sirali = sorted(
+            [r for r in opt_rows if r.get("_gercek_fiyat")],
+            key=lambda r: -r["Optima Skoru"])
+        _ilerleme = True
+        while _kalan_butce > 0.01 and _ilerleme and _skor_sirali:
+            _ilerleme = False
+            for r in _skor_sirali:
+                _fiyat = r["Emir Fiyatı"]
+                if _fiyat > 0 and _fiyat <= _kalan_butce:
+                    r["Birim"] += 1
+                    r["Gerçek Tutar (₺)"] = round(r["Gerçek Tutar (₺)"] + _fiyat, 2)
+                    _kalan_butce = round(_kalan_butce - _fiyat, 2)
+                    _ilerleme = True
 
     if opt_rows:
         df_opt=pd.DataFrame(opt_rows)
@@ -2390,8 +2419,12 @@ if page=="Ana Sayfa":
         col_order = base_cols
         df_opt = df_opt[[c for c in col_order if c in df_opt.columns]]
 
-        st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Lot tam sayıya yuvarlandığından Hedef Tutar'dan küçük olabilir. "
-                   "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | TEFAS 1A getirisi x 12). Yatırım tavsiyesi değildir.")
+        st.caption("Gerçek Tutar = Lot x Emir Fiyatı. Kategori içi eşit bölüşümden artan bakiye, "
+                   "Optima Skoru en yüksek varlıklara ek lot olarak dağıtılarak bütçenin mümkün "
+                   "olduğunca tamamı kullanılır (Hedef Tutar, yuvarlama öncesi teorik eşit payı gösterir). "
+                   "Pasif gelir tahmini üstteki özet metriklerde gösterilir (BIST temettü | Kripto staking APY | "
+                   "TEFAS 1A getirisi x 12 — bu sonuncusu gerçek gelir değil, kısa vadeli getirinin basit "
+                   "yıllıklandırılmasıdır). Yatırım tavsiyesi değildir.")
 
         # v2.0.4.40: Deneme - Ana Sayfa'yi da Portfoyum/kategori sayfalarinda
         # zaten basariyla kullanilan native st.dataframe (clickable_table)
@@ -2425,6 +2458,22 @@ if page=="Ana Sayfa":
         sel_ana = st.session_state.get("sel_Ana Sayfa", "")
         df_opt_show = df_opt.drop(columns=["Ad"], errors="ignore").reset_index(drop=True)
         _yeni_secim = clickable_table(df_opt_show, key="anasayfa_df", sel_ticker=sel_ana, col_cfg=col_cfg_ana)
+
+        # v2.0.7.21 - Gercek/Hedef Tutar toplamlari (Bahri'nin talebi):
+        # Butce kullanim verimliligini bir bakista gormek icin.
+        _toplam_gercek = df_opt["Gerçek Tutar (₺)"].sum()
+        _toplam_hedef  = df_opt["Hedef Tutar (₺)"].sum()
+        st.markdown(
+            f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
+            f"display:flex;justify-content:space-between;'>"
+            f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM</b>"
+            f"<span style='font-size:14px;'>"
+            f"Gerçek Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
+            f"&nbsp;&nbsp;|&nbsp;&nbsp;Hedef Tutar: <b style='color:#1b2a4a;'>{_toplam_hedef:,.2f} ₺</b>"
+            f"&nbsp;&nbsp;|&nbsp;&nbsp;Bütçe Kullanımı: <b style='color:#1b2a4a;'>"
+            f"{(_toplam_gercek/budget*100 if budget>0 else 0):.1f}%</b></span></div>",
+            unsafe_allow_html=True
+        )
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim
