@@ -300,6 +300,10 @@ def fetch_temettu_list(force_refresh: bool = False) -> pd.DataFrame:
         lambda r: r["_sort_val"] if r["_grup"] != 1 else -r["_sort_val"], axis=1)
     df = df.sort_values(["_grup", "_sort_val2", "div_yield"],
                         ascending=[True, True, False])
+    # v2.0.7.17 - Gorsel netlik icin Durum etiketi (Bahri'nin talebi):
+    # "Yaklasiyor" (bugun dahil gelecek), "Gecti" (gecmis ex-date, hala
+    # referans/verim bilgisi olarak listede kalir), "—" (tarih bulunamadi).
+    df["Durum"] = df["_grup"].map({0: "Yaklaşıyor", 1: "Geçti", 2: "—"})
     df = df.drop(columns=["_ex_dt", "_grup", "_sort_val", "_sort_val2"])
     df = df.reset_index(drop=True)
 

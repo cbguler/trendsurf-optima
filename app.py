@@ -3747,6 +3747,9 @@ elif page=="Temettü":
     if "ex_date" in df_show.columns:
         _kolonlar.append(("ex_date", "Ex-Date", "9%",
                            "Haklardan düşme tarihi — temettüyü almak için bu tarihten önce hisseye sahip olunmalı", "nowrap"))
+    if "Durum" in df_show.columns:
+        _kolonlar.append(("Durum", "Durum", "7%",
+                           "Yaklaşıyor: ex-date bugün veya ileride. Geçti: ex-date geçmişte kalmış (referans amaçlı gösterilir).", "nowrap"))
     if "frequency" in df_show.columns:
         _kolonlar.append(("frequency", "Sıklık", "6%", "Temettü ödeme sıklığı", ""))
     if "Ret1M" in df_show.columns:
@@ -3777,6 +3780,17 @@ elif page=="Temettü":
             elif anahtar == "ex_date":
                 _bos = v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).lower() == "nan"
                 deger = "—" if _bos else _html.escape(str(v))
+            elif anahtar == "Durum":
+                _durum_stil = {"Yaklaşıyor": ("#e8f5e9", "#2e7d32"),
+                               "Geçti":      ("#f5f5f5", "#8a96a3")}.get(str(v))
+                _durum_txt = _html.escape(str(v)) if v is not None else "—"
+                if _durum_stil:
+                    _bgc, _fgc = _durum_stil
+                    deger = (f'<span style="background:{_bgc};color:{_fgc};'
+                             f'padding:2px 8px;border-radius:10px;font-size:12px;">'
+                             f'{_durum_txt}</span>')
+                else:
+                    deger = _durum_txt
             elif anahtar == "div_per_share":
                 deger = _fmt_num(v, ondalik=4)
             elif anahtar == "div_yield":
