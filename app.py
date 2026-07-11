@@ -2886,6 +2886,7 @@ elif page=="Portföyüm":
             _sig_lbl = "—"
 
         _id_map[_tkr + "_" + str(pos["id"])] = pos["id"]
+        _kz_tl = _toplam - (_adet * _alis)
         _pf_rows.append({
             "Ticker":       _tkr,
             "Tarih":        _tg,
@@ -2894,6 +2895,7 @@ elif page=="Portföyüm":
             "Alış":         _alis,
             "Güncel":       _guncel,
             "Toplam":       _toplam,
+            "K/Z":          round(_kz_tl, 2),
             "K/Z %":        _kz_pct,
             "Skor":         _skor,
             "Sinyal":       _sig_lbl,
@@ -2923,6 +2925,8 @@ elif page=="Portföyüm":
                 format="%.4f", width="small", help="Güncel piyasa fiyatı (TL)"),
             "Toplam": st.column_config.NumberColumn(
                 format="%.2f", width="small", help="Pozisyon toplam değeri (TL)"),
+            "K/Z":    st.column_config.NumberColumn(
+                format="%+.2f", width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
             "K/Z %":  st.column_config.NumberColumn(
                 format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.NumberColumn(
@@ -2934,18 +2938,38 @@ elif page=="Portföyüm":
         }
     )
 
-    # Toplam satırı
+    # Toplam satırı — v2.0.7.25 (Bahri'nin talebi): Toplam Portföy Değeri ve
+    # K/Z toplami, tablodaki "Toplam" ve "K/Z" sutunlarinin ALTINA denk
+    # gelecek sekilde hizalandi (native st.dataframe oldugu icin piksel
+    # piksel degil, ayni sutun agirliklariyla flexbox yaklasik hizalama).
+    # Iki deger de ARTIK AYNI font boyutunda (onceden Toplam daha buyuktu).
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
     _tcs = "+" if _total_kz>=0 else ""
+    # Sutun sirasi/agirliklari tablodakiyle ayni (small=1, medium=1.5)
+    _footer_kolonlar = [
+        ("", 0.4),      # checkbox sutunu spaceri
+        ("Ticker", 1), ("Tarih", 1), ("Miktar", 1), ("Birim", 1),
+        ("Alış", 1), ("Güncel", 1),
+        ("TOPLAM", 1), ("KZ", 1),
+        ("", 1), ("", 1), ("", 1.5),
+    ]
+    _footer_html = ""
+    for _etiket, _w in _footer_kolonlar:
+        if _etiket == "TOPLAM":
+            _icerik = f"<b style='font-size:15px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL</b>"
+        elif _etiket == "KZ":
+            _icerik = f"<b style='font-size:15px;color:{_tcc};'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
+        else:
+            _icerik = ""
+        _footer_html += f"<div style='flex:{_w};text-align:right;padding:0 4px;'>{_icerik}</div>"
     st.markdown(
         f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
-        f"display:flex;justify-content:space-between;'>"
-        f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        f"<b style='font-size:17px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL"
-        f"&nbsp;<span style='font-size:13px;color:{_tcc};'>"
-        f"{_tcs}{fmt_tr(_total_kz)} TL</span></b></div>",
+        f"display:flex;align-items:center;'>"
+        f"<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;"
+        f"margin-right:8px;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        f"<div style='flex:1;display:flex;'>{_footer_html}</div></div>",
         unsafe_allow_html=True
     )
 
