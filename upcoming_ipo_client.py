@@ -930,6 +930,35 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         except Exception as e:
             print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme/cikarma atlandi (hata): {e}", flush=True)
 
+    # v2.0.7.14 - Islem gormeye baslamis (BIST evrenine gecmis) sirketleri
+    # "Yaklasan Halka Arzlar" listesinden otomatik dus. Kaynak: optimized_universe.csv
+    # (worker.py'nin BIST_TICKERS + bist_universe_dynamic - XHARZ ile otomatik
+    # tespit - birlesimi, bkz. worker.py _detect_and_register_new_bist_listings).
+    # Boylece bir sirket mezun oldugunda hem BIST kategorisinde canli fiyat/skor
+    # almaya baslar HEM DE bu listeden dusmus olur - cift kayit/karisiklik onlenir.
+    # Hata durumunda SESSIZCE atlanir, halka arz listesi kendisi etkilenmez.
+    if not df.empty:
+        try:
+            _uni_csv = os.path.join(BASE_DIR, "optimized_universe.csv")
+            if os.path.exists(_uni_csv):
+                _df_uni_check = pd.read_csv(_uni_csv, usecols=["Ticker", "Kategori"])
+                _bist_tickers_islemde = set(
+                    _df_uni_check.loc[_df_uni_check["Kategori"] == "BIST", "Ticker"]
+                    .astype(str).str.strip().str.upper()
+                )
+                if _bist_tickers_islemde:
+                    def _zaten_islemde_mi(kod_raw):
+                        codes = [c.strip().upper() for c in re.split(r"[,\s]+", str(kod_raw)) if c.strip()]
+                        return any(c in _bist_tickers_islemde for c in codes)
+                    _mask_islemde = df["Kod"].apply(_zaten_islemde_mi)
+                    _dusenler = df.loc[_mask_islemde, "Kod"].tolist()
+                    if _dusenler:
+                        df = df[~_mask_islemde].reset_index(drop=True)
+                        print(f"[upcoming-ipo] {len(_dusenler)} sirket zaten BIST'te "
+                              f"islem goruyor, listeden dusuruldu: {_dusenler}", flush=True)
+        except Exception as e:
+            print(f"[upcoming-ipo] Islem-goren-cikarma filtresi atlandi (hata): {e}", flush=True)
+
     print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}", flush=True)
 
     _write_cache(df.to_dict("records"))
