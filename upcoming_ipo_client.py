@@ -930,34 +930,53 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         except Exception as e:
             print(f"[upcoming-ipo] Fiyat Tespit Raporu satir eslestirme/cikarma atlandi (hata): {e}", flush=True)
 
-    # v2.0.7.14 - Islem gormeye baslamis (BIST evrenine gecmis) sirketleri
-    # "Yaklasan Halka Arzlar" listesinden otomatik dus. Kaynak: optimized_universe.csv
-    # (worker.py'nin BIST_TICKERS + bist_universe_dynamic - XHARZ ile otomatik
-    # tespit - birlesimi, bkz. worker.py _detect_and_register_new_bist_listings).
-    # Boylece bir sirket mezun oldugunda hem BIST kategorisinde canli fiyat/skor
-    # almaya baslar HEM DE bu listeden dusmus olur - cift kayit/karisiklik onlenir.
-    # Hata durumunda SESSIZCE atlanir, halka arz listesi kendisi etkilenmez.
+    # v2.0.7.14/15 - Islem gormeye baslamis (BIST evrenine gecmis) sirketleri
+    # "Yaklasan Halka Arzlar" listesinden otomatik dus.
+    #
+    # v2.0.7.14'te KAYNAK olarak optimized_universe.csv'nin TUM BIST kategorisi
+    # kullanilmisti - bu YANLIS cikti (Bahri'nin 11 Temmuz geri bildirimi ile
+    # tespit edildi): O dosyada IKI farkli false-positive kaynagi var:
+    #   1) KOD CAKISMASI - "TERA" hem KAP'in YENI IPO adayi "SA-RA Enerji"ye
+    #      atadigi iliskili-hisse referans kodu HEM DE zaten yillardir islem
+    #      goren alakasiz "TERA Yatirim Menkul Degerler A.S."nin gercek
+    #      ticker'i. Genel BIST listesiyle karsilastirma bu tesadufi cakismayi
+    #      "zaten islem goruyor" sanip HALA BEKLEYEN gercek bir IPO'yu
+    #      listeden yanlislikla dusurebilirdi.
+    #   2) STUB KAYITLAR - worker.py, BIST_TICKERS statik listesindeki HER
+    #      ticker icin (fiyat gelsin gelmesin) bir satir yazar; fiyat
+    #      gelmeyenler "(islem gormuyor)" etiketiyle Son_Fiyat=0 olarak
+    #      Kategori=BIST'e ISTE bu sekilde giriyor - yani "BIST'te" olmak
+    #      "zaten islem goruyor" anlamina gelmiyor.
+    #
+    # KESIN COZUM: Genel CSV yerine SADECE bist_universe_dynamic Supabase
+    # tablosu kullanilir - bu tablo YALNIZCA XHARZ (BIST Halka Arz Endeksi)
+    # uyeligiyle ONAYLANMIS, gercekten mezun olmus ticker'lari icerir
+    # (worker.py _detect_and_register_new_bist_listings, bkz. Oturum XII).
+    # Baglanti/tablo erisilemezse SESSIZCE hicbir satir dusurulmez (fail-safe
+    # - yanlis dusurmektense hic dusurmemek tercih edilir).
     if not df.empty:
         try:
-            _uni_csv = os.path.join(BASE_DIR, "optimized_universe.csv")
-            if os.path.exists(_uni_csv):
-                _df_uni_check = pd.read_csv(_uni_csv, usecols=["Ticker", "Kategori"])
-                _bist_tickers_islemde = set(
-                    _df_uni_check.loc[_df_uni_check["Kategori"] == "BIST", "Ticker"]
-                    .astype(str).str.strip().str.upper()
-                )
-                if _bist_tickers_islemde:
-                    def _zaten_islemde_mi(kod_raw):
+            _conn_bud = _supabase_conn()
+            if _conn_bud is not None:
+                _cur_bud = _conn_bud.cursor()
+                _cur_bud.execute("SELECT ticker FROM bist_universe_dynamic")
+                _mezun_tickers = {
+                    str(r[0]).strip().upper() for r in _cur_bud.fetchall() if r[0]
+                }
+                _conn_bud.close()
+                if _mezun_tickers:
+                    def _mezun_mu(kod_raw):
                         codes = [c.strip().upper() for c in re.split(r"[,\s]+", str(kod_raw)) if c.strip()]
-                        return any(c in _bist_tickers_islemde for c in codes)
-                    _mask_islemde = df["Kod"].apply(_zaten_islemde_mi)
-                    _dusenler = df.loc[_mask_islemde, "Kod"].tolist()
+                        return any(c in _mezun_tickers for c in codes)
+                    _mask_mezun = df["Kod"].apply(_mezun_mu)
+                    _dusenler = df.loc[_mask_mezun, "Kod"].tolist()
                     if _dusenler:
-                        df = df[~_mask_islemde].reset_index(drop=True)
-                        print(f"[upcoming-ipo] {len(_dusenler)} sirket zaten BIST'te "
-                              f"islem goruyor, listeden dusuruldu: {_dusenler}", flush=True)
+                        df = df[~_mask_mezun].reset_index(drop=True)
+                        print(f"[upcoming-ipo] {len(_dusenler)} sirket XHARZ ile "
+                              f"mezun oldugu icin listeden dusuruldu: {_dusenler}",
+                              flush=True)
         except Exception as e:
-            print(f"[upcoming-ipo] Islem-goren-cikarma filtresi atlandi (hata): {e}", flush=True)
+            print(f"[upcoming-ipo] Mezuniyet filtresi atlandi (hata): {e}", flush=True)
 
     print(f"[upcoming-ipo] TOPLAM yeni halka arz adayi (iki kategori birlesik): {len(df)}", flush=True)
 
