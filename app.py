@@ -665,6 +665,15 @@ if _cur_user is None:
     render_auth_gate()
     st.stop()
 
+# v2.0.7.9 - "Yeni Abonelik Basvurusu" mailindeki dogrudan link icin:
+# ?go=admin URL parametresi, ADMIN kullanicisini otomatik Admin Paneli'ne
+# yonlendirir. Sadece is_admin=True icin calisir (baskasi bu linki elde
+# ederse hicbir sey olmaz - normal sayfaya duser). Beni Hatirla (_ta)
+# ile birlikte kullanildiginda mobilden tek tikla onay ekranina inilir.
+if st.query_params.get("go") == "admin" and _cur_user.get("is_admin"):
+    st.session_state["page_override"] = "admin"
+    del st.query_params["go"]
+
 # ══════════════════════════════════════════════════════════════
 # VERİ
 # ══════════════════════════════════════════════════════════════

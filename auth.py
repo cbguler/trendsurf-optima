@@ -59,20 +59,37 @@ def _notify_admin_yeni_kayit(email: str, full_name: str):
         msg["To"] = admin_email
 
         _simdi = datetime.now().strftime("%d.%m.%Y %H:%M")
+        # v2.0.7.9 - Mobil uyumlu + tiklanabilir buton. Bahri sahada (fizik
+        # tedavi vb.) telefonundan onay verebilsin diye: buyuk dokunma alani,
+        # tek sutun, viewport meta, ve Admin Paneli'ne DOGRUDAN goturen link
+        # (?go=admin - app.py'de is_admin kontrolüyle otomatik acilir).
+        _app_url = "https://trendsurf-optima.streamlit.app/?go=admin"
         _html = f"""
-        <div style="font-family:Segoe UI,Arial,sans-serif;max-width:480px;margin:auto;">
-          <h2 style="color:#0d2b4e;margin-bottom:4px;">Yeni Abonelik Başvurusu</h2>
-          <p style="color:#333;">TrendSurf Optima'ya yeni bir kayıt başvurusu geldi:</p>
-          <table style="border-collapse:collapse;width:100%;font-size:14px;">
-            <tr><td style="padding:6px 0;color:#5a6a78;width:110px;">Ad Soyad</td>
-                <td style="padding:6px 0;"><b>{full_name}</b></td></tr>
-            <tr><td style="padding:6px 0;color:#5a6a78;">E-posta</td>
-                <td style="padding:6px 0;"><b>{email}</b></td></tr>
-            <tr><td style="padding:6px 0;color:#5a6a78;">Tarih</td>
-                <td style="padding:6px 0;">{_simdi}</td></tr>
+        <div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;
+                    max-width:480px;margin:auto;padding:8px;">
+          <h2 style="color:#0d2b4e;margin-bottom:4px;font-size:20px;">
+              Yeni Abonelik Başvurusu</h2>
+          <p style="color:#333;font-size:15px;line-height:1.5;">
+              TrendSurf Optima'ya yeni bir kayıt başvurusu geldi:</p>
+          <table style="border-collapse:collapse;width:100%;font-size:15px;
+                         margin-bottom:20px;">
+            <tr><td style="padding:8px 0;color:#5a6a78;">Ad Soyad</td>
+                <td style="padding:8px 0;"><b>{full_name}</b></td></tr>
+            <tr><td style="padding:8px 0;color:#5a6a78;">E-posta</td>
+                <td style="padding:8px 0;"><b>{email}</b></td></tr>
+            <tr><td style="padding:8px 0;color:#5a6a78;">Tarih</td>
+                <td style="padding:8px 0;">{_simdi}</td></tr>
           </table>
-          <p style="margin-top:16px;color:#333;">Onaylamak için Admin Paneli →
-          Bekleyen Kullanıcılar bölümüne gidin.</p>
+          <a href="{_app_url}"
+             style="display:block;text-align:center;background:#0d2b4e;
+                    color:#ffffff;text-decoration:none;font-size:17px;
+                    font-weight:bold;padding:16px 20px;border-radius:8px;
+                    margin-bottom:12px;">
+              Admin Panelini Aç →
+          </a>
+          <p style="color:#8a96a3;font-size:13px;line-height:1.4;">
+              Butona basınca Admin Paneli — Bekleyen Kullanıcılar bölümü
+              doğrudan açılır (giriş yapmış olmanız gerekir).</p>
         </div>
         """
         msg.attach(MIMEText(_html, "html"))
