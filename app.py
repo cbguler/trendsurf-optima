@@ -516,35 +516,20 @@ def render_auth_gate():
                         # v1.9.9.2 - Hem localStorage hem email cookie yaz (components.v1.html ile)
                         # Email cookie 90 gun, localStorage token 90 gun (DB token suresi ile ayni)
                         if remember:
-                            # v2.0.7.2 - Beni Hatirla KALICI oturum: token artik
-                            # tso_auth CEREZINE yazilir. localStorage'i Python
-                            # tarafinda geri OKUYACAK mekanizma yoktu (v1.9.9.x
-                            # denemeleri iframe sandbox'a takildi); cerezleri ise
-                            # st.context.cookies sunucu tarafinda dogrudan okur -
-                            # asagida "cerezden oturum geri yukleme" blogu bkz.
-                            # Parent cookie yazimi ts_rem_email ile zaten kanitli.
-                            _tok_safe = res["token"].replace("'","").replace('"','')
-                            _em_safe = email.replace("'","").replace('"','')
-                            _stc_v1.html(f"""
-                            <script>
-                            try {{
-                              window.parent.localStorage.setItem('tso_auth_token', '{_tok_safe}');
-                              window.parent.sessionStorage.setItem('tso_logged_in', '1');
-                              var d = new Date();
-                              d.setTime(d.getTime() + 90*24*60*60*1000);
-                              window.parent.document.cookie = "tso_auth=" +
-                                  encodeURIComponent('{_tok_safe}') +
-                                  ";expires=" + d.toUTCString() +
-                                  ";path=/;SameSite=Lax;Secure";
-                              window.parent.document.cookie = "ts_rem_email=" +
-                                  encodeURIComponent('{_em_safe}') +
-                                  ";expires=" + d.toUTCString() +
-                                  ";path=/;SameSite=Lax";
-                              console.log('[tso] auth+email saved to browser');
-                            }} catch(e) {{ console.log('[tso] save err:', e); }}
-                            </script>
-                            """, height=0)
-                            print(f"[auth] Beni Hatirla aktif: 90 gun tso_auth cerezi + email cookie")
+                            # v2.0.7.8 - Beni Hatirla KALICI oturum: onceki JS/cerez
+                            # tabanli yontemler (st.context.cookies + URL yonlendirme)
+                            # calismiyordu. KANIT: DevTools console'da "Unsafe attempt
+                            # to initiate navigation ... frame is sandboxed" hatasi -
+                            # components.v1.html iframe'i ust cerceveyi (parent) YONLEN-
+                            # DIREMIYOR (sandbox kisitlamasi, Streamlit'in kendi iframe'i
+                            # icin sabit, bizim degistiremedigimiz bir ozellik). Bu yuzden
+                            # JS/navigasyon TERK EDILDI. Yerine dogrudan Python'dan
+                            # st.query_params kullaniliyor - bu, Streamlit'in KENDI ana
+                            # cercevesinden (sandbox DISINDA) URL'i gunceller, F5'te bu
+                            # URL ile fresh HTTP istegi gider, token asagidaki "URL
+                            # parametresinden oturum geri yukleme" blogunda okunur.
+                            st.query_params["_ta"] = res["token"]
+                            print(f"[auth] Beni Hatirla aktif: token st.query_params'a yazildi")
                         else:
                             # v2.0.7.2 - Beni Hatirla ISARETSIZ: eski bir tso_auth
                             # cerezi kalmissa temizle - kullanici "hatirlama"
@@ -625,53 +610,27 @@ def render_auth_gate():
 if "auth_token" not in st.session_state and "remember_token" in st.session_state:
     st.session_state["auth_token"] = st.session_state["remember_token"]
 
-# v2.0.7.7 - Beni Hatirla FALLBACK: st.context.cookies bu Streamlit Cloud
-# kurulumunda cerezleri GORMUYOR (v2.0.7.6 ekran-ici tanilama panelinde
-# kanitlandi - giris hemen sonrasi bile "cerez anahtarlari: []" donuyor,
-# yani sorun sadece okuma zamanlamasinda degil, temelde calismiyor).
-# Bu yuzden ayni yontem TERK EDILDI. Yerine, email autofill'de zaten
-# KANITLANMIS calisan istemci-tarafi cerez okuma + URL query param
-# teknigi kullaniliyor: JS tso_auth cerezini okur, "_ta" query param'ina
-# ekleyip sayfayi bu parametreyle yeniden yukler; Python asagida "_ta"yi
-# okuyup session_state'e yazar, token'in gecerliligi get_current_user()
-# icinde DB'den dogrulanir. Token URL'de kalici kalmasin diye okunduktan
-# hemen sonra history.replaceState ile temizlenir.
-_ta_param = st.query_params.get("_ta", "")
-if _ta_param and "auth_token" not in st.session_state:
-    st.session_state["auth_token"] = _ta_param
-    st.session_state["_tso_cerez_denenen"] = _ta_param
-    print("[auth] tso_auth URL parametresinden oturum geri yukleme denendi")
-    _stc_v1.html("""
-    <script>
-    try {
-      var u = new URL(window.parent.location.href);
-      u.searchParams.delete('_ta');
-      window.parent.history.replaceState({}, '', u.toString());
-    } catch(e) { console.log('tso _ta temizleme err:', e); }
-    </script>
-    """, height=0)
-
-if "auth_token" not in st.session_state:
-    _stc_v1.html("""
-    <script>
-    (function() {
-        try {
-          var loc = window.parent.location;
-          if (loc.search.indexOf('_ta=') !== -1) return;  // zaten eklenmis
-          var v = "; " + window.parent.document.cookie;
-          var p = v.split("; tso_auth=");
-          if (p.length === 2) {
-            var tok = decodeURIComponent(p.pop().split(";")[0]);
-            if (tok) {
-              var u = new URL(loc.href);
-              u.searchParams.set("_ta", tok);
-              loc.href = u.toString();
-            }
-          }
-        } catch(e) { console.log('tso auth restore err:', e); }
-    })();
-    </script>
-    """, height=0)
+# v2.0.7.8 - Beni Hatirla KESIN COZUM: Hem st.context.cookies (v2.0.7.6'da
+# kanitlandi - cerezleri hep bos donuyor) HEM DE JS/URL-yonlendirme yontemi
+# (bu oturumda kanitlandi - DevTools console: "Unsafe attempt to initiate
+# navigation ... frame is sandboxed, disallowed from navigating its
+# ancestors") CALISMIYOR. components.v1.html'in olusturdugu iframe sandbox'i
+# Streamlit'in kendi sabit ozelligi - degistiremeyiz, ve icinden
+# window.parent.location.href / history.replaceState gibi navigasyon
+# gerektiren HICBIR JS calismaz. Bu yuzden JS tamamen TERK EDILDI.
+#
+# KESIN COZUM: Token dogrudan Python'dan st.query_params'a yazilir (login
+# ani, yukarida "st.query_params['_ta'] = res['token']" satirina bkz).
+# st.query_params, Streamlit'in KENDI ana cercevesinden (sandbox DISINDA)
+# calisir, URL'i gercekten gunceller. F5'te tarayici bu URL ile (icinde
+# _ta ile) fresh istek atar, asagida okunur. Sadece Python - JS yok,
+# cerez yok, navigasyon yok.
+if "_ta" in st.query_params and "auth_token" not in st.session_state:
+    st.session_state["auth_token"] = st.query_params["_ta"]
+    print("[auth] tso_auth st.query_params'tan oturum geri yukleme denendi")
+    # Token'i URL'de birakma - okunduktan hemen sonra temizle (Python
+    # tarafinda, JS'e gerek yok, sandbox sorunu olmaz).
+    del st.query_params["_ta"]
 
 # v1.9.9.3 - Beni Hatirla yapilanmasi:
 #   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
