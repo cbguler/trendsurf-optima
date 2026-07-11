@@ -632,29 +632,26 @@ if "auth_token" not in st.session_state and "remember_token" in st.session_state
 # icinde DB'den dogrulanir (gecersizse sessizce dusurulur, giris ekrani
 # gelir). Ayni olu token'i her rerun'da yeniden denememek icin bir kez
 # denenen deger session_state'te isaretlenir.
+print(f"[auth-debug] cerez blogu calisti - auth_token session_state'te mi: "
+      f"{'auth_token' in st.session_state}")
 if "auth_token" not in st.session_state:
     try:
         _ctx = getattr(st, "context", None)
+        print(f"[auth-debug] st.context: {_ctx!r}")
         _cerezler = getattr(_ctx, "cookies", None) if _ctx is not None else None
-        # v2.0.7.4 - TANILAMA: st.context.cookies'in Streamlit Cloud'da
-        # bu tarayici/proxy kombinasyonunda ne dondugunu bir kez logla.
-        # Sadece anahtar isimlerini yaz (token degerini degil - guvenlik).
-        if not st.session_state.get("_tso_cerez_tanilama_yapildi"):
-            st.session_state["_tso_cerez_tanilama_yapildi"] = True
-            if _cerezler is None:
-                print("[auth-debug] st.context.cookies mevcut degil (None) - "
-                      "Streamlit surumu cok eski olabilir")
-            else:
-                print(f"[auth-debug] st.context.cookies anahtarlari: "
-                      f"{list(_cerezler.keys())} (tso_auth var mi: "
-                      f"{'tso_auth' in _cerezler})")
+        print(f"[auth-debug] cerezler objesi: {_cerezler!r}")
+        if _cerezler is not None:
+            print(f"[auth-debug] cerez anahtarlari: {list(_cerezler.keys())} "
+                  f"(tso_auth var mi: {'tso_auth' in _cerezler})")
         _tok_cerez = _cerezler.get("tso_auth") if _cerezler else None
         if _tok_cerez and st.session_state.get("_tso_cerez_denenen") != _tok_cerez:
             st.session_state["_tso_cerez_denenen"] = _tok_cerez
             st.session_state["auth_token"] = _tok_cerez
             print("[auth] tso_auth cerezinden oturum geri yukleme denendi")
     except Exception as _ck_ex:
-        print(f"[auth] cerez okuma atlandi: {_ck_ex}")
+        import traceback
+        print(f"[auth] cerez okuma HATA: {_ck_ex!r}")
+        traceback.print_exc()
 
 # v1.9.9.3 - Beni Hatirla yapilanmasi:
 #   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
