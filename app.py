@@ -2931,7 +2931,7 @@ elif page=="Portföyüm":
                 format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.NumberColumn(
                 "Optima Skor",
-                format="%.1f", width="small", help="Optima Skoru (0-100)"),
+                format="%.1f", width="medium", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
                 width="medium",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
@@ -2953,23 +2953,23 @@ elif page=="Portföyüm":
         ("Ticker", 1), ("Tarih", 1), ("Miktar", 1), ("Birim", 1),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
-        ("", 1), ("", 1), ("", 1.5),
+        ("", 1), ("", 1.5), ("", 1.5),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
         if _etiket == "TOPLAM":
-            _icerik = f"<b style='font-size:15px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL</b>"
+            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
         elif _etiket == "KZ":
-            _icerik = f"<b style='font-size:15px;color:{_tcc};'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
+            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
         else:
             _icerik = ""
-        _footer_html += f"<div style='flex:{_w};text-align:right;padding:0 4px;'>{_icerik}</div>"
+        _footer_html += f"<div style='flex:{_w};text-align:right;padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
     st.markdown(
         f"<div style='border-top:2px solid #2c3e6b;padding:8px 4px;"
         f"display:flex;align-items:center;'>"
         f"<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;"
         f"margin-right:8px;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        f"<div style='flex:1;display:flex;'>{_footer_html}</div></div>",
+        f"<div style='flex:1;display:flex;flex-wrap:nowrap;'>{_footer_html}</div></div>",
         unsafe_allow_html=True
     )
 
