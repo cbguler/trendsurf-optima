@@ -277,18 +277,30 @@ def fetch_temettu_list(force_refresh: bool = False) -> pd.DataFrame:
 
     df = pd.DataFrame(enriched)
 
-    # Ex-date'e göre sırala (yakın tarih üste), sonra temettü verimine göre
-    def _sort_key(row):
-        ed = row.get("ex_date", "—")
-        try:
-            from datetime import datetime
-            return datetime.strptime(ed, "%d.%m.%Y")
-        except Exception:
-            return pd.Timestamp.max
-
-    df["_sort_date"] = df.apply(_sort_key, axis=1)
-    df = df.sort_values(["_sort_date", "div_yield"],
-                        ascending=[True, False]).drop(columns=["_sort_date"])
+    # v2.0.7.16 - ONCEKI SIRALAMA HATASI (Bahri'nin 11 Temmuz geri bildirimi):
+    # yfinance'in "exDividendDate" alani GELECEKTEKI degil, KAYITLARDAKI EN SON
+    # BILINEN ex-temettu tarihini doner - sirket bu yil icin henuz yeni bir
+    # dagitim aciklamadiysa bu tarih 1 yil kadar ESKI olabilir. Onceki kod
+    # sadece "ascending=True" ile SAF KRONOLOJIK sirlardi - bu, eski bir tarihi
+    # (kucuk sayisal deger) gelecekteki bir tarihten (buyuk deger) ONCE
+    # gosteriyordu; yani 1 yil once gecmis bir ex-date, listenin TEPESINE
+    # cikiyordu. Duzeltme: once GELECEK (bugun dahil) tarihler en yakindan en
+    # uzaga, SONRA GECMIS tarihler en yeniden en eskiye, EN SONDA tarihsiz
+    # kayitlar (verim'e gore azalan) - boylece "yakinda gelecek" ex-date'ler
+    # gercekten en ustte cikar, cok eski gecmis kayitlar en altta kalir.
+    from datetime import datetime as _dt_srt
+    df["_ex_dt"] = pd.to_datetime(df["ex_date"], format="%d.%m.%Y", errors="coerce")
+    _bugun = pd.Timestamp(_dt_srt.now().date())
+    df["_grup"] = df["_ex_dt"].apply(
+        lambda d: 2 if pd.isna(d) else (0 if d >= _bugun else 1))
+    df["_sort_val"] = df["_ex_dt"].apply(lambda d: 0 if pd.isna(d) else d.value)
+    # grup 0 (gelecek): kucukten buyuge (en yakin once). grup 1 (gecmis):
+    # buyukten kucuge (en yeni gecmis once) -> isareti ters cevirip yine artan sirala.
+    df["_sort_val2"] = df.apply(
+        lambda r: r["_sort_val"] if r["_grup"] != 1 else -r["_sort_val"], axis=1)
+    df = df.sort_values(["_grup", "_sort_val2", "div_yield"],
+                        ascending=[True, True, False])
+    df = df.drop(columns=["_ex_dt", "_grup", "_sort_val", "_sort_val2"])
     df = df.reset_index(drop=True)
 
     _write_cache(df.to_dict("records"))
