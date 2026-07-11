@@ -3781,13 +3781,15 @@ elif page=="Temettü":
                 _bos = v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).lower() == "nan"
                 deger = "—" if _bos else _html.escape(str(v))
             elif anahtar == "Durum":
-                _durum_stil = {"Yaklaşıyor": ("#e8f5e9", "#2e7d32"),
-                               "Geçti":      ("#f5f5f5", "#8a96a3")}.get(str(v))
-                _durum_txt = _html.escape(str(v)) if v is not None else "—"
+                _durum_stil = {"Yaklaşıyor": ("#c8e6c9", "#1b5e20"),
+                               "Geçti":      ("#e0e0e0", "#616161")}.get(str(v))
+                _durum_txt = _html.escape(str(v)).upper() if v is not None else "—"
                 if _durum_stil:
                     _bgc, _fgc = _durum_stil
                     deger = (f'<span style="background:{_bgc};color:{_fgc};'
-                             f'padding:2px 8px;border-radius:10px;font-size:12px;">'
+                             f'padding:4px 12px;border-radius:12px;font-size:13px;'
+                             f'font-weight:700;letter-spacing:0.3px;'
+                             f'display:inline-block;">'
                              f'{_durum_txt}</span>')
                 else:
                     deger = _durum_txt
