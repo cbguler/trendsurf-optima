@@ -10,6 +10,22 @@ except: HAS_PLOTLY = False
 st.set_page_config(page_title="TrendSurf Optima", page_icon="favicon.png", layout="wide",
                    initial_sidebar_state="expanded")
 
+# v2.0.7.6 - GECICI TANILAMA PANELI (Beni Hatirla / st.context.cookies testi).
+# Loglarda print() cikmiyordu - bu yuzden bilgiyi dogrudan ekranda gosteriyoruz.
+# SORUN COZULUNCE BU BLOK TAMAMEN SILINECEK.
+with st.expander("🔧 GECICI TANILAMA (Beni Hatirla testi) - is bitince silinecek", expanded=True):
+    st.write("**auth_token session_state'te mi:**", "auth_token" in st.session_state)
+    try:
+        _tani_ctx = getattr(st, "context", None)
+        st.write("**st.context objesi:**", repr(_tani_ctx))
+        _tani_cerezler = getattr(_tani_ctx, "cookies", None) if _tani_ctx is not None else None
+        st.write("**cerezler objesi:**", repr(_tani_cerezler))
+        if _tani_cerezler is not None:
+            st.write("**cerez anahtarlari:**", list(_tani_cerezler.keys()))
+            st.write("**tso_auth var mi:**", "tso_auth" in _tani_cerezler)
+    except Exception as _tani_ex:
+        st.write("**HATA:**", repr(_tani_ex))
+
 # ══════════════════════════════════════════════════════════════
 # CSS
 # ══════════════════════════════════════════════════════════════
