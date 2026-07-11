@@ -3748,7 +3748,7 @@ elif page=="Temettü":
         _kolonlar.append(("ex_date", "Ex-Date", "9%",
                            "Haklardan düşme tarihi — temettüyü almak için bu tarihten önce hisseye sahip olunmalı", "nowrap"))
     if "Durum" in df_show.columns:
-        _kolonlar.append(("Durum", "Durum", "7%",
+        _kolonlar.append(("Durum", "Durum", "11%",
                            "Yaklaşıyor: ex-date bugün veya ileride. Geçti: ex-date geçmişte kalmış (referans amaçlı gösterilir).", "nowrap"))
     if "frequency" in df_show.columns:
         _kolonlar.append(("frequency", "Sıklık", "6%", "Temettü ödeme sıklığı", ""))
@@ -3758,7 +3758,7 @@ elif page=="Temettü":
         _kolonlar.append(("Optima_Skor", "Optima Skor", "8%",
                            "TrendSurf Optima bileşik puanı (0-100)", ""))
     if "Toplam_Getiri" in df_show.columns:
-        _kolonlar.append(("Toplam_Getiri", "Tahmini Toplam Getiri %", "12%",
+        _kolonlar.append(("Toplam_Getiri", "Tahmini Toplam Getiri %", "8%",
                            "1 Aylık Momentum + Temettü Verimi (gösterge, yatırım tavsiyesi değildir)", ""))
     if "KAP_URL" in df_show.columns:
         _kolonlar.append(("KAP_URL", "KAP", "9%", "Kamuyu Aydınlatma Platformu şirket sayfası", ""))
@@ -3787,9 +3787,9 @@ elif page=="Temettü":
                 if _durum_stil:
                     _bgc, _fgc = _durum_stil
                     deger = (f'<span style="background:{_bgc};color:{_fgc};'
-                             f'padding:4px 12px;border-radius:12px;font-size:13px;'
-                             f'font-weight:700;letter-spacing:0.3px;'
-                             f'display:inline-block;">'
+                             f'padding:4px 9px;border-radius:12px;font-size:12px;'
+                             f'font-weight:700;letter-spacing:0.2px;'
+                             f'display:inline-block;white-space:nowrap;">'
                              f'{_durum_txt}</span>')
                 else:
                     deger = _durum_txt
