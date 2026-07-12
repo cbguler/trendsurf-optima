@@ -1187,6 +1187,25 @@ def live_optima_score(row, period="1mo"):
     except Exception:
         return 0.0
 
+def _sinyal_renk_stil(v):
+    """v2.0.7.31 - Sinyal metnine gore renk dondurur (Bahri'nin talebi):
+    GUCLU AL koyu yesil, KADEMELI AL acik yesil, TUT IZLE sari,
+    KADEMELI SAT turuncu, NET SAT kirmizi. clickable_table() ve
+    Portfoyum tablosunda ortak kullanilir."""
+    v = str(v).upper()
+    if "GÜÇLÜ AL" in v or "GUCLU AL" in v:
+        return "background-color: #1b8a4a; color: white; font-weight: 600;"
+    elif "KADEMELİ AL" in v or "KADEMELI AL" in v:
+        return "background-color: #a8e6a1; color: #1b5e20; font-weight: 600;"
+    elif "TUT" in v:
+        return "background-color: #fff3b0; color: #7a6500; font-weight: 600;"
+    elif "KADEMELİ SAT" in v or "KADEMELI SAT" in v:
+        return "background-color: #f5a25d; color: #7a3b00; font-weight: 600;"
+    elif "NET SAT" in v:
+        return "background-color: #e74c3c; color: white; font-weight: 600;"
+    return ""
+
+
 def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     """on_select ile satır seçimi — checkbox Streamlit'in kendi davranışı.
 
@@ -1194,6 +1213,10 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     sütun ayarı (genişlik, başlık, format) kabul etmiyordu - çağıran kod
     özenle bir col_cfg sözlüğü hazırlasa bile sessizce yok sayılıyordu.
     Şimdi disaridan verilen col_cfg, otomatik tespit edilenin üzerine yazar.
+
+    v2.0.7.31: "Sinyal" sutunu varsa otomatik renklendirilir (bkz.
+    _sinyal_renk_stil). Ana Sayfa, BIST, TEFAS - hepsi bu fonksiyonu
+    kullandigi icin tek yerden tum tablolara yayilir.
     """
     auto_cfg = {}
     for c in df_show.columns:
@@ -1208,8 +1231,15 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     if col_cfg:
         auto_cfg.update(col_cfg)
 
+    df_render = df_show
+    if "Sinyal" in df_show.columns:
+        try:
+            df_render = df_show.style.map(_sinyal_renk_stil, subset=["Sinyal"])
+        except AttributeError:
+            df_render = df_show.style.applymap(_sinyal_renk_stil, subset=["Sinyal"])
+
     evt = st.dataframe(
-        df_show,
+        df_render,
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
@@ -2920,11 +2950,16 @@ elif page=="Portföyüm":
             return "color: #c0392b; font-weight: 600;"
         return ""
 
+    # v2.0.7.31 - Sinyal renklendirmesi icin ortak _sinyal_renk_stil()
+    # fonksiyonu kullanilir (bkz. clickable_table yakinindaki tanim) -
+    # Ana Sayfa/BIST/TEFAS ile tutarli olsun diye kod tekrari yapilmadi.
     try:
-        df_show_styled = df_show.style.map(_kz_renk, subset=["K/Z", "K/Z %"])
+        df_show_styled = df_show.style.map(_kz_renk, subset=["K/Z", "K/Z %"]) \
+                                       .map(_sinyal_renk_stil, subset=["Sinyal"])
     except AttributeError:
         # eski pandas surumlerinde .map yok, .applymap kullan
-        df_show_styled = df_show.style.applymap(_kz_renk, subset=["K/Z", "K/Z %"])
+        df_show_styled = df_show.style.applymap(_kz_renk, subset=["K/Z", "K/Z %"]) \
+                                       .applymap(_sinyal_renk_stil, subset=["Sinyal"])
 
     # st.dataframe — Daraltilmis sutunlar + Sinyal eklendi
     _event = st.dataframe(
