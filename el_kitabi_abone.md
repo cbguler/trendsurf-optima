@@ -102,12 +102,66 @@ aynı anda değerlendirir.
 | Kategori         | BIST, TEFAS, Döviz, Maden, Kripto                                                       |
 | Ticker           | Varlığın işlem sembolü                                                                  |
 | Optima Skoru     | 0-100 arası bileşik puan (yüksek = daha güçlü pozisyon)                                 |
-| Sinyal           | Güçlü Al / Kademeli Al / Tut-İzle / Sat / Net Sat                                       |
+| Sinyal           | Güçlü Al / Kademeli Al / Tut-İzle / Kademeli Sat / Net Sat                              |
 | RSI              | Göreceli Güç Endeksi (30 altı aşırı satım, 70 üzeri aşırı alım)                         |
 | 1A Getiri %      | Son 1 aylık fiyat getirisi                                                              |
 | Emir Fiyatı      | Güncel piyasa fiyatı — limit emir girerken referans alın                                |
 | Birim            | Bütçenize göre önerilen alım adedi/lot                                                  |
 | Tutar (₺)        | Birim × Emir Fiyatı — gerçekte harcanacak/harcanan tutar                                |
+
+### Sinyal Hangi Koşullarda Belirlenir? (Detaylı Tablo)
+
+Sinyal, sadece Optima Skoru'na değil, skorla birlikte trend yönüne (son
+1 aylık getiri artıda mı eksi mi) ve RSI'ın hangi bölgede olduğuna da
+bakar. Aşağıdaki tablo, uygulamada kullanılanla birebir aynı renklerle
+gösterilmiştir:
+
+<table>
+<thead>
+<tr>
+<th style="padding:8px;border-bottom:2px solid #1b2a4a;">Skor Aralığı</th>
+<th style="padding:8px;border-bottom:2px solid #1b2a4a;">Koşul</th>
+<th style="padding:8px;border-bottom:2px solid #1b2a4a;">Sinyal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="padding:8px;">≥ 80</td>
+<td style="padding:8px;">Yükseliş trendi + RSI 35-65 arası</td>
+<td style="padding:8px;"><strong style="color:#1b8a4a;">GÜÇLÜ AL</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">≥ 80</td>
+<td style="padding:8px;">(yukarıdaki koşul sağlanmazsa)</td>
+<td style="padding:8px;"><strong style="color:#66bb6a;">KADEMELİ AL</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">≥ 60</td>
+<td style="padding:8px;">Yükseliş trendi VEYA RSI 35-65 arası</td>
+<td style="padding:8px;"><strong style="color:#66bb6a;">KADEMELİ AL</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">≥ 60</td>
+<td style="padding:8px;">(yukarıdaki koşul sağlanmazsa)</td>
+<td style="padding:8px;"><strong style="color:#b8860b;">TUT İZLE</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">≥ 40</td>
+<td style="padding:8px;">Düşüş trendi + RSI &gt; 70 (aşırı alımdan zayıflayan)</td>
+<td style="padding:8px;"><strong style="color:#e67e22;">KADEMELİ SAT</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">≥ 40</td>
+<td style="padding:8px;">(yukarıdaki koşul sağlanmazsa)</td>
+<td style="padding:8px;"><strong style="color:#b8860b;">TUT İZLE</strong></td>
+</tr>
+<tr>
+<td style="padding:8px;">&lt; 40</td>
+<td style="padding:8px;">—</td>
+<td style="padding:8px;"><strong style="color:#e74c3c;">NET SAT</strong></td>
+</tr>
+</tbody>
+</table>
 
 <table>
 <colgroup>
@@ -764,7 +818,7 @@ Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 | Ex-Date                                                    | Temettü hakkının düştüğü tarih. Bu tarihten önceki günün kapanışında hisseye sahip olunması, o dönemin temettüsünü almak için gereklidir.                                                                                                                          |
 | K/Z (TL) ve K/Z %                                          | Portföyünüzdeki bir pozisyonun mutlak (TL) ve yüzdesel kâr/zararı. Güncel değer ile alış maliyeti arasındaki farktır.                                                                                                                                              |
 | Peak (Tepe Fiyat)                                          | Kâr realizasyonu uyarı sisteminin izlediği, bir varlığın şimdiye kadar gördüğü en yüksek fiyat. Bu tepeden belirlediğiniz oranda düşüş olduğunda uyarı tetiklenir.                                                                                                 |
-| Sinyal (Güçlü Al / Kademeli Al / Tut-İzle / Sat / Net Sat) | Optima Skoru'nun kategorik karşılığıdır; yüksekten düşüğe doğru sıralanır: Güçlü Al, Kademeli Al, Tut-İzle, Sat, Net Sat.                                                                                                                                          |
+| Sinyal (Güçlü Al / Kademeli Al / Tut-İzle / Kademeli Sat / Net Sat) | Optima Skoru'nun kategorik karşılığıdır; yüksekten düşüğe doğru sıralanır: Güçlü Al, Kademeli Al, Tut-İzle, Kademeli Sat, Net Sat. Skor+trend+RSI koşullarının detaylı tablosu için bkz. Bölüm 3.2.                                                                                                                                          |
 
 # 14. Sıkça Sorulan Sorular
 
