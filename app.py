@@ -2538,6 +2538,10 @@ if page=="Ana Sayfa":
                     # (tablo bos / 45dk'dan eski) canli enrich() skoruna duser.
                     _rd_ana = sel_row_ana.get("Optima_Skor")
                     disp_score_ana = float(_rd_ana) if (_rd_ana is not None and _rd_ana == _rd_ana) else d["score"]
+                    # v2.0.7.34 - ayni tutarlilik kurali (bkz. genel Detay
+                    # sayfasindaki not): fiyatsiz varligin skoru daima 0.
+                    if float(sel_row_ana.get("Son_Fiyat", 0) or 0) <= 0:
+                        disp_score_ana = 0.0
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
@@ -3070,6 +3074,9 @@ elif page=="Portföyüm":
                 # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
                 _rd_pf = _sr.get("Optima_Skor")
                 disp_score_pf = float(_rd_pf) if (_rd_pf is not None and _rd_pf == _rd_pf) else _d["score"]
+                # v2.0.7.34 - ayni tutarlilik kurali: fiyatsiz varligin skoru daima 0.
+                if float(_sr.get("Son_Fiyat", 0) or 0) <= 0:
+                    disp_score_pf = 0.0
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
@@ -3324,6 +3331,17 @@ elif page in CAT:
         # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
         _rd_cat = sel_row.get("Optima_Skor")
         disp_score_cat = float(_rd_cat) if (_rd_cat is not None and _rd_cat == _rd_cat) else d["score"]
+        # v2.0.7.34 - TUTARLILIK DUZELTMESI (Bahri'nin 12 Temmuz bulgusu):
+        # sel_row, DUZELTILMEMIS df_uni'den okunuyor - "Tum Varliklar"
+        # listesindeki "fiyatsiz varligin skoru HER ZAMAN 0'dir" kurali
+        # (bkz. df_cat.loc[Son_Fiyat<=0, Optima_Skor]=0.0) buraya hic
+        # yansimiyordu. Sonuc: CLINK/ICP gibi fiyati 0 olan varliklar,
+        # enrich()'in kendi (genelde notr varsayilanlardan tureyen)
+        # skoruyla KADEMELI AL/NET SAT gibi anlamli gorunen ama aslinda
+        # veri yoklugundan kaynaklanan celiskili sinyaller uretiyordu.
+        # Ayni kural burada da uygulanir.
+        if float(sel_row.get("Son_Fiyat", 0) or 0) <= 0:
+            disp_score_cat = 0.0
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
