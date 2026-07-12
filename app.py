@@ -1188,21 +1188,23 @@ def live_optima_score(row, period="1mo"):
         return 0.0
 
 def _sinyal_renk_stil(v):
-    """v2.0.7.31 - Sinyal metnine gore renk dondurur (Bahri'nin talebi):
+    """v2.0.7.31/32 - Sinyal metnine gore renk dondurur (Bahri'nin talebi):
     GUCLU AL koyu yesil, KADEMELI AL acik yesil, TUT IZLE sari,
-    KADEMELI SAT turuncu, NET SAT kirmizi. clickable_table() ve
-    Portfoyum tablosunda ortak kullanilir."""
+    KADEMELI SAT turuncu, NET SAT kirmizi. Sadece YAZI RENGI + kalin -
+    v2.0.7.32'de arkaplan/hucre dolgusu kaldirildi (Bahri: 'sadece
+    yazinin rengi degissin, hucre komple degismesin'). clickable_table()
+    ve Portfoyum tablosunda ortak kullanilir."""
     v = str(v).upper()
     if "GÜÇLÜ AL" in v or "GUCLU AL" in v:
-        return "background-color: #1b8a4a; color: white; font-weight: 600;"
+        return "color: #1b8a4a; font-weight: 700;"
     elif "KADEMELİ AL" in v or "KADEMELI AL" in v:
-        return "background-color: #a8e6a1; color: #1b5e20; font-weight: 600;"
+        return "color: #66bb6a; font-weight: 700;"
     elif "TUT" in v:
-        return "background-color: #fff3b0; color: #7a6500; font-weight: 600;"
+        return "color: #b8860b; font-weight: 700;"
     elif "KADEMELİ SAT" in v or "KADEMELI SAT" in v:
-        return "background-color: #f5a25d; color: #7a3b00; font-weight: 600;"
+        return "color: #e67e22; font-weight: 700;"
     elif "NET SAT" in v:
-        return "background-color: #e74c3c; color: white; font-weight: 600;"
+        return "color: #e74c3c; font-weight: 700;"
     return ""
 
 
