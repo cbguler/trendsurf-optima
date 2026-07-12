@@ -53,7 +53,7 @@ Konum: C:/Users/bahri/Desktop/TrendSurf_Optima/
 | BIST         | 772 hisse     |
 | TEFAS        | ~1.347 fon    |
 | Kripto       | 18            |
-| Maden        | 11            |
+| Maden        | 9             |
 | Döviz        | 12 TRY çapraz |
 
 <table>
@@ -393,7 +393,7 @@ taşınmıştır.</p></td>
 | Altın fiyatı yanlış                 | yfinance ons/gram karışıklığı                                              | Bigpara birincil kaynak — otomatik düzelmeli                            |
 | Türkçe karakter bozuk               | KAP API encoding                                                           | fix_encoding (latin-1 → UTF-8) çözümü                                   |
 | E-posta gitmiyor                    | SMTP Secrets eksik/yanlış                                                  | Streamlit + GitHub Actions Secrets kontrol                              |
-| Login beni unutuyor                 | v2.0.7.2 öncesi: redeploy/yenileme oturumu düşürüyordu                     | v2.0.7.2'de çözüldü — tso_auth çerezi + st.context.cookies geri yükleme |
+| Login beni unutuyor                 | v2.0.7.7 öncesi: `st.context.cookies` bu Streamlit Cloud kurulumunda HİÇBİR ZAMAN çerezi görmüyordu (kanıtlandı — giriş sonrası bile boş dönüyordu); ayrıca JS/URL-yönlendirme denemeleri sandboxed iframe navigasyon kısıtına takıldı (DevTools: "frame is sandboxed, disallowed from navigating its ancestors") | v2.0.7.8'de KESİN çözüldü — JS/çerez tamamen terk edildi, token doğrudan Python'dan `st.query_params` ile taşınıyor (sandbox'ı bypass eder). Bilinen ödün: token bir süre URL'de görünür kalır |
 | Database connection error           | Supabase pooler 6543 yanlış                                                | SUPABASE_DB_URL kontrol                                                 |
 | Halka Arz Graham/Çarpan boş         | OCR kalitesi düşük rapor                                                   | Beklenen/güvenli davranış — manuel düzeltme yapılmaz                    |
 | Peak check çalışmıyor               | cron-job.org tetiklemesi kesilmiş olabilir                                 | cron-job.org panelinden job durumunu kontrol edin                       |
@@ -402,6 +402,7 @@ taşınmıştır.</p></td>
 | Halka Arz değerleri yeniden başlatınca kayboluyordu | Yerel cache Streamlit Cloud yeniden başlatmasında sıfırlanıyordu | v2.0.6.4'te çözüldü — ipo_valuations kalıcı katmanı (bkz. 3.5)          |
 | BNB/CLINK/ICP fiyatı gelmiyor       | BtcTurk 400 hatası (kalıcı görünüyor)                                      | Açık madde — kaynak/kod eşlemesi incelenecek; fiyatsız varlık skoru 0   |
 | Uygulama "Oh no" + Segmentation fault | Sürümü sabitlenmemiş bir bağımlılığın bozuk yeni sürümü (örn. 10 Tem 2026: pyarrow 25.0.0, st.dataframe'de segfault) | Stabil ve çöken deploy loglarının paket listelerini karşılaştır; değişen paketi requirements.txt'te eski sürüme sabitle. Kod revert'i işe yaramıyorsa suçlu bağımlılıktır |
+| `components.v1.html` içinden JS ile sayfa yönlendirme/URL değiştirme çalışmıyor | Streamlit'in bu iframe'e uyguladığı sabit sandbox, üst çerçeveyi (parent) navigasyon iznini içermiyor (allow-top-navigation yok) — DevTools'ta "frame is sandboxed, disallowed from navigating its ancestors" hatası | Navigasyon gerektiren HİÇBİR JS çözümü kullanılamaz (cerez okuma/yazma JS ile hâlâ mümkün, sadece navigasyon engelli); kalıcılık/URL güncelleme gereken durumlarda doğrudan Python'dan `st.query_params` kullan (bkz. v2.0.7.8, Beni Hatırla) |
 
 ## 7.1 Manuel CSV Güncelleme
 
@@ -417,7 +418,79 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
 # 8. Versiyon Geçmişi (Özet)
 
-**v2.0.5.x – v2.0.7.x (Temmuz 2026) — Fırsat Radarı ve Kalıcılık Dönemi**
+### 11 Temmuz 2026 (v2.0.7.4 – v2.0.7.29) — Beni Hatırla Kesin Çözümü, Portföy/Halka Arz/Temettü İyileştirmeleri
+
+- v2.0.7.29: Ana Sayfa başlığına logo eklendi
+
+- v2.0.7.25–28: Portföyüm tablosuna **K/Z (TL)** sütunu eklendi (Toplam
+  ile K/Z % arasına); alt "TOPLAM PORTFÖY DEĞERİ" satırı tablo
+  sütunlarıyla hizalanacak şekilde yeniden tasarlandı (etiket ayrı üst
+  satırda, rakamlar kendi sütunlarının altında, eşit font boyutu);
+  "Optima Skor" sütun genişliği otomatik hesaplamaya bırakıldı (manuel
+  sabitleme yatay scroll'a yol açıyordu)
+
+- v2.0.7.21–24: Ana Sayfa'da bütçe kullanım verimliliği — lot
+  yuvarlamasından kalan bütçe artığı, en yüksek Optima Skorlu seçili
+  varlıklara round-robin dağıtılıyor (Max Varlık Sayısı bozulmuyor).
+  "Hedef Tutar" sütunu kaldırıldı (kafa karıştırıyordu), tek sütun:
+  "Tutar (₺)". Toplam satırında sıralama değişti: Bütçe Kullanımı önce,
+  Toplam Tutar sonra (en sağdaki "Tutar" sütununun devamı gibi)
+
+- v2.0.7.23: **Kritik bug düzeltmesi** — `calc_optimization_income`
+  fonksiyonu var olmayan `"Lot / Adet"` sütununa bakıyordu (gerçek adı
+  `"Birim"`), bu yüzden BIST temettü geliri hesaplamada HER ZAMAN 0
+  çıkıyordu; "Tahmini Yıllık Pasif Gelir" pratikte sadece TEFAS'ın
+  spekülatif projeksiyonundan geliyordu. Ayrıca metodoloji tutarlı hale
+  getirildi: DÖVİZ ve MADEN de artık TEFAS ile aynı yöntemle (1A getiri
+  bileşik yıllıklandırma) hesaplanıyor; sadece BIST/KRIPTO gerçek veri
+
+- v2.0.7.14–15: Halka Arz modülü — işlem görmeye başlamış (BIST'e
+  XHARZ ile mezun olmuş) şirketler "Yaklaşan Halka Arzlar" listesinden
+  otomatik düşürülüyor. İlk versiyon (v2.0.7.14) genel
+  optimized_universe.csv'yi kaynak aldığı için hem stub kayıtlar (fiyatı
+  0, "(islem gormuyor)") hem de ticker kod çakışmaları (örn. "TERA" hem
+  yeni bir IPO'nun KAP referans kodu hem de alakasız, zaten işlem gören
+  bir şirketin gerçek ticker'ı) yüzünden yanlış pozitif riski
+  taşıyordu; v2.0.7.15'te kaynak SADECE `bist_universe_dynamic`
+  (XHARZ-onaylı mezuniyet) tablosuna değiştirildi
+
+- v2.0.7.16–17: Temettü tablosu sıralama hatası düzeltildi —
+  yfinance'in `exDividendDate` alanı geçmişteki en son bilinen tarihi
+  döner (yaklaşan değil); önceki saf kronolojik artan sıralama, yıl
+  önce geçmiş tarihleri listenin tepesine çıkarıyordu. Artık: gelecek
+  tarihler en yakından en uzağa, geçmiş tarihler en yeniden en eskiye,
+  tarihsiz kayıtlar en sonda. Yeni "Durum" sütunu (Yaklaşıyor/Geçti
+  rozetleri) eklendi
+
+- v2.0.7.10–13: "Yeni Pozisyon Ekle" varlık kutusu artık boş açılıyor
+  (placeholder + arama); Portföyüm tablosunda çoklu satır seçimi + toplu
+  silme eklendi; Uyarı Ayarları panelinde "Kaydet" ve "Tüm Peak'leri
+  Sıfırla" blokları görünür sınırlı kutulara alındı (Şimdi Kontrol Et
+  ile karışıyordu)
+
+- v2.0.7.9: Yeni-abonelik bildirim maili mobil uyumlu hale getirildi —
+  tek sütun, büyük tıklanabilir "Admin Panelini Aç" butonu
+  (`?go=admin` URL parametresi, sadece is_admin=True için otomatik
+  panele yönlendirir — fizyoterapi gibi saha durumlarında telefondan
+  hızlı onay için)
+
+- v2.0.7.4–8: **Beni Hatırla kesin çözümü.** v2.0.7.2'nin
+  `st.context.cookies` yaklaşımı hiç çalışmadı — ekran-içi geçici
+  tanılama paneliyle kanıtlandı (giriş sonrası bile "cerez anahtarlari:
+  []" dönüyordu). Sonraki deneme (JS ile çerez okuyup URL'e ekleyip
+  yönlendirme) de sandboxed iframe'in üst çerçeveyi navigasyon
+  kısıtına takıldı (DevTools: "Unsafe attempt to initiate navigation...
+  frame is sandboxed"). KESİN ÇÖZÜM: JS/çerez tamamen terk edildi,
+  token login anında doğrudan Python'dan `st.query_params["_ta"]`'ya
+  yazılıyor (sandbox'ı bypass eder, Streamlit'in kendi ana çerçevesinden
+  çalışır); F5'te bu URL ile fresh istek gelir, token okunup
+  session_state'e yazılır. **Öğrenilen ders:** `components.v1.html`
+  iframe'i navigasyon/üst-çerçeve erişimi gerektiren hiçbir JS'i
+  çalıştıramaz (sandbox kısıtı Streamlit'in kendi sabit özelliği,
+  değiştirilemez) — bu tür kalıcılık ihtiyaçlarında doğrudan
+  `st.query_params` tercih edilmeli
+
+### v2.0.5.x – v2.0.7.x (Temmuz 2026) — Fırsat Radarı ve Kalıcılık Dönemi
 
 - v2.0.7.3: pyarrow==24.0.0 ve websockets==16.0 sabitlendi — 10
   Temmuz'da yayınlanan pyarrow 25.0.0, st.dataframe serileştirmesinde
@@ -464,7 +537,7 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
 - Güvenlik: PAT yenilendi (eskisi sohbete sızdığı için iptal)
 
-**v2.0.4.x (Temmuz 2026) — Halka Arz, Tablo ve Mobil Uyum Dönemi**
+### v2.0.4.x (Temmuz 2026) — Halka Arz, Tablo ve Mobil Uyum Dönemi
 
 - Yaklaşan Halka Arzlar modülü: KAP RSC reverse-engineering, PDF
   indirme, Tip A/B/C/D ayrıştırma, Türkçe OCR normalizasyonu
@@ -493,7 +566,7 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 - cron-job.org harici zamanlayıcıya geçiş — GitHub Actions'ın kendi cron
   throttling'ini aşmak için
 
-**v2.0.1 – v2.0.3.x (Haziran 2026)**
+### v2.0.1 – v2.0.3.x (Haziran 2026)
 
 - Kâr realizasyonu uyarı sistemi (peak tracking) tam otomasyonu, GitHub
   Actions entegrasyonu
@@ -504,7 +577,7 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 
 - Bulanıklaşma fix: autorefresh 60sn → 300sn, dosya temizliği
 
-**v1.9.x ve Öncesi**
+### v1.9.x ve Öncesi
 
 - SQLite → Supabase PostgreSQL migrasyonu
 

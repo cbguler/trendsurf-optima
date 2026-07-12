@@ -27,17 +27,17 @@ size aittir.</p></td>
 </tbody>
 </table>
 
-**Bu Kılavuzu Nasıl Kullanmalısınız?**
+### Bu Kılavuzu Nasıl Kullanmalısınız?
 
 Kılavuz, uygulamadaki sayfa sırasını takip eder. Her bölümde önce "ne
 işe yarar" sonra "nasıl okunur/hesaplanır" anlatılır. Kılavuzun
-sonundaki Terimler Sözlüğü ve Sık Sorulan Sorular bölümlerine, herhangi
+sonundaki Terimler Sözlüğü ve Sıkça Sorulan Sorular bölümlerine, herhangi
 bir noktada aklınıza takılan bir terim veya sorun için doğrudan
 atlayabilirsiniz.
 
 # 2. Başlangıç — Kayıt ve Giriş
 
-**Hesap Oluşturma**
+### Hesap Oluşturma
 
 1.  Giriş ekranında "Kayıt Ol" sekmesine tıklayın.
 
@@ -46,7 +46,7 @@ atlayabilirsiniz.
 3.  Hesabınız, sistem yöneticisinin onayından sonra aktif olur — onay
     bekleme süresi genellikle birkaç saat içindedir.
 
-**Giriş Yapma**
+### Giriş Yapma
 
 - E-posta ve şifrenizle giriş yapın.
 
@@ -56,7 +56,7 @@ atlayabilirsiniz.
 - Tarayıcı şifre yöneticisi (Chrome, Edge, Firefox) bilgilerinizi
   kaydetmenize izin verebilir.
 
-**Şifremi Unuttum**
+### Şifremi Unuttum
 
 - Giriş ekranında "Şifremi Unuttum" sekmesine tıklayın.
 
@@ -97,7 +97,7 @@ aynı anda değerlendirir.
 
 ## 3.2 Öneri Tablosu Sütunları
 
-| **Sütun**        | **Açıklama**                                                                            |
+| **Sütun**    | **Açıklama**                                                                            |
 |------------------|-----------------------------------------------------------------------------------------|
 | Kategori         | BIST, TEFAS, Döviz, Maden, Kripto                                                       |
 | Ticker           | Varlığın işlem sembolü                                                                  |
@@ -107,8 +107,7 @@ aynı anda değerlendirir.
 | 1A Getiri %      | Son 1 aylık fiyat getirisi                                                              |
 | Emir Fiyatı      | Güncel piyasa fiyatı — limit emir girerken referans alın                                |
 | Birim            | Bütçenize göre önerilen alım adedi/lot                                                  |
-| Gerçek Tutar (₺) | Birim × Emir Fiyatı — birim tam sayıya yuvarlandığı için Hedef Tutar'dan küçük olabilir |
-| Hedef Tutar (₺)  | O varlığa ayrılan bütçe payı                                                            |
+| Tutar (₺)        | Birim × Emir Fiyatı — gerçekte harcanacak/harcanan tutar                                |
 
 <table>
 <colgroup>
@@ -116,9 +115,8 @@ aynı anda değerlendirir.
 </colgroup>
 <tbody>
 <tr class="odd">
-<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Bir Satıra Tıklayın</strong></p>
-<p>Tabloda bir satırı seçtiğinizde (satırın herhangi bir hücresine
-tıklayarak), sayfanın altında o varlığın fiyat grafiği, teknik
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Tablodaki varlığın solundaki kutucuğu işaretleyin.</strong></p>
+<p>Tabloda bir varlığın solundaki kutucuğu seçtiğinizde, sayfanın altında o varlığın fiyat grafiği, teknik
 göstergeleri ve detaylı analizi açılır.</p></td>
 </tr>
 </tbody>
@@ -137,6 +135,14 @@ durumda o varlık listeden çıkarılır ve payı, aynı kategorideki diğer
 varlıklara yeniden dağıtılır — bu işlem, kategorideki tüm varlıklar ya
 karşılanana ya da kategori tamamen boşalana kadar tekrarlanır.
 
+Birim sayısı tam sayıya yuvarlandığı için her varlıkta küçük bir bakiye
+artığı kalabilir. Sistem bu artığı israf etmez: tüm kategoriler
+belirlendikten sonra, kalan bütçe en yüksek Optima Skorlu seçili
+varlıklara sırayla birer birim daha eklenerek dağıtılır — böylece
+bütçenizin mümkün olduğunca tamamı fiilen kullanılır. Tablonun altındaki
+**Bütçe Kullanımı** yüzdesi, bütçenizin ne kadarının gerçekten
+harcandığını gösterir (genellikle %100'e çok yakındır).
+
 <table>
 <colgroup>
 <col style="width: 100%" />
@@ -152,9 +158,38 @@ karşılamıyorsa, sistem bunu açıkça bir bilgi notuyla belirtir.</p></td>
 </tbody>
 </table>
 
-## 3.4 Optima Skoru Nasıl Hesaplanır?
+## 3.4 Tahmini Yıllık Pasif Gelir
 
-Sistem dört faktörü ağırlıklı olarak birleştirir:
+Tablonun üstünde, önerilen portföyün ürettiği tahmini pasif geliri
+gösteren üç metrik yer alır: **Tahmini Yıllık Pasif Gelir**, **Aylık
+Gelir** ve **Bütçeye Oranı**. Bu rakam, kategoriye göre iki farklı
+mantıkla hesaplanır — ikisini birbirinden ayırt etmek önemlidir:
+
+- **BIST (temettü) ve Kripto (staking APY):** Gerçek, açıklanmış
+  verilere dayanır — güvenilir bir tahmindir.
+
+- **TEFAS, Döviz ve Değerli Maden:** Bu üç kategori için sabit oranlı
+  gerçek bir gelir kaynağı yoktur. Sistem, tutarlılık için hepsinde aynı
+  yöntemi kullanır: son 1 aylık getiri, "bu hız 12 ay sürerse ne olur"
+  varsayımıyla bileşik olarak yıllıklandırılır.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#fff4e5;border-left:5px solid #e08a00;padding:14px 16px;border-radius:4px;"><p><strong>⚠ TEFAS/Döviz/Maden Kısmı Spekülatiftir</strong></p>
+<p>Kısa vadeli bir getirinin 12 aya yayılması, gerçek bir gelir
+garantisi değildir — sadece "bu ay bu hızda gitti" varsayımının basit
+bir projeksiyonudur. Yüksek bir "Bütçeye Oranı" (örn. %100'ün üzerinde)
+gördüğünüzde, bunun büyük ölçüde bu spekülatif kısımdan geldiğini
+unutmayın. Yatırım tavsiyesi değildir.</p></td>
+</tr>
+</tbody>
+</table>
+
+## 3.5 Optima Skoru Nasıl Hesaplanır?
 
 - RSI Zonu — %25 ağırlık. Aşırı satım bölgesi (RSI \< 30) yüksek puan
   alır.
@@ -172,13 +207,13 @@ listesi, Portföyüm ve detay sayfası, aynı varlık için her zaman aynı
 Optima Skoru'nu gösterir. Fırsat Radarı'nın alarm e-postaları da (bkz.
 Bölüm 6) aynı formülü kullanır.
 
-## 3.5 Kategori Dağılımı (Pasta Grafiği)
+## 3.6 Kategori Dağılımı (Pasta Grafiği)
 
 Tablonun altındaki 3 boyutlu pasta grafiği, önerilen portföyünüzün
 kategoriler arasındaki dağılımını görsel olarak özetler. Her dilimin
 büyüklüğü, o kategoriye ayrılan bütçe payını gösterir.
 
-## 3.6 Detaylı Analiz Bölümü
+## 3.7 Detaylı Analiz Bölümü
 
 Tabloda bir satır seçtiğinizde, sayfanın altında o varlığa özel bir
 detaylı analiz bölümü açılır: mum grafiği (candlestick chart), işlem
@@ -186,7 +221,7 @@ hacmi göstergesi, teknik göstergeler (MA20/MA50, 52 Haftalık
 Yüksek/Düşük, MACD) ve Optima Skoru'nun bileşenlerine ayrıldığı bir skor
 dökümü yer alır.
 
-**Mum Grafiği (Candlestick) Nasıl Okunur?**
+### Mum Grafiği (Candlestick) Nasıl Okunur?
 
 Her "mum", belirli bir zaman dilimindeki (genellikle bir gün) fiyat
 hareketini özetler. Mumun gövdesi (kalın kısmı), o gün açılış ve kapanış
@@ -206,10 +241,14 @@ fiyatı gösterir.
 - Art arda aynı yönde büyük gövdeli mumlar: güçlü, kararlı bir trend
   olduğuna işaret eder.
 
-**İşlem Hacmi Nasıl Okunur?**
+### İşlem Hacmi Nasıl Okunur?
 
 Mum grafiğinin altındaki çubuklar, o günkü işlem hacmini (alınıp satılan
-toplam miktarı) gösterir. Hacim, bir fiyat hareketinin "ne kadar ciddiye
+toplam miktarı) gösterir. Çubuklar da mum gövdeleri gibi renklendirilir,
+ancak ayrı bir mavi/lacivert paleti kullanılır (mumların yeşil/kırmızı
+renkleriyle karışmasın diye): **mavi** — o gün kapanış açılıştan
+yüksek/eşit (yükselen gün); **lacivert** — o gün kapanış açılıştan
+düşük (düşen gün). Hacim, bir fiyat hareketinin "ne kadar ciddiye
 alınması gerektiğini" anlamak için kullanılır:
 
 - Yüksek hacimle birlikte gelen bir fiyat artışı/düşüşü: hareketin
@@ -223,7 +262,7 @@ alınması gerektiğini" anlamak için kullanılır:
 - Fiyat yükselirken hacmin azalması: yükselişin gücünü kaybediyor
   olabileceğine dair erken bir uyarı sayılabilir.
 
-**Skor Bileşimi**
+### Skor Bileşimi
 
 Bu bölümde, o varlığın Optima Skoru'nun hangi alt bileşenlerden (RSI
 zonu, momentum, volatilite, temel analiz) ne kadar puan aldığı ayrı ayrı
@@ -244,7 +283,9 @@ durumunu gösterir.
 
 2.  Kategori seçin (BIST, TEFAS, Döviz, Maden, Kripto).
 
-3.  Listeden varlık seçin (örn: GARAN, USD/TRY, ATOM).
+3.  Kutu boş açılır — yazarak arayın veya listeden varlık seçin (örn:
+    GARAN, USD/TRY, ATOM). Bir şey seçene kadar formun geri kalanı
+    görünmez.
 
 4.  Birim Türü otomatik seçilir: BIST hisseleri → Lot, gram altın/gümüş
     → Gram, diğerleri (kripto, döviz, fon) → Adet.
@@ -323,7 +364,7 @@ ayarlarsınız.
 
 - "Kaydet" butonuna basınca değişiklikler kayıt edilir.
 
-**Rapor İçeriği**
+### Rapor İçeriği
 
 Mail içinde portföyünüzdeki her varlık için: Ticker, kategori, adet,
 alış/güncel fiyat, toplam değer, K/Z (TL ve %), Optima Skor ve mevcut
@@ -360,7 +401,7 @@ sistem ortalama 1-2 günde bir uyarı verir.</p></td>
 </tbody>
 </table>
 
-**Manuel Test ve Peak Sıfırlama**
+### Manuel Test ve Peak Sıfırlama
 
 - "Şimdi Kontrol Et (Test)" — mail göndermeden sistemin ne göreceğini
   gösterir.
@@ -371,7 +412,7 @@ sistem ortalama 1-2 günde bir uyarı verir.</p></td>
 - "Tüm Peak'leri Sıfırla" — portföyünüzde büyük değişiklik yaptığınızda
   kullanışlıdır; geri alınamaz.
 
-**Hafta Sonu Davranışı**
+### Hafta Sonu Davranışı
 
 Cumartesi/Pazar günleri BIST, TEFAS, Döviz ve Maden piyasaları kapalı
 olduğundan, sistem hafta sonu sadece kripto varlıklar için kontrol
@@ -607,6 +648,15 @@ Başarıyla çıkarılan değerler kalıcı bir katmanda (veritabanı) saklanır
 uygulama yeniden başlasa bile daha önce hesaplanmış Arz Fiyatı, İskonto,
 Graham ve Çarpan değerleri kaybolmaz, ilk açılışta otomatik geri gelir.
 
+## 10.5 Şirket Borsada İşlem Görmeye Başlayınca Ne Olur?
+
+Bir şirket halka arz sürecini tamamlayıp fiilen Borsa İstanbul'da işlem
+görmeye başladığında (BIST Halka Arz Endeksi'ne — XHARZ'a — resmen
+girdiğinde), sistem bunu otomatik olarak algılar: şirket hem **BIST
+sayfasında** canlı fiyat/skor almaya başlar, hem de bu **Yaklaşan Halka
+Arzlar** listesinden kendiliğinden düşürülür. Manuel bir işlem
+gerekmez; aynı şirketi iki ayrı sayfada görmezsiniz.
+
 # 11. Temettü Takip
 
 BIST Temettü Endeksi (XTMTU) üyesi — düzenli nakit temettü dağıtan —
@@ -622,6 +672,7 @@ karşılaştırmanızı sağlar.
 | Temettü/Hisse (₺)       | Hisse başına ödenen/duyurulan brüt temettü tutarı     |
 | Temettü Verimi %        | Temettü/Hisse ÷ Fiyat × 100                           |
 | Ex-Date                 | Haklardan düşme tarihi (bkz. 11.2)                    |
+| Durum                   | YAKLAŞIYOR (ex-date bugün/ileride) veya GEÇTİ (ex-date geçmişte) |
 | Sıklık                  | Temettü ödeme sıklığı (Yıllık, Yarı Yıllık vb.)       |
 | 1A Getiri %             | Son 1 aylık fiyat getirisi                            |
 | Optima Skor             | TrendSurf Optima bileşik puanı                        |
@@ -634,6 +685,14 @@ Ex-Date (haklardan düşme tarihi), temettüyü almak için hisseye en geç ne
 zamana kadar sahip olmanız gerektiğini belirtir. Temettüyü almak için
 hisseye bu tarihten önceki gün kapanışında sahip olunması gerekir;
 ex-date'te veya sonrasında yapılan alım, o dönemin temettüsünü kaçırır.
+
+Veri kaynağının doğası gereği (yfinance), bir şirket bu yıl için henüz
+yeni bir temettü açıklamadıysa Ex-Date alanı **geçen yıla ait son
+bilinen tarihi** gösterebilir — bu bir hata değil, veri kaynağının
+sınırıdır. Tablo, yaklaşan (gelecekteki) tarihleri en yakından en uzağa,
+ardından geçmiş tarihleri en yeniden en eskiye sıralar; **Durum**
+sütunundaki yeşil "Yaklaşıyor" / gri "Geçti" etiketi hangisinin
+güncel olduğunu bir bakışta gösterir.
 
 <table>
 <colgroup>
@@ -707,9 +766,9 @@ Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 | Peak (Tepe Fiyat)                                          | Kâr realizasyonu uyarı sisteminin izlediği, bir varlığın şimdiye kadar gördüğü en yüksek fiyat. Bu tepeden belirlediğiniz oranda düşüş olduğunda uyarı tetiklenir.                                                                                                 |
 | Sinyal (Güçlü Al / Kademeli Al / Tut-İzle / Sat / Net Sat) | Optima Skoru'nun kategorik karşılığıdır; yüksekten düşüğe doğru sıralanır: Güçlü Al, Kademeli Al, Tut-İzle, Sat, Net Sat.                                                                                                                                          |
 
-# 14. Sık Sorulan Sorular
+# 14. Sıkça Sorulan Sorular
 
-**Veriler ne sıklıkla güncellenir?**
+### Veriler ne sıklıkla güncellenir?
 
 BIST fiyat ve skorları seans saatlerinde (hafta içi 10:00-18:30)
 yaklaşık 15 dakikada bir; döviz, maden ve kripto 7/24 yaklaşık 15
@@ -718,55 +777,55 @@ kez güncellenir. Temel analiz verileri (P/E, temettü vb.) gece
 yenilenir. Halka Arz gibi daha az sık değişen veriler birkaç saatlik
 önbellekten gelir.
 
-**Portföy verilerim kayboldu, neden?**
+### Portföy verilerim kayboldu, neden?
 
 Portföyünüz güvenli bir veritabanında saklanır, kaybolmaz. Çıkış yapıp
 tekrar giriş yapmayı deneyin; sorun devam ederse sistem yöneticisiyle
 iletişime geçin.
 
-**Kâr realizasyonu uyarısı ne kadar gecikmeyle gelir?**
+### Kâr realizasyonu uyarısı ne kadar gecikmeyle gelir?
 
 Sisteminizin kontrol sıklığı ayarına bağlı olarak, tetiklenmeden mail
 gelene kadar birkaç dakika ile bir saat arası gecikme olabilir.
 
-**Aynı varlık için defalarca mail alabilir miyim?**
+### Aynı varlık için defalarca mail alabilir miyim?
 
 Uyarı tekrar modunuza bağlıdır: "Peak Kırıldıkça" modunda aynı tepe için
 bir kez, yeni bir tepe oluşursa tekrar gelir.
 
-**Fırsat Radarı'ndan alarm geldi — hemen almalı mıyım?**
+### Fırsat Radarı'ndan alarm geldi — hemen almalı mıyım?
 
 Hayır. Alarm bir "al" sinyali değil, bir inceleme davetidir; skor
 geçmişe bakar ve şirket haberlerini görmez. Ayrıntı için Bölüm 6'ya
 bakın.
 
-**Hafta sonu BIST hissem düşse mail gelir mi?**
+### Hafta sonu BIST hissem düşse mail gelir mi?
 
 Hayır. Hafta sonu piyasalar kapalı olduğu için sadece kripto varlıklar
 için kontrol yapılır.
 
-**Düşüş eşiğini çok düşük yaparsam ne olur?**
+### Düşüş eşiğini çok düşük yaparsam ne olur?
 
 Mail kutunuz sık uyarılarla dolabilir. %2'nin altındaki değerler
 önerilmez.
 
-**Uygulama yavaş açılıyor?**
+### Uygulama yavaş açılıyor?
 
 Uzun süre kullanılmayınca sistem uyku moduna geçebilir; ilk açılış 1-2
 dakika sürebilir, sonrası hızlanır.
 
-**Ana Sayfa'daki tablo mobilde neden farklı görünüyor?**
+### Ana Sayfa'daki tablo mobilde neden farklı görünüyor?
 
 Tablo, telefon ekranlarında otomatik olarak tek sütunlu bir görünüme
 geçer; tüm bilgiler yine de erişilebilir durumdadır.
 
-**Halka Arz sayfasında bazı satırlarda Graham/Çarpan değeri neden yok?**
+### Halka Arz sayfasında bazı satırlarda Graham/Çarpan değeri neden yok?
 
 İlgili şirketin Fiyat Tespit Raporu düşük kaliteli/taranmış bir belge
 olduğunda, sistem yanlış rakam üretmemek için bu alanı bilinçli olarak
 boş bırakır.
 
-**Veri kaynağı güvenilir mi?**
+### Veri kaynağı güvenilir mi?
 
 Her varlık sınıfı için birden fazla yedek kaynak kullanılır; birincil
 kaynaktan veri alınamazsa sistem otomatik olarak yedek kaynağa geçer.
