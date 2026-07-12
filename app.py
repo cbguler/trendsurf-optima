@@ -469,7 +469,7 @@ def render_auth_gate():
                                       value=_remembered_email)
                 pwd   = st.text_input("Sifre", type="password", key="li_pass",
                                       placeholder="Sifreniz")
-                remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=True)
+                remember = st.checkbox("Beni Hatirla (90 gün)", key="li_remember", value=False)
 
                 # v1.9.9.3 - Browser password manager entegrasyonu (fallback)
                 # Streamlit 1.32+ text_input autocomplete parametresi var (yukarida);
