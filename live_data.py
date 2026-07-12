@@ -308,9 +308,21 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
                 "Ret1Y":      0.0,
                 "Ret3Y":      0.0,
                 "Ret5Y":      0.0,
-                "Vol":        0.0,
+                "Vol":        25.0,
                 "YF_Symbol":  "",
                 "_tcmb_guncellendi": "",
+                # v2.0.7.33 - KRITIK DUZELTME (Bahri'nin 12 Temmuz bulgusu):
+                # Bu satirlar Optima_Skor'u hic yazmiyordu -> asagidaki
+                # "df.columns'da olmayan sutunlari 0.0 ile doldur" adimi
+                # bunu SESSIZCE 0.0 yapiyordu (NaN degil!). app.py'deki
+                # canli skor tamamlama mantigi ise SADECE NaN olan
+                # skorlari yeniden hesapliyor - 0.0 "zaten hesaplanmis
+                # gecerli bir skor" sanilip hic dokunulmuyordu. Sonuc:
+                # Ceyrek/Yarim/Tam/Cumhuriyet/Ata Altin HER ZAMAN
+                # Optima Skor=0 gosteriyordu. Simdi acikca NaN yazilarak
+                # app.py'nin optima_score(RSI,Ret1M,Vol) ile gercek bir
+                # skor hesaplamasi saglaniyor.
+                "Optima_Skor": float("nan"),
             }
             yeni_satirlar.append(row)
 
