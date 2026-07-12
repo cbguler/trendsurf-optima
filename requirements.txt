@@ -24,3 +24,11 @@ psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
 pdfplumber
 pytesseract
+# v2.0.7.36 (12 Temmuz 2026): Beni Hatirla GERCEK cerez cozumu icin.
+# st.query_params tabanli URL-token yontemi calisiyordu ama URL/bookmark
+# bagimliydi, yeni bir cihazda/tarayicida normal giris deneyimi
+# saglamiyordu (Serdar'in test etmesi gerekiyordu). Bu paket Streamlit'in
+# resmi cift-yonlu bilesen protokolunu (postMessage, navigasyon DEGIL)
+# kullanarak GERCEK bir tarayici cerezi okur/yazar - sandboxed iframe
+# navigasyon kisitina hic takilmaz.
+extra-streamlit-components>=0.1.80

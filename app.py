@@ -186,6 +186,7 @@ _COOKIE_OK = True  # localStorage her zaman erisilebilir
 # v1.9.9.3.1 - components.v1.html icin module-level import (scope sorunu engellenir)
 # Asagidaki render_auth_gate ve logout button'da kullaniliyor.
 import streamlit.components.v1 as _stc_v1
+import extra_streamlit_components as stx
 
 # ── Yeni Auth sistemi (SQLite) ───────────────────────────────────────────────
 from db import init_db
@@ -516,33 +517,21 @@ def render_auth_gate():
                         # v1.9.9.2 - Hem localStorage hem email cookie yaz (components.v1.html ile)
                         # Email cookie 90 gun, localStorage token 90 gun (DB token suresi ile ayni)
                         if remember:
-                            # v2.0.7.8 - Beni Hatirla KALICI oturum: onceki JS/cerez
-                            # tabanli yontemler (st.context.cookies + URL yonlendirme)
-                            # calismiyordu. KANIT: DevTools console'da "Unsafe attempt
-                            # to initiate navigation ... frame is sandboxed" hatasi -
-                            # components.v1.html iframe'i ust cerceveyi (parent) YONLEN-
-                            # DIREMIYOR (sandbox kisitlamasi, Streamlit'in kendi iframe'i
-                            # icin sabit, bizim degistiremedigimiz bir ozellik). Bu yuzden
-                            # JS/navigasyon TERK EDILDI. Yerine dogrudan Python'dan
-                            # st.query_params kullaniliyor - bu, Streamlit'in KENDI ana
-                            # cercevesinden (sandbox DISINDA) URL'i gunceller, F5'te bu
-                            # URL ile fresh HTTP istegi gider, token asagidaki "URL
-                            # parametresinden oturum geri yukleme" blogunda okunur.
-                            st.query_params["_ta"] = res["token"]
-                            print(f"[auth] Beni Hatirla aktif: token st.query_params'a yazildi")
+                            # v2.0.7.36 - CookieManager ile GERCEK tarayici
+                            # cerezi yazilir (90 gun) - herhangi bir cihaz/
+                            # tarayicida calisir, URL/bookmark bagimliligi yok.
+                            from datetime import datetime, timedelta
+                            _expire = datetime.now() + timedelta(days=90)
+                            cookie_manager.set(
+                                "tso_auth", res["token"],
+                                expires_at=_expire, key="set_tso_auth",
+                                same_site="lax",
+                            )
+                            print("[auth] Beni Hatirla aktif: tso_auth cerezi CookieManager ile yazildi")
                         else:
-                            # v2.0.7.2 - Beni Hatirla ISARETSIZ: eski bir tso_auth
-                            # cerezi kalmissa temizle - kullanici "hatirlama"
-                            # dediginde tam sayfa yenilemede eski oturum geri
-                            # yuklenmesin.
-                            _stc_v1.html("""
-                            <script>
-                            try {
-                              window.parent.document.cookie =
-                                  "tso_auth=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-                            } catch(e) {}
-                            </script>
-                            """, height=0)
+                            # v2.0.7.36 - Beni Hatirla ISARETSIZ: eski bir
+                            # tso_auth cerezi kalmissa CookieManager ile temizle.
+                            cookie_manager.delete("tso_auth", key="del_tso_auth_login")
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -607,30 +596,26 @@ def render_auth_gate():
         st.markdown("</div>", unsafe_allow_html=True)
 
 # Beni Hatirla: onceki token ile otomatik giris
-if "auth_token" not in st.session_state and "remember_token" in st.session_state:
-    st.session_state["auth_token"] = st.session_state["remember_token"]
+# v2.0.7.36 - Beni Hatirla GERCEK COZUM: onceki st.query_params tabanli
+# yontem calisan ama kirilgan bir gecici cozumdu - token tarayici adres
+# cubugunda tasindigi icin SADECE o tam URL (bookmarkli) tekrar acilirsa
+# calisiyordu; farkli bir cihazda/tarayicida (Serdar'in bilgisayari gibi)
+# normal giris deneyimi saglamiyordu. KESIN COZUM: extra-streamlit-
+# components paketinin CookieManager'i - bu, Streamlit'in RESMI cift-
+# yonlu bilesen protokolunu (window.parent.postMessage) kullanir, navigasyon
+# GEREKTIRMEZ, bu yuzden daha once tum JS/URL denemelerini kirip gecen
+# sandboxed iframe navigasyon kisitina hic takilmaz. Artik GERCEK bir
+# tarayici cerezi (tso_auth) yazilip okunuyor - herhangi bir cihazda normal
+# "giris yap + Beni Hatirla isaretle" deneyimi calisir, URL'ye veya
+# bookmark'a bagimlilik yok.
+cookie_manager = stx.CookieManager(key="tso_cookie_mgr")
 
-# v2.0.7.8 - Beni Hatirla KESIN COZUM: Hem st.context.cookies (v2.0.7.6'da
-# kanitlandi - cerezleri hep bos donuyor) HEM DE JS/URL-yonlendirme yontemi
-# (bu oturumda kanitlandi - DevTools console: "Unsafe attempt to initiate
-# navigation ... frame is sandboxed, disallowed from navigating its
-# ancestors") CALISMIYOR. components.v1.html'in olusturdugu iframe sandbox'i
-# Streamlit'in kendi sabit ozelligi - degistiremeyiz, ve icinden
-# window.parent.location.href / history.replaceState gibi navigasyon
-# gerektiren HICBIR JS calismaz. Bu yuzden JS tamamen TERK EDILDI.
-#
-# KESIN COZUM: Token dogrudan Python'dan st.query_params'a yazilir (login
-# ani, yukarida "st.query_params['_ta'] = res['token']" satirina bkz).
-# st.query_params, Streamlit'in KENDI ana cercevesinden (sandbox DISINDA)
-# calisir, URL'i gercekten gunceller. F5'te tarayici bu URL ile (icinde
-# _ta ile) fresh istek atar, asagida okunur. Sadece Python - JS yok,
-# cerez yok, navigasyon yok.
-if "_ta" in st.query_params and "auth_token" not in st.session_state:
-    st.session_state["auth_token"] = st.query_params["_ta"]
-    print("[auth] tso_auth st.query_params'tan oturum geri yukleme denendi")
-    # Token'i URL'de birakma - okunduktan hemen sonra temizle (Python
-    # tarafinda, JS'e gerek yok, sandbox sorunu olmaz).
-    del st.query_params["_ta"]
+if "auth_token" not in st.session_state:
+    _tso_cookies = cookie_manager.get_all(key="tso_cookies_get_all")
+    _tso_token_cookie = (_tso_cookies or {}).get("tso_auth")
+    if _tso_token_cookie:
+        st.session_state["auth_token"] = _tso_token_cookie
+        print("[auth] tso_auth cerezinden (CookieManager) oturum geri yuklendi")
 
 # v1.9.9.3 - Beni Hatirla yapilanmasi:
 #   Daha onceki localStorage + cookie yontemleri Streamlit Cloud iframe sandboxing
@@ -668,8 +653,8 @@ if _cur_user is None:
 # v2.0.7.9 - "Yeni Abonelik Basvurusu" mailindeki dogrudan link icin:
 # ?go=admin URL parametresi, ADMIN kullanicisini otomatik Admin Paneli'ne
 # yonlendirir. Sadece is_admin=True icin calisir (baskasi bu linki elde
-# ederse hicbir sey olmaz - normal sayfaya duser). Beni Hatirla (_ta)
-# ile birlikte kullanildiginda mobilden tek tikla onay ekranina inilir.
+# ederse hicbir sey olmaz - normal sayfaya duser). Beni Hatirla (tso_auth
+# cerezi) ile birlikte kullanildiginda mobilden tek tikla onay ekranina inilir.
 if st.query_params.get("go") == "admin" and _cur_user.get("is_admin"):
     st.session_state["page_override"] = "admin"
     del st.query_params["go"]
@@ -2109,21 +2094,9 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v1.9.9.2 - localStorage + sessionStorage + email cookie temizle
-        # components.v1.html ile script gercekten calisir (st.markdown calismaz)
-        _stc_v1.html("""
-        <script>
-        try {
-          window.parent.localStorage.removeItem('tso_auth_token');
-          window.parent.sessionStorage.removeItem('tso_logged_in');
-          window.parent.document.cookie =
-              "tso_auth=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-          window.parent.document.cookie =
-              "ts_rem_email=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-          console.log('[tso] auth cleared from browser');
-        } catch(e) { console.log('[tso] clear err:', e); }
-        </script>
-        """, height=0)
+        # v2.0.7.36 - CookieManager ile gercek cerez silme (eski ham JS
+        # yontemi terk edildi - guvenilirlik icin tek mekanizma kullanilir).
+        cookie_manager.delete("tso_auth", key="del_tso_auth_logout")
         logout()
         st.rerun()
 
