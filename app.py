@@ -2906,9 +2906,29 @@ elif page=="Portföyüm":
     df_pf = _pd2.DataFrame(_pf_rows)
     df_show = df_pf.drop(columns=["_id"])
 
+    # v2.0.7.30 - K/Z ve K/Z % sutunlarina pozitif/negatif renk kodlamasi
+    # (Bahri'nin talebi): pozitif yesil, negatif kirmizi. st.dataframe bir
+    # pandas Styler kabul eder, column_config ile birlikte calisir.
+    def _kz_renk(v):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return ""
+        if v > 0:
+            return "color: #1b8a4a; font-weight: 600;"
+        elif v < 0:
+            return "color: #c0392b; font-weight: 600;"
+        return ""
+
+    try:
+        df_show_styled = df_show.style.map(_kz_renk, subset=["K/Z", "K/Z %"])
+    except AttributeError:
+        # eski pandas surumlerinde .map yok, .applymap kullan
+        df_show_styled = df_show.style.applymap(_kz_renk, subset=["K/Z", "K/Z %"])
+
     # st.dataframe — Daraltilmis sutunlar + Sinyal eklendi
     _event = st.dataframe(
-        df_show,
+        df_show_styled,
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
