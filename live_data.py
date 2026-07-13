@@ -154,9 +154,32 @@ _MADEN_AD_GUNCELLE = {
     "PLATIN_TRY": "Gram Platin",
 }
 
+# v2.0.7.39 - 185+ kriptoya genisleme: worker.py artik BtcTurk'teki TUM
+# TRY paritelerini dinamik cekiyor, BIST ile cakisanlari (LINK->CLINK
+# ornegindeki gibi) "C" onekiyle yeniden adlandirip esap kripto_parite_
+# map.json dosyasina yaziyor. Burada o dosya okunur - boylece "C" ile
+# baslayan GERCEK sembolleri (CHZ, COTI gibi) yanlislikla cakisma sanip
+# kirpma riski olmadan, SADECE worker.py'nin tespit ettigi gercek
+# cakismalar dogru sekilde cozulur. Dosya yoksa/okunamazsa (ilk kurulum,
+# worker henuz hic calismadi) CLINK icin eski bilinen esleme yedek olarak
+# kullanilir, boylece gecici bir bozulma olmaz.
+def _kripto_parite_haritasi_yukle() -> dict:
+    try:
+        import json as _json_lp
+        with open("kripto_parite_map.json", encoding="utf-8") as f:
+            return _json_lp.load(f)
+    except Exception:
+        return {"CLINK": "LINKTRY"}  # worker henuz hic calismadiysa yedek
+
+
+_KRIPTO_PARITE_MAP = _kripto_parite_haritasi_yukle()
+
+
 # KRIPTO: BTC -> "BTCTRY", ETH -> "ETHTRY" (BtcTurk borsasindan TRY cifti)
 def _kripto_bp_code(ticker: str) -> str:
     t = ticker.upper().strip()
+    if t in _KRIPTO_PARITE_MAP:
+        return _KRIPTO_PARITE_MAP[t]
     if t.endswith("TRY"):
         return t
     return f"{t}TRY"

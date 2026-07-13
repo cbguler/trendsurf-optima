@@ -295,12 +295,22 @@ def tara_fx_maden_kripto(df_uni):
         except Exception:
             continue
 
+    # v2.0.7.39 - 185+ kriptoya genisleme: hardcoded "CLINK->LINK" ozel
+    # durumu terk edildi, worker.py'nin urettigi kripto_parite_map.json
+    # (BIST ile cakisan TUM kriptolar icin genel esleme) kullanilir.
+    try:
+        import json as _json_rd
+        with open("kripto_parite_map.json", encoding="utf-8") as _f_rd:
+            _kripto_parite = _json_rd.load(_f_rd)
+    except Exception:
+        _kripto_parite = {"CLINK": "LINKTRY"}  # worker hic calismadiysa yedek
+
     kripto_list = (df_uni[df_uni["Kategori"] == "KRIPTO"]["Ticker"]
                    .dropna().astype(str).tolist()) if df_uni is not None else []
     for t in kripto_list:
         try:
-            code = "LINK" if t == "CLINK" else t
-            _skorla(t, "KRIPTO", _close_from(bp.Crypto(f"{code}TRY").history(period="3mo", interval="1d")))
+            pair = _kripto_parite.get(t, f"{t}TRY")
+            _skorla(t, "KRIPTO", _close_from(bp.Crypto(pair).history(period="3mo", interval="1d")))
         except Exception:
             continue
 

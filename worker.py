@@ -220,14 +220,82 @@ def _detect_and_register_new_bist_listings(existing_tickers: list) -> list:
         print(f"[dinamik-evren] yeni mezun tespiti atlandi (hata): {e}")
         return []
 
-# ─── 20 Kripto ───────────────────────────────────────────────
-KRIPTO = [
-    ("BTC","BTC-USD"),("ETH","ETH-USD"),("BNB","BNB-USD"),("SOL","SOL-USD"),
+# ─── Kripto (dinamik - tum BtcTurk TRY pariteleri) ────────────
+# v2.0.7.39 - 20'DEN 185+'E GENISLEME (Bahri'nin talebi): Onceki statik
+# 20 kriptoluk liste terk edildi. Zaten TUM kripto verisi (fiyat/RSI/
+# Ret1M/Vol) dogrudan BtcTurk'ten (bp.Crypto(...).history()) geliyordu -
+# yfinance sadece detay sayfasindaki opsiyonel zengin grafik icin
+# kullaniliyor (bulunamazsa zaten "gecmis veri yuklenemedi" ile duzgunce
+# es geciyor). Yani BtcTurk'un sundugu HER TRY paritesini otomatik
+# eklemek, elle liste yazmaktan cok daha guvenilir VE surdurulebilir:
+# BtcTurk yeni parite ekledikce/kaldirdikca sistem kendini otomatik
+# gunceller, "BNB/ICP'de TRY yok" gibi kesifleri bir daha elle
+# yapmamiza gerek kalmaz - artik olmayan parite zaten listede hic
+# gorunmez.
+#
+# COLLISION KORUMASI: LINK (Chainlink) ile BIST'teki "LINK" (Link
+# Bilgisayar) arasindaki cakisma nasil "CLINK" onekiyle cozuldüyse,
+# 185 pariteye genislerken BENZER cakismalar da otomatik tespit edilip
+# ayni yontemle (once "C" harfi eklenerek) cozulur - manuel mudahale
+# gerekmez.
+#
+# FAIL-SAFE: Canli cekim basarisiz olursa (Actions'ta gecici bir ag
+# sorunu), eski statik liste YEDEK olarak devreye girer - kripto
+# sayfasi hicbir zaman tamamen bos kalmaz.
+_KRIPTO_STATIK_YEDEK = [
+    ("BTC","BTC-USD"),("ETH","ETH-USD"),("SOL","SOL-USD"),
     ("ADA","ADA-USD"),("XRP","XRP-USD"),("DOGE","DOGE-USD"),("DOT","DOT-USD"),
     ("AVAX","AVAX-USD"),("CLINK","LINK-USD"),("LTC","LTC-USD"),("ATOM","ATOM-USD"),
-    ("TRX","TRX-USD"),("NEAR","NEAR-USD"),("ICP","ICP-USD"),
-("OP","OP-USD"),("INJ","INJ-USD"),("SUI","SUI20947-USD"),("TON","TON11419-USD"),
+    ("TRX","TRX-USD"),("NEAR","NEAR-USD"),
+    ("OP","OP-USD"),("INJ","INJ-USD"),("SUI","SUI20947-USD"),("TON","TON11419-USD"),
 ]
+
+
+def _kripto_evrenini_olustur():
+    """BtcTurk'teki TUM TRY paritelerini canli ceker, BIST ile cakisanlari
+    'C' onekiyle yeniden adlandirir (CLINK ornegindeki gibi), (ticker,
+    yfinance_sembolu) ciftleri listesi doner. Basarisiz olursa yedek
+    statik listeye duser. Ayrica _KRIPTO_BP_PARITE_MAP global sozlugunu
+    doldurur - ticker -> gercek BtcTurk parite kodu (yeniden adlandirilan
+    TUM ticker'lar icin, sadece CLINK degil)."""
+    global _KRIPTO_BP_PARITE_MAP
+    try:
+        import borsapy as bp
+        pairs = bp.crypto_pairs("TRY")  # ['BTCTRY','ETHTRY',...]
+        if not pairs:
+            raise ValueError("bos parite listesi dondu")
+        bist_set = {t.upper() for t in BIST_TICKERS}
+        sonuc = []
+        yeniden_adlandirilan = []
+        for pair in pairs:
+            base = pair[:-3] if pair.upper().endswith("TRY") else pair
+            base = base.upper().strip()
+            if not base:
+                continue
+            ticker = base
+            if base in bist_set:
+                # v2.0.4.6'daki LINK->CLINK cozumuyle AYNI yontem
+                ticker = f"C{base}"
+                yeniden_adlandirilan.append(f"{base}->{ticker}")
+            _KRIPTO_BP_PARITE_MAP[ticker] = f"{base}TRY"
+            yf_sym = f"{base}-USD"  # yfinance icin tahmini sembol (detay
+                                     # sayfasi opsiyonel grafik icin - bulunamazsa
+                                     # zaten zarifce es geciliyor)
+            sonuc.append((ticker, yf_sym))
+        if yeniden_adlandirilan:
+            print(f"[kripto-evren] BIST ile cakisan {len(yeniden_adlandirilan)} "
+                  f"kripto yeniden adlandirildi: {yeniden_adlandirilan}")
+        print(f"[kripto-evren] BtcTurk'ten {len(sonuc)} TRY paritesi canli cekildi.")
+        return sonuc
+    except Exception as e:
+        print(f"[kripto-evren] Canli cekim basarisiz ({type(e).__name__}: {e}) - "
+              f"yedek statik listeye (16 varlik) dusuluyor.")
+        _KRIPTO_BP_PARITE_MAP = {"CLINK": "LINKTRY"}
+        return _KRIPTO_STATIK_YEDEK
+
+
+_KRIPTO_BP_PARITE_MAP = {}   # ticker -> gercek BtcTurk parite kodu (rename edilenler icin)
+KRIPTO = _kripto_evrenini_olustur()
 
 # POL yfinance'de cevap vermezse MATIC-USD ile dene
 
@@ -902,18 +970,15 @@ def build():
     # Bunun yerine borsapy'nin Crypto sinifi (BtcTurk API - GERCEK, DOGRUDAN
     # TL cinsinden islem gören fiyat) kullaniliyor - live_data.py'deki canli
     # overlay'in zaten guvenilir sekilde kullandigi AYNI kaynak.
-    # v2.0.7.38 - CLINK duzeltmesinin IKINCI YARISI: ayni sembol esleme
-    # hatasi hem live_data.py'de (v2.0.7.35'te duzeltildi) hem BURADA
-    # vardi - iki dosyada ayni fonksiyonun iki kopyasi var ve dun sadece
-    # biri duzeltildi, CSV'yi yazan bu kopya "CLINKTRY" gondermeye devam
-    # ediyordu (BtcTurk'te parite adi "LINKTRY"). Ders: kod kopyasi
-    # tehlikelidir - iki kopya da ayni anda duzeltilmeli.
-    _KRIPTO_BP_OZEL = {"CLINK": "LINKTRY"}
-
+    # v2.0.7.39 - Artik SADECE CLINK degil, BIST ile cakisip yeniden
+    # adlandirilan HERHANGI bir kripto icin _KRIPTO_BP_PARITE_MAP'teki
+    # gercek BtcTurk parite kodu kullanilir (bkz. _kripto_evrenini_olustur,
+    # 185+ kriptoya genisleme). Onceki CLINK-ozel cozum artik gereksiz -
+    # genel mekanizma onu da kapsiyor.
     def _kripto_bp_kod(ticker: str) -> str:
         t = ticker.upper().strip()
-        if t in _KRIPTO_BP_OZEL:
-            return _KRIPTO_BP_OZEL[t]
+        if t in _KRIPTO_BP_PARITE_MAP:
+            return _KRIPTO_BP_PARITE_MAP[t]
         return t if t.endswith("TRY") else f"{t}TRY"
 
     kripto_results = {}
@@ -1153,6 +1218,20 @@ def build():
         df["TEFAS_Kind"] = ""
     df = df.drop_duplicates(subset=["Ticker"], keep="last").reset_index(drop=True)
     df.to_csv(OUTPUT, index=False, encoding="utf-8")
+
+    # v2.0.7.39 - Kripto parite eslemesini (BIST cakismasi yuzunden
+    # yeniden adlandirilan ticker -> gercek BtcTurk parite kodu) kucuk
+    # bir JSON'a yaz. live_data.py (canli fiyat overlay) bunu okuyup ayni
+    # eslemeyi kullanir - "C" ile baslayan GERCEK sembolleri (CHZ, COTI
+    # gibi) yanlislikla cakisma sanip kirpmaktan bu sekilde kacinilir.
+    try:
+        import json as _json_kp
+        with open("kripto_parite_map.json", "w", encoding="utf-8") as f:
+            _json_kp.dump(_KRIPTO_BP_PARITE_MAP, f, ensure_ascii=False, indent=2)
+        print(f"[kripto-evren] kripto_parite_map.json yazildi "
+              f"({len(_KRIPTO_BP_PARITE_MAP)} yeniden adlandirilan/eslenen kayit).")
+    except Exception as e:
+        print(f"[kripto-evren] kripto_parite_map.json yazilamadi: {e}")
 
     # ── v2.0.4.8: Yaklasan Halka Arzlar + Fiyat Tespit Raporu cache'i ────────
     # Bu adim optimized_universe.csv'yi ETKILEMEZ - ayri bir cache dosyasina
