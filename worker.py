@@ -951,6 +951,12 @@ def build():
         r["DY"] = _dy
 
     # ── 3. Kripto ─────────────────────────────────────────────
+    # v2.0.7.40 - 186 kriptoya genisleme sonrasi isim sozlugu de genisletildi
+    # (Bahri'nin bulgusu: "Ad" sutununda ticker tekrarlaniyordu). borsapy
+    # tam isim vermiyor (sadece fiyat/hacim), bu yuzden bilinen ~150+
+    # kripto icin elle isim eslemesi eklendi. Hala eslesmeyen (cok
+    # yeni/az bilinen) bir ticker olursa, kod zaten .get(t, t) ile
+    # ticker'in kendisine zarifce duser - hicbir zaman bos/hatali gostermez.
     KRIPTO_ADLAR = {
         "BTC": "Bitcoin", "ETH": "Ethereum", "BNB": "BNB",
         "SOL": "Solana", "ADA": "Cardano", "XRP": "XRP",
@@ -959,6 +965,64 @@ def build():
         "TRX": "TRON", "NEAR": "NEAR Protocol", "ICP": "Internet Computer",
         "OP": "Optimism", "INJ": "Injective",
         "SUI": "Sui", "TON": "Toncoin",
+        # v2.0.7.40 - genisletilen liste
+        "USDT": "Tether", "USDC": "USD Coin", "STETH": "Lido Staked ETH",
+        "WBTC": "Wrapped Bitcoin", "SHIB": "Shiba Inu", "DAI": "Dai",
+        "BCH": "Bitcoin Cash", "LEO": "UNUS SED LEO", "XLM": "Stellar",
+        "HBAR": "Hedera", "FIL": "Filecoin", "APT": "Aptos",
+        "ARB": "Arbitrum", "MKR": "Maker", "VET": "VeChain",
+        "RENDER": "Render", "IMX": "Immutable", "GRT": "The Graph",
+        "ALGO": "Algorand", "FTM": "Fantom", "AAVE": "Aave",
+        "FLOW": "Flow", "SAND": "The Sandbox", "MANA": "Decentraland",
+        "EGLD": "MultiversX", "XTZ": "Tezos", "THETA": "Theta Network",
+        "AXS": "Axie Infinity", "EOS": "EOS", "KAVA": "Kava",
+        "CHZ": "Chiliz", "ZEC": "Zcash", "DASH": "Dash",
+        "MINA": "Mina Protocol", "XMR": "Monero", "NEO": "NEO",
+        "IOTA": "IOTA", "KSM": "Kusama", "WAVES": "Waves",
+        "COMP": "Compound", "SNX": "Synthetix", "CRV": "Curve DAO",
+        "1INCH": "1inch", "ENJ": "Enjin Coin", "BAT": "Basic Attention Token",
+        "ZIL": "Zilliqa", "QTUM": "Qtum", "OMG": "OMG Network",
+        "ANKR": "Ankr", "CELO": "Celo", "GALA": "Gala",
+        "APE": "ApeCoin", "LDO": "Lido DAO", "RPL": "Rocket Pool",
+        "PEPE": "Pepe", "WIF": "dogwifhat", "FLOKI": "Floki",
+        "BONK": "Bonk", "JUP": "Jupiter", "PYTH": "Pyth Network",
+        "TIA": "Celestia", "SEI": "Sei", "STX": "Stacks",
+        "RUNE": "THORChain", "KAS": "Kaspa", "ORDI": "Ordinals",
+        "WLD": "Worldcoin", "JASMY": "JasmyCoin", "GMT": "STEPN",
+        "DYDX": "dYdX", "ENS": "Ethereum Name Service", "GNO": "Gnosis",
+        "BLUR": "Blur", "ROSE": "Oasis Network", "ONE": "Harmony",
+        "CFX": "Conflux", "SKL": "SKALE", "OCEAN": "Ocean Protocol",
+        "AR": "Arweave", "STORJ": "Storj", "BAND": "Band Protocol",
+        "CVC": "Civic", "REN": "Ren", "SXP": "Solar",
+        "SUSHI": "SushiSwap", "UMA": "UMA", "BAL": "Balancer",
+        "YFI": "yearn.finance", "ZRX": "0x Protocol", "KNC": "Kyber Network",
+        "LRC": "Loopring", "NMR": "Numeraire", "OXT": "Orchid",
+        "REP": "Augur", "MTL": "Metal", "DGB": "DigiByte",
+        "SC": "Siacoin", "ICX": "ICON", "ONT": "Ontology",
+        "ZEN": "Horizen", "RVN": "Ravencoin", "ANT": "Aragon",
+        "AUDIO": "Audius", "CTSI": "Cartesi", "DENT": "Dent",
+        "HOT": "Holo", "IOST": "IOST", "WAXP": "WAX",
+        "CVX": "Convex Finance", "FXS": "Frax Share", "SPELL": "Spell Token",
+        "TWT": "Trust Wallet Token", "WOO": "WOO Network", "GLMR": "Moonbeam",
+        "MOVR": "Moonriver", "ASTR": "Astar", "ACH": "Alchemy Pay",
+        "API3": "API3", "RSR": "Reserve Rights", "PERP": "Perpetual Protocol",
+        "SUPER": "SuperVerse", "ALICE": "MyNeighborAlice", "TLM": "Alien Worlds",
+        "COTI": "COTI", "MASK": "Mask Network", "RAD": "Radicle",
+        "POLYX": "Polymesh", "PHA": "Phala Network", "DUSK": "Dusk",
+        "TRB": "Tellor", "BADGER": "Badger DAO", "FARM": "Harvest Finance",
+        "ILV": "Illuvium", "PENDLE": "Pendle", "STRK": "Starknet",
+        "MANTA": "Manta Network", "ALT": "AltLayer", "DYM": "Dymension",
+        "PIXEL": "Pixels", "PORTAL": "Portal", "AEVO": "Aevo",
+        "ETHFI": "ether.fi", "ENA": "Ethena", "OMNI": "Omni Network",
+        "SAGA": "Saga", "TAO": "Bittensor", "NOT": "Notcoin",
+        "IO": "io.net", "ZK": "ZKsync", "LISTA": "Lista DAO",
+        "ZRO": "LayerZero", "BLAST": "Blast", "BOME": "Book of Meme",
+        "KAITO": "Kaito", "HYPE": "Hyperliquid", "PENGU": "Pudgy Penguins",
+        "S": "Sonic", "TRUMP": "Official Trump", "PNUT": "Peanut the Squirrel",
+        "MOODENG": "Moo Deng", "ACT": "Act I The AI Prophecy",
+        "VIRTUAL": "Virtuals Protocol", "AI16Z": "ai16z",
+        "GRASS": "Grass", "BERA": "Berachain", "LAYER": "Solayer",
+        "PARTI": "Particle Network", "OM": "MANTRA",
     }
     print(f"\n[3/4] {len(KRIPTO)} kripto varlik (toplu download)...")
     from datetime import datetime, timedelta
