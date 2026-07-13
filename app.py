@@ -529,9 +529,22 @@ def render_auth_gate():
                             )
                             print("[auth] Beni Hatirla aktif: tso_auth cerezi CookieManager ile yazildi")
                         else:
-                            # v2.0.7.36 - Beni Hatirla ISARETSIZ: eski bir
-                            # tso_auth cerezi kalmissa CookieManager ile temizle.
-                            cookie_manager.delete("tso_auth", key="del_tso_auth_login")
+                            # v2.0.7.2 -> v2.0.7.41: Beni Hatirla ISARETSIZ:
+                            # eski bir tso_auth cerezi kalmissa temizle.
+                            # v2.0.7.41 - KRITIK DUZELTME: extra-streamlit-
+                            # components'in CookieManager.delete() metodu,
+                            # cerez o an tarayicida/kutuphanenin kendi ic
+                            # sozlugunde HENUZ HIC YOKSA "del self.cookies
+                            # [cookie]" ile KeyError firlatiyor (kutuphanenin
+                            # kendi hatasi) - Bahri'nin ekran goruntusunde
+                            # gorulen "KeyError" cokmesi tam olarak bu.
+                            # Cerez zaten yoksa silmeye calismanin bir
+                            # anlami da yok - try/except ile sessizce
+                            # atlanir.
+                            try:
+                                cookie_manager.delete("tso_auth", key="del_tso_auth_login")
+                            except KeyError:
+                                pass
                         st.rerun()
                     else:
                         st.error(res["msg"])
@@ -2094,9 +2107,13 @@ with st.sidebar:
             st.session_state["page_override"] = "admin"
             st.rerun()
     if st.button("Cikis Yap", use_container_width=True):
-        # v2.0.7.36 - CookieManager ile gercek cerez silme (eski ham JS
-        # yontemi terk edildi - guvenilirlik icin tek mekanizma kullanilir).
-        cookie_manager.delete("tso_auth", key="del_tso_auth_logout")
+        # v2.0.7.36 -> v2.0.7.41 - CookieManager ile gercek cerez silme.
+        # KeyError korumasi: cerez hic yoksa kutuphane kendi ic sozlugunde
+        # bulamayip KeyError firlatiyor - bkz. login blogundaki not.
+        try:
+            cookie_manager.delete("tso_auth", key="del_tso_auth_logout")
+        except KeyError:
+            pass
         logout()
         st.rerun()
 
