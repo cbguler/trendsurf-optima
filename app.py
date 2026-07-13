@@ -3195,6 +3195,23 @@ elif page in CAT:
     st.title(page)
     if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
+    # v2.0.7.45 - Ons Altın (USD) - Bahri'nin talebi: SADECE bilgi amaçlı,
+    # TL'ymiş gibi gizlenmeden USD olarak gösterilir. Evrene/skorlamaya/
+    # bütçe dağıtımına KATILMAZ (bkz. bigpara_client.fetch_truncgil_ons_usd
+    # docstring) - bu yüzden ayrı bir metrik olarak, kategori tablosunun
+    # dışında gösteriliyor.
+    if cat_code == "MADEN":
+        @st.cache_data(ttl=1800, show_spinner=False)
+        def _ons_usd_cached():
+            try:
+                from bigpara_client import fetch_truncgil_ons_usd
+                return fetch_truncgil_ons_usd()
+            except Exception:
+                return 0.0
+        _ons_usd = _ons_usd_cached()
+        if _ons_usd > 0:
+            st.caption(f"ℹ️ Ons Altın (USD, bilgi amaçlı — TL fiyatlara dahil değildir): **${_ons_usd:,.2f}**")
+
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
     if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
 
@@ -3276,12 +3293,15 @@ elif page in CAT:
     # ── Tüm Varlıklar Tablosu (tıklanabilir) ─────────────────
     st.divider()
     st.subheader("Tüm Varlıklar")
-    if cat_code in ["BIST","TEFAS"]:
-        srch=st.text_input("Ara",placeholder="Ticker veya ad...")
-        if srch.strip():
-            mask=(df_cat["Ticker"].str.contains(srch.strip().upper(),na=False)|
-                  df_cat["Ad"].str.contains(srch.strip(),case=False,na=False))
-            df_cat=df_cat[mask]
+    # v2.0.7.46 - Arama kutusu artik TUM kategorilerde (once sadece BIST/
+    # TEFAS icin vardi - Bahri'nin talebi: Doviz 63'e, Kripto 186'ya
+    # cikinca onlarda da arama gerekli hale geldi). Mantik zaten kategoriden
+    # bagimsizdi, sadece kisitlama kaldirildi.
+    srch=st.text_input("Ara",placeholder="Ticker veya ad...",key=f"srch_{page}")
+    if srch.strip():
+        mask=(df_cat["Ticker"].str.contains(srch.strip().upper(),na=False)|
+              df_cat["Ad"].str.contains(srch.strip(),case=False,na=False))
+        df_cat=df_cat[mask]
 
     # v2.0.5.1: Sayfalama KALDIRILDI - 772 varligin tamami tek listede.
     # st.dataframe satirlari sanallastirarak cizdigi icin 772 satir hizli
