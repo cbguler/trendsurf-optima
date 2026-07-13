@@ -2176,12 +2176,18 @@ if page=="Ana Sayfa":
         st.error("`python worker.py` ile veriyi oluşturun."); st.stop()
 
     cats=df_uni["Kategori"].value_counts()
-    c1,c2,c3,c4,c5=st.columns(5)
+    # v2.0.7.42 - "Döviz+Maden" birlesik karti ayri iki karta bolundu
+    # (Bahri'nin bulgusu: birlesik etiket, Doviz'in sayiya dahil oldugunu
+    # gizliyor, sanki eksikmis gibi goruniyordu - matematiksel olarak
+    # eksik degildi, sadece etiket yaniltici sekilde tek kategori gibi
+    # okunuyordu).
+    c1,c2,c3,c4,c5,c6=st.columns(6)
     c1.metric("Toplam Varlık",f"{len(df_uni):,}")
     c2.metric("TEFAS",f"{cats.get('TEFAS',0):,}")
     c3.metric("BIST",f"{cats.get('BIST',0):,}")
     c4.metric("Kripto",f"{cats.get('KRIPTO',0):,}")
-    c5.metric("Döviz+Maden",f"{cats.get('DOVIZ',0)+cats.get('MADEN',0):,}")
+    c5.metric("Döviz",f"{cats.get('DOVIZ',0):,}")
+    c6.metric("Maden",f"{cats.get('MADEN',0):,}")
 
     if budget<=0:
         st.info("Sol panelden **Portföy Bütçesi** girerek optimize edilmiş öneri listesini görün.")
