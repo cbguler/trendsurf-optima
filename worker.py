@@ -303,6 +303,19 @@ KRIPTO = _kripto_evrenini_olustur()
 MADEN = [
     ("ALTIN_TRY","GC=F"),("GUMUS_TRY","SI=F"),
     ("PLATIN_TRY","PL=F"),("PALADYUM_TRY","PA=F"),
+    # v2.0.7.43 - GENISLEME (Bahri'nin talebi): Truncgil'in ayni yanitinda
+    # zaten yapilandirilmis olarak duran 9 ek altin/gumus turu. Bunlarin
+    # HICBIRINDE yfinance karsiligi yok (Turkiye'ye ozgu urunler - ceyrek/
+    # yarim/tam altin sikkeler, 14/18 ayar, bilezik vb.) - bu yuzden
+    # yf sembolu olarak gercekte VAR OLMAYAN, benzersiz bir yer tutucu
+    # kullanilir ve _MADEN_SENTETIK_CEVRIM_YASAK'a eklenir: Platin/
+    # Paladyum'daki gibi SADECE Truncgil/Bigpara'nin gercek TL fiyati
+    # kullanilir, hicbir sentetik USD->TL cevrimi denenmez.
+    ("GRAM_HAS_ALTIN","NOYF_GRAMHAS"),("AYAR14_ALTIN","NOYF_AYAR14"),
+    ("AYAR18_ALTIN","NOYF_AYAR18"),("BILEZIK22_ALTIN","NOYF_BILEZIK22"),
+    ("IKIBUCUK_ALTIN","NOYF_IKIBUCUK"),("BESLI_ALTIN","NOYF_BESLI"),
+    ("GREMSE_ALTIN","NOYF_GREMSE"),("RESAT_ALTIN","NOYF_RESAT"),
+    ("HAMIT_ALTIN","NOYF_HAMIT"),
 ]
 # v2.0.4.55/56: Platin ve Paladyum GERI EKLENDI - arastirma sonucu
 # Akbank/Papara/doviz.com uzerinden gercek, gram bazli Turkiye TL
@@ -314,15 +327,54 @@ MADEN = [
 # oldugunu varsaymak kadar mantiksiz olamaz"), sadece dogrudan Turkiye
 # kaynagi (Kademe 1) veya onceki CSV degeri (Kademe 3) kullanilir -
 # hicbir sekilde sentetik cevrim yapilmaz.
-_MADEN_SENTETIK_CEVRIM_YASAK = {"PL=F", "PA=F"}
+_MADEN_SENTETIK_CEVRIM_YASAK = {
+    "PL=F", "PA=F",
+    "NOYF_GRAMHAS", "NOYF_AYAR14", "NOYF_AYAR18", "NOYF_BILEZIK22",
+    "NOYF_IKIBUCUK", "NOYF_BESLI", "NOYF_GREMSE", "NOYF_RESAT", "NOYF_HAMIT",
+}
 
-# ─── 16 Döviz (yfinance'de çalışanlar) ───────────────────────
+# ─── Döviz (12 ana + 51 Truncgil genisletmesi) ───────────────
 DOVIZ = [
     ("USDTRY","USDTRY=X"),("EURTRY","EURTRY=X"),("GBPTRY","GBPTRY=X"),
     ("JPYTRY","JPYTRY=X"),("CHFTRY","CHFTRY=X"),("AUDTRY","AUDTRY=X"),
     ("CADTRY","CADTRY=X"),("NZDTRY","NZDTRY=X"),("NOKTRY","NOKTRY=X"),
     ("SEKTRY","SEKTRY=X"),("DKKTRY","DKKTRY=X"),("CNYTRY","CNYTRY=X"),
 ]
+# v2.0.7.43 - GENISLEME (Bahri'nin talebi): Truncgil'in ayni yanitinda
+# ~51 EK doviz kodu var (RUB, AED, KWD, ZAR, ... vb.). Bunlarin coğunun
+# yfinance'de guvenilir "XXXTRY=X" karsiligi YOK (Yahoo cogunlukla
+# majör pariteleri kapsiyor) - bu yuzden asagidaki dongude bu kodlar
+# icin ONCE Truncgil (guvenilir gercek TL fiyati) denenir, RSI/Ret1M/Vol
+# icin yfinance best-effort denenir (bulunamazsa MADEN'deki Bigpara-
+# kaynakli varliklar gibi notr degerlerle kalir - hata degil, "fiyat var
+# ama zengin teknik gosterge yok" durumu).
+DOVIZ_GENISLEME = [
+    ("RUBTRY","RUBTRY=X"),("AEDTRY","AEDTRY=X"),("KWDTRY","KWDTRY=X"),
+    ("ZARTRY","ZARTRY=X"),("BHDTRY","BHDTRY=X"),("LYDTRY","LYDTRY=X"),
+    ("SARTRY","SARTRY=X"),("IQDTRY","IQDTRY=X"),("ILSTRY","ILSTRY=X"),
+    ("INRTRY","INRTRY=X"),("MXNTRY","MXNTRY=X"),("HUFTRY","HUFTRY=X"),
+    ("BRLTRY","BRLTRY=X"),("IDRTRY","IDRTRY=X"),("CZKTRY","CZKTRY=X"),
+    ("PLNTRY","PLNTRY=X"),("RONTRY","RONTRY=X"),("ARSTRY","ARSTRY=X"),
+    ("ALLTRY","ALLTRY=X"),("AZNTRY","AZNTRY=X"),("BAMTRY","BAMTRY=X"),
+    ("CLPTRY","CLPTRY=X"),("COPTRY","COPTRY=X"),("CRCTRY","CRCTRY=X"),
+    ("DZDTRY","DZDTRY=X"),("EGPTRY","EGPTRY=X"),("HKDTRY","HKDTRY=X"),
+    ("ISKTRY","ISKTRY=X"),("KRWTRY","KRWTRY=X"),("KZTTRY","KZTTRY=X"),
+    ("LBPTRY","LBPTRY=X"),("LKRTRY","LKRTRY=X"),("MADTRY","MADTRY=X"),
+    ("MDLTRY","MDLTRY=X"),("MKDTRY","MKDTRY=X"),("MYRTRY","MYRTRY=X"),
+    ("OMRTRY","OMRTRY=X"),("PENTRY","PENTRY=X"),("PHPTRY","PHPTRY=X"),
+    ("PKRTRY","PKRTRY=X"),("QARTRY","QARTRY=X"),("RSDTRY","RSDTRY=X"),
+    ("SGDTRY","SGDTRY=X"),("SYPTRY","SYPTRY=X"),("THBTRY","THBTRY=X"),
+    ("TWDTRY","TWDTRY=X"),("UAHTRY","UAHTRY=X"),("UYUTRY","UYUTRY=X"),
+    ("GELTRY","GELTRY=X"),("TNDTRY","TNDTRY=X"),("BGNTRY","BGNTRY=X"),
+]
+DOVIZ = DOVIZ + DOVIZ_GENISLEME
+# Ticker -> Truncgil doviz kodu (RUBTRY -> RUB)
+_DOVIZ_TRUNCGIL_KOD = {f"{k}TRY": k for k in
+    ["RUB","AED","KWD","ZAR","BHD","LYD","SAR","IQD","ILS","INR",
+     "MXN","HUF","BRL","IDR","CZK","PLN","RON","ARS","ALL","AZN",
+     "BAM","CLP","COP","CRC","DZD","EGP","HKD","ISK","KRW","KZT",
+     "LBP","LKR","MAD","MDL","MKD","MYR","OMR","PEN","PHP","PKR",
+     "QAR","RSD","SGD","SYP","THB","TWD","UAH","UYU","GEL","TND","BGN"]}
 
 OUTPUT = "optimized_universe.csv"
 
@@ -1092,6 +1144,12 @@ def build():
     MADEN_ADLAR = {
         "ALTIN_TRY": "Altin (TL)", "GUMUS_TRY": "Gumus (TL)",
         "PLATIN_TRY": "Platin (TL)", "PALADYUM_TRY": "Paladyum (TL)",
+        # v2.0.7.43 - genisleme
+        "GRAM_HAS_ALTIN": "Gram Has Altin", "AYAR14_ALTIN": "14 Ayar Altin",
+        "AYAR18_ALTIN": "18 Ayar Altin", "BILEZIK22_ALTIN": "22 Ayar Bilezik",
+        "IKIBUCUK_ALTIN": "Ikibucuk Altin", "BESLI_ALTIN": "Besli Altin",
+        "GREMSE_ALTIN": "Gremse Altin", "RESAT_ALTIN": "Resat Altin",
+        "HAMIT_ALTIN": "Hamit Altin",
     }
     DOVIZ_ADLAR = {
         "USDTRY": "Amerikan Dolari / Turk Lirasi",
@@ -1106,6 +1164,33 @@ def build():
         "SEKTRY": "Isvec Kronu / Turk Lirasi",
         "DKKTRY": "Danimarka Kronu / Turk Lirasi",
         "CNYTRY": "Cin Yuani / Turk Lirasi",
+        # v2.0.7.43 - genisleme (Truncgil'den kesfedilen 51 ek doviz)
+        "RUBTRY": "Rus Rublesi / Turk Lirasi", "AEDTRY": "BAE Dirhemi / Turk Lirasi",
+        "KWDTRY": "Kuveyt Dinari / Turk Lirasi", "ZARTRY": "Guney Afrika Randi / Turk Lirasi",
+        "BHDTRY": "Bahreyn Dinari / Turk Lirasi", "LYDTRY": "Libya Dinari / Turk Lirasi",
+        "SARTRY": "Suudi Riyali / Turk Lirasi", "IQDTRY": "Irak Dinari / Turk Lirasi",
+        "ILSTRY": "Israil Sekeli / Turk Lirasi", "INRTRY": "Hindistan Rupisi / Turk Lirasi",
+        "MXNTRY": "Meksika Pesosu / Turk Lirasi", "HUFTRY": "Macar Forinti / Turk Lirasi",
+        "BRLTRY": "Brezilya Reali / Turk Lirasi", "IDRTRY": "Endonezya Rupiahi / Turk Lirasi",
+        "CZKTRY": "Cek Korunasi / Turk Lirasi", "PLNTRY": "Polonya Zlotisi / Turk Lirasi",
+        "RONTRY": "Romen Leyi / Turk Lirasi", "ARSTRY": "Arjantin Pesosu / Turk Lirasi",
+        "ALLTRY": "Arnavutluk Leki / Turk Lirasi", "AZNTRY": "Azerbaycan Manati / Turk Lirasi",
+        "BAMTRY": "Bosna Markı / Turk Lirasi", "CLPTRY": "Sili Pesosu / Turk Lirasi",
+        "COPTRY": "Kolombiya Pesosu / Turk Lirasi", "CRCTRY": "Kosta Rika Kolonu / Turk Lirasi",
+        "DZDTRY": "Cezayir Dinari / Turk Lirasi", "EGPTRY": "Misir Lirasi / Turk Lirasi",
+        "HKDTRY": "Hong Kong Dolari / Turk Lirasi", "ISKTRY": "Izlanda Kronu / Turk Lirasi",
+        "KRWTRY": "Guney Kore Wonu / Turk Lirasi", "KZTTRY": "Kazakistan Tengesi / Turk Lirasi",
+        "LBPTRY": "Lubnan Lirasi / Turk Lirasi", "LKRTRY": "Sri Lanka Rupisi / Turk Lirasi",
+        "MADTRY": "Fas Dirhemi / Turk Lirasi", "MDLTRY": "Moldova Leyi / Turk Lirasi",
+        "MKDTRY": "Makedonya Dinari / Turk Lirasi", "MYRTRY": "Malezya Ringgiti / Turk Lirasi",
+        "OMRTRY": "Umman Riyali / Turk Lirasi", "PENTRY": "Peru Solu / Turk Lirasi",
+        "PHPTRY": "Filipin Pesosu / Turk Lirasi", "PKRTRY": "Pakistan Rupisi / Turk Lirasi",
+        "QARTRY": "Katar Riyali / Turk Lirasi", "RSDTRY": "Sirbistan Dinari / Turk Lirasi",
+        "SGDTRY": "Singapur Dolari / Turk Lirasi", "SYPTRY": "Suriye Lirasi / Turk Lirasi",
+        "THBTRY": "Tayland Bahti / Turk Lirasi", "TWDTRY": "Tayvan Dolari / Turk Lirasi",
+        "UAHTRY": "Ukrayna Grivnasi / Turk Lirasi", "UYUTRY": "Uruguay Pesosu / Turk Lirasi",
+        "GELTRY": "Gurcistan Larisi / Turk Lirasi", "TNDTRY": "Tunus Dinari / Turk Lirasi",
+        "BGNTRY": "Bulgar Levasi / Turk Lirasi",
     }
     print(f"\n[4/4] {len(MADEN)} maden + {len(DOVIZ)} doviz (toplu download)...")
     maden_start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
@@ -1116,7 +1201,10 @@ def build():
     maden_end = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Maden toplu
-    maden_syms = [yf_s for _, yf_s in MADEN]
+    # v2.0.7.43 - NOYF_ ile baslayan yer tutucu semboller (yeni 9 sikke/
+    # ayar altin turu) gercekte var olmadigi icin yf.download listesine
+    # HIC sokulmaz - zaten Truncgil'den (Kademe 1) geliyorlar.
+    maden_syms = [yf_s for _, yf_s in MADEN if not yf_s.startswith("NOYF_")]
     maden_map  = {yf_s: t for t, yf_s in MADEN}
     try:
         raw_m = yf.download(maden_syms, start=maden_start, end=maden_end,
@@ -1230,6 +1318,20 @@ def build():
     # JPYTRY, AUDTRY, CADTRY için cross rate hesabı kullan
     CROSS_PAIRS = {"JPYTRY=X", "AUDTRY=X", "CADTRY=X", "NZDTRY=X",
                      "NOKTRY=X", "SEKTRY=X", "DKKTRY=X", "CNYTRY=X"}
+    # v2.0.7.43 - GENISLEME: 51 yeni doviz icin Truncgil'i TEK istekte
+    # onceden cek (ayni sekilde MADEN'in Bigpara/Truncgil kullandigi gibi).
+    # yfinance'in bu kodlarin cogunda "XXXTRY=X" karsiligi olmadigi icin,
+    # yfinance denemeleri (cross-rate + single_full) basarisiz olursa bu
+    # sozluk YEDEK/tamamlayici kaynak olarak devreye girer.
+    try:
+        from bigpara_client import fetch_truncgil_doviz
+        truncgil_doviz = fetch_truncgil_doviz()
+        if truncgil_doviz:
+            print(f"  [Truncgil] {len(truncgil_doviz)} ek doviz fiyati alindi: {list(truncgil_doviz.keys())}")
+    except Exception as _tg_err:
+        truncgil_doviz = {}
+        print(f"  [Truncgil] Ek doviz cekimi atlandi: {_tg_err}")
+
     print(f"  Doviz: {len(DOVIZ)} parite (cross rate destekli)...")
     ok_d = 0
     for t, yf_s in DOVIZ:
@@ -1246,6 +1348,14 @@ def build():
         if p == 0.0:
             # Normal çekim dene
             p, rsi, ret, vol_v = single_full(yf_s, t)
+        if p == 0.0:
+            # v2.0.7.43 - yfinance basarisizsa Truncgil'e dus (RSI/Ret1M
+            # icin gecmis veri yok - Bigpara-kaynakli MADEN varliklari gibi
+            # notr kalir, bu bir hata degil).
+            _tg_kod = _DOVIZ_TRUNCGIL_KOD.get(t)
+            if _tg_kod and _tg_kod in truncgil_doviz:
+                p = truncgil_doviz[_tg_kod]
+                rsi, ret, vol_v = 50.0, 0.0, 15.0
         if p > 0:
             ok_d += 1
         all_rows.append({"Ticker": t, "Ad": DOVIZ_ADLAR.get(t, t),

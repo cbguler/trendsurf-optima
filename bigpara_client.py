@@ -329,23 +329,70 @@ TRUNCGIL_MADEN_KEYLERI = {
     "GUMUS_TRY":    "gumus",
     "PLATIN_TRY":   "gram-platin",
     "PALADYUM_TRY": "gram-paladyum",
+    # v2.0.7.43 - GENISLEME (Bahri'nin talebi): Bahri'nin bizzat cektigi
+    # gercek Truncgil yanitinda (13 Temmuz 2026) bu 9 ek altin/gumus
+    # turunun de "Buying"/"Selling" alanlariyla yapilandirilmis, guvenilir
+    # sekilde mevcut oldugu goruldu. "ons" haric tutuldu - USD bazli oldugu
+    # icin sentetik cevrim gerektirir (Bahri'nin yasak ilkesi, bkz. MADEN
+    # bolumu). "cumhuriyet-altini" (Truncgil'deki gercek anahtar - sondaki
+    # "i" dikkat) - bizim mevcut CUMHURIYET_ALTIN ticker'imizden AYRI, o
+    # farkli bir kaynaktan (canlidoviz) zaten geliyor; burada CATE_ALTIN
+    # gibi cakismayi onlemek icin farkli bir ticker adi kullanildi.
+    "GRAM_HAS_ALTIN":  "gram-has-altin",
+    "AYAR14_ALTIN":    "14-ayar-altin",
+    "AYAR18_ALTIN":    "18-ayar-altin",
+    "BILEZIK22_ALTIN": "22-ayar-bilezik",
+    "IKIBUCUK_ALTIN":  "ikibucuk-altin",
+    "BESLI_ALTIN":     "besli-altin",
+    "GREMSE_ALTIN":    "gremse-altin",
+    "RESAT_ALTIN":     "resat-altin",
+    "HAMIT_ALTIN":     "hamit-altin",
 }
 
+# v2.0.7.43 - Truncgil'in ayni yanitinda "Type":"Currency" ile isaretli
+# 63 doviz kodu da var. Sadece 12'sini (USD/EUR/GBP/JPY/CHF/AUD/CAD/NZD/
+# NOK/SEK/DKK/CNY) kullaniyorduk. Kalan ~51'i de guvenilir tek istekte
+# (ayni Truncgil cagrisi) mevcut - MADEN'deki gibi BIRINCIL fiyat kaynagi
+# burasi olacak; RSI/momentum icin yfinance best-effort denenir (bulunamazsa
+# MADEN'deki Bigpara-kaynakli varliklar gibi notr RSI=50/Ret1M=0 ile kalir -
+# bu bir hata degil, "gercek fiyat var ama teknik gostergeler icin
+# yeterli/guvenilir gecmis veri yok" durumudur).
+TRUNCGIL_DOVIZ_KODLARI = [
+    "RUB", "AED", "KWD", "ZAR", "BHD", "LYD", "SAR", "IQD", "ILS", "INR",
+    "MXN", "HUF", "BRL", "IDR", "CZK", "PLN", "RON", "ARS", "ALL", "AZN",
+    "BAM", "CLP", "COP", "CRC", "DZD", "EGP", "HKD", "ISK", "KRW", "KZT",
+    "LBP", "LKR", "MAD", "MDL", "MKD", "MYR", "OMR", "PEN", "PHP", "PKR",
+    "QAR", "RSD", "SGD", "SYP", "THB", "TWD", "UAH", "UYU", "GEL", "TND",
+    "BGN",
+]
+
 def _safe_float_tr(s) -> float:
-    """Truncgil'in TR bicimli sayi metnini (opsiyonel '$' onekiyle) float'a cevirir.
-    '6.281,55' -> 6281.55 , '\\$4.171,20' -> 4171.20"""
+    """Truncgil'in TR bicimli sayi metnini float'a cevirir.
+    '6.281,55' -> 6281.55"""
     if not s:
         return 0.0
     try:
-        s = str(s).strip().lstrip("$")
+        s = str(s).strip()
         s = s.replace(".", "").replace(",", ".")
         return float(s)
     except Exception:
         return 0.0
 
+
+def _usd_bazli_mi(s) -> bool:
+    """v2.0.7.44 - Bahri'nin acik talimati: Truncgil yanitinda bazi
+    alanlar (orn. 'ons': '$4.000,76') USD bazlidir - basindaki '$' isareti
+    bunu gosterir. Boyle bir deger TL degilmis gibi sisteme MONTE
+    EDILEMEZ (sentetik USD->TL cevrimi Bahri'nin kirmizi cizgisi).
+    Onceden _safe_float_tr bu '$' isaretini sessizce kirpip sayiyi TL
+    gibi kabul ediyordu - bu KRITIK bir hataydi, artik acikca reddedilir."""
+    return isinstance(s, str) and s.strip().startswith("$")
+
+
 def fetch_truncgil_maden() -> dict:
-    """Truncgil'den 4 degerli madeni TEK istekte ceker. Basarisiz olursa
-    bos dict doner (cagiran taraf Bigpara/doviz.com yedegine duser)."""
+    """Truncgil'den madenleri (artik 13 tur - 4 ana + 9 yeni sikke/ayar)
+    TEK istekte ceker. Basarisiz olursa bos dict doner (cagiran taraf
+    Bigpara/doviz.com yedegine duser)."""
     try:
         r = requests.get(TRUNCGIL_URL, headers=HEADERS, timeout=10)
         if r.status_code != 200:
@@ -354,13 +401,50 @@ def fetch_truncgil_maden() -> dict:
         result = {}
         for ticker, key in TRUNCGIL_MADEN_KEYLERI.items():
             if key in data and isinstance(data[key], dict):
-                satis = _safe_float_tr(data[key].get("Selling"))
+                _ham = data[key].get("Selling")
+                if _usd_bazli_mi(_ham):
+                    print(f"  [Truncgil] UYARI: {ticker} ({key}) USD bazli "
+                          f"donuyor ('{_ham}') - sentetik cevrim yasak, ATLANDI.")
+                    continue
+                satis = _safe_float_tr(_ham)
                 if satis > 0:
                     result[ticker] = round(satis, 4)
         return result
     except Exception as e:
         print(f"  [Truncgil] Maden cekimi basarisiz: {type(e).__name__}: {e}")
         return {}
+
+
+def fetch_truncgil_doviz() -> dict:
+    """v2.0.7.43 - Truncgil'in AYNI yanitindaki "Type":"Currency" ile
+    isaretli ~51 EK doviz kodunu (RUB, AED, KWD, ZAR, ... vb.) tek istekte
+    ceker. Anahtar = doviz kodu (orn. "RUB"), deger = 1 birimin TL satis
+    fiyati. Basarisiz olursa bos dict doner - cagiran taraf o kodlari
+    sessizce atlar, mevcut 12 ana doviz etkilenmez.
+    v2.0.7.44 - USD-bazli donen degerler (bkz. _usd_bazli_mi) acikca
+    reddedilir, sisteme hic girmez."""
+    try:
+        r = requests.get(TRUNCGIL_URL, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            return {}
+        data = r.json()
+        result = {}
+        for kod in TRUNCGIL_DOVIZ_KODLARI:
+            entry = data.get(kod)
+            if isinstance(entry, dict) and entry.get("Type") == "Currency":
+                _ham = entry.get("Selling")
+                if _usd_bazli_mi(_ham):
+                    print(f"  [Truncgil] UYARI: {kod} USD bazli donuyor "
+                          f"('{_ham}') - sentetik cevrim yasak, ATLANDI.")
+                    continue
+                satis = _safe_float_tr(_ham)
+                if satis > 0:
+                    result[kod] = round(satis, 6)
+        return result
+    except Exception as e:
+        print(f"  [Truncgil] Doviz cekimi basarisiz: {type(e).__name__}: {e}")
+        return {}
+
 
 def fetch_truncgil_usdtry() -> float:
     """Truncgil'den USD/TRY satis kurunu ceker (kripto TL cevrimi vb. icin
