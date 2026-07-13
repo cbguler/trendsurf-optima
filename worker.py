@@ -902,8 +902,18 @@ def build():
     # Bunun yerine borsapy'nin Crypto sinifi (BtcTurk API - GERCEK, DOGRUDAN
     # TL cinsinden islem gören fiyat) kullaniliyor - live_data.py'deki canli
     # overlay'in zaten guvenilir sekilde kullandigi AYNI kaynak.
+    # v2.0.7.38 - CLINK duzeltmesinin IKINCI YARISI: ayni sembol esleme
+    # hatasi hem live_data.py'de (v2.0.7.35'te duzeltildi) hem BURADA
+    # vardi - iki dosyada ayni fonksiyonun iki kopyasi var ve dun sadece
+    # biri duzeltildi, CSV'yi yazan bu kopya "CLINKTRY" gondermeye devam
+    # ediyordu (BtcTurk'te parite adi "LINKTRY"). Ders: kod kopyasi
+    # tehlikelidir - iki kopya da ayni anda duzeltilmeli.
+    _KRIPTO_BP_OZEL = {"CLINK": "LINKTRY"}
+
     def _kripto_bp_kod(ticker: str) -> str:
         t = ticker.upper().strip()
+        if t in _KRIPTO_BP_OZEL:
+            return _KRIPTO_BP_OZEL[t]
         return t if t.endswith("TRY") else f"{t}TRY"
 
     kripto_results = {}

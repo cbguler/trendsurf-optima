@@ -102,6 +102,12 @@ EXCLUDED_USD_COMMODITIES = {
     # v1.9.10 - Guvenilir TL fiyat kaynagi olmayan varliklar
     "ONS_ALTIN_TRY",   # canlidoviz endpoint'i USD veriyor (~1/47 gosteriyordu)
     "BNB",             # BtcTurk'ta BNB/TRY paritesi yok (~1/44 gosteriyordu)
+    # v2.0.7.38 - Bahri BtcTurk'un 185 TRY paritesini tek tek kontrol etti
+    # (13 Temmuz): ICP/TRY YOK. BNB ile ayni durum - gecmis USD verisi
+    # (yfinance) var ama gercek TL islem fiyati yok; sentetik USD*kur
+    # cevrimi Bahri'nin temel ilkesi geregi YASAK. Fiyatsiz gorunmesindense
+    # evrenden cikarilir.
+    "ICP",             # BtcTurk'ta ICP/TRY paritesi yok (dogrulandi 13.07.2026)
 }
 
 
