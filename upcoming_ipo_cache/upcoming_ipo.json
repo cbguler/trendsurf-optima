@@ -50,7 +50,7 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1621057",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620968",
-    "Arz_Fiyati": 9.2,
+    "Arz_Fiyati": null,
     "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
@@ -64,8 +64,8 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1620819",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620821",
-    "Arz_Fiyati": 20.9,
-    "Iskonto_Orani": 27.03,
+    "Arz_Fiyati": null,
+    "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   },
@@ -92,8 +92,8 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1620799",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620801",
-    "Arz_Fiyati": 15.0,
-    "Iskonto_Orani": 37.0,
+    "Arz_Fiyati": null,
+    "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   },
@@ -106,8 +106,8 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1618394",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1616583",
-    "Arz_Fiyati": 40.0,
-    "Iskonto_Orani": 20.45,
+    "Arz_Fiyati": null,
+    "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   }
