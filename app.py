@@ -2939,30 +2939,61 @@ elif page=="Portföyüm":
     df_pf = _pd2.DataFrame(_pf_rows)
     df_show = df_pf.drop(columns=["_id", "_asset_type"])
 
+    # v2.0.7.58 - KRITIK DUZELTME (Bahri'nin bulgusu): bu tablo NumberColumn
+    # format="%.4f" gibi INGILIZCE (nokta ondalik) format string'leri
+    # kullaniyordu - K/Z/Sinyal renklendirmesi eklenmisti ama sayilarin
+    # kendisi hic Turkce'ye cevrilmemisti. Artik tum sayisal sutunlar
+    # Turkce bicimli METIN olarak gosteriliyor (once eski _fmt_tr_isaretli
+    # ile +/- isareti korunuyor - K/Z ve K/Z % onceden "%+.2f" kullaniyordu).
+    def _fmt_tr_isaretli(x, ondalik=2, yuzde=False):
+        try:
+            xf = float(x)
+        except (TypeError, ValueError):
+            return str(x)
+        taban = fmt_tr(abs(xf), ondalik)
+        isaret = "+" if xf > 0 else ("-" if xf < 0 else "")
+        return f"{isaret}{taban}{'%' if yuzde else ''}"
+
+    df_show["Miktar"] = df_show["Miktar"].apply(lambda v: fmt_tr(v, 4))
+    df_show["Alış"]   = df_show["Alış"].apply(lambda v: fmt_tr(v, 4))
+    df_show["Güncel"] = df_show["Güncel"].apply(lambda v: fmt_tr(v, 4))
+    df_show["Toplam"] = df_show["Toplam"].apply(lambda v: fmt_tr(v, 2))
+    df_show["K/Z"]    = df_show["K/Z"].apply(lambda v: _fmt_tr_isaretli(v, 2))
+    df_show["K/Z %"]  = df_show["K/Z %"].apply(lambda v: _fmt_tr_isaretli(v, 2, yuzde=True))
+    df_show["Skor"]   = df_show["Skor"].apply(lambda v: fmt_tr(v, 1))
+
     # v2.0.7.30 - K/Z ve K/Z % sutunlarina pozitif/negatif renk kodlamasi
     # (Bahri'nin talebi): pozitif yesil, negatif kirmizi. st.dataframe bir
     # pandas Styler kabul eder, column_config ile birlikte calisir.
     def _kz_renk(v):
+        # v2.0.7.58 - Deger artik Turkce bicimli STRING ("+1.234,56" gibi) -
+        # renk tespiti icin virgul/nokta cevrilip float'a donduruluyor.
         try:
-            v = float(v)
+            temiz = str(v).replace(".", "").replace(",", ".").replace("%", "").replace("+", "")
+            vv = float(temiz)
         except (TypeError, ValueError):
-            return ""
-        if v > 0:
-            return "color: #1b8a4a; font-weight: 600;"
-        elif v < 0:
-            return "color: #c0392b; font-weight: 600;"
-        return ""
+            return "text-align: right;"
+        if vv > 0:
+            return "color: #1b8a4a; font-weight: 600; text-align: right;"
+        elif vv < 0:
+            return "color: #c0392b; font-weight: 600; text-align: right;"
+        return "text-align: right;"
+
+    def _sayi_saga_yasla(v):
+        return "text-align: right;"
 
     # v2.0.7.31 - Sinyal renklendirmesi icin ortak _sinyal_renk_stil()
     # fonksiyonu kullanilir (bkz. clickable_table yakinindaki tanim) -
     # Ana Sayfa/BIST/TEFAS ile tutarli olsun diye kod tekrari yapilmadi.
     try:
         df_show_styled = df_show.style.map(_kz_renk, subset=["K/Z", "K/Z %"]) \
-                                       .map(_sinyal_renk_stil, subset=["Sinyal"])
+                                       .map(_sinyal_renk_stil, subset=["Sinyal"]) \
+                                       .map(_sayi_saga_yasla, subset=["Miktar", "Alış", "Güncel", "Toplam", "Skor"])
     except AttributeError:
         # eski pandas surumlerinde .map yok, .applymap kullan
         df_show_styled = df_show.style.applymap(_kz_renk, subset=["K/Z", "K/Z %"]) \
-                                       .applymap(_sinyal_renk_stil, subset=["Sinyal"])
+                                       .applymap(_sinyal_renk_stil, subset=["Sinyal"]) \
+                                       .applymap(_sayi_saga_yasla, subset=["Miktar", "Alış", "Güncel", "Toplam", "Skor"])
 
     # st.dataframe — Daraltilmis sutunlar + Sinyal eklendi
     _event = st.dataframe(
@@ -2974,22 +3005,15 @@ elif page=="Portföyüm":
         column_config={
             "Ticker": st.column_config.TextColumn(width="small"),
             "Tarih":  st.column_config.TextColumn(width="small"),
-            "Miktar": st.column_config.NumberColumn(
-                format="%.4f", width="small"),
+            "Miktar": st.column_config.TextColumn(width="small"),
             "Birim":  st.column_config.TextColumn(width="small"),
-            "Alış":   st.column_config.NumberColumn(
-                format="%.4f", width="small", help="Alış fiyatı (TL)"),
-            "Güncel": st.column_config.NumberColumn(
-                format="%.4f", width="small", help="Güncel piyasa fiyatı (TL)"),
-            "Toplam": st.column_config.NumberColumn(
-                format="%.2f", width="small", help="Pozisyon toplam değeri (TL)"),
-            "K/Z":    st.column_config.NumberColumn(
-                format="%+.2f", width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
-            "K/Z %":  st.column_config.NumberColumn(
-                format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
-            "Skor":   st.column_config.NumberColumn(
-                "Optima Skor",
-                format="%.1f", width="small", help="Optima Skoru (0-100)"),
+            "Alış":   st.column_config.TextColumn(width="small", help="Alış fiyatı (TL)"),
+            "Güncel": st.column_config.TextColumn(width="small", help="Güncel piyasa fiyatı (TL)"),
+            "Toplam": st.column_config.TextColumn(width="small", help="Pozisyon toplam değeri (TL)"),
+            "K/Z":    st.column_config.TextColumn(width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
+            "K/Z %":  st.column_config.TextColumn(width="small", help="Kâr/Zarar yüzdesi"),
+            "Skor":   st.column_config.TextColumn(
+                "Optima Skor", width="small", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
                 width="medium",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
@@ -3087,25 +3111,40 @@ elif page=="Portföyüm":
                         "Satış Tarihi", value=_dt_pf.date.today(), key="pf_satis_tarih",
                         format="DD.MM.YYYY")
                 fs4, fs5 = st.columns(2)
+                # v2.0.7.58 - Bahri'nin talebi: Satis dekontu geldiginde
+                # gercek TL tutari elde olur, oran degil - bu yuzden
+                # Komisyon/Vergi artik dogrudan TL olarak girilir. Kategori
+                # varsayilan yuzdesi sadece bir BASLANGIC ONERISI hesaplamak
+                # icin kullanilir (onizleme oncesi tahmini tutar), kullanici
+                # dekonttaki gercek tutarla degistirir.
+                _tahmini_alis_deger = float(_row_data["Miktar"]) * _row_data["Alış"]
+                _tahmini_satis_deger = float(_row_data["Miktar"]) * _row_data["Güncel"]
+                _tahmini_brut = _tahmini_satis_deger - _tahmini_alis_deger
+                _oneri_komisyon_tl = round(
+                    (_tahmini_alis_deger + _tahmini_satis_deger) * _oran["fee_pct"] / 100.0, 2)
+                _oneri_vergi_tl = round(max(0.0, _tahmini_brut) * _oran["tax_pct"] / 100.0, 2)
                 with fs4:
                     _satis_komisyon_str = st.text_input(
-                        "Komisyon %", value=fmt_tr(_oran["fee_pct"], 2),
+                        "Komisyon (₺)", value=fmt_tr(_oneri_komisyon_tl, 2),
                         key="pf_satis_komisyon",
-                        help="Alış+satış tutarına uygulanır (gidiş-dönüş). Kategori varsayılanı otomatik dolduruldu, düzenleyebilirsiniz.")
+                        help="Aracı kurumun satış dekontunda gösterdiği gerçek komisyon tutarı. "
+                             "Kategori ortalamasına göre bir başlangıç önerisiyle dolduruldu, "
+                             "dekonttaki gerçek tutarla değiştirebilirsiniz.")
                     _satis_komisyon = parse_tr(_satis_komisyon_str)
                 with fs5:
                     _satis_vergi_str = st.text_input(
-                        "Vergi %", value=fmt_tr(_oran["tax_pct"], 2),
+                        "Vergi (₺)", value=fmt_tr(_oneri_vergi_tl, 2),
                         key="pf_satis_vergi",
-                        help="Sadece kârdan (varsa) düşülür. Genel tahmindir, mali müşavirinize danışın.")
+                        help="Aracı kurumun kestiği gerçek vergi/stopaj tutarı. Genel bir "
+                             "tahminle dolduruldu, mali müşavirinize danışıp düzeltebilirsiniz.")
                     _satis_vergi = parse_tr(_satis_vergi_str)
 
                 # Önizleme
                 _alis_deger = _satis_miktar * _row_data["Alış"]
                 _satis_deger = _satis_miktar * _satis_fiyat
                 _brut = _satis_deger - _alis_deger
-                _kom_tl = round((_alis_deger + _satis_deger) * _satis_komisyon / 100.0, 2)
-                _verg_tl = round(max(0.0, _brut) * _satis_vergi / 100.0, 2)
+                _kom_tl = _satis_komisyon
+                _verg_tl = _satis_vergi
                 _net = round(_brut - _kom_tl - _verg_tl, 2)
                 _net_renk = "#1b8a4a" if _net >= 0 else "#c0392b"
                 st.markdown(
@@ -3307,6 +3346,27 @@ elif page=="Portföyüm":
                    "yukarıdaki tablodan seçip Sat butonuyla satış kaydı "
                    "oluşturduğunuzda burada raporlanır.")
     else:
+        # v2.0.7.58 - Yardimci Turkce format fonksiyonlari erken tanimlandi
+        # (Aylik/Yillik ozet + Tum Islem Gecmisi, hepsi bunlari kullanir).
+        def _tr_sayi(x, ondalik=2):
+            try:
+                return (f"{float(x):,.{ondalik}f}"
+                        .replace(",", "X").replace(".", ",").replace("X", "."))
+            except (TypeError, ValueError):
+                return str(x)
+
+        def _pl_netkz_renk(v):
+            try:
+                sayi = float(str(v).replace(".", "").replace(",", "."))
+            except (TypeError, ValueError):
+                return "text-align: right;"
+            renk = ""
+            if sayi > 0:
+                renk = "color: #1b8a4a; font-weight: 600;"
+            elif sayi < 0:
+                renk = "color: #c0392b; font-weight: 600;"
+            return renk + " text-align: right;"
+
         st.markdown("**Tarih Aralığına Göre Özet**")
         dr1, dr2 = st.columns(2)
         import datetime as _dt_pl
@@ -3322,16 +3382,29 @@ elif page=="Portföyüm":
                                       _pl_bit.strftime("%Y-%m-%d"))
         o1, o2, o3, o4, o5 = st.columns(5)
         o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
-        o2.metric("Brüt K/Z", f"{_ozet['brut_kz']:,.2f} ₺")
-        o3.metric("Komisyon", f"-{_ozet['komisyon']:,.2f} ₺")
-        o4.metric("Vergi", f"-{_ozet['vergi']:,.2f} ₺")
-        o5.metric("Net K/Z", f"{_ozet['net_kz']:,.2f} ₺")
+        o2.metric("Brüt K/Z", f"{fmt_tr(_ozet['brut_kz'])} ₺")
+        o3.metric("Komisyon", f"-{fmt_tr(_ozet['komisyon'])} ₺")
+        o4.metric("Vergi", f"-{fmt_tr(_ozet['vergi'])} ₺")
+        o5.metric("Net K/Z", f"{fmt_tr(_ozet['net_kz'])} ₺")
+
+        # v2.0.7.58 - Aylik/Yillik ozet tablolarina Turkce sayi formati
+        # uygulandi (onceki halde "68.35" gibi ingilizce noktali gorunuyordu).
+        def _ozet_tablo_gostergisi(df_ozet):
+            df_g = df_ozet.copy()
+            for _c in ["Ödenmiş Komisyon (₺)", "Ödenmiş Vergi (₺)", "Toplam Net K/Z"]:
+                if _c in df_g.columns:
+                    df_g[_c] = df_g[_c].apply(lambda v: fmt_tr(v))
+            if "Toplam Net K/Z" in df_g.columns:
+                return df_g.style.map(_pl_netkz_renk, subset=["Toplam Net K/Z"])
+            return df_g
 
         st.markdown("**Aylık Özet**")
-        st.dataframe(get_monthly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
+        st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"])),
+                     use_container_width=True, hide_index=True)
 
         st.markdown("**Yıllık Özet**")
-        st.dataframe(get_yearly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
+        st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"])),
+                     use_container_width=True, hide_index=True)
 
         st.markdown("**Tüm İşlem Geçmişi**")
         from portfolio_ledger import delete_sale_record, update_sale_record
@@ -3341,13 +3414,6 @@ elif page=="Portföyüm":
         # (3) Net K/Z pozitif/negatife gore yesil/kirmizi renklensin ve
         # genis rakamlar (100 bin+) icin sutun genisletilsin, (4) Miktar/
         # Komisyon/Vergi sutunlari daraltilsin.
-        def _tr_sayi(x, ondalik=2):
-            try:
-                return (f"{float(x):,.{ondalik}f}"
-                        .replace(",", "X").replace(".", ",").replace("X", "."))
-            except (TypeError, ValueError):
-                return str(x)
-
         _pl_gosterim = _pl_tum.drop(
             columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
         for _dcol in ["Alış Tarihi", "Satış Tarihi"]:
@@ -3368,18 +3434,6 @@ elif page=="Portföyüm":
         _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
         _pl_gosterim = pd.concat(
             [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
-
-        def _pl_netkz_renk(v):
-            try:
-                sayi = float(str(v).replace(".", "").replace(",", "."))
-            except (TypeError, ValueError):
-                return "text-align: right;"
-            renk = ""
-            if sayi > 0:
-                renk = "color: #1b8a4a; font-weight: 600;"
-            elif sayi < 0:
-                renk = "color: #c0392b; font-weight: 600;"
-            return renk + " text-align: right;"
 
         def _pl_toplam_satir_kalin(row):
             # TOPLAM satirini (son satir) kalin/ayirici cizgiyle vurgula

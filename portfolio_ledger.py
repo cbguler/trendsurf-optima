@@ -94,18 +94,20 @@ def save_fee_settings(user_id: int, asset_type: str, fee_pct: float, tax_pct: fl
 
 
 def sell_portfolio_item(user_id: int, item_id: int, sell_qty: float, sell_price: float,
-                         sell_date: str, fee_pct: float, tax_pct: float,
+                         sell_date: str, fee_amount: float, tax_amount: float,
                          note: str = "") -> dict:
     """Bir pozisyondan (kısmi veya tam) satış yapar. Kalıcı bir satış kaydı
     oluşturur (portfolio_sales), açık pozisyonu günceller/kapatır.
 
+    v2.0.7.58 - DUZELTME (Bahri'nin talebi): Komisyon/vergi artik YUZDEN
+    HESAPLANMIYOR - aracı kurumun satış dekontunda gösterdiği GERÇEK TL
+    tutarı doğrudan girilir (arayüzde kategori ortalamasına göre bir
+    başlangıç önerisiyle doldurulur, kullanıcı dekonttaki gerçek tutarla
+    değiştirebilir).
+
     Hesaplama:
       brut_kz    = (satis_fiyati - alis_fiyati) * miktar
-      komisyon   = (alis_degeri + satis_degeri) * fee_pct/100  (gidiş-dönüş)
-      vergi      = max(0, brut_kz) * tax_pct/100  (sadece kârdan, zarar
-                   vergilendirilmez - Türk vergi mevzuatının genel mantığı,
-                   kesin oran/istisna için mali müşavire danışılmalıdır)
-      net_kz     = brut_kz - komisyon - vergi
+      net_kz     = brut_kz - fee_amount - tax_amount
 
     Döner: {"basari":bool, "hata":str|None, "brut_kz":float, "net_kz":float,
             "komisyon":float, "vergi":float, "net_hasilat":float}
@@ -145,10 +147,15 @@ def sell_portfolio_item(user_id: int, item_id: int, sell_qty: float, sell_price:
     alis_degeri  = sell_qty * avg_cost
     satis_degeri = sell_qty * sell_price
     brut_kz      = satis_degeri - alis_degeri
-    komisyon     = round((alis_degeri + satis_degeri) * fee_pct / 100.0, 2)
-    vergi        = round(max(0.0, brut_kz) * tax_pct / 100.0, 2)
+    komisyon     = round(float(fee_amount), 2)
+    vergi        = round(float(tax_amount), 2)
     net_kz       = round(brut_kz - komisyon - vergi, 2)
     net_hasilat  = round(satis_degeri - komisyon - vergi, 2)
+    # Kayit tutarliligi icin oransal yuzdeyi geriye hesaplayip saklıyoruz
+    # (kaynak artik degil, sadece turev/bilgi amacli).
+    _islem_hacmi = alis_degeri + satis_degeri
+    fee_pct = round(komisyon / _islem_hacmi * 100.0, 4) if _islem_hacmi > 0 else 0.0
+    tax_pct = round(vergi / brut_kz * 100.0, 4) if brut_kz > 0 else 0.0
 
     try:
         conn.execute(
@@ -378,14 +385,19 @@ def get_monthly_summary(user_id: int) -> pd.DataFrame:
     """Aylık bazda gerçekleşmiş net K/Z özeti (en yeni ay en üstte)."""
     df = get_sales_history(user_id)
     if df.empty:
-        return pd.DataFrame(columns=["Ay", "İşlem Sayısı", "Toplam Net K/Z"])
+        return pd.DataFrame(columns=["Ay", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
+                                      "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
     df = df.copy()
     df["Ay"] = pd.to_datetime(df["Satış Tarihi"], errors="coerce").dt.strftime("%Y-%m")
     ozet = (df.groupby("Ay")
               .agg(**{"İşlem Sayısı": ("Net K/Z", "count"),
+                      "Ödenmiş Komisyon (₺)": ("Komisyon (₺)", "sum"),
+                      "Ödenmiş Vergi (₺)": ("Vergi (₺)", "sum"),
                       "Toplam Net K/Z": ("Net K/Z", "sum")})
               .reset_index()
               .sort_values("Ay", ascending=False))
+    ozet["Ödenmiş Komisyon (₺)"] = ozet["Ödenmiş Komisyon (₺)"].round(2)
+    ozet["Ödenmiş Vergi (₺)"] = ozet["Ödenmiş Vergi (₺)"].round(2)
     ozet["Toplam Net K/Z"] = ozet["Toplam Net K/Z"].round(2)
     return ozet
 
@@ -394,14 +406,19 @@ def get_yearly_summary(user_id: int) -> pd.DataFrame:
     """Yıllık bazda gerçekleşmiş net K/Z özeti (en yeni yıl en üstte)."""
     df = get_sales_history(user_id)
     if df.empty:
-        return pd.DataFrame(columns=["Yıl", "İşlem Sayısı", "Toplam Net K/Z"])
+        return pd.DataFrame(columns=["Yıl", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
+                                      "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
     df = df.copy()
     df["Yıl"] = pd.to_datetime(df["Satış Tarihi"], errors="coerce").dt.strftime("%Y")
     ozet = (df.groupby("Yıl")
               .agg(**{"İşlem Sayısı": ("Net K/Z", "count"),
+                      "Ödenmiş Komisyon (₺)": ("Komisyon (₺)", "sum"),
+                      "Ödenmiş Vergi (₺)": ("Vergi (₺)", "sum"),
                       "Toplam Net K/Z": ("Net K/Z", "sum")})
               .reset_index()
               .sort_values("Yıl", ascending=False))
+    ozet["Ödenmiş Komisyon (₺)"] = ozet["Ödenmiş Komisyon (₺)"].round(2)
+    ozet["Ödenmiş Vergi (₺)"] = ozet["Ödenmiş Vergi (₺)"].round(2)
     ozet["Toplam Net K/Z"] = ozet["Toplam Net K/Z"].round(2)
     return ozet
 
