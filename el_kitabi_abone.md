@@ -79,7 +79,7 @@ içindir.</p></td>
 </tbody>
 </table>
 
-# 3. Ana Sayfa — Portföy Optimizasyonu
+# 3. Ana Sayfa — Bütçe Optimizasyonu
 
 Ana Sayfa, girdiğiniz bütçeyi ve risk tercihinizi temel alarak, o an
 piyasadaki en güçlü sinyalli varlıklara genel bir optima skoru vererek,
@@ -91,7 +91,7 @@ aynı anda değerlendirir.
 
 | **Ayar**             | **Açıklama**                                                                                                         |
 |----------------------|----------------------------------------------------------------------------------------------------------------------|
-| Portföy Bütçesi (TL) | Yatırım düşündüğünüz toplam tutar. Örnek: 100.000.                                                                   |
+| Bütçe (TL)        | Yatırım düşündüğünüz toplam tutar. Örnek: 100.000.                                                                   |
 | Risk Toleransı       | Düşük → Yüksek. Düşük risk daha çok TEFAS/döviz, yüksek risk daha çok hisse/kripto ağırlığı verir.                   |
 | Max Varlık Sayısı    | Portföyde en fazla kaç farklı varlık önerilsin (kategori başına). Az sayı yoğunlaşma, çok sayı çeşitlendirme sağlar. |
 
@@ -323,13 +323,14 @@ zonu, momentum, volatilite, temel analiz) ne kadar puan aldığı ayrı ayrı
 gösterilir — böylece skorun "neden" bu seviyede olduğunu
 anlayabilirsiniz.
 
-# 4. Portföyüm — Pozisyon Takibi
+# 4. Portföyüm — Pozisyon Takibi ve Muhasebe
 
 Bu sayfada gerçek alımlarınızı kayıt edip takip edersiniz. Sistem güncel
 fiyatları otomatik günceller, kâr/zarar hesaplar ve isterseniz kâr
 maksimizasyonu için ayarlayacağınız kriterlere göre size e-posta raporu
-gönderir. Sistem portföyünüzün muhasebesini yapmaz, sadece anlık
-durumunu gösterir.
+gönderir. Ayrıca bir varlığı sattığınızda, komisyon ve vergi düşülmüş
+**gerçekleşmiş kâr/zararınızı** kalıcı olarak kaydedip raporlayan tam bir
+muhasebe katmanı da içerir (bkz. Bölüm 4.4).
 
 ## 4.1 Yeni Pozisyon Ekleme
 
@@ -380,12 +381,18 @@ sıfır).</p></td>
 | Optima Skor  | Varlığın mevcut sinyal puanı (0-100)  |
 | Alış Tarihi  | Pozisyonu açtığınız gün               |
 
-## 4.3 Pozisyon Düzenleme / Silme
+## 4.3 Pozisyon Düzenleme / Satış / Silme
 
-- Tabloda sağdaki düzenle ikonu ile mevcut pozisyonu
-  güncelleyebilirsiniz.
+- Tabloda bir varlığın solundaki kutucuğu işaretlediğinizde iki buton
+  belirir: **Sil** ve **Sat**.
 
-- Çoklu seçim ile birden fazla pozisyonu aynı anda silebilirsiniz.
+- **Sil**, pozisyonu hiçbir kayıt bırakmadan kaldırır (örn. yanlışlıkla
+  eklenmiş bir pozisyonu düzeltmek için).
+
+- **Sat**, aşağıda anlatılan gerçek satış/muhasebe akışını başlatır.
+
+- Çoklu seçim ile birden fazla pozisyonu aynı anda silebilirsiniz (Sat
+  işlemi tek seferde tek pozisyon için yapılır).
 
 <table>
 <colgroup>
@@ -394,10 +401,86 @@ sıfır).</p></td>
 <tbody>
 <tr class="odd">
 <td style="background-color:#fff4e5;border-left:5px solid #e08a00;padding:14px 16px;border-radius:4px;"><p><strong>⚠ Dikkat</strong></p>
-<p>Silinen pozisyonlar geri alınamaz.</p></td>
+<p>"Sil" ile kaldırılan pozisyonlar geri alınamaz ve hiçbir muhasebe
+kaydı bırakmaz. Gerçek bir satışı kaydetmek istiyorsanız "Sat"
+kullanın.</p></td>
 </tr>
 </tbody>
 </table>
+
+## 4.4 Satış ve Gerçekleşmiş Kâr/Zarar (Muhasebe)
+
+**Sat** butonuna tıkladığınızda açılan formda:
+
+1.  **Satış Miktarı** — elinizdeki miktarın tamamını veya bir kısmını
+    girebilirsiniz (kısmi satış desteklenir — geri kalan miktar açık
+    pozisyon olarak devam eder).
+
+2.  **Satış Fiyatı** ve **Satış Tarihi**.
+
+3.  **Komisyon (₺)** ve **Vergi (₺)** — aracı kurumunuzun satış
+    dekontunda gösterdiği gerçek TL tutarını buraya doğrudan yazarsınız
+    (yüzde değil). Kategori ortalamasına göre bir başlangıç önerisiyle
+    dolu gelir, siz dekonttaki gerçek tutarla değiştirebilirsiniz (bkz.
+    aşağıda Komisyon/Vergi Ayarları — bu ayarlar sadece bu başlangıç
+    önerisini belirler).
+
+4.  Onaylamadan önce **Brüt K/Z, Komisyon, Vergi ve Net K/Z** anlık
+    olarak önizlenir.
+
+5.  "Satışı Onayla ve Kaydet" ile işlem **kalıcı olarak** kaydedilir.
+
+### Komisyon / Vergi Ayarları
+
+Portföyüm sayfasının altındaki "Gerçekleşmiş Kâr/Zarar" bölümünde,
+kategori bazlı (BIST/TEFAS/Kripto/Döviz/Değerli Maden) komisyon ve
+vergi oranlarını düzenleyebilirsiniz.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Oranlar Hakkında</strong></p>
+<p>Varsayılan komisyon/vergi oranları genel/yaklaşık başlangıç
+değerleridir, kesin bir mali müşavirlik veya vergi danışmanlığı yerine
+geçmez. Kendi aracı kurumunuzun/borsanızın komisyon oranına ve güncel
+mevzuata göre düzenlemeniz önerilir.</p></td>
+</tr>
+</tbody>
+</table>
+
+### Gerçekleşmiş Kâr/Zarar Raporu
+
+- **Tarih Aralığına Göre Özet**: Başlangıç/bitiş tarihi seçerek o
+  dönemdeki işlem sayısı, brüt K/Z, toplam komisyon, toplam vergi ve
+  net K/Z'yi görürsünüz.
+
+- **Aylık Özet** ve **Yıllık Özet**: Tüm gerçekleşmiş işlemlerin
+  otomatik aylık/yıllık toplamları — işlem sayısı, ödenmiş toplam
+  komisyon (₺), ödenmiş toplam vergi (₺) ve toplam net K/Z.
+
+- **Tüm İşlem Geçmişi**: Her satışın tam kaydı (varlık, miktar, alış/satış
+  fiyat ve tarihi, net K/Z).
+
+### Kayıt Düzeltme ve Silme
+
+Tüm İşlem Geçmişi tablosunda bir kayıt seçtiğinizde:
+
+- **Düzelt**: Miktar, fiyat, tarih veya komisyon/vergi (₺) tutarını
+  değiştirebilirsiniz — sistem net K/Z'yi otomatik yeniden hesaplar.
+  Miktarı **azaltırsanız** fark açık pozisyona otomatik geri eklenir.
+  Miktarı **artırırsanız**, elinizdeki açık pozisyon bu artışı
+  karşılamaya yetmiyorsa düzeltme **reddedilir** (olmayan bir miktarı
+  satılmış gibi göstermemek için).
+
+- **Kaydı Sil**: Satış kaydını kalıcı olarak siler. "Pozisyonu geri aç"
+  kutucuğunu işaretlerseniz, satılan miktar açık pozisyona geri
+  eklenir (satışı tamamen geri almış olursunuz); işaretlemezseniz sadece
+  muhasebe kaydı silinir.
+
+
 
 # 5. E-Posta ve Uyarı Ayarları
 
@@ -612,20 +695,43 @@ ve son işlem fiyatı görülebilir.
 
 ## 9.1 Döviz
 
-- 12 TRY bazlı kur izlenir: USD, EUR, GBP, CHF, JPY ve diğerleri.
+- **63 TRY bazlı kur** izlenir: USD, EUR, GBP, CHF, JPY, AUD, CAD, NZD,
+  NOK, SEK, DKK, CNY gibi ana kurların yanı sıra RUB, SAR, AED, INR,
+  BRL, PLN ve daha birçok döviz.
+
+- Ana 12 kur için zengin teknik gösterge (RSI, 1A getiri, volatilite)
+  hesaplanır. Genişletilen ~51 dövizde gerçek TL fiyatı garantidir,
+  ancak bazılarında teknik geçmiş veri sınırlı olabilir — bu durumda
+  Optima Skoru nötr bir değerde kalır, bu bir hata değildir.
 
 ## 9.2 Madenler
 
-- 10 maden: Altın (Gram), Gümüş (Gram), Platin, Paladyum, Bakır vb.
+- **18 maden/altın türü**: Gram Altın, Gram Gümüş, Platin, Paladyum,
+  Çeyrek/Yarım/Tam Altın, Cumhuriyet Altını, Ata Altını, Gram Has Altın,
+  14/18 Ayar Altın, 22 Ayar Bilezik, İkibuçuk Altın, Beşli Altın, Gremse
+  Altın, Reşat Altını, Hamit Altın.
 
-- Gram altın ve gram gümüş için doğrudan TL/gram Türkiye fiyatı
-  kullanılır.
+- Tüm fiyatlar doğrudan TL bazlıdır — hiçbir zaman USD üzerinden
+  sentetik çevrim yapılmaz.
+
+- Değerli Madenler sayfasının en üstünde, sadece bilgi amaçlı, **Ons
+  Altın (USD)** fiyatı da gösterilir. Bu değer dolar bazlıdır ve
+  hesaplamalara/portföy önerilerine dahil edilmez — sadece küresel
+  piyasayı takip etmek isteyenler için bir referanstır.
 
 ## 9.3 Kriptolar
 
-- 18 kripto para: BTC, ETH, SOL, ADA, ATOM, AVAX, DOT, MATIC, TON vb.
+- **186 kripto para** — BtcTurk borsasında TRY paritesi bulunan
+  hemen hemen tüm varlıklar otomatik olarak izlenir (liste, borsa yeni
+  parite ekledikçe/kaldırdıkça kendini günceller).
 
-- BTC/TRY ve ETH/TRY için doğrudan TL fiyat kullanılır.
+- Fiyat, RSI, getiri ve volatilite doğrudan BtcTurk'ün TL verisinden
+  hesaplanır — hiçbir USD çevrimi yapılmaz.
+
+- Bazı kripto isimleri BIST'teki bir hisse koduyla çakıştığı için
+  başına "C" harfi eklenerek görüntülenir (örn. Chainlink → CLINK,
+  gerçek borsa kodu yine LINK'tir). Bu, sadece uygulama içi bir
+  görünüm farkıdır, işlem yaptığınız varlığı değiştirmez.
 
 - Kripto piyasası 7/24 aktif — kâr realizasyonu uyarı sistemi hafta sonu
   sadece bu kategoride çalışır.
@@ -764,7 +870,7 @@ işaret eder.</p></td>
 
 ## 11.3 Bu Tabloyu Nasıl Kullanabilirsiniz? — Üç Yöntem
 
-- **1. Temettü geliri hesabı:** Portföy Bütçesi × Temettü Verimi % = o
+- **1. Temettü geliri hesabı:** Bütçe × Temettü Verimi % = o
   hisseye yatırılırsa yıllık beklenen brüt nakit temettü tutarı (stopaj
   bu hesaba dahil değildir, ayrıca düşülmelidir).
 

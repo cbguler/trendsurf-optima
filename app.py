@@ -1721,7 +1721,7 @@ with st.sidebar:
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()
 
-    st.markdown("**Portföy Bütçesi (TL)**")
+    st.markdown("**Bütçe (TL)**")
     butce_str = st.text_input(
         "Butce",
         value="" if st.session_state.get("butce_val", 0) == 0 else str(int(st.session_state.get("butce_val", 0))),
@@ -2171,7 +2171,7 @@ RISK_W={
 # ANA SAYFA
 # ══════════════════════════════════════════════════════════════
 if page=="Ana Sayfa":
-    st.title("Portföy Optimizasyonu")
+    st.title("Bütçe Optimizasyonu")
     if df_uni.empty:
         st.error("`python worker.py` ile veriyi oluşturun."); st.stop()
 
@@ -2190,7 +2190,7 @@ if page=="Ana Sayfa":
     c6.metric("Maden",f"{cats.get('MADEN',0):,}")
 
     if budget<=0:
-        st.info("Sol panelden **Portföy Bütçesi** girerek optimize edilmiş öneri listesini görün.")
+        st.info("Sol panelden **Bütçe** girerek optimize edilmiş öneri listesini görün.")
         st.stop()
 
     w=RISK_W[risk]
@@ -3003,7 +3003,10 @@ elif page=="Portföyüm":
         on_select="rerun",
         selection_mode="multi-row",
         column_config={
-            "Ticker": st.column_config.TextColumn(width="small"),
+            # v2.0.7.59 - Bahri'nin bulgusu: cozum daraltmak degil DENGE -
+            # Ticker/Optima Skor genisletildi, Sinyal (en uzun metin
+            # tasiyan sutun - "KADEMELI AL" gibi) daraltildi.
+            "Ticker": st.column_config.TextColumn(width="medium"),
             "Tarih":  st.column_config.TextColumn(width="small"),
             "Miktar": st.column_config.TextColumn(width="small"),
             "Birim":  st.column_config.TextColumn(width="small"),
@@ -3013,9 +3016,9 @@ elif page=="Portföyüm":
             "K/Z":    st.column_config.TextColumn(width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
             "K/Z %":  st.column_config.TextColumn(width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.TextColumn(
-                "Optima Skor", width="small", help="Optima Skoru (0-100)"),
+                "Optima Skor", width="medium", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
-                width="medium",
+                width="small",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
         }
     )
@@ -3423,53 +3426,49 @@ elif page=="Portföyüm":
             _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
         _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
 
-        # v2.0.7.56 - Bahri'nin talebi: sutunun ALTINA denk gelecek sekilde
-        # Net K/Z TOPLAMI - ayri bir widget yerine, ayni tabloya son satir
-        # olarak eklendi (boylece sutun hizalamasi piksel piksel garanti -
-        # farkli bir widget kullansaydik hizalama tutmayabilirdi).
-        _pl_satir_sayisi = len(_pl_gosterim)
+        # v2.0.7.59 - DUZELTME (Bahri'nin bulgusu): Toplam satirini ayni
+        # secilebilir tabloya eklemek, o satirda da bir isaret kutucugu
+        # (checkbox) gostermeye zorluyordu - tiklaninca hicbir seye
+        # yaramiyordu, kafa karistiriciydi. Artik TOPLAM tamamen AYRI,
+        # secim ozelligi OLMAYAN kucuk bir tabloda gosteriliyor - ayni
+        # column_config kullanildigi icin hizalama yine de yakin kalıyor.
         _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
         _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
         _pl_toplam_satir["Ticker"] = "TOPLAM"
         _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
-        _pl_gosterim = pd.concat(
-            [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
+        _pl_toplam_df = pd.DataFrame([_pl_toplam_satir])
+        _pl_toplam_styled = (_pl_toplam_df.style
+                              .map(_pl_netkz_renk, subset=["Net K/Z"])
+                              .apply(lambda row: ["font-weight: 700;"] * len(row), axis=1))
 
-        def _pl_toplam_satir_kalin(row):
-            # TOPLAM satirini (son satir) kalin/ayirici cizgiyle vurgula
-            if row.name == _pl_satir_sayisi:
-                return ["font-weight: 700; border-top: 2px solid #1b2a4a;"] * len(row)
-            return [""] * len(row)
-
-        _pl_styled = (_pl_gosterim.style
-                      .map(_pl_netkz_renk, subset=["Net K/Z"])
-                      .apply(_pl_toplam_satir_kalin, axis=1))
+        _pl_styled = _pl_gosterim.style.map(_pl_netkz_renk, subset=["Net K/Z"])
 
         # v2.0.7.56 - Bahri'nin talebi: Kategori/Ticker/fiyat/tarih
         # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
         # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
         # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
+        _pl_col_config = {
+            # v2.0.7.59 - Bahri'nin bulgusu: Ticker genisletildi, Net
+            # K/Z (yanal scroll'a asil neden olan genis sutun) daraltildi.
+            "Kategori":      st.column_config.Column(width="small"),
+            "Ticker":        st.column_config.Column(width="medium"),
+            "Miktar":        st.column_config.Column(width="small"),
+            "Alış Fiyatı":   st.column_config.Column(width="small"),
+            "Alış Tarihi":   st.column_config.Column(width="small"),
+            "Satış Fiyatı":  st.column_config.Column(width="small"),
+            "Satış Tarihi":  st.column_config.Column(width="small"),
+            "Komisyon (₺)":  st.column_config.Column(width="small"),
+            "Vergi (₺)":     st.column_config.Column(width="small"),
+            "Net K/Z":       st.column_config.Column(width="small"),
+        }
         _pl_event = st.dataframe(
             _pl_styled, use_container_width=True, hide_index=True,
-            column_config={
-                "Kategori":      st.column_config.Column(width="small"),
-                "Ticker":        st.column_config.Column(width="small"),
-                "Miktar":        st.column_config.Column(width="small"),
-                "Alış Fiyatı":   st.column_config.Column(width="small"),
-                "Alış Tarihi":   st.column_config.Column(width="small"),
-                "Satış Fiyatı":  st.column_config.Column(width="small"),
-                "Satış Tarihi":  st.column_config.Column(width="small"),
-                "Komisyon (₺)":  st.column_config.Column(width="small"),
-                "Vergi (₺)":     st.column_config.Column(width="small"),
-                "Net K/Z":       st.column_config.Column(width="large"),
-            },
+            column_config=_pl_col_config,
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
+        # Toplam satırı - ayrı, seçim özelliği olmayan tablo (işaret kutusu yok)
+        st.dataframe(_pl_toplam_styled, use_container_width=True, hide_index=True,
+                     column_config=_pl_col_config)
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
-        # v2.0.7.56 - TOPLAM satiri (son satir) secilebilir ama duzenlenemez/
-        # silinemez - bir kayit degil, sadece bir ozet satiri.
-        if _pl_sel and _pl_sel[0] >= _pl_satir_sayisi:
-            st.caption("TOPLAM satırı bir işlem kaydı değildir, düzenlenemez/silinemez.")
-            _pl_sel = []
         if _pl_sel:
             _pl_si = _pl_sel[0]
             _pl_row = _pl_tum.iloc[_pl_si]
@@ -4413,7 +4412,7 @@ elif page=="Temettü":
         "<br><br>"
         "<b>Nasıl kullanılır — üç yöntem:</b>"
         "<br>"
-        "<b>1. Temettü geliri hesabı:</b> Portföy Bütçesi × Temettü Verimi % = o hisseye "
+        "<b>1. Temettü geliri hesabı:</b> Bütçe × Temettü Verimi % = o hisseye "
         "yatırılırsa yıllık beklenen brüt nakit temettü tutarı (stopaj bu hesaba dahil değildir, "
         "ayrıca düşülmelidir)."
         "<br>"
