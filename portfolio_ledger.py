@@ -121,8 +121,19 @@ def sell_portfolio_item(user_id: int, item_id: int, sell_qty: float, sell_price:
         conn.close()
         return {"basari": False, "hata": "Pozisyon bulunamadı."}
 
-    ticker, asset_type, quantity, avg_cost, unit_type, purchase_date = row
-    quantity = float(quantity); avg_cost = float(avg_cost)
+    # v2.0.7.53 - KRITIK DUZELTME (Bahri'nin bulgusu, ValueError): _CompatRow
+    # bir dict alt sinifi - "a, b, c = row" seklinde tuple-unpacking
+    # yapildiginda DEGERLER degil ANAHTARLAR (sutun isimleri) aciliyordu!
+    # (dict'i dogrudan unpack etmek onun key'lerini gezer). Bu yuzden
+    # "quantity" degiskenine 5.06 gibi bir sayi degil, DUZ "quantity"
+    # STRING'i atanıyordu - float("quantity") da ValueError firlatiyordu.
+    # Duzeltme: acik sekilde anahtarla eris.
+    ticker      = row["ticker"]
+    asset_type  = row["asset_type"]
+    quantity    = float(row["quantity"])
+    avg_cost    = float(row["avg_cost"])
+    unit_type   = row["unit_type"]
+    purchase_date = row["purchase_date"]
 
     if sell_qty <= 0:
         conn.close()
@@ -188,7 +199,12 @@ def delete_sale_record(user_id: int, sale_id: int, geri_ac: bool = False) -> dic
     if not row:
         conn.close()
         return {"basari": False, "hata": "Satış kaydı bulunamadı."}
-    ticker, asset_type, unit_type, quantity, buy_price, buy_date = row
+    ticker      = row["ticker"]
+    asset_type  = row["asset_type"]
+    unit_type   = row["unit_type"]
+    quantity    = row["quantity"]
+    buy_price   = row["buy_price"]
+    buy_date    = row["buy_date"]
 
     if geri_ac:
         mevcut = conn.execute(
@@ -239,8 +255,10 @@ def update_sale_record(user_id: int, sale_id: int, sell_qty: float, buy_price: f
     if not old:
         conn.close()
         return {"basari": False, "hata": "Satış kaydı bulunamadı."}
-    ticker, asset_type, unit_type, eski_miktar = old
-    eski_miktar = float(eski_miktar)
+    ticker      = old["ticker"]
+    asset_type  = old["asset_type"]
+    unit_type   = old["unit_type"]
+    eski_miktar = float(old["quantity"])
 
     if sell_qty <= 0:
         conn.close()
