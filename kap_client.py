@@ -349,8 +349,12 @@ def fundamentals_to_display(raw: dict) -> dict:
             yf[label] = _fmt_mil(raw[field])
 
     # KAP durumu
+    # v2.0.7.50 - DUZELTME: "_kap_note" alani duz "Veri kaynağı: yfinance"
+    # metniydi - "KAP Durumu" satirinin ETIKETIYLE uyumsuzdu (etiket KAP'in
+    # durumunu soruyor, icerik yfinance'ten bahsediyordu). Artik etiketle
+    # tutarli, acik bir ifade kullaniliyor.
     if not raw.get("_kap_available", True):
-        yf["KAP Durumu"] = raw.get("_kap_note", "—")
+        yf["KAP Durumu"] = "Bilanço verisi bulunamadı (yfinance kullanılıyor)"
 
     # Boş alanları kaldır
     return {k: v for k, v in yf.items() if v != "—"}

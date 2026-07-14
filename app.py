@@ -3584,12 +3584,17 @@ elif page in CAT:
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi
+            # v2.0.7.50 - DUZELTME (Bahri'nin bulgusu): "_kap_note" alani
+            # zaten TAM bir cumleydi ("Veri kaynağı: yfinance"), ama buraya
+            # "KAP: " oneki eklenerek yapistiriliyordu - sonuc "Kaynak:
+            # yfinance | KAP: Veri kaynağı: yfinance" gibi anlamsiz,
+            # tekrarli bir metin oluyordu. Artik acik ve tek seferlik.
             src_note = "yfinance"
             if raw.get("_kap_available"):
                 src_note += " + KAP"
-            elif raw.get("_kap_note"):
-                src_note += f" | KAP: {raw['_kap_note']}"
             st.caption(f"Kaynak: {src_note}")
+            if not raw.get("_kap_available"):
+                st.caption("Bu hisse için KAP bilanço verisi bulunamadı, sadece yfinance kullanıldı.")
 
             if kap_url:
                 st.caption(f"[KAP Finansal Bilgiler Sayfası]({kap_url})")
