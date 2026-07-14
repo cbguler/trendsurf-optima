@@ -3082,7 +3082,8 @@ elif page=="Portföyüm":
                         value=float(_row_data["Güncel"]), key="pf_satis_fiyat")
                 with fs3:
                     _satis_tarih = st.date_input(
-                        "Satış Tarihi", value=_dt_pf.date.today(), key="pf_satis_tarih")
+                        "Satış Tarihi", value=_dt_pf.date.today(), key="pf_satis_tarih",
+                        format="DD.MM.YYYY")
                 fs4, fs5 = st.columns(2)
                 with fs4:
                     _satis_komisyon = st.number_input(
@@ -3637,9 +3638,11 @@ elif page in CAT:
         import datetime as _dt_pl
         with dr1:
             _pl_bas = st.date_input("Başlangıç", key="pl_bas_tarih",
-                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30))
+                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30),
+                                     format="DD.MM.YYYY")
         with dr2:
-            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today())
+            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
+                                     format="DD.MM.YYYY")
         _ozet = get_realized_summary(_cur_user["id"],
                                       _pl_bas.strftime("%Y-%m-%d"),
                                       _pl_bit.strftime("%Y-%m-%d"))
