@@ -306,10 +306,48 @@ def init_db():
         used       INTEGER   NOT NULL DEFAULT 0
     )""")
 
+    # v2.0.7.47 - Muhasebe sistemi (Bahri'nin talebi): satis islemleri
+    # KALICI olarak kaydedilir - "portfolio" tablosundaki gibi silinince
+    # yok olmaz. Gercek kar/zarar (net, komisyon+vergi dusulmus) burada
+    # hesaplanip saklanir.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS portfolio_sales (
+        id           SERIAL  PRIMARY KEY,
+        user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        asset_type   TEXT    NOT NULL,
+        ticker       TEXT    NOT NULL,
+        unit_type    TEXT    DEFAULT 'Adet',
+        quantity     REAL    NOT NULL,
+        buy_price    REAL    NOT NULL,
+        buy_date     TEXT    DEFAULT '',
+        sell_price   REAL    NOT NULL,
+        sell_date    TEXT    NOT NULL,
+        fee_pct      REAL    NOT NULL DEFAULT 0,
+        tax_pct      REAL    NOT NULL DEFAULT 0,
+        fee_amount   REAL    NOT NULL DEFAULT 0,
+        tax_amount   REAL    NOT NULL DEFAULT 0,
+        gross_pl     REAL    NOT NULL DEFAULT 0,
+        net_pl       REAL    NOT NULL DEFAULT 0,
+        note         TEXT    DEFAULT '',
+        created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
+    # v2.0.7.47 - Kategori bazli komisyon/vergi oranlari (kullanici
+    # duzenleyebilir, ilk kullanimda makul varsayilanlarla doldurulur).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS portfolio_fee_settings (
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        asset_type  TEXT    NOT NULL,
+        fee_pct     REAL    NOT NULL DEFAULT 0,
+        tax_pct     REAL    NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, asset_type)
+    )""")
+
     # Idempotent index'ler
     c.execute("CREATE INDEX IF NOT EXISTS idx_users_email      ON users(LOWER(email))")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token   ON sessions(token)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_user   ON portfolio(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_sales_user ON portfolio_sales(user_id)")
 
     conn.commit()
     conn.close()
