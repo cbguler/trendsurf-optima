@@ -1246,24 +1246,18 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     auto_cfg = {}
     for c in df_show.columns:
         if c in _turkce_cevrilen:
-            # Artik metin (Turkce bicimli) - TextColumn + saga yasli goster.
-            auto_cfg[c] = st.column_config.TextColumn()
+            # v2.0.7.61 - CSS hack yerine GERCEK alignment parametresi
+            # (Streamlit'in kendi TextColumn ozelligi, daha guvenilir).
+            auto_cfg[c] = st.column_config.TextColumn(alignment="right")
     if col_cfg:
         auto_cfg.update(col_cfg)
 
-    def _saga_yasla(_):
-        return "text-align: right;"
-
     try:
         df_render = df_show.style
-        if _turkce_cevrilen:
-            df_render = df_render.map(_saga_yasla, subset=_turkce_cevrilen)
         if "Sinyal" in df_show.columns:
             df_render = df_render.map(_sinyal_renk_stil, subset=["Sinyal"])
     except AttributeError:
         df_render = df_show.style
-        if _turkce_cevrilen:
-            df_render = df_render.applymap(_saga_yasla, subset=_turkce_cevrilen)
         if "Sinyal" in df_show.columns:
             df_render = df_render.applymap(_sinyal_renk_stil, subset=["Sinyal"])
 
@@ -2524,13 +2518,13 @@ if page=="Ana Sayfa":
         col_cfg_ana = {
             "Kategori": st.column_config.TextColumn("Kategori", width="small"),
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Optima Skoru": st.column_config.TextColumn("Optima Skoru", width="small"),
+            "Optima Skoru": st.column_config.TextColumn("Optima Skoru", width="small", alignment="right"),
             "Sinyal": st.column_config.TextColumn("Sinyal", width="small"),
-            "RSI": st.column_config.TextColumn("RSI", width="small"),
-            "1A Getiri %": st.column_config.TextColumn("1A Getiri %", width="small"),
-            "Emir Fiyatı": st.column_config.TextColumn("Emir Fiyatı", width="small"),
+            "RSI": st.column_config.TextColumn("RSI", width="small", alignment="right"),
+            "1A Getiri %": st.column_config.TextColumn("1A Getiri %", width="small", alignment="right"),
+            "Emir Fiyatı": st.column_config.TextColumn("Emir Fiyatı", width="small", alignment="right"),
             "Birim": st.column_config.NumberColumn("Birim", format="%d", width="small"),
-            "Tutar (₺)": st.column_config.TextColumn("Tutar (₺)", width="small"),
+            "Tutar (₺)": st.column_config.TextColumn("Tutar (₺)", width="small", alignment="right"),
         }
         st.markdown("""
         <style>
@@ -3060,22 +3054,25 @@ elif page=="Portföyüm":
         on_select="rerun",
         selection_mode="multi-row",
         column_config={
-            # v2.0.7.60 - DUZELTME (Bahri'nin bulgusu: bir onceki "genislet"
-            # degisikligi TERS etki yapip Ticker/Skor'u anormal genisletti).
-            # Kucuk (small) genislige geri donuldu, Sinyal orta (medium)'a.
-            "Ticker": st.column_config.TextColumn(width="small"),
+            # v2.0.7.61 - Bahri'nin talebi: artik KESIN PIKSEL genislikleri
+            # kullaniliyor (Streamlit'in "small"=75px/"medium"=200px/
+            # "large"=400px varsayilanlarindan yuzdelik hesaplandi):
+            # Ticker +%5, Miktar +%10, Birim -%10, Sinyal -%40. Ayrica
+            # CSS hack'i yerine GERCEK alignment parametresi kullanildi
+            # (daha guvenilir, Styler CSS destegine bagimli degil).
+            "Ticker": st.column_config.TextColumn(width=79),
             "Tarih":  st.column_config.TextColumn(width="small"),
-            "Miktar": st.column_config.TextColumn(width="small"),
-            "Birim":  st.column_config.TextColumn(width="small"),
-            "Alış":   st.column_config.TextColumn(width="small", help="Alış fiyatı (TL)"),
-            "Güncel": st.column_config.TextColumn(width="small", help="Güncel piyasa fiyatı (TL)"),
-            "Toplam": st.column_config.TextColumn(width="small", help="Pozisyon toplam değeri (TL)"),
-            "K/Z":    st.column_config.TextColumn(width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
-            "K/Z %":  st.column_config.TextColumn(width="small", help="Kâr/Zarar yüzdesi"),
+            "Miktar": st.column_config.TextColumn(width=82, alignment="right"),
+            "Birim":  st.column_config.TextColumn(width=68),
+            "Alış":   st.column_config.TextColumn(width="small", alignment="right", help="Alış fiyatı (TL)"),
+            "Güncel": st.column_config.TextColumn(width="small", alignment="right", help="Güncel piyasa fiyatı (TL)"),
+            "Toplam": st.column_config.TextColumn(width="small", alignment="right", help="Pozisyon toplam değeri (TL)"),
+            "K/Z":    st.column_config.TextColumn(width="small", alignment="right", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
+            "K/Z %":  st.column_config.TextColumn(width="small", alignment="right", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.TextColumn(
-                "Optima Skor", width="small", help="Optima Skoru (0-100)"),
+                "Optima Skor", width="small", alignment="right", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
-                width="medium",
+                width=120,
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
         }
     )
@@ -3088,33 +3085,37 @@ elif page=="Portföyüm":
     # boylece sutun agirliklari gercekten karsilik gelen sutunlarin
     # ALTINA denk geliyor (native dataframe oldugu icin yine de piksel
     # piksel garanti degil, ama onceki halden cok daha yakin).
+    # v2.0.7.61 - DUZELTME (Bahri'nin talebi): etiket tekrar ayni satira,
+    # rakamlarla YAN YANA getirildi. Onceki (v2.0.7.28) endise - etiketin
+    # sutun hizalamasini bozmasi - ilk uc BOS sutunu (checkbox spaceri +
+    # Ticker + Tarih, toplam agirlik 2.45) TEK bir sola-yasli etiket
+    # kutusuna birlestirerek cozuldu - geri kalan sutunlarin (Miktar,
+    # Birim, Alis, Guncel, Toplam, KZ) hizalamasi/agirligi DEGISMEDI.
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
     _tcs = "+" if _total_kz>=0 else ""
-    # Sutun sirasi/agirliklari tablodaki fiili genisliklerle (ekran
-    # goruntusunden olculdu) uyumlu: checkbox kucuk, veri sutunlari esit,
-    # Optima Skor biraz genis, Sinyal en genis.
     _footer_kolonlar = [
-        ("", 0.45),     # checkbox sutunu spaceri
-        ("Ticker", 1), ("Tarih", 1), ("Miktar", 1), ("Birim", 1),
+        ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
+        ("Miktar", 1), ("Birim", 1),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
         ("", 1), ("", 1.2), ("", 1.9),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
-        if _etiket == "TOPLAM":
+        if _etiket == "ETIKET":
+            _icerik = "<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        elif _etiket == "TOPLAM":
             _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
         elif _etiket == "KZ":
             _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
         else:
             _icerik = ""
-        _footer_html += f"<div style='flex:{_w};text-align:right;padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
+        _hiza = "left" if _etiket == "ETIKET" else "right"
+        _footer_html += f"<div style='flex:{_w};text-align:{_hiza};padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
     st.markdown(
-        f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:2px;'>"
-        f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        f"</div>"
+        f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:6px;'></div>"
         f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"
         f"{_footer_html}</div>",
         unsafe_allow_html=True
@@ -3416,16 +3417,18 @@ elif page=="Portföyüm":
                 return str(x)
 
         def _pl_netkz_renk(v):
+            # v2.0.7.61 - CSS "text-align" hack'i kaldirildi - artik
+            # column_config'in GERCEK alignment="right" parametresi
+            # kullaniliyor, sadece renk burada kaliyor.
             try:
                 sayi = float(str(v).replace(".", "").replace(",", "."))
             except (TypeError, ValueError):
-                return "text-align: right;"
-            renk = ""
+                return ""
             if sayi > 0:
-                renk = "color: #1b8a4a; font-weight: 600;"
+                return "color: #1b8a4a; font-weight: 600;"
             elif sayi < 0:
-                renk = "color: #c0392b; font-weight: 600;"
-            return renk + " text-align: right;"
+                return "color: #c0392b; font-weight: 600;"
+            return ""
 
         st.markdown("**Tarih Aralığına Göre Özet**")
         dr1, dr2 = st.columns(2)
@@ -3515,14 +3518,14 @@ elif page=="Portföyüm":
         _pl_col_config = {
             "Kategori":      st.column_config.Column(width="small"),
             "Ticker":        st.column_config.Column(width="medium"),
-            "Miktar":        st.column_config.Column(width="small"),
-            "Alış Fiyatı":   st.column_config.Column(width="small"),
+            "Miktar":        st.column_config.Column(width="small", alignment="right"),
+            "Alış Fiyatı":   st.column_config.Column(width="small", alignment="right"),
             "Alış Tarihi":   st.column_config.Column(width="small"),
-            "Satış Fiyatı":  st.column_config.Column(width="small"),
+            "Satış Fiyatı":  st.column_config.Column(width="small", alignment="right"),
             "Satış Tarihi":  st.column_config.Column(width="small"),
-            "Komisyon (₺)":  st.column_config.Column(width="small"),
-            "Vergi (₺)":     st.column_config.Column(width="small"),
-            "Net K/Z":       st.column_config.Column(width="small"),
+            "Komisyon (₺)":  st.column_config.Column(width="small", alignment="right"),
+            "Vergi (₺)":     st.column_config.Column(width="small", alignment="right"),
+            "Net K/Z":       st.column_config.Column(width="small", alignment="right"),
         }
         _pl_event = st.dataframe(
             _pl_styled, use_container_width=True, hide_index=True,
