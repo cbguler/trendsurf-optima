@@ -231,9 +231,15 @@ def delete_sale_record(user_id: int, sale_id: int, geri_ac: bool = False) -> dic
 
 def update_sale_record(user_id: int, sale_id: int, sell_qty: float, buy_price: float,
                         buy_date: str, sell_price: float, sell_date: str,
-                        fee_pct: float, tax_pct: float, note: str = "") -> dict:
+                        fee_amount: float, tax_amount: float, note: str = "") -> dict:
     """v2.0.7.52 - Bahri'nin talebi: sadece silme yetmiyor, yanlış girilen
     bir satış kaydının miktar/fiyat/tarih/oran bilgileri DÜZELTİLEBİLMELİ.
+
+    v2.0.7.57 - DUZELTME (Bahri'nin talebi): Komisyon/Vergi artik YUZDE
+    olarak degil, aracı kurumun kestigi GERCEK TL TUTARI olarak dogrudan
+    girilir (orn. "58" TL komisyon). Bir duzeltme yaparken kullanicinin
+    elinde genelde hesap ekstresindeki GERCEK kesinti tutari olur, oran
+    degil - bu yuzden dogrudan TL girisi daha dogru ve pratiktir.
 
     Miktar değiştirilirse (eski kayıttaki miktardan farklıysa), açık
     pozisyon da FARKA göre otomatik ayarlanır - böylece "aslında 5 değil 6
@@ -309,9 +315,17 @@ def update_sale_record(user_id: int, sale_id: int, sell_qty: float, buy_price: f
     alis_degeri  = sell_qty * buy_price
     satis_degeri = sell_qty * sell_price
     brut_kz      = satis_degeri - alis_degeri
-    komisyon     = round((alis_degeri + satis_degeri) * fee_pct / 100.0, 2)
-    vergi        = round(max(0.0, brut_kz) * tax_pct / 100.0, 2)
+    # v2.0.7.57 - Bahri'nin talebi: komisyon/vergi artik yuzdeden HESAPLANMIYOR,
+    # aracı kurumun kestigi GERCEK TL tutari dogrudan kullaniliyor.
+    komisyon     = round(float(fee_amount), 2)
+    vergi        = round(float(tax_amount), 2)
     net_kz       = round(brut_kz - komisyon - vergi, 2)
+    # Kayit tutarliligi icin orantili yuzdeyi geriye hesaplayip saklıyoruz
+    # (baska bir yerde "Komisyon %" gosterilmek istenirse anlamli kalsin diye) -
+    # ama artik hesaplamanin KAYNAGI degil, sadece bir turev bilgi.
+    _islem_hacmi = alis_degeri + satis_degeri
+    fee_pct = round(komisyon / _islem_hacmi * 100.0, 4) if _islem_hacmi > 0 else 0.0
+    tax_pct = round(vergi / brut_kz * 100.0, 4) if brut_kz > 0 else 0.0
 
     conn.execute(
         "UPDATE portfolio_sales SET quantity=?, buy_price=?, buy_date=?, sell_price=?, "

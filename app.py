@@ -2989,7 +2989,7 @@ elif page=="Portföyüm":
                 format="%+.2f%%", width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.NumberColumn(
                 "Optima Skor",
-                format="%.1f", help="Optima Skoru (0-100)"),
+                format="%.1f", width="small", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
                 width="medium",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
@@ -3069,32 +3069,36 @@ elif page=="Portföyüm":
             _oran = _pf_oranlar.get(_pf_asset_type, {"fee_pct": 0.0, "tax_pct": 0.0})
 
             with st.container(border=True):
-                st.markdown(f"**{_sel_tkr} — Satış Formu** (elinizde: {_row_data['Miktar']:g} {_row_data['Birim']})")
+                st.markdown(f"**{_sel_tkr} — Satış Formu** (elinizde: {fmt_tr(_row_data['Miktar'],4)} {_row_data['Birim']})")
                 import datetime as _dt_pf
                 fs1, fs2, fs3 = st.columns(3)
                 with fs1:
-                    _satis_miktar = st.number_input(
-                        "Satış Miktarı", min_value=0.0, max_value=float(_row_data["Miktar"]),
-                        value=float(_row_data["Miktar"]), key="pf_satis_miktar")
+                    _satis_miktar_str = st.text_input(
+                        "Satış Miktarı", value=fmt_tr(_row_data["Miktar"], 4),
+                        key="pf_satis_miktar")
+                    _satis_miktar = parse_tr(_satis_miktar_str)
                 with fs2:
-                    _satis_fiyat = st.number_input(
-                        "Satış Fiyatı (birim, TL)", min_value=0.0,
-                        value=float(_row_data["Güncel"]), key="pf_satis_fiyat")
+                    _satis_fiyat_str = st.text_input(
+                        "Satış Fiyatı (birim, TL)", value=fmt_tr(_row_data["Güncel"], 4),
+                        key="pf_satis_fiyat")
+                    _satis_fiyat = parse_tr(_satis_fiyat_str)
                 with fs3:
                     _satis_tarih = st.date_input(
                         "Satış Tarihi", value=_dt_pf.date.today(), key="pf_satis_tarih",
                         format="DD.MM.YYYY")
                 fs4, fs5 = st.columns(2)
                 with fs4:
-                    _satis_komisyon = st.number_input(
-                        "Komisyon %", min_value=0.0, max_value=100.0,
-                        value=float(_oran["fee_pct"]), step=0.01, key="pf_satis_komisyon",
+                    _satis_komisyon_str = st.text_input(
+                        "Komisyon %", value=fmt_tr(_oran["fee_pct"], 2),
+                        key="pf_satis_komisyon",
                         help="Alış+satış tutarına uygulanır (gidiş-dönüş). Kategori varsayılanı otomatik dolduruldu, düzenleyebilirsiniz.")
+                    _satis_komisyon = parse_tr(_satis_komisyon_str)
                 with fs5:
-                    _satis_vergi = st.number_input(
-                        "Vergi %", min_value=0.0, max_value=100.0,
-                        value=float(_oran["tax_pct"]), step=0.01, key="pf_satis_vergi",
+                    _satis_vergi_str = st.text_input(
+                        "Vergi %", value=fmt_tr(_oran["tax_pct"], 2),
+                        key="pf_satis_vergi",
                         help="Sadece kârdan (varsa) düşülür. Genel tahmindir, mali müşavirinize danışın.")
+                    _satis_vergi = parse_tr(_satis_vergi_str)
 
                 # Önizleme
                 _alis_deger = _satis_miktar * _row_data["Alış"]
@@ -3105,9 +3109,9 @@ elif page=="Portföyüm":
                 _net = round(_brut - _kom_tl - _verg_tl, 2)
                 _net_renk = "#1b8a4a" if _net >= 0 else "#c0392b"
                 st.markdown(
-                    f"Brüt K/Z: **{_brut:,.2f} ₺**  |  Komisyon: **-{_kom_tl:,.2f} ₺**  |  "
-                    f"Vergi: **-{_verg_tl:,.2f} ₺**  |  "
-                    f"<span style='color:{_net_renk};font-weight:700;'>Net K/Z: {_net:,.2f} ₺</span>",
+                    f"Brüt K/Z: **{fmt_tr(_brut)} ₺**  |  Komisyon: **-{fmt_tr(_kom_tl)} ₺**  |  "
+                    f"Vergi: **-{fmt_tr(_verg_tl)} ₺**  |  "
+                    f"<span style='color:{_net_renk};font-weight:700;'>Net K/Z: {fmt_tr(_net)} ₺</span>",
                     unsafe_allow_html=True)
 
                 fb1, fb2 = st.columns([1, 1])
@@ -3117,7 +3121,7 @@ elif page=="Portföyüm":
                         _satis_tarih.strftime("%Y-%m-%d"), _satis_komisyon, _satis_vergi)
                     if _sonuc["basari"]:
                         st.session_state.pop("pf_satis_form_id", None)
-                        st.success(f"Satış kaydedildi — Net K/Z: {_sonuc['net_kz']:,.2f} ₺")
+                        st.success(f"Satış kaydedildi — Net K/Z: {fmt_tr(_sonuc['net_kz'])} ₺")
                         st.rerun()
                     else:
                         st.error(_sonuc["hata"])
@@ -3287,15 +3291,13 @@ elif page=="Portföyüm":
             with _fc1:
                 st.markdown(f"**{_cat_lbl}**")
             with _fc2:
-                _yeni_fee = st.number_input(
-                    "Komisyon %", min_value=0.0, max_value=100.0,
-                    value=float(_mevcut["fee_pct"]), step=0.01,
-                    key=f"fee_ayar_{_cat_key}")
+                _yeni_fee = parse_tr(st.text_input(
+                    "Komisyon %", value=fmt_tr(float(_mevcut["fee_pct"]), 2),
+                    key=f"fee_ayar_{_cat_key}"))
             with _fc3:
-                _yeni_tax = st.number_input(
-                    "Vergi %", min_value=0.0, max_value=100.0,
-                    value=float(_mevcut["tax_pct"]), step=0.01,
-                    key=f"tax_ayar_{_cat_key}")
+                _yeni_tax = parse_tr(st.text_input(
+                    "Vergi %", value=fmt_tr(float(_mevcut["tax_pct"]), 2),
+                    key=f"tax_ayar_{_cat_key}"))
             if _yeni_fee != _mevcut["fee_pct"] or _yeni_tax != _mevcut["tax_pct"]:
                 save_fee_settings(_cur_user["id"], _cat_key, _yeni_fee, _yeni_tax)
 
@@ -3355,29 +3357,65 @@ elif page=="Portföyüm":
             _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
         _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
 
+        # v2.0.7.56 - Bahri'nin talebi: sutunun ALTINA denk gelecek sekilde
+        # Net K/Z TOPLAMI - ayri bir widget yerine, ayni tabloya son satir
+        # olarak eklendi (boylece sutun hizalamasi piksel piksel garanti -
+        # farkli bir widget kullansaydik hizalama tutmayabilirdi).
+        _pl_satir_sayisi = len(_pl_gosterim)
+        _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
+        _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
+        _pl_toplam_satir["Ticker"] = "TOPLAM"
+        _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
+        _pl_gosterim = pd.concat(
+            [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
+
         def _pl_netkz_renk(v):
             try:
                 sayi = float(str(v).replace(".", "").replace(",", "."))
             except (TypeError, ValueError):
-                return ""
+                return "text-align: right;"
+            renk = ""
             if sayi > 0:
-                return "color: #1b8a4a; font-weight: 600;"
+                renk = "color: #1b8a4a; font-weight: 600;"
             elif sayi < 0:
-                return "color: #c0392b; font-weight: 600;"
-            return ""
+                renk = "color: #c0392b; font-weight: 600;"
+            return renk + " text-align: right;"
 
-        _pl_styled = _pl_gosterim.style.map(_pl_netkz_renk, subset=["Net K/Z"])
+        def _pl_toplam_satir_kalin(row):
+            # TOPLAM satirini (son satir) kalin/ayirici cizgiyle vurgula
+            if row.name == _pl_satir_sayisi:
+                return ["font-weight: 700; border-top: 2px solid #1b2a4a;"] * len(row)
+            return [""] * len(row)
 
+        _pl_styled = (_pl_gosterim.style
+                      .map(_pl_netkz_renk, subset=["Net K/Z"])
+                      .apply(_pl_toplam_satir_kalin, axis=1))
+
+        # v2.0.7.56 - Bahri'nin talebi: Kategori/Ticker/fiyat/tarih
+        # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
+        # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
+        # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
         _pl_event = st.dataframe(
             _pl_styled, use_container_width=True, hide_index=True,
             column_config={
+                "Kategori":      st.column_config.Column(width="small"),
+                "Ticker":        st.column_config.Column(width="small"),
                 "Miktar":        st.column_config.Column(width="small"),
+                "Alış Fiyatı":   st.column_config.Column(width="small"),
+                "Alış Tarihi":   st.column_config.Column(width="small"),
+                "Satış Fiyatı":  st.column_config.Column(width="small"),
+                "Satış Tarihi":  st.column_config.Column(width="small"),
                 "Komisyon (₺)":  st.column_config.Column(width="small"),
                 "Vergi (₺)":     st.column_config.Column(width="small"),
                 "Net K/Z":       st.column_config.Column(width="large"),
             },
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
+        # v2.0.7.56 - TOPLAM satiri (son satir) secilebilir ama duzenlenemez/
+        # silinemez - bir kayit degil, sadece bir ozet satiri.
+        if _pl_sel and _pl_sel[0] >= _pl_satir_sayisi:
+            st.caption("TOPLAM satırı bir işlem kaydı değildir, düzenlenemez/silinemez.")
+            _pl_sel = []
         if _pl_sel:
             _pl_si = _pl_sel[0]
             _pl_row = _pl_tum.iloc[_pl_si]
@@ -3411,17 +3449,17 @@ elif page=="Portföyüm":
                     st.markdown(f"**{_pl_sel_tkr} — Kayıt Düzeltme**")
                     dz1, dz2, dz3 = st.columns(3)
                     with dz1:
-                        _dz_miktar = st.number_input(
-                            "Miktar", min_value=0.0001,
-                            value=float(_pl_row["Miktar"]), key="dz_miktar")
+                        _dz_miktar = parse_tr(st.text_input(
+                            "Miktar", value=fmt_tr(float(_pl_row["Miktar"]), 4),
+                            key="dz_miktar"))
                     with dz2:
-                        _dz_alis = st.number_input(
-                            "Alış Fiyatı", min_value=0.0,
-                            value=float(_pl_row["Alış Fiyatı"]), key="dz_alis")
+                        _dz_alis = parse_tr(st.text_input(
+                            "Alış Fiyatı", value=fmt_tr(float(_pl_row["Alış Fiyatı"]), 4),
+                            key="dz_alis"))
                     with dz3:
-                        _dz_satis = st.number_input(
-                            "Satış Fiyatı", min_value=0.0,
-                            value=float(_pl_row["Satış Fiyatı"]), key="dz_satis")
+                        _dz_satis = parse_tr(st.text_input(
+                            "Satış Fiyatı", value=fmt_tr(float(_pl_row["Satış Fiyatı"]), 4),
+                            key="dz_satis"))
                     dz4, dz5, dz6 = st.columns(3)
                     import datetime as _dt_dz
                     with dz4:
@@ -3446,13 +3484,15 @@ elif page=="Portföyüm":
                         st.caption("")
                     dz7, dz8 = st.columns(2)
                     with dz7:
-                        _dz_komisyon = st.number_input(
-                            "Komisyon %", min_value=0.0, max_value=100.0,
-                            value=float(_pl_row["Komisyon %"]), step=0.01, key="dz_komisyon")
+                        _dz_komisyon = parse_tr(st.text_input(
+                            "Komisyon (₺) — aracı kurumun kestiği gerçek tutar",
+                            value=fmt_tr(float(_pl_row["Komisyon (₺)"]), 2),
+                            key="dz_komisyon"))
                     with dz8:
-                        _dz_vergi = st.number_input(
-                            "Vergi %", min_value=0.0, max_value=100.0,
-                            value=float(_pl_row["Vergi %"]), step=0.01, key="dz_vergi")
+                        _dz_vergi = parse_tr(st.text_input(
+                            "Vergi (₺) — aracı kurumun kestiği gerçek tutar",
+                            value=fmt_tr(float(_pl_row["Vergi (₺)"]), 2),
+                            key="dz_vergi"))
 
                     dzb1, dzb2 = st.columns([1, 1])
                     if dzb1.button("Düzeltmeyi Kaydet", type="primary", key="pl_duzelt_kaydet"):
@@ -3465,7 +3505,7 @@ elif page=="Portföyüm":
                             st.session_state.pop("pl_duzelt_form_id", None)
                             if _dz_sonuc.get("uyari"):
                                 st.warning(_dz_sonuc["uyari"])
-                            st.success(f"Kayıt düzeltildi — Net K/Z: {_dz_sonuc['net_kz']:,.2f} ₺")
+                            st.success(f"Kayıt düzeltildi — Net K/Z: {fmt_tr(_dz_sonuc['net_kz'])} ₺")
                             st.rerun()
                         else:
                             st.error(_dz_sonuc["hata"])
