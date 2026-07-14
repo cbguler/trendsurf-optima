@@ -285,7 +285,7 @@ if _qp.get("trigger") == "email":
                     user_email=_admin_email)
 
         _dt = _t.time() - _t0
-        st.write(f"OK: Email gonderildi ({_dt:.1f}s)")
+        st.write(f"OK: Email gonderildi ({fmt_tr(_dt,1)}s)")
         st.write(f"Alici: {_cfg['address']}")
         st.write(f"Universe: {len(_df_uni)} satir | Butce: {_budget} TL | "
                  f"Risk: {_risk} | Max varlik: {_max_assets}")
@@ -1217,26 +1217,55 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     v2.0.7.31: "Sinyal" sutunu varsa otomatik renklendirilir (bkz.
     _sinyal_renk_stil). Ana Sayfa, BIST, TEFAS - hepsi bu fonksiyonu
     kullandigi icin tek yerden tum tablolara yayilir.
+
+    v2.0.7.60 - KRITIK, SISTEM GENELI DUZELTME (Bahri'nin bulgusu:
+    "Turkce sayi formati sorunu her sayfada karsima cikiyor"): Bu fonksiyon
+    Ana Sayfa/BIST/TEFAS/Doviz/Maden/Kripto TARAFINDAN PAYLASILIYOR - NumberColumn
+    format="%.4f" gibi INGILIZCE format string'leri kullaniyordu, bu yuzden
+    TEK bir yerdeki hata butun bu sayfalara ayni anda yayiliyordu. Simdi
+    numerik sutunlar Turkce bicimli metne cevriliyor (Portfoyum'deki
+    duzeltmeyle AYNI desen) - boylece Ana Sayfa/BIST/TEFAS/Doviz/Maden/
+    Kripto'nun HEPSI TEK SEFERDE duzelir.
     """
+    # v2.0.7.60 - kolon adina gore ondalik hassasiyeti (eski NumberColumn
+    # format spec'leriyle AYNI hassasiyet, sadece artik Turkce virgul).
+    _kolon_ondalik = {
+        "Son Fiyat": 4, "Fiyat": 4, "Emir Fiyati": 4, "Emir Fiyatı": 4,
+        "1A Getiri%": 2, "1A Getiri %": 2, "1A%": 2, "Ret1M": 2,
+        "Optima Skor": 1, "Optima Skoru": 1, "Skor": 1,
+        "RSI": 1,
+        "Tutar (₺)": 2, "Tutar": 2,
+    }
+    df_show = df_show.copy()
+    _turkce_cevrilen = []
+    for c in df_show.columns:
+        if c in _kolon_ondalik:
+            df_show[c] = df_show[c].apply(lambda v: fmt_tr(v, _kolon_ondalik[c]))
+            _turkce_cevrilen.append(c)
+
     auto_cfg = {}
     for c in df_show.columns:
-        if c in ("Son Fiyat","Fiyat","Emir Fiyati"):
-            auto_cfg[c] = st.column_config.NumberColumn(format="%.4f")
-        elif c in ("1A Getiri%","1A%","Ret1M"):
-            auto_cfg[c] = st.column_config.NumberColumn(format="%.2f")
-        elif c in ("Optima Skor","Skor"):
-            auto_cfg[c] = st.column_config.NumberColumn(format="%.1f")
-        elif c == "RSI":
-            auto_cfg[c] = st.column_config.NumberColumn(format="%.1f")
+        if c in _turkce_cevrilen:
+            # Artik metin (Turkce bicimli) - TextColumn + saga yasli goster.
+            auto_cfg[c] = st.column_config.TextColumn()
     if col_cfg:
         auto_cfg.update(col_cfg)
 
-    df_render = df_show
-    if "Sinyal" in df_show.columns:
-        try:
-            df_render = df_show.style.map(_sinyal_renk_stil, subset=["Sinyal"])
-        except AttributeError:
-            df_render = df_show.style.applymap(_sinyal_renk_stil, subset=["Sinyal"])
+    def _saga_yasla(_):
+        return "text-align: right;"
+
+    try:
+        df_render = df_show.style
+        if _turkce_cevrilen:
+            df_render = df_render.map(_saga_yasla, subset=_turkce_cevrilen)
+        if "Sinyal" in df_show.columns:
+            df_render = df_render.map(_sinyal_renk_stil, subset=["Sinyal"])
+    except AttributeError:
+        df_render = df_show.style
+        if _turkce_cevrilen:
+            df_render = df_render.applymap(_saga_yasla, subset=_turkce_cevrilen)
+        if "Sinyal" in df_show.columns:
+            df_render = df_render.applymap(_sinyal_renk_stil, subset=["Sinyal"])
 
     evt = st.dataframe(
         df_render,
@@ -1369,7 +1398,10 @@ def render_teknik_gostergeler(d, son_fiyat):
         if v is None or (isinstance(v, float) and pd.isna(v)):
             return "—"
         try:
-            return fmt.format(float(v))
+            # v2.0.7.60 - Turkce format: fmt parametresindeki ondalik
+            # basamak sayisini koru, virgul ayiraciyla goster.
+            _ondalik = int(fmt.split(".")[1][0]) if "." in fmt else 2
+            return fmt_tr(float(v), _ondalik)
         except Exception:
             return "—"
 
@@ -1394,7 +1426,7 @@ def render_teknik_gostergeler(d, son_fiyat):
         dd_clr = "#e74c3c" if max_dd < -50 else "#f39c12" if max_dd < -30 else "#27ae60"
         dd_adj = d.get("dd_adj", 0)
         adj_note = f" <span style='color:{dd_clr};font-size:11px'>({dd_adj:+d} skor)</span>" if dd_adj != 0 else ""
-        dd_str = f"<span style='color:{dd_clr}'><b>{max_dd:.1f}%</b></span>{adj_note}"
+        dd_str = f"<span style='color:{dd_clr}'><b>{fmt_tr(max_dd,1)}%</b></span>{adj_note}"
     else:
         dd_str = "—"
 
@@ -1453,10 +1485,14 @@ def _simple_portfolio(portfolio, df_uni):
         })
     if rows:
         df_p = pd.DataFrame(rows)
-        st.dataframe(df_p, use_container_width=True, hide_index=True)
+        df_p_g = df_p.copy()
+        for _c, _dec in [("Alış",4),("Güncel",4),("Toplam",2),("K/Z (₺)",2)]:
+            df_p_g[_c] = df_p_g[_c].apply(lambda v: fmt_tr(v, _dec))
+        df_p_g["K/Z %"] = df_p_g["K/Z %"].apply(lambda v: fmt_tr_isaretli(v,2,yuzde=True))
+        st.dataframe(df_p_g, use_container_width=True, hide_index=True)
         c1, c2 = st.columns(2)
-        c1.metric("Toplam Değer", f"{df_p['Toplam'].sum():,.2f} ₺")
-        c2.metric("Toplam K/Z", f"{df_p['K/Z (₺)'].sum():+,.2f} ₺")
+        c1.metric("Toplam Değer", f"{fmt_tr(df_p['Toplam'].sum())} ₺")
+        c2.metric("Toplam K/Z", fmt_tr_isaretli(df_p['K/Z (₺)'].sum())+" ₺")
 
 def fmt_tr(val, decimals=2):
     """Float -> Türkçe format: 1.234,56"""
@@ -1465,6 +1501,19 @@ def fmt_tr(val, decimals=2):
     s = f"{abs(val):,.{decimals}f}"          # "1,234.56"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return sign + s
+
+def fmt_tr_isaretli(val, decimals=2, yuzde=False):
+    """v2.0.7.60 - Türkçe format + acik +/- isareti (eskiden "%+.2f" gibi
+    Ingilizce format spec'leri kullanilan onlarca yerde tek noktadan
+    tekrar kullanilir: 1A Getiri%, K/Z, MACD degisimi vb."""
+    if val is None: return "—"
+    try:
+        val = float(val)
+    except (TypeError, ValueError):
+        return str(val)
+    taban = fmt_tr(abs(val), decimals)
+    isaret = "+" if val > 0 else ("-" if val < 0 else "")
+    return f"{isaret}{taban}{'%' if yuzde else ''}"
 
 def parse_tr(s):
     """Türkçe format string -> float: '1.234,56' -> 1234.56"""
@@ -1958,13 +2007,13 @@ with st.sidebar:
                         _alert_rows.append({
                             "Ticker":      a["ticker"],
                             "Kategori":    a["asset_type"],
-                            "Alış":        f"{a['alish_fiyat']:.4f}",
-                            "Peak":        f"{a['peak_price']:.4f}",
-                            "Şu Anki":     f"{a['current_price']:.4f}",
-                            "Düşüş (%)":   f"{a['drop_pct']:.2f}",
-                            "Tavsiye":     f"{a['tavsiye_fiyat']:.4f}" if a['tavsiye_fiyat'] > 0 else "—",
-                            "Miktar":      f"{a['miktar']:.4f}",
-                            "Toplam (TL)": f"{a['toplam_deger']:,.2f}",
+                            "Alış":        fmt_tr(a['alish_fiyat'],4),
+                            "Peak":        fmt_tr(a['peak_price'],4),
+                            "Şu Anki":     fmt_tr(a['current_price'],4),
+                            "Düşüş (%)":   fmt_tr(a['drop_pct'],2),
+                            "Tavsiye":     fmt_tr(a['tavsiye_fiyat'],4) if a['tavsiye_fiyat'] > 0 else "—",
+                            "Miktar":      fmt_tr(a['miktar'],4),
+                            "Toplam (TL)": fmt_tr(a['toplam_deger'],2),
                         })
                     if _alert_rows:
                         st.dataframe(_alert_rows, use_container_width=True,
@@ -2013,7 +2062,7 @@ with st.sidebar:
                 # Yeni peak yapan tickerlar
                 if _last_res["updated_peaks"]:
                     _peak_msgs = [
-                        f"{t} -> {p:.4f} ({s})"
+                        f"{t} -> {fmt_tr(p,4)} ({s})"
                         for t, p, s in _last_res["updated_peaks"]
                     ]
                     st.caption("Peak güncellemeleri: " + ", ".join(_peak_msgs))
@@ -2071,7 +2120,7 @@ with st.sidebar:
                     # Sayfa yuklemesi: cache hit ise tum degerler eski, cache miss ise yeni
                     _toplam = _tdict.get("load_universe_TOPLAM", 0.0)
                     if _toplam > 0:
-                        st.caption(f"**Son yüklenme:** {_toplam:.2f} sn")
+                        st.caption(f"**Son yüklenme:** {fmt_tr(_toplam,2)} sn")
                     st.caption("**Parça parça (saniye):**")
                     _order = ["extend_maden_universe", "refresh_fx_maden_kripto", "refresh_bist"]
                     _shown = set()
@@ -2182,19 +2231,19 @@ if page=="Ana Sayfa":
     # eksik degildi, sadece etiket yaniltici sekilde tek kategori gibi
     # okunuyordu).
     c1,c2,c3,c4,c5,c6=st.columns(6)
-    c1.metric("Toplam Varlık",f"{len(df_uni):,}")
-    c2.metric("TEFAS",f"{cats.get('TEFAS',0):,}")
-    c3.metric("BIST",f"{cats.get('BIST',0):,}")
-    c4.metric("Kripto",f"{cats.get('KRIPTO',0):,}")
-    c5.metric("Döviz",f"{cats.get('DOVIZ',0):,}")
-    c6.metric("Maden",f"{cats.get('MADEN',0):,}")
+    c1.metric("Toplam Varlık",fmt_tr(len(df_uni),0))
+    c2.metric("TEFAS",fmt_tr(cats.get('TEFAS',0),0))
+    c3.metric("BIST",fmt_tr(cats.get('BIST',0),0))
+    c4.metric("Kripto",fmt_tr(cats.get('KRIPTO',0),0))
+    c5.metric("Döviz",fmt_tr(cats.get('DOVIZ',0),0))
+    c6.metric("Maden",fmt_tr(cats.get('MADEN',0),0))
 
     if budget<=0:
         st.info("Sol panelden **Bütçe** girerek optimize edilmiş öneri listesini görün.")
         st.stop()
 
     w=RISK_W[risk]
-    st.subheader(f"Önerilen Dağılım — {budget:,.0f} ₺  |  Risk: {risk}  |  Max: {max_assets} varlık")
+    st.subheader(f"Önerilen Dağılım — {fmt_tr(budget,0)} ₺  |  Risk: {risk}  |  Max: {max_assets} varlık")
     st.caption(
         "**Optima Skoru** = RSI Zonu (25%) + Momentum/Getiri (35%) + Volatilite (15%) + Temel Analiz (25%). "
         "Her kategori içinde en yüksek Optima Skoruna sahip varlıklar seçilir. "
@@ -2428,10 +2477,10 @@ if page=="Ana Sayfa":
                 # Özet metrikler
                 if toplam_gelir > 0:
                     pg1, pg2, pg3 = st.columns(3)
-                    pg1.metric("Tahmini Yıllık Pasif Gelir", f"{toplam_gelir:,.2f} ₺")
-                    pg2.metric("Aylık Gelir (~)", f"{toplam_gelir/12:,.2f} ₺")
+                    pg1.metric("Tahmini Yıllık Pasif Gelir", f"{fmt_tr(toplam_gelir)} ₺")
+                    pg2.metric("Aylık Gelir (~)", f"{fmt_tr(toplam_gelir/12)} ₺")
                     pg3.metric("Bütçeye Oranı",
-                               f"{toplam_gelir/budget*100:.2f}%" if budget > 0 else "—")
+                               f"{fmt_tr(toplam_gelir/budget*100)}%" if budget > 0 else "—")
         except Exception as e:
             st.caption(f"Gelir projeksiyonu: {e}")
 
@@ -2464,16 +2513,24 @@ if page=="Ana Sayfa":
         # bilesen metin kaydirma (word-wrap) desteklemedigi icin dar
         # sutunlarda eskisi gibi sikisma/kesilme olabilir - bunu canlida
         # birlikte degerlendirecegiz.
+        # v2.0.7.60 - KRITIK DUZELTME (Bahri'nin bulgusu): bu sozluk
+        # clickable_table()'a col_cfg olarak veriliyor ve auto_cfg.update()
+        # ile onun Turkce TextColumn ayarlarinin USTUNE yaziyordu - bu
+        # yuzden clickable_table'i duzeltmis olmama ragmen Ana Sayfa hala
+        # Ingilizce NumberColumn format="%.1f" gibi spec'ler gosteriyordu.
+        # Artik Turkce'ye cevrilen sutunlarda format belirtilmiyor (sadece
+        # genislik), TextColumn kullaniliyor - deger zaten clickable_table
+        # icinde Turkce metne cevrilmis oluyor.
         col_cfg_ana = {
             "Kategori": st.column_config.TextColumn("Kategori", width="small"),
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Optima Skoru": st.column_config.NumberColumn("Optima Skoru", format="%.1f", width="small"),
+            "Optima Skoru": st.column_config.TextColumn("Optima Skoru", width="small"),
             "Sinyal": st.column_config.TextColumn("Sinyal", width="small"),
-            "RSI": st.column_config.NumberColumn("RSI", format="%.1f", width="small"),
-            "1A Getiri %": st.column_config.NumberColumn("1A Getiri %", format="%.2f", width="small"),
-            "Emir Fiyatı": st.column_config.NumberColumn("Emir Fiyatı", format="%.4f", width="small"),
+            "RSI": st.column_config.TextColumn("RSI", width="small"),
+            "1A Getiri %": st.column_config.TextColumn("1A Getiri %", width="small"),
+            "Emir Fiyatı": st.column_config.TextColumn("Emir Fiyatı", width="small"),
             "Birim": st.column_config.NumberColumn("Birim", format="%d", width="small"),
-            "Tutar (₺)": st.column_config.NumberColumn("Tutar (₺)", format="%.2f", width="small"),
+            "Tutar (₺)": st.column_config.TextColumn("Tutar (₺)", width="small"),
         }
         st.markdown("""
         <style>
@@ -2498,8 +2555,8 @@ if page=="Ana Sayfa":
             f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM</b>"
             f"<span style='font-size:14px;'>"
             f"Bütçe Kullanımı: <b style='color:#1b2a4a;'>"
-            f"{(_toplam_gercek/budget*100 if budget>0 else 0):.1f}%</b>"
-            f"&nbsp;&nbsp;|&nbsp;&nbsp;Toplam Tutar: <b style='color:#1b2a4a;'>{_toplam_gercek:,.2f} ₺</b>"
+            f"{fmt_tr((_toplam_gercek/budget*100 if budget>0 else 0),1)}%</b>"
+            f"&nbsp;&nbsp;|&nbsp;&nbsp;Toplam Tutar: <b style='color:#1b2a4a;'>{fmt_tr(_toplam_gercek)} ₺</b>"
             f"</span></div>",
             unsafe_allow_html=True
         )
@@ -2541,11 +2598,11 @@ if page=="Ana Sayfa":
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
-                r1.metric("Son Fiyat",    f"{float(sel_row_ana['Son_Fiyat']):,.4f}")
-                r2.metric("Optima Skor",  f"{disp_score_ana:.1f}")
-                r3.metric("RSI (14)",     f"{d['rsi']:.1f}")
-                r4.metric("1A Getiri %",  f"{d['ret1m']:+.2f}%")
-                r5.metric("Yillik Vol %", f"{d['vol']:.1f}%")
+                r1.metric("Son Fiyat",    fmt_tr(float(sel_row_ana['Son_Fiyat']),4))
+                r2.metric("Optima Skor",  fmt_tr(disp_score_ana,1))
+                r3.metric("RSI (14)",     fmt_tr(d['rsi'],1))
+                r4.metric("1A Getiri %",  fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
+                r5.metric("Yillik Vol %", fmt_tr(d['vol'],1)+"%")
 
                 sig_color = SIG_COLORS.get(sig_cls, "#666")
 
@@ -2559,7 +2616,7 @@ if page=="Ana Sayfa":
                     _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                     _vol_html_ana = (
                         f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
-                        f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+                        f'<small>(5g/20g = {fmt_tr(_vr,2)})</small>{_adj_str}'
                     )
 
                 # v2.0.3.2: Max DD cezasi bilgisi
@@ -2568,7 +2625,7 @@ if page=="Ana Sayfa":
                     _dd_val = d.get("max_dd")
                     _dd_clr = "#e74c3c"
                     _dd_html_ana = (
-                        f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
+                        f' | Max DD: <b style="color:{_dd_clr}">{fmt_tr(_dd_val,1)}%</b> '
                         f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
                     )
 
@@ -2578,7 +2635,7 @@ if page=="Ana Sayfa":
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
                     Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
                     Optima Skor: <b>{disp_score_ana}/100</b> &nbsp;|&nbsp;
-                    MACD: <b>{d['macd']:.4f}</b>{_vol_html_ana}{_dd_html_ana}
+                    MACD: <b>{fmt_tr(d['macd'],4)}</b>{_vol_html_ana}{_dd_html_ana}
                   </span>
                 </div>""", unsafe_allow_html=True)
 
@@ -2637,9 +2694,9 @@ if page=="Ana Sayfa":
                             <div class="ts-card">
                             <b>Skor Bilesimi</b><br><br>
                             <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(d['score'],1)} / 70</b><br><br>
                             <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu + Kar)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 30</b><br>
                             <hr style='border-color:#e0e8f4;margin:10px 0'>
                             <small style='color:#6c7a9c'>Master Skor</small><br>
                             <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
@@ -2729,7 +2786,7 @@ if page=="Ana Sayfa":
                 ust_yolu = (f"M {cx0:.2f},{cy0:.2f} L {p0[0]:.2f},{p0[1]:.2f} "
                             f"A {rx},{ry} 0 {buyuk_yay} 1 {p1[0]:.2f},{p1[1]:.2f} Z")
                 parcalar.append(f'<path d="{ust_yolu}" fill="{ust_renk}" stroke="#ffffff" stroke-width="1.5">'
-                                 f'<title>{etiketler[w["i"]]}: %{degerler[w["i"]]/toplam*100:.1f}</title></path>')
+                                 f'<title>{etiketler[w["i"]]}: %{fmt_tr(degerler[w["i"]]/toplam*100,1)}</title></path>')
 
 
             for w in dilimler:
@@ -2747,7 +2804,7 @@ if page=="Ana Sayfa":
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="12.5" fill="#1b2a4a" '
                                  f'text-anchor="{hiza}" font-weight="600">{_html_esc(etiketler[w["i"]])}</text>')
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly+15:.1f}" font-size="11.5" fill="#5a6a8a" '
-                                 f'text-anchor="{hiza}">%{yuzde:.1f}</text>')
+                                 f'text-anchor="{hiza}">%{fmt_tr(yuzde,1)}</text>')
 
             parcalar.append("</svg>")
             return "".join(parcalar)
@@ -3003,10 +3060,10 @@ elif page=="Portföyüm":
         on_select="rerun",
         selection_mode="multi-row",
         column_config={
-            # v2.0.7.59 - Bahri'nin bulgusu: cozum daraltmak degil DENGE -
-            # Ticker/Optima Skor genisletildi, Sinyal (en uzun metin
-            # tasiyan sutun - "KADEMELI AL" gibi) daraltildi.
-            "Ticker": st.column_config.TextColumn(width="medium"),
+            # v2.0.7.60 - DUZELTME (Bahri'nin bulgusu: bir onceki "genislet"
+            # degisikligi TERS etki yapip Ticker/Skor'u anormal genisletti).
+            # Kucuk (small) genislige geri donuldu, Sinyal orta (medium)'a.
+            "Ticker": st.column_config.TextColumn(width="small"),
             "Tarih":  st.column_config.TextColumn(width="small"),
             "Miktar": st.column_config.TextColumn(width="small"),
             "Birim":  st.column_config.TextColumn(width="small"),
@@ -3016,9 +3073,9 @@ elif page=="Portföyüm":
             "K/Z":    st.column_config.TextColumn(width="small", help="Kâr/Zarar (TL) — Toplam − Alış maliyeti"),
             "K/Z %":  st.column_config.TextColumn(width="small", help="Kâr/Zarar yüzdesi"),
             "Skor":   st.column_config.TextColumn(
-                "Optima Skor", width="medium", help="Optima Skoru (0-100)"),
+                "Optima Skor", width="small", help="Optima Skoru (0-100)"),
             "Sinyal": st.column_config.TextColumn(
-                width="small",
+                width="medium",
                 help="Hızlı tahmin (RSI + Ret1M + Vol). Detaylı sinyal için satıra tıklayın."),
         }
     )
@@ -3190,11 +3247,11 @@ elif page=="Portföyüm":
                     disp_score_pf = 0.0
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
-            _m1.metric("Son Fiyat",   f"{float(_sr['Son_Fiyat']):,.4f}")
-            _m2.metric("Optima Skor", f"{disp_score_pf:.1f}")
-            _m3.metric("RSI (14)",    f"{_d['rsi']:.1f}")
-            _m4.metric("1A Getiri %", f"{_d['ret1m']:+.2f}%")
-            _m5.metric("Yıllık Vol %",f"{_d['vol']:.1f}%")
+            _m1.metric("Son Fiyat",   fmt_tr(float(_sr['Son_Fiyat']),4))
+            _m2.metric("Optima Skor", fmt_tr(disp_score_pf,1))
+            _m3.metric("RSI (14)",    fmt_tr(_d['rsi'],1))
+            _m4.metric("1A Getiri %", fmt_tr_isaretli(_d['ret1m'],2,yuzde=True))
+            _m5.metric("Yıllık Vol %",fmt_tr(_d['vol'],1)+"%")
             _sc = SIG_COLORS.get(_sig_cls,"#666")
 
             # v2.0.3: Hacim trendi bilgisi (varsa)
@@ -3207,7 +3264,7 @@ elif page=="Portföyüm":
                 _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                 _vol_html = (
                     f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
-                    f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+                    f'<small>(5g/20g = {fmt_tr(_vr,2)})</small>{_adj_str}'
                 )
 
             # v2.0.3.2: Max DD cezasi bilgisi (kullaniciya hatirlat)
@@ -3216,14 +3273,14 @@ elif page=="Portföyüm":
                 _dd_val = _d.get("max_dd")
                 _dd_clr = "#e74c3c"
                 _dd_html = (
-                    f' | Max DD: <b style="color:{_dd_clr}">{_dd_val:.1f}%</b> '
+                    f' | Max DD: <b style="color:{_dd_clr}">{fmt_tr(_dd_val,1)}%</b> '
                     f'<b style="color:{_dd_clr}">({_d["dd_adj"]:+d} skor)</b>'
                 )
 
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{disp_score_pf}/100</b> | MACD: <b>{_d["macd"]:.4f}</b>{_vol_html}{_dd_html}
+        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{disp_score_pf}/100</b> | MACD: <b>{fmt_tr(_d["macd"],4)}</b>{_vol_html}{_dd_html}
       </span></div>''', unsafe_allow_html=True)
 
             # v2.0.3.2: Teknik Gostergeler expander
@@ -3286,9 +3343,9 @@ elif page=="Portföyüm":
                         <div class="ts-card">
                         <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                         <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{_d['score']:.1f} / 70</b><br><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_d['score'],1)} / 70</b><br><br>
                         <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{_fund_skor:.1f} / 30</b><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_fund_skor,1)} / 30</b><br>
                         <hr style='border-color:#e0e8f4;margin:10px 0'>
                         <small style='color:#6c7a9c'>Master Skor</small><br>
                         <b style='font-size:30px;color:{_clr}'>{_combined}</b> <small>/100</small><br><br>
@@ -3426,30 +3483,36 @@ elif page=="Portföyüm":
             _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
         _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
 
-        # v2.0.7.59 - DUZELTME (Bahri'nin bulgusu): Toplam satirini ayni
-        # secilebilir tabloya eklemek, o satirda da bir isaret kutucugu
-        # (checkbox) gostermeye zorluyordu - tiklaninca hicbir seye
-        # yaramiyordu, kafa karistiriciydi. Artik TOPLAM tamamen AYRI,
-        # secim ozelligi OLMAYAN kucuk bir tabloda gosteriliyor - ayni
-        # column_config kullanildigi icin hizalama yine de yakin kalıyor.
+        # v2.0.7.60 - DUZELTME (Bahri'nin bulgusu: ayri tablo denemesi -
+        # kendi basligi ve satir araligiyla - "korkunc" gorundu, tabloyla
+        # devam ediyormus gibi algilanmiyordu). TOPLAM satiri tekrar AYNI
+        # tabloya donduruldu (v2.0.7.56'daki gibi) - tek baslik, sifir
+        # bosluk, mukemmel hizalama. Bedel: o satirda da bir isaret kutusu
+        # gorunur ama tiklaninca "bu bir kayit degil" diye uyarilip yok
+        # sayilir - bu, iki ayri tablonun yarattigi gorsel kopukluktan
+        # daha az rahatsiz edici.
+        _pl_satir_sayisi = len(_pl_gosterim)
         _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
         _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
         _pl_toplam_satir["Ticker"] = "TOPLAM"
         _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
-        _pl_toplam_df = pd.DataFrame([_pl_toplam_satir])
-        _pl_toplam_styled = (_pl_toplam_df.style
-                              .map(_pl_netkz_renk, subset=["Net K/Z"])
-                              .apply(lambda row: ["font-weight: 700;"] * len(row), axis=1))
+        _pl_gosterim = pd.concat(
+            [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
 
-        _pl_styled = _pl_gosterim.style.map(_pl_netkz_renk, subset=["Net K/Z"])
+        def _pl_toplam_satir_kalin(row):
+            if row.name == _pl_satir_sayisi:
+                return ["font-weight: 700; border-top: 2px solid #1b2a4a;"] * len(row)
+            return [""] * len(row)
+
+        _pl_styled = (_pl_gosterim.style
+                      .map(_pl_netkz_renk, subset=["Net K/Z"])
+                      .apply(_pl_toplam_satir_kalin, axis=1))
 
         # v2.0.7.56 - Bahri'nin talebi: Kategori/Ticker/fiyat/tarih
         # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
         # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
         # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
         _pl_col_config = {
-            # v2.0.7.59 - Bahri'nin bulgusu: Ticker genisletildi, Net
-            # K/Z (yanal scroll'a asil neden olan genis sutun) daraltildi.
             "Kategori":      st.column_config.Column(width="small"),
             "Ticker":        st.column_config.Column(width="medium"),
             "Miktar":        st.column_config.Column(width="small"),
@@ -3465,10 +3528,10 @@ elif page=="Portföyüm":
             _pl_styled, use_container_width=True, hide_index=True,
             column_config=_pl_col_config,
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
-        # Toplam satırı - ayrı, seçim özelliği olmayan tablo (işaret kutusu yok)
-        st.dataframe(_pl_toplam_styled, use_container_width=True, hide_index=True,
-                     column_config=_pl_col_config)
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
+        if _pl_sel and _pl_sel[0] >= _pl_satir_sayisi:
+            st.caption("TOPLAM satırı bir işlem kaydı değildir, düzenlenemez/silinemez.")
+            _pl_sel = []
         if _pl_sel:
             _pl_si = _pl_sel[0]
             _pl_row = _pl_tum.iloc[_pl_si]
@@ -3589,7 +3652,7 @@ elif page in CAT:
                 return 0.0
         _ons_usd = _ons_usd_cached()
         if _ons_usd > 0:
-            st.caption(f"ℹ️ Ons Altın (USD, bilgi amaçlı — TL fiyatlara dahil değildir): **${_ons_usd:,.2f}**")
+            st.caption(f"Ons Altın (USD, bilgi amaçlı — TL fiyatlara dahil değildir): **${fmt_tr(_ons_usd)}**")
 
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
     if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
@@ -3606,7 +3669,7 @@ elif page in CAT:
                 _t_baslangic = __import__("time").time()
                 df_uni = _ld_refresh_bist_sel(df_uni, _hedef)
                 _sure = __import__("time").time() - _t_baslangic
-            st.caption(f"Tamamlandı ({_sure:.1f} sn) — {len(_hedef)} hisse yenilendi.")
+            st.caption(f"Tamamlandı ({fmt_tr(_sure,1)} sn) — {len(_hedef)} hisse yenilendi.")
             df_cat = df_uni[df_uni["Kategori"] == cat_code].copy()
     elif cat_code == "BIST":
         st.caption("Canlı yenileme sadece BIST seans saatlerinde (hafta içi 10:00-18:00) kullanılabilir.")
@@ -3647,8 +3710,8 @@ elif page in CAT:
     m2.metric("Fiyatı Olan" if cat_code != "TEFAS" else "Getiri Verisi",
               len(fiyatli) if cat_code != "TEFAS" else len(degerli))
     ret_mean = degerli["Ret1M"].mean() if not degerli.empty else 0.0
-    m3.metric("Ort. 1A Getiri %",f"{ret_mean:.2f}%")
-    m4.metric("Ort. Optima Skor",f"{degerli['Optima_Skor'].mean():.1f}" if not degerli.empty else "N/A")
+    m3.metric("Ort. 1A Getiri %",f"{fmt_tr(ret_mean,2)}%")
+    m4.metric("Ort. Optima Skor",fmt_tr(degerli['Optima_Skor'].mean(),1) if not degerli.empty else "N/A")
 
     # ── TOP 5 ────────────────────────────────────────────────
     st.divider()
@@ -3740,11 +3803,11 @@ elif page in CAT:
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
-    r1.metric("Son Fiyat",f"{float(sel_row['Son_Fiyat']):,.4f}")
-    r2.metric("Optima Skor",f"{disp_score_cat:.1f}")
-    r3.metric("RSI (14)",f"{d['rsi']:.1f}")
-    r4.metric("1A Getiri %",f"{d['ret1m']:+.2f}%")
-    r5.metric("Yıllık Vol %",f"{d['vol']:.1f}%")
+    r1.metric("Son Fiyat",fmt_tr(float(sel_row['Son_Fiyat']),4))
+    r2.metric("Optima Skor",fmt_tr(disp_score_cat,1))
+    r3.metric("RSI (14)",fmt_tr(d['rsi'],1))
+    r4.metric("1A Getiri %",fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
+    r5.metric("Yıllık Vol %",fmt_tr(d['vol'],1)+"%")
 
     sig_color=SIG_COLORS.get(sig_cls,"#666")
 
@@ -3758,7 +3821,7 @@ elif page in CAT:
         _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
         vol_html = (
             f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
-            f'<small>(5g/20g = {_vr:.2f})</small>{_adj_str}'
+            f'<small>(5g/20g = {fmt_tr(_vr,2)})</small>{_adj_str}'
         )
 
     # v2.0.3.2: Max DD cezasi bilgisi
@@ -3766,7 +3829,7 @@ elif page in CAT:
     if d.get("dd_adj", 0) != 0:
         _dd_val = d.get("max_dd")
         dd_html = (
-            f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{_dd_val:.1f}%</b> '
+            f' &nbsp;|&nbsp; Max DD: <b style="color:#e74c3c">{fmt_tr(_dd_val,1)}%</b> '
             f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
         )
 
@@ -3776,7 +3839,7 @@ elif page in CAT:
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
         Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
         Optima Skor: <b>{disp_score_cat}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{d['macd']:.4f}</b>{vol_html}{dd_html}
+        MACD: <b>{fmt_tr(d['macd'],4)}</b>{vol_html}{dd_html}
       </span>
     </div>""",unsafe_allow_html=True)
 
@@ -3847,9 +3910,9 @@ elif page in CAT:
                 <div class="ts-card">
                 <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                 <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{d['score']:.1f} / 70</b><br><br>
+                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(d['score'],1)} / 70</b><br><br>
                 <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fund_skor:.1f} / 30</b><br>
+                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 30</b><br>
                 <hr style='border-color:#e0e8f4;margin:10px 0'>
                 <small style='color:#6c7a9c'>Master Skor</small><br>
                 <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
@@ -3878,15 +3941,15 @@ elif page in CAT:
         ret5y_x = float(sel_row.get("Ret5Y", 0) or 0) if "Ret5Y" in sel_row.index else 0.0
 
         ta,tb,tc,td = st.columns(4)
-        ta.metric("1 Ay",  f"{ret1m_x:+.2f}%")
-        tb.metric("3 Ay",  f"{ret3m_x:+.2f}%")
-        tc.metric("6 Ay",  f"{ret6m_x:+.2f}%")
-        td.metric("1 Yil", f"{ret1y_x:+.2f}%")
+        ta.metric("1 Ay",  fmt_tr_isaretli(ret1m_x,2,yuzde=True))
+        tb.metric("3 Ay",  fmt_tr_isaretli(ret3m_x,2,yuzde=True))
+        tc.metric("6 Ay",  fmt_tr_isaretli(ret6m_x,2,yuzde=True))
+        td.metric("1 Yil", fmt_tr_isaretli(ret1y_x,2,yuzde=True))
 
         if ret3y_x != 0 or ret5y_x != 0:
             te,tf,tg = st.columns(3)
-            te.metric("3 Yil", f"{ret3y_x:+.2f}%")
-            tf.metric("5 Yil", f"{ret5y_x:+.2f}%")
+            te.metric("3 Yil", fmt_tr_isaretli(ret3y_x,2,yuzde=True))
+            tf.metric("5 Yil", fmt_tr_isaretli(ret5y_x,2,yuzde=True))
             tg.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
         else:
             st.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
@@ -3900,7 +3963,7 @@ elif page in CAT:
                 s1,s2=st.columns(2)
                 s1.metric("Tahmini Sharpe",f"{sharpe:.3f}",
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
-                s2.metric("Tahmini Max Drawdown",f"{maxdd:.2f}%",
+                s2.metric("Tahmini Max Drawdown",f"{fmt_tr(maxdd,2)}%",
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
         st.caption("Kaynak: TEFAS Excel (TEFAS.gov.tr)")
 
@@ -4118,10 +4181,10 @@ elif page=="Halka Arz":
     m2.metric("Fiyat Verisi Olan", n_fiyatli)
     if "Optima_Skor" in df_ipo.columns:
         ort_skor = df_ipo[df_ipo["Optima_Skor"] > 0]["Optima_Skor"].mean()
-        m3.metric("Ort. Optima Skor", f"{ort_skor:.1f}" if not pd.isna(ort_skor) else "—")
+        m3.metric("Ort. Optima Skor", fmt_tr(ort_skor,1) if not pd.isna(ort_skor) else "—")
     if "Ret1M" in df_ipo.columns:
         ort_ret = df_ipo[df_ipo["Ret1M"] != 0]["Ret1M"].mean()
-        m4.metric("Ort. 1A Getiri", f"{ort_ret:+.2f}%" if not pd.isna(ort_ret) else "—")
+        m4.metric("Ort. 1A Getiri", fmt_tr_isaretli(ort_ret,2,yuzde=True) if not pd.isna(ort_ret) else "—")
 
     # ── Filtre ──────────────────────────────────────────────
     df_show = df_ipo.copy()
@@ -4169,6 +4232,20 @@ elif page=="Halka Arz":
     col_cfg["KAP_URL"] = st.column_config.LinkColumn("KAP", display_text="Görüntüle")
 
     tablo_df = df_show[[c for c in display_cols if c in df_show.columns]].reset_index(drop=True)
+    # v2.0.7.60 - Bahri'nin bulgusu: bu tablo da Ingilizce NumberColumn
+    # format kullaniyordu, sistem geneli Turkce format taramasinda bulundu.
+    if "Son_Fiyat" in tablo_df.columns:
+        tablo_df["Son_Fiyat"] = tablo_df["Son_Fiyat"].apply(lambda v: fmt_tr(v,4))
+        col_cfg["Son_Fiyat"] = st.column_config.TextColumn("Fiyat (₺)")
+    if "RSI" in tablo_df.columns:
+        tablo_df["RSI"] = tablo_df["RSI"].apply(lambda v: fmt_tr(v,1))
+        col_cfg["RSI"] = st.column_config.TextColumn("RSI")
+    if "Ret1M" in tablo_df.columns:
+        tablo_df["Ret1M"] = tablo_df["Ret1M"].apply(lambda v: fmt_tr(v,2))
+        col_cfg["Ret1M"] = st.column_config.TextColumn("1A Getiri %")
+    if "Optima_Skor" in tablo_df.columns:
+        tablo_df["Optima_Skor"] = tablo_df["Optima_Skor"].apply(lambda v: fmt_tr(v,1))
+        col_cfg["Optima_Skor"] = st.column_config.TextColumn("Optima Skor")
     st.dataframe(tablo_df, use_container_width=True, hide_index=True, column_config=col_cfg)
 
     # ── CSV indir ────────────────────────────────────────────
@@ -4237,7 +4314,7 @@ elif page=="Temettü":
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("XTMTU Üye Sayısı",   len(df_tm))
     m2.metric("Temettü Verisi Olan", n_temettu)
-    m3.metric("Ort. Temettü Verimi", f"%{ort_verim:.2f}" if ort_verim else "—")
+    m3.metric("Ort. Temettü Verimi", f"%{fmt_tr(ort_verim,2)}" if ort_verim else "—")
     m4.metric("30 Gün İçinde Ex-Date", ex_yakinda)
 
     # ── Filtre ───────────────────────────────────────────────
