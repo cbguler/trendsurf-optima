@@ -266,32 +266,45 @@ def update_sale_record(user_id: int, sale_id: int, sell_qty: float, buy_price: f
 
     fark = sell_qty - eski_miktar  # pozitif: daha fazla satildi (pozisyondan ek dus)
     uyari = None
-    if abs(fark) > 1e-9:
-        pos = conn.execute(
-            "SELECT id, quantity FROM portfolio WHERE user_id=? AND ticker=? AND asset_type=?",
-            (user_id, ticker, asset_type)
-        ).fetchone()
+    pos = conn.execute(
+        "SELECT id, quantity FROM portfolio WHERE user_id=? AND ticker=? AND asset_type=?",
+        (user_id, ticker, asset_type)
+    ).fetchone()
+    mevcut_pos_miktar = float(pos["quantity"]) if pos else 0.0
+
+    if fark > 1e-9:
+        # v2.0.7.55 - KRITIK DUZELTME (Bahri'nin bulgusu): miktar ARTIRILIYORSA
+        # (daha fazla satildigini soyleyen bir duzeltme), elde bu farkı
+        # karsilayacak kadar ACIK POZISYON olmasi SART - yoksa "10 sattim"
+        # kaydini "11 sattim"a cevirmek, olmayan 1 birimi yoktan var eder.
+        # Onceden bu durumda sadece UYARI verilip islem yine de kabul
+        # ediliyordu - bu bir veri butunlugu ihlaliydi. Artik acikca
+        # REDDEDILIYOR, hicbir sey degismiyor.
+        if mevcut_pos_miktar < fark - 1e-9:
+            conn.close()
+            return {"basari": False, "hata":
+                    f"Bu düzeltme, elinizdeki açık pozisyondan ({mevcut_pos_miktar:g} "
+                    f"{unit_type}) daha fazla ek satış gösteriyor (+{fark:g} "
+                    f"{unit_type} gerekiyor) - reddedildi. Miktarı azaltan bir "
+                    f"düzeltme her zaman kabul edilir."}
+        yeni_pos_miktar = mevcut_pos_miktar - fark
+        if yeni_pos_miktar <= 1e-9:
+            conn.execute("DELETE FROM portfolio WHERE id=?", (pos["id"],))
+        else:
+            conn.execute("UPDATE portfolio SET quantity=? WHERE id=?",
+                         (yeni_pos_miktar, pos["id"]))
+    elif fark < -1e-9:
+        # Miktar AZALTILIYOR (daha az satildigini soyleyen bir duzeltme) -
+        # fark her zaman kabul edilir, acik pozisyona geri eklenir.
         if pos:
-            yeni_pos_miktar = float(pos[1]) - fark
-            if yeni_pos_miktar <= 1e-9:
-                if yeni_pos_miktar < -1e-9:
-                    uyari = ("Düzeltme, elinizdeki miktardan daha fazla satış "
-                             "gösteriyor - pozisyon 0'a sabitlendi, lütfen kontrol edin.")
-                conn.execute("DELETE FROM portfolio WHERE id=?", (pos[0],))
-            else:
-                conn.execute("UPDATE portfolio SET quantity=? WHERE id=?",
-                             (yeni_pos_miktar, pos[0]))
-        elif fark < 0:
-            # Pozisyon tamamen kapanmisti, duzeltme daha AZ satildigini
-            # gosteriyor -> farki yeni acik pozisyon olarak geri ac.
+            conn.execute("UPDATE portfolio SET quantity = quantity + ? WHERE id=?",
+                         (-fark, pos["id"]))
+        else:
             conn.execute(
                 "INSERT INTO portfolio (user_id,asset_type,ticker,quantity,avg_cost,"
                 "purchase_date,unit_type) VALUES (?,?,?,?,?,?,?)",
                 (user_id, asset_type, ticker, -fark, buy_price, buy_date, unit_type)
             )
-        else:
-            uyari = ("Açık pozisyon bulunamadı, düzeltme daha fazla satış "
-                     "gösteriyor - pozisyon güncellenemedi, sadece kayıt düzeltildi.")
 
     alis_degeri  = sell_qty * buy_price
     satis_degeri = sell_qty * sell_price

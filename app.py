@@ -3333,9 +3333,49 @@ elif page=="Portföyüm":
 
         st.markdown("**Tüm İşlem Geçmişi**")
         from portfolio_ledger import delete_sale_record, update_sale_record
+
+        # v2.0.7.55 - Bahri'nin bulguları: (1) tarihler Turkce (GG.AA.YYYY)
+        # olmali, (2) sayilar Turkce ondalik (virgul) formatinda olmali,
+        # (3) Net K/Z pozitif/negatife gore yesil/kirmizi renklensin ve
+        # genis rakamlar (100 bin+) icin sutun genisletilsin, (4) Miktar/
+        # Komisyon/Vergi sutunlari daraltilsin.
+        def _tr_sayi(x, ondalik=2):
+            try:
+                return (f"{float(x):,.{ondalik}f}"
+                        .replace(",", "X").replace(".", ",").replace("X", "."))
+            except (TypeError, ValueError):
+                return str(x)
+
+        _pl_gosterim = _pl_tum.drop(
+            columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
+        for _dcol in ["Alış Tarihi", "Satış Tarihi"]:
+            _pl_gosterim[_dcol] = pd.to_datetime(
+                _pl_gosterim[_dcol], errors="coerce").dt.strftime("%d.%m.%Y")
+        for _ncol in ["Miktar", "Alış Fiyatı", "Satış Fiyatı", "Komisyon (₺)", "Vergi (₺)"]:
+            _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
+        _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
+
+        def _pl_netkz_renk(v):
+            try:
+                sayi = float(str(v).replace(".", "").replace(",", "."))
+            except (TypeError, ValueError):
+                return ""
+            if sayi > 0:
+                return "color: #1b8a4a; font-weight: 600;"
+            elif sayi < 0:
+                return "color: #c0392b; font-weight: 600;"
+            return ""
+
+        _pl_styled = _pl_gosterim.style.map(_pl_netkz_renk, subset=["Net K/Z"])
+
         _pl_event = st.dataframe(
-            _pl_tum.drop(columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]),
-            use_container_width=True, hide_index=True,
+            _pl_styled, use_container_width=True, hide_index=True,
+            column_config={
+                "Miktar":        st.column_config.Column(width="small"),
+                "Komisyon (₺)":  st.column_config.Column(width="small"),
+                "Vergi (₺)":     st.column_config.Column(width="small"),
+                "Net K/Z":       st.column_config.Column(width="large"),
+            },
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
         if _pl_sel:
