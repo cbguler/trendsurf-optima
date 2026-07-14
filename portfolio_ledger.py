@@ -333,7 +333,18 @@ def get_sales_history(user_id: int, start_date: str = None, end_date: str = None
             "Vergi (₺)", "Brüt K/Z", "Net K/Z", "Not"]
     if not rows:
         return pd.DataFrame(columns=cols)
-    return pd.DataFrame(rows, columns=cols)
+    # v2.0.7.54 - KRITIK DUZELTME (Bahri'nin bulgusu - tum sutunlar None
+    # gorunuyordu): "rows" _CompatRow (dict alt sinifi) nesnelerinden
+    # olusuyor. pd.DataFrame(rows, columns=cols) cagrisi, data bir dict
+    # listesi oldugunda pandas'in ANAHTAR bazli sutun esleme davranisina
+    # giriyor - "cols" Turkce goruntu isimleri (Kategori, Ticker, ...)
+    # oldugu icin gercek SQL sutun adlariyla (asset_type, ticker, ...)
+    # HICBIRI eslesmiyor, "id" haric hepsi NaN/None kaliyordu. Duzeltme:
+    # her satiri ACIKCA pozisyonel bir listeye cevirip (SELECT'teki sirayla
+    # birebir ayni) DataFrame'i tuple/list verisinden kurmak - dict
+    # anahtar eslemesine hic girmez.
+    veri = [[r[i] for i in range(len(cols))] for r in rows]
+    return pd.DataFrame(veri, columns=cols)
 
 
 def get_monthly_summary(user_id: int) -> pd.DataFrame:

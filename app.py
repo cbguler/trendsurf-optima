@@ -3334,7 +3334,8 @@ elif page=="Portföyüm":
         st.markdown("**Tüm İşlem Geçmişi**")
         from portfolio_ledger import delete_sale_record, update_sale_record
         _pl_event = st.dataframe(
-            _pl_tum.drop(columns=["id"]), use_container_width=True, hide_index=True,
+            _pl_tum.drop(columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]),
+            use_container_width=True, hide_index=True,
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
         if _pl_sel:
