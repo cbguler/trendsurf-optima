@@ -167,6 +167,133 @@ def sell_portfolio_item(user_id: int, item_id: int, sell_qty: float, sell_price:
             "komisyon": komisyon, "vergi": vergi, "net_hasilat": net_hasilat}
 
 
+def delete_sale_record(user_id: int, sale_id: int, geri_ac: bool = False) -> dict:
+    """v2.0.7.51 - Bir satış kaydını KALICI olarak siler (test/hatalı
+    girişleri geri almak için - Bahri'nin talebi: test satışı yapmadan
+    önce güvenli bir geri alma yolu olmalı).
+
+    geri_ac=True verilirse, satılan miktar açık pozisyona geri eklenir
+    (aynı ticker'da hâlâ açık bir pozisyon varsa miktarına eklenir, yoksa
+    satıştaki alış fiyatı/tarihiyle yeni bir açık pozisyon oluşturulur) -
+    böylece "yanlışlıkla sattım" durumunu tam olarak geri alabilirsiniz.
+    geri_ac=False ise sadece muhasebe kaydı silinir, pozisyon değişmez
+    (örn. test amaçlı deneme satışını temizlemek için)."""
+    from db import get_conn
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT ticker, asset_type, unit_type, quantity, buy_price, buy_date "
+        "FROM portfolio_sales WHERE id=? AND user_id=?",
+        (sale_id, user_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return {"basari": False, "hata": "Satış kaydı bulunamadı."}
+    ticker, asset_type, unit_type, quantity, buy_price, buy_date = row
+
+    if geri_ac:
+        mevcut = conn.execute(
+            "SELECT id, quantity FROM portfolio WHERE user_id=? AND ticker=? AND asset_type=?",
+            (user_id, ticker, asset_type)
+        ).fetchone()
+        if mevcut:
+            conn.execute(
+                "UPDATE portfolio SET quantity = quantity + ? WHERE id=?",
+                (float(quantity), mevcut[0])
+            )
+        else:
+            conn.execute(
+                "INSERT INTO portfolio (user_id,asset_type,ticker,quantity,avg_cost,"
+                "purchase_date,unit_type) VALUES (?,?,?,?,?,?,?)",
+                (user_id, asset_type, ticker, float(quantity), float(buy_price),
+                 buy_date, unit_type)
+            )
+
+    conn.execute("DELETE FROM portfolio_sales WHERE id=? AND user_id=?", (sale_id, user_id))
+    conn.commit(); conn.close()
+    return {"basari": True, "hata": None}
+
+
+def update_sale_record(user_id: int, sale_id: int, sell_qty: float, buy_price: float,
+                        buy_date: str, sell_price: float, sell_date: str,
+                        fee_pct: float, tax_pct: float, note: str = "") -> dict:
+    """v2.0.7.52 - Bahri'nin talebi: sadece silme yetmiyor, yanlış girilen
+    bir satış kaydının miktar/fiyat/tarih/oran bilgileri DÜZELTİLEBİLMELİ.
+
+    Miktar değiştirilirse (eski kayıttaki miktardan farklıysa), açık
+    pozisyon da FARKA göre otomatik ayarlanır - böylece "aslında 5 değil 6
+    sattım" gibi bir düzeltme, elinizdeki güncel miktarla tutarlı kalır:
+      - Düzeltilen miktar eskisinden BÜYÜKSE -> açık pozisyondan ek düşülür.
+      - Düzeltilen miktar eskisinden KÜÇÜKSE -> açık pozisyona fark geri eklenir
+        (pozisyon kapanmışsa yeniden açılır).
+    Ticker/kategori DEĞİŞTİRİLEMEZ (yanlış varlığa taşıma değil, aynı
+    kaydın rakamlarını düzeltme amaçlıdır).
+
+    Döner: {"basari":bool, "hata":str|None, "uyari":str|None, ... yeni hesap değerleri}
+    """
+    from db import get_conn
+    conn = get_conn()
+    old = conn.execute(
+        "SELECT ticker, asset_type, unit_type, quantity FROM portfolio_sales "
+        "WHERE id=? AND user_id=?", (sale_id, user_id)
+    ).fetchone()
+    if not old:
+        conn.close()
+        return {"basari": False, "hata": "Satış kaydı bulunamadı."}
+    ticker, asset_type, unit_type, eski_miktar = old
+    eski_miktar = float(eski_miktar)
+
+    if sell_qty <= 0:
+        conn.close()
+        return {"basari": False, "hata": "Miktar 0'dan büyük olmalı."}
+
+    fark = sell_qty - eski_miktar  # pozitif: daha fazla satildi (pozisyondan ek dus)
+    uyari = None
+    if abs(fark) > 1e-9:
+        pos = conn.execute(
+            "SELECT id, quantity FROM portfolio WHERE user_id=? AND ticker=? AND asset_type=?",
+            (user_id, ticker, asset_type)
+        ).fetchone()
+        if pos:
+            yeni_pos_miktar = float(pos[1]) - fark
+            if yeni_pos_miktar <= 1e-9:
+                if yeni_pos_miktar < -1e-9:
+                    uyari = ("Düzeltme, elinizdeki miktardan daha fazla satış "
+                             "gösteriyor - pozisyon 0'a sabitlendi, lütfen kontrol edin.")
+                conn.execute("DELETE FROM portfolio WHERE id=?", (pos[0],))
+            else:
+                conn.execute("UPDATE portfolio SET quantity=? WHERE id=?",
+                             (yeni_pos_miktar, pos[0]))
+        elif fark < 0:
+            # Pozisyon tamamen kapanmisti, duzeltme daha AZ satildigini
+            # gosteriyor -> farki yeni acik pozisyon olarak geri ac.
+            conn.execute(
+                "INSERT INTO portfolio (user_id,asset_type,ticker,quantity,avg_cost,"
+                "purchase_date,unit_type) VALUES (?,?,?,?,?,?,?)",
+                (user_id, asset_type, ticker, -fark, buy_price, buy_date, unit_type)
+            )
+        else:
+            uyari = ("Açık pozisyon bulunamadı, düzeltme daha fazla satış "
+                     "gösteriyor - pozisyon güncellenemedi, sadece kayıt düzeltildi.")
+
+    alis_degeri  = sell_qty * buy_price
+    satis_degeri = sell_qty * sell_price
+    brut_kz      = satis_degeri - alis_degeri
+    komisyon     = round((alis_degeri + satis_degeri) * fee_pct / 100.0, 2)
+    vergi        = round(max(0.0, brut_kz) * tax_pct / 100.0, 2)
+    net_kz       = round(brut_kz - komisyon - vergi, 2)
+
+    conn.execute(
+        "UPDATE portfolio_sales SET quantity=?, buy_price=?, buy_date=?, sell_price=?, "
+        "sell_date=?, fee_pct=?, tax_pct=?, fee_amount=?, tax_amount=?, gross_pl=?, "
+        "net_pl=?, note=? WHERE id=? AND user_id=?",
+        (sell_qty, buy_price, buy_date, sell_price, sell_date, fee_pct, tax_pct,
+         komisyon, vergi, round(brut_kz, 2), net_kz, note, sale_id, user_id)
+    )
+    conn.commit(); conn.close()
+    return {"basari": True, "hata": None, "uyari": uyari, "net_kz": net_kz,
+            "brut_kz": round(brut_kz, 2), "komisyon": komisyon, "vergi": vergi}
+
+
 def get_sales_history(user_id: int, start_date: str = None, end_date: str = None) -> pd.DataFrame:
     """Kullanıcının gerçekleşmiş (satılmış) tüm işlemlerini döner, isteğe
     bağlı tarih aralığı filtresiyle (sell_date bazlı, YYYY-MM-DD)."""

@@ -3332,7 +3332,105 @@ elif page=="Portföyüm":
         st.dataframe(get_yearly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
 
         st.markdown("**Tüm İşlem Geçmişi**")
-        st.dataframe(_pl_tum.drop(columns=["id"]), use_container_width=True, hide_index=True)
+        from portfolio_ledger import delete_sale_record, update_sale_record
+        _pl_event = st.dataframe(
+            _pl_tum.drop(columns=["id"]), use_container_width=True, hide_index=True,
+            on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
+        _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
+        if _pl_sel:
+            _pl_si = _pl_sel[0]
+            _pl_row = _pl_tum.iloc[_pl_si]
+            _pl_sel_id = int(_pl_row["id"])
+            _pl_sel_tkr = _pl_row["Ticker"]
+
+            _pdz1, _pdz2 = st.columns([1, 1])
+            if _pdz1.button(f"Düzelt: {_pl_sel_tkr}", type="primary", key="pl_duzelt_ac"):
+                st.session_state["pl_duzelt_form_id"] = _pl_sel_id
+            with _pdz2:
+                st.caption(
+                    "Bu kaydı silebilirsiniz (örn. bir test satışını geri almak "
+                    "için). 'Pozisyonu geri aç' işaretlenirse satılan miktar "
+                    "açık pozisyona geri eklenir; işaretlenmezse sadece "
+                    "muhasebe kaydı silinir, pozisyon değişmez.")
+            _pl_geri_ac = st.checkbox("Pozisyonu geri aç (miktarı portföye geri ekle)",
+                                       key="pl_geri_ac")
+            if st.button(f"Kaydı Sil: {_pl_sel_tkr}", type="secondary", key="pl_kayit_sil"):
+                _pl_sonuc = delete_sale_record(_cur_user["id"], _pl_sel_id, _pl_geri_ac)
+                if _pl_sonuc["basari"]:
+                    st.success("Satış kaydı silindi.")
+                    st.rerun()
+                else:
+                    st.error(_pl_sonuc["hata"])
+
+            # v2.0.7.52 - Duzeltme formu (Bahri'nin talebi: silmek yetmez,
+            # yanlis girilen bir kaydin miktar/fiyat/tarih/oranlari
+            # duzeltilebilmeli).
+            if st.session_state.get("pl_duzelt_form_id") == _pl_sel_id:
+                with st.container(border=True):
+                    st.markdown(f"**{_pl_sel_tkr} — Kayıt Düzeltme**")
+                    dz1, dz2, dz3 = st.columns(3)
+                    with dz1:
+                        _dz_miktar = st.number_input(
+                            "Miktar", min_value=0.0001,
+                            value=float(_pl_row["Miktar"]), key="dz_miktar")
+                    with dz2:
+                        _dz_alis = st.number_input(
+                            "Alış Fiyatı", min_value=0.0,
+                            value=float(_pl_row["Alış Fiyatı"]), key="dz_alis")
+                    with dz3:
+                        _dz_satis = st.number_input(
+                            "Satış Fiyatı", min_value=0.0,
+                            value=float(_pl_row["Satış Fiyatı"]), key="dz_satis")
+                    dz4, dz5, dz6 = st.columns(3)
+                    import datetime as _dt_dz
+                    with dz4:
+                        try:
+                            _dz_alis_tarih_val = _dt_dz.datetime.strptime(
+                                str(_pl_row["Alış Tarihi"]), "%Y-%m-%d").date()
+                        except Exception:
+                            _dz_alis_tarih_val = _dt_dz.date.today()
+                        _dz_alis_tarih = st.date_input(
+                            "Alış Tarihi", value=_dz_alis_tarih_val,
+                            key="dz_alis_tarih", format="DD.MM.YYYY")
+                    with dz5:
+                        try:
+                            _dz_satis_tarih_val = _dt_dz.datetime.strptime(
+                                str(_pl_row["Satış Tarihi"]), "%Y-%m-%d").date()
+                        except Exception:
+                            _dz_satis_tarih_val = _dt_dz.date.today()
+                        _dz_satis_tarih = st.date_input(
+                            "Satış Tarihi", value=_dz_satis_tarih_val,
+                            key="dz_satis_tarih", format="DD.MM.YYYY")
+                    with dz6:
+                        st.caption("")
+                    dz7, dz8 = st.columns(2)
+                    with dz7:
+                        _dz_komisyon = st.number_input(
+                            "Komisyon %", min_value=0.0, max_value=100.0,
+                            value=float(_pl_row["Komisyon %"]), step=0.01, key="dz_komisyon")
+                    with dz8:
+                        _dz_vergi = st.number_input(
+                            "Vergi %", min_value=0.0, max_value=100.0,
+                            value=float(_pl_row["Vergi %"]), step=0.01, key="dz_vergi")
+
+                    dzb1, dzb2 = st.columns([1, 1])
+                    if dzb1.button("Düzeltmeyi Kaydet", type="primary", key="pl_duzelt_kaydet"):
+                        _dz_sonuc = update_sale_record(
+                            _cur_user["id"], _pl_sel_id, _dz_miktar, _dz_alis,
+                            _dz_alis_tarih.strftime("%Y-%m-%d"), _dz_satis,
+                            _dz_satis_tarih.strftime("%Y-%m-%d"),
+                            _dz_komisyon, _dz_vergi)
+                        if _dz_sonuc["basari"]:
+                            st.session_state.pop("pl_duzelt_form_id", None)
+                            if _dz_sonuc.get("uyari"):
+                                st.warning(_dz_sonuc["uyari"])
+                            st.success(f"Kayıt düzeltildi — Net K/Z: {_dz_sonuc['net_kz']:,.2f} ₺")
+                            st.rerun()
+                        else:
+                            st.error(_dz_sonuc["hata"])
+                    if dzb2.button("Vazgeç", key="pl_duzelt_vazgec"):
+                        st.session_state.pop("pl_duzelt_form_id", None)
+                        st.rerun()
 
 
 
