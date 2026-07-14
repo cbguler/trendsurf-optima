@@ -3256,6 +3256,84 @@ elif page=="Portföyüm":
 
     st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
 
+    # ══════════════════════════════════════════════════════════
+    # v2.0.7.49 - GERÇEKLEŞMİŞ KÂR/ZARAR (Bahri'nin talebi): gerçek bir
+    # muhasebe katmanı - satış geçmişi, komisyon/vergi düşülmüş net K/Z,
+    # tarih aralığı + aylık/yıllık özet raporu.
+    # DUZELTME (v2.0.7.49): Bu blok yanlislikla "elif page in CAT:"
+    # (BIST/TEFAS/Doviz/Maden/Kripto ortak blogu) icine eklenmisti - bu
+    # yuzden TUM kategori sayfalarinda goruyordu. Dogru yere (yalnizca
+    # Portfoyum sayfasinin sonuna) tasindi. Ayrica emoji/widget KESINLIKLE
+    # kullanilmiyor - proje kuralinin ihlaliydi, duzeltildi.
+    # ══════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("Gerçekleşmiş Kâr/Zarar (Muhasebe)")
+    from portfolio_ledger import (get_fee_settings, save_fee_settings,
+                                   get_sales_history, get_monthly_summary,
+                                   get_yearly_summary, get_realized_summary)
+
+    with st.expander("Komisyon / Vergi Ayarları (kategori bazlı)"):
+        st.caption(
+            "Aşağıdaki oranlar genel/yaklaşık başlangıç değerleridir, kesin "
+            "mali müşavirlik veya vergi danışmanlığı yerine geçmez. Kendi "
+            "aracı kurumunuzun/borsanızın komisyon oranına ve güncel "
+            "mevzuata göre düzenleyin.")
+        _fee_ayarlari = get_fee_settings(_cur_user["id"])
+        for _cat_key, _cat_lbl in [("BIST","BIST"),("TEFAS","TEFAS"),
+                                     ("KRIPTO","Kripto"),("DOVIZ","Döviz"),
+                                     ("MADEN","Değerli Maden")]:
+            _fc1, _fc2, _fc3 = st.columns([1, 1, 1])
+            _mevcut = _fee_ayarlari.get(_cat_key, {"fee_pct":0.0,"tax_pct":0.0})
+            with _fc1:
+                st.markdown(f"**{_cat_lbl}**")
+            with _fc2:
+                _yeni_fee = st.number_input(
+                    "Komisyon %", min_value=0.0, max_value=100.0,
+                    value=float(_mevcut["fee_pct"]), step=0.01,
+                    key=f"fee_ayar_{_cat_key}")
+            with _fc3:
+                _yeni_tax = st.number_input(
+                    "Vergi %", min_value=0.0, max_value=100.0,
+                    value=float(_mevcut["tax_pct"]), step=0.01,
+                    key=f"tax_ayar_{_cat_key}")
+            if _yeni_fee != _mevcut["fee_pct"] or _yeni_tax != _mevcut["tax_pct"]:
+                save_fee_settings(_cur_user["id"], _cat_key, _yeni_fee, _yeni_tax)
+
+    _pl_tum = get_sales_history(_cur_user["id"])
+    if _pl_tum.empty:
+        st.caption("Henüz gerçekleşmiş (satılmış) bir işlem yok. Bir varlığı "
+                   "yukarıdaki tablodan seçip Sat butonuyla satış kaydı "
+                   "oluşturduğunuzda burada raporlanır.")
+    else:
+        st.markdown("**Tarih Aralığına Göre Özet**")
+        dr1, dr2 = st.columns(2)
+        import datetime as _dt_pl
+        with dr1:
+            _pl_bas = st.date_input("Başlangıç", key="pl_bas_tarih",
+                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30),
+                                     format="DD.MM.YYYY")
+        with dr2:
+            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
+                                     format="DD.MM.YYYY")
+        _ozet = get_realized_summary(_cur_user["id"],
+                                      _pl_bas.strftime("%Y-%m-%d"),
+                                      _pl_bit.strftime("%Y-%m-%d"))
+        o1, o2, o3, o4, o5 = st.columns(5)
+        o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
+        o2.metric("Brüt K/Z", f"{_ozet['brut_kz']:,.2f} ₺")
+        o3.metric("Komisyon", f"-{_ozet['komisyon']:,.2f} ₺")
+        o4.metric("Vergi", f"-{_ozet['vergi']:,.2f} ₺")
+        o5.metric("Net K/Z", f"{_ozet['net_kz']:,.2f} ₺")
+
+        st.markdown("**Aylık Özet**")
+        st.dataframe(get_monthly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
+
+        st.markdown("**Yıllık Özet**")
+        st.dataframe(get_yearly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
+
+        st.markdown("**Tüm İşlem Geçmişi**")
+        st.dataframe(_pl_tum.drop(columns=["id"]), use_container_width=True, hide_index=True)
+
 
 
 # ══════ KATEGORİ SAYFALARI ══════
@@ -3588,79 +3666,6 @@ elif page in CAT:
                 s2.metric("Tahmini Max Drawdown",f"{maxdd:.2f}%",
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
         st.caption("Kaynak: TEFAS Excel (TEFAS.gov.tr)")
-
-    # ══════════════════════════════════════════════════════════
-    # v2.0.7.47 - GERÇEKLEŞMİŞ KÂR/ZARAR (Bahri'nin talebi): gerçek bir
-    # muhasebe katmanı - satış geçmişi, komisyon/vergi düşülmüş net K/Z,
-    # tarih aralığı + aylık/yıllık özet raporu.
-    # ══════════════════════════════════════════════════════════
-    st.divider()
-    st.subheader("📒 Gerçekleşmiş Kâr/Zarar (Muhasebe)")
-    from portfolio_ledger import (get_fee_settings, save_fee_settings,
-                                   get_sales_history, get_monthly_summary,
-                                   get_yearly_summary, get_realized_summary)
-
-    with st.expander("⚙️ Komisyon / Vergi Ayarları (kategori bazlı)"):
-        st.caption(
-            "Aşağıdaki oranlar genel/yaklaşık başlangıç değerleridir, kesin "
-            "mali müşavirlik veya vergi danışmanlığı yerine geçmez. Kendi "
-            "aracı kurumunuzun/borsanızın komisyon oranına ve güncel "
-            "mevzuata göre düzenleyin.")
-        _fee_ayarlari = get_fee_settings(_cur_user["id"])
-        for _cat_key, _cat_lbl in [("BIST","BIST"),("TEFAS","TEFAS"),
-                                     ("KRIPTO","Kripto"),("DOVIZ","Döviz"),
-                                     ("MADEN","Değerli Maden")]:
-            _fc1, _fc2, _fc3 = st.columns([1, 1, 1])
-            _mevcut = _fee_ayarlari.get(_cat_key, {"fee_pct":0.0,"tax_pct":0.0})
-            with _fc1:
-                st.markdown(f"**{_cat_lbl}**")
-            with _fc2:
-                _yeni_fee = st.number_input(
-                    "Komisyon %", min_value=0.0, max_value=100.0,
-                    value=float(_mevcut["fee_pct"]), step=0.01,
-                    key=f"fee_ayar_{_cat_key}")
-            with _fc3:
-                _yeni_tax = st.number_input(
-                    "Vergi %", min_value=0.0, max_value=100.0,
-                    value=float(_mevcut["tax_pct"]), step=0.01,
-                    key=f"tax_ayar_{_cat_key}")
-            if _yeni_fee != _mevcut["fee_pct"] or _yeni_tax != _mevcut["tax_pct"]:
-                save_fee_settings(_cur_user["id"], _cat_key, _yeni_fee, _yeni_tax)
-
-    _pl_tum = get_sales_history(_cur_user["id"])
-    if _pl_tum.empty:
-        st.caption("Henüz gerçekleşmiş (satılmış) bir işlem yok. Bir varlığı "
-                   "yukarıdaki tablodan seçip **Sat** butonuyla satış kaydı "
-                   "oluşturduğunuzda burada raporlanır.")
-    else:
-        st.markdown("**Tarih Aralığına Göre Özet**")
-        dr1, dr2 = st.columns(2)
-        import datetime as _dt_pl
-        with dr1:
-            _pl_bas = st.date_input("Başlangıç", key="pl_bas_tarih",
-                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30),
-                                     format="DD.MM.YYYY")
-        with dr2:
-            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
-                                     format="DD.MM.YYYY")
-        _ozet = get_realized_summary(_cur_user["id"],
-                                      _pl_bas.strftime("%Y-%m-%d"),
-                                      _pl_bit.strftime("%Y-%m-%d"))
-        o1, o2, o3, o4, o5 = st.columns(5)
-        o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
-        o2.metric("Brüt K/Z", f"{_ozet['brut_kz']:,.2f} ₺")
-        o3.metric("Komisyon", f"-{_ozet['komisyon']:,.2f} ₺")
-        o4.metric("Vergi", f"-{_ozet['vergi']:,.2f} ₺")
-        o5.metric("Net K/Z", f"{_ozet['net_kz']:,.2f} ₺")
-
-        st.markdown("**Aylık Özet**")
-        st.dataframe(get_monthly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
-
-        st.markdown("**Yıllık Özet**")
-        st.dataframe(get_yearly_summary(_cur_user["id"]), use_container_width=True, hide_index=True)
-
-        st.markdown("**Tüm İşlem Geçmişi**")
-        st.dataframe(_pl_tum.drop(columns=["id"]), use_container_width=True, hide_index=True)
 
 # ══════════════════════════════════════════════════════════════
 # HALKA ARZ
@@ -4313,7 +4318,7 @@ elif page=="Yardım":
     if _os_yk.path.exists(_docx_yol):
         with open(_docx_yol, "rb") as _f:
             st.download_button(
-                "📄 Word (.docx) olarak indir",
+                "Word (.docx) olarak indir",
                 data=_f.read(),
                 file_name=_docx_dosya,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
