@@ -1803,7 +1803,7 @@ with st.sidebar:
         st.caption(f"Secilen: {budget:,} TL".replace(",", "."))
     risk=st.select_slider("Risk Toleransı",
                            options=["Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"],value="Orta")
-    max_assets=st.slider("Max Varlık Sayısı",min_value=5,max_value=30,value=10,step=1,
+    max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,value=10,step=1,
                           help="Portföyde kaç farklı varlık olacağını belirler")
     st.divider()
 
@@ -2325,13 +2325,29 @@ if page=="Ana Sayfa":
     cats_by_qual = sorted(cat_quality, key=cat_quality.get, reverse=True)
     n_cats       = len(cat_pools)
 
-    slots     = {c: max(1, max_assets // n_cats) for c in cat_pools}
-    # Toplam slotu max_assets'e tamamla (bölme artığı)
-    deficit   = max_assets - sum(slots.values())
-    for cat in cats_by_qual:
-        if deficit <= 0: break
-        slots[cat] += 1
-        deficit    -= 1
+    # v2.0.7.65 - KRITIK DUZELTME (Bahri'nin talebi: Max Varlik Sayisi'ni
+    # 2'ye indirebilmek istedi): "max(1, max_assets // n_cats)" tabani,
+    # max_assets KATEGORI SAYISINDAN (5: BIST/TEFAS/Doviz/Maden/Kripto)
+    # KUCUK oldugunda HER kategoriye yine de 1'er slot veriyordu - ornegin
+    # max_assets=2 istense bile 5 kategori x 1 slot = 5 varlik oneriliyordu,
+    # kullanicinin istedigi ust siniri sessizce ihlal ediyordu. Artik
+    # max_assets < n_cats ise SADECE en yuksek kaliteli (ortalama Optima
+    # Skoru en yuksek) max_assets kadar kategori 1'er slot alir, digerleri
+    # 0 kalir - toplam HER ZAMAN max_assets'i asmaz.
+    if max_assets < n_cats:
+        slots = {c: 0 for c in cat_pools}
+        for _i, _cat in enumerate(cats_by_qual):
+            if _i >= max_assets:
+                break
+            slots[_cat] = 1
+    else:
+        slots     = {c: max(1, max_assets // n_cats) for c in cat_pools}
+        # Toplam slotu max_assets'e tamamla (bölme artığı)
+        deficit   = max_assets - sum(slots.values())
+        for cat in cats_by_qual:
+            if deficit <= 0: break
+            slots[cat] += 1
+            deficit    -= 1
 
     # Kapasitesi az olan kategorilerin slotlarını yeniden dağıt
     changed = True
