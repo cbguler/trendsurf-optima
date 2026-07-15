@@ -24,6 +24,9 @@ psycopg2-binary>=2.9.0
 streamlit-autorefresh>=1.0.1
 pdfplumber
 pytesseract
+# v2.0.7.66 (15 Temmuz 2026): KAP finansal bilgi sayfasi HTML tablo
+# ayristirmasi (pandas.read_html) icin gerekli.
+lxml
 # v2.0.7.36 (12 Temmuz 2026): Beni Hatirla GERCEK cerez cozumu icin.
 # st.query_params tabanli URL-token yontemi calisiyordu ama URL/bookmark
 # bagimliydi, yeni bir cihazda/tarayicida normal giris deneyimi

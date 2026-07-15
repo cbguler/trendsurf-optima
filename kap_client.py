@@ -67,6 +67,9 @@ KAP_SLUG_MAP = {
     "KORDS":"1009-kordsa-teknik-tekstil-a-s",
     "INDES":"1390-indeks-bilgisayar-sistemleri-muhendislik-sanayi-ve-ticaret-a-s",
     "NETAS":"1041-netas-telekomunikasyon-a-s",
+    # v2.0.7.66 - Bahri'nin bulgusu uzerine dogrulandi (web_fetch ile
+    # gercek KAP sayfasindan teyit edildi, 15 Temmuz 2026):
+    "AHGAZ":"3064-ahlatci-dogal-gaz-dagitim-enerji-ve-yatirim-a-s",
 }
 
 KAP_HEADERS = {
@@ -89,6 +92,24 @@ def _safe_float(v) -> Optional[float]:
     try:
         return float(str(v).replace(",", ".").replace(" ", "").replace("₺", ""))
     except: return None
+
+def _safe_float_kap_tr(v) -> Optional[float]:
+    """v2.0.7.66 - KAP'in HTML tablolarindaki BUYUK Turkce formatli sayilar
+    icin (orn. '45.269.483.033' -> 45269483033.0, nokta binlik ayiraci).
+    _safe_float'tan AYRI tutuldu - o fonksiyon yfinance'in zaten duz
+    ondalikli (42.5 gibi) degerlerini parse ediyor, oraya Turkce binlik
+    ayirac mantigi eklemek yfinance tarafini bozardi."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if s in ("", "-", "—", "nan", "NaN", "None"):
+        return None
+    try:
+        # Turkce format: nokta binlik ayiraci, virgul (varsa) ondalik ayiraci
+        s = s.replace(".", "").replace(",", ".").replace("₺", "").replace(" ", "")
+        return float(s)
+    except (ValueError, TypeError):
+        return None
 
 def _fmt_mil(v, suffix="₺") -> str:
     if v is None: return "—"
@@ -195,41 +216,44 @@ def _fetch_kap(ticker: str) -> dict:
     """
     KAP'tan Türkçe bilanço kalemlerini çeker.
     Çalışmazsa boş dict döner — yfinance verisi yeterli olur.
+
+    v2.0.7.66 - TAM YENIDEN YAZILDI (Bahri'nin bulgusu, 15 Temmuz):
+    Onceki surum tamamen HAYALI/DOGRULANMAMIS JSON API adreslerine
+    (orn. "kap.org.tr/tr/api/financialReport/{id}/summary") istek
+    atiyordu - bunlar gercekte HICBIR ZAMAN calisan endpoint'ler
+    degildi, bu yuzden AHGAZ dahil NEREDEYSE HICBIR hisse icin KAP
+    verisi gelmiyordu. Bahri'nin verdigi gercek KAP sayfasini
+    (kap.org.tr/tr/sirket-finansal-bilgileri/{slug}) inceledim: bu
+    JS gerektirmeyen, SUNUCU TARAFINDA RENDER EDILMIS normal bir HTML
+    sayfasi - icinde gercek <table> etiketleriyle bilanco/gelir tablosu
+    var. Artik bu GERCEK, DOGRULANMIS sayfa cekilip pandas.read_html
+    ile ayristiriliyor - JSON API varsayimi tamamen terk edildi.
     """
     slug = KAP_SLUG_MAP.get(ticker.upper())
     if not slug:
         return {"_kap_available": False,
                 "_kap_note": "Veri kaynağı: yfinance"}
 
-    company_id = slug.split("-")[0]
     result = {"_kap_available": True}
+    url = f"https://kap.org.tr/tr/sirket-finansal-bilgileri/{slug}"
 
-    # Finansal tablo endpoint denemeleri
-    endpoints = [
-        f"https://kap.org.tr/tr/api/financialReport/{company_id}/financialTable/bilanço/son/TRY",
-        f"https://kap.org.tr/tr/api/financialReport/{company_id}/summary",
-        f"https://kap.org.tr/tr/api/companies/{company_id}/financials",
-        f"https://kap.org.tr/tr/api/companies/{company_id}/stockInfo",
-    ]
-
-    for url in endpoints:
-        try:
-            r = requests.get(url, headers=KAP_HEADERS, timeout=8)
-            if r.status_code == 200 and r.text and len(r.text) > 50:
-                data = r.json()
-                if isinstance(data, dict) and data:
-                    result["_kap_raw"] = data
-                    # KAP bilanço kalemlerini parse et
-                    _parse_kap_financials(data, result)
-                    result["_kap_source"] = url
-                    break
-                elif isinstance(data, list) and data:
-                    result["_kap_list"] = data
-                    result["_kap_source"] = url
-                    break
-        except Exception as e:
-            result[f"_kap_err_{url[-20:]}"] = str(e)[:50]
-            continue
+    try:
+        r = requests.get(url, headers=KAP_HEADERS, timeout=10)
+        if r.status_code == 200 and r.text and len(r.text) > 500:
+            import pandas as _pd
+            import io as _io
+            # v2.0.7.66 - KRITIK: read_html'e HAM STRING verilirse pandas
+            # bunu dosya YOLU saniyor (FileNotFoundError firlatiyor) -
+            # io.StringIO ile sarmalamak SART. Yerel testle dogrulandi.
+            try:
+                tablolar = _pd.read_html(_io.StringIO(r.text), flavor="lxml")
+            except Exception:
+                tablolar = _pd.read_html(_io.StringIO(r.text))
+            _parse_kap_financials(tablolar, result)
+            if len(result) > 1:  # "_kap_available" disinda en az 1 alan geldiyse
+                result["_kap_source"] = url
+    except Exception as e:
+        result["_kap_err"] = str(e)[:80]
 
     if "_kap_source" not in result:
         result["_kap_available"] = False
@@ -238,43 +262,45 @@ def _fetch_kap(ticker: str) -> dict:
     return result
 
 
-def _parse_kap_financials(data: dict, result: dict):
-    """KAP JSON yanıtından finansal kalemleri çıkarır."""
-    # KAP'ın veri yapısı endpoint'e göre farklılık gösterebilir
-    # Bu mapping, KAP'ın bilinen alan adlarına göre yazılmıştır
-    field_map = {
-        # Bilanço kalemleri
-        "donenVarlik":        "kap_current_assets",
-        "kvBorc":             "kap_short_term_debt",
-        "uzunVadeliBorc":     "kap_long_term_debt",
-        "ozKaynak":           "kap_equity",
-        "toplamVarlik":       "kap_total_assets",
-        "donmeSerBirimi":     "kap_paid_capital",
-        # Gelir tablosu
-        "netKar":             "kap_net_income",
-        "ciro":               "kap_revenue",
-        "faaliyetKari":       "kap_operating_income",
-        "brutKar":            "kap_gross_profit",
-        # Piyasa
-        "piyasaDegeri":       "kap_market_cap",
-        # Rasyolar (KAP hesaplıyorsa)
-        "fk":                 "kap_pe",
-        "pddd":               "kap_pb",
+def _parse_kap_financials(tablolar: list, result: dict):
+    """v2.0.7.66 - TAM YENIDEN YAZILDI: KAP'in GERCEK sayfa yapisi
+    pandas.read_html() ile bir DataFrame LISTESI olarak gelir (JSON
+    degil). Her tablonun ilk sutunu Turkce satir etiketleri (orn.
+    "Dönen Varlıklar"), diger sutunlar donemler (en sagdaki = en
+    guncel/"cari donem"). Bu fonksiyon etiketlere gore satirlari bulup
+    EN SON (en sagdaki, bos olmayan) donem degerini alir."""
+    satir_etiket_map = {
+        "Dönen Varlıklar":            "kap_current_assets",
+        "Duran Varlıklar":            "kap_noncurrent_assets",
+        "Toplam Varlıklar":           "kap_total_assets",
+        "Kısa Vadeli Yükümlülükler":  "kap_short_term_debt",
+        "Uzun Vadeli Yükümlülükler":  "kap_long_term_debt",
+        "Toplam Yükümlülükler":       "kap_total_liabilities",
+        "Ana Ortaklığa Ait Özkaynaklar": "kap_equity",
+        "Toplam Özkaynaklar":         "kap_total_equity",
+        "Ödenmiş Sermaye":            "kap_paid_capital",
+        "Hasılat":                    "kap_revenue",
+        "Esas Faaliyet Kârı (Zararı)":"kap_operating_income",
+        "Brüt Kâr (Zarar)":           "kap_gross_profit",
+        "Net Dönem Kârı (Zararı)":    "kap_net_income",
     }
-
-    def _search_nested(d, target_keys):
-        """İç içe dict'lerde hedef anahtarı arar."""
-        if isinstance(d, dict):
-            for k, v in d.items():
-                if k in target_keys:
-                    result[target_keys[k]] = _safe_float(v)
-                if isinstance(v, (dict, list)):
-                    _search_nested(v, target_keys)
-        elif isinstance(d, list):
-            for item in d:
-                _search_nested(item, target_keys)
-
-    _search_nested(data, field_map)
+    for df in tablolar:
+        if df.shape[1] < 2:
+            continue
+        ilk_sutun = df.iloc[:, 0].astype(str).str.strip()
+        for etiket, alan in satir_etiket_map.items():
+            if alan in result:
+                continue  # zaten baska bir tablodan bulunmus (ilkini koru)
+            eslesen = df[ilk_sutun == etiket]
+            if eslesen.empty:
+                continue
+            satir = eslesen.iloc[0]
+            # En sagdaki (en guncel donem) BOS OLMAYAN degeri al
+            for sutun_idx in range(len(satir) - 1, 0, -1):
+                deger = _safe_float_kap_tr(satir.iloc[sutun_idx])
+                if deger is not None:
+                    result[alan] = deger
+                    break
 
 
 # ─── ANA FONKSİYONLAR ────────────────────────────────────────
@@ -335,14 +361,20 @@ def fundamentals_to_display(raw: dict) -> dict:
 
     # KAP ek verileri (varsa)
     kap_fields = {
-        "kap_current_assets":   ("Dönen Varlık (KAP)", "₺"),
-        "kap_short_term_debt":  ("KV Borç (KAP)", "₺"),
-        "kap_equity":           ("Özkaynak (KAP)", "₺"),
-        "kap_revenue":          ("Ciro (KAP)", "₺"),
-        "kap_net_income":       ("Net Kâr (KAP)", "₺"),
-        "kap_operating_income": ("Faaliyet Kârı (KAP)", "₺"),
-        "kap_market_cap":       ("PD (KAP)", "₺"),
-        "kap_paid_capital":     ("Ödenmiş Sermaye (KAP)", "₺"),
+        "kap_current_assets":    ("Dönen Varlık (KAP)", "₺"),
+        "kap_noncurrent_assets": ("Duran Varlık (KAP)", "₺"),
+        "kap_total_assets":      ("Toplam Varlık (KAP)", "₺"),
+        "kap_short_term_debt":   ("KV Borç (KAP)", "₺"),
+        "kap_long_term_debt":    ("UV Borç (KAP)", "₺"),
+        "kap_total_liabilities": ("Toplam Yükümlülük (KAP)", "₺"),
+        "kap_equity":            ("Özkaynak (KAP)", "₺"),
+        "kap_total_equity":      ("Toplam Özkaynak (KAP)", "₺"),
+        "kap_revenue":           ("Ciro (KAP)", "₺"),
+        "kap_net_income":        ("Net Kâr (KAP)", "₺"),
+        "kap_operating_income":  ("Faaliyet Kârı (KAP)", "₺"),
+        "kap_gross_profit":      ("Brüt Kâr (KAP)", "₺"),
+        "kap_market_cap":        ("PD (KAP)", "₺"),
+        "kap_paid_capital":      ("Ödenmiş Sermaye (KAP)", "₺"),
     }
     for field, (label, unit) in kap_fields.items():
         if raw.get(field) is not None:
