@@ -1206,6 +1206,27 @@ def _sinyal_renk_stil(v):
     return ""
 
 
+@st.cache_data(show_spinner=False, ttl=600)
+def _clickable_table_turkce_format(df_show: pd.DataFrame, kolon_ondalik_items: tuple):
+    """v2.0.7.63 - PERFORMANS (Bahri'nin bulgusu: "sistem agirlasti",
+    eski sayfali gorunume DONMEK ISTEMIYOR): Turkce format donusumu
+    (.apply ile hucre hucre string islemi) BIST(772)/TEFAS(1339) gibi
+    buyuk, sayfasiz listelerde her Streamlit yeniden calismasinda
+    (her tiklamada) TEKRAR TEKRAR yapiliyordu - asil yavaslama kaynagi
+    muhtemelen buydu. Alttaki veri zaten load_universe() ile 10 dk
+    onbelleklendigi icin, bu donusumu de AYNI onbellege alip sadece
+    veri GERCEKTEN degistiginde yeniden hesaplamak mantikli - ayni
+    tabloya tekrar tekrar tiklamak artik hicbir bicimlendirme maliyeti
+    getirmez (cache hit)."""
+    df_show = df_show.copy()
+    _turkce_cevrilen = []
+    for c, dec in kolon_ondalik_items:
+        if c in df_show.columns:
+            df_show[c] = df_show[c].apply(lambda v: fmt_tr(v, dec))
+            _turkce_cevrilen.append(c)
+    return df_show, _turkce_cevrilen
+
+
 def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     """on_select ile satır seçimi — checkbox Streamlit'in kendi davranışı.
 
@@ -1226,6 +1247,9 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     numerik sutunlar Turkce bicimli metne cevriliyor (Portfoyum'deki
     duzeltmeyle AYNI desen) - boylece Ana Sayfa/BIST/TEFAS/Doviz/Maden/
     Kripto'nun HEPSI TEK SEFERDE duzelir.
+
+    v2.0.7.63 - Turkce donusumu artik _clickable_table_turkce_format()
+    icinde ONBELLEKLI yapiliyor (bkz. o fonksiyonun docstring'i).
     """
     # v2.0.7.60 - kolon adina gore ondalik hassasiyeti (eski NumberColumn
     # format spec'leriyle AYNI hassasiyet, sadece artik Turkce virgul).
@@ -1236,12 +1260,8 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
         "RSI": 1,
         "Tutar (₺)": 2, "Tutar": 2,
     }
-    df_show = df_show.copy()
-    _turkce_cevrilen = []
-    for c in df_show.columns:
-        if c in _kolon_ondalik:
-            df_show[c] = df_show[c].apply(lambda v: fmt_tr(v, _kolon_ondalik[c]))
-            _turkce_cevrilen.append(c)
+    df_show, _turkce_cevrilen = _clickable_table_turkce_format(
+        df_show, tuple(_kolon_ondalik.items()))
 
     auto_cfg = {}
     for c in df_show.columns:
@@ -3440,9 +3460,14 @@ elif page=="Portföyüm":
         with dr2:
             _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
                                      format="DD.MM.YYYY")
+        # v2.0.7.62 - PERFORMANS: asagidaki 3 cagri artik AYRI sorgu
+        # yapmiyor, yukarida zaten cekilmis "_pl_tum" DataFrame'ini
+        # tekrar kullaniyor - Portfoyum sayfasi basina 4 yerine 1
+        # veritabani sorgusu (Bahri'nin "sistem agirlasti" bulgusu).
         _ozet = get_realized_summary(_cur_user["id"],
                                       _pl_bas.strftime("%Y-%m-%d"),
-                                      _pl_bit.strftime("%Y-%m-%d"))
+                                      _pl_bit.strftime("%Y-%m-%d"),
+                                      df=_pl_tum)
         o1, o2, o3, o4, o5 = st.columns(5)
         o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
         o2.metric("Brüt K/Z", f"{fmt_tr(_ozet['brut_kz'])} ₺")
@@ -3462,11 +3487,11 @@ elif page=="Portföyüm":
             return df_g
 
         st.markdown("**Aylık Özet**")
-        st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"])),
+        st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"], df=_pl_tum)),
                      use_container_width=True, hide_index=True)
 
         st.markdown("**Yıllık Özet**")
-        st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"])),
+        st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"], df=_pl_tum)),
                      use_container_width=True, hide_index=True)
 
         st.markdown("**Tüm İşlem Geçmişi**")

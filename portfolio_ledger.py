@@ -381,9 +381,17 @@ def get_sales_history(user_id: int, start_date: str = None, end_date: str = None
     return pd.DataFrame(veri, columns=cols)
 
 
-def get_monthly_summary(user_id: int) -> pd.DataFrame:
-    """Aylık bazda gerçekleşmiş net K/Z özeti (en yeni ay en üstte)."""
-    df = get_sales_history(user_id)
+def get_monthly_summary(user_id: int, df: pd.DataFrame = None) -> pd.DataFrame:
+    """Aylık bazda gerçekleşmiş net K/Z özeti (en yeni ay en üstte).
+
+    v2.0.7.62 - PERFORMANS DUZELTMESI (Bahri'nin bulgusu: "sistem
+    agirlasti"): onceden her cagri kendi get_sales_history() sorgusunu
+    ayrica calistiriyordu - Portfoyum sayfasinda AYNI veri 4 kez ayri
+    ayri veritabanindan cekiliyordu. Artik cagiran taraf (app.py) veriyi
+    BIR KEZ cekip "df" parametresiyle burada tekrar kullanabilir -
+    verilmezse eskisi gibi kendi sorgusunu yapar (geriye donuk uyumlu)."""
+    if df is None:
+        df = get_sales_history(user_id)
     if df.empty:
         return pd.DataFrame(columns=["Ay", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
                                       "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
@@ -402,9 +410,11 @@ def get_monthly_summary(user_id: int) -> pd.DataFrame:
     return ozet
 
 
-def get_yearly_summary(user_id: int) -> pd.DataFrame:
-    """Yıllık bazda gerçekleşmiş net K/Z özeti (en yeni yıl en üstte)."""
-    df = get_sales_history(user_id)
+def get_yearly_summary(user_id: int, df: pd.DataFrame = None) -> pd.DataFrame:
+    """Yıllık bazda gerçekleşmiş net K/Z özeti (en yeni yıl en üstte).
+    v2.0.7.62 - bkz. get_monthly_summary docstring (ayni performans notu)."""
+    if df is None:
+        df = get_sales_history(user_id)
     if df.empty:
         return pd.DataFrame(columns=["Yıl", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
                                       "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
@@ -423,10 +433,20 @@ def get_yearly_summary(user_id: int) -> pd.DataFrame:
     return ozet
 
 
-def get_realized_summary(user_id: int, start_date: str = None, end_date: str = None) -> dict:
+def get_realized_summary(user_id: int, start_date: str = None, end_date: str = None,
+                          df: pd.DataFrame = None) -> dict:
     """Belirli bir tarih aralığındaki (veya tüm zamanların) gerçekleşmiş
-    K/Z özetini döner: toplam brüt, toplam komisyon, toplam vergi, toplam net."""
-    df = get_sales_history(user_id, start_date, end_date)
+    K/Z özetini döner: toplam brüt, toplam komisyon, toplam vergi, toplam net.
+    v2.0.7.62 - "df" onceden cekilmis (filtresiz) tam gecmis verilir,
+    tarih filtresi burada pandas ile uygulanir - ayri bir SQL sorgusu
+    gerekmez."""
+    if df is None:
+        df = get_sales_history(user_id, start_date, end_date)
+    else:
+        if start_date:
+            df = df[df["Satış Tarihi"] >= start_date]
+        if end_date:
+            df = df[df["Satış Tarihi"] <= end_date]
     if df.empty:
         return {"islem_sayisi": 0, "brut_kz": 0.0, "komisyon": 0.0,
                 "vergi": 0.0, "net_kz": 0.0}
