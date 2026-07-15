@@ -3685,22 +3685,15 @@ elif page in CAT:
     df_cat=df_uni[df_uni["Kategori"]==cat_code].copy()
     if df_cat.empty: st.warning(f"{page} verisi bulunamadı."); st.stop()
 
-    # v2.0.4.50: BIST icin manuel canli yenileme butonu. Tum 772 hisseyi
-    # otomatik/her sayfa yuklemesinde canli cekmek gecmiste denendi ve
-    # cok yavas cikti (bkz. live_data.py notlari, 380+ saniye) - o yuzden
-    # burada SADECE kullanici acikca isterse, makul bir ust sinirla (ilk
-    # 100 hisse, fiyati zaten olanlar) calisiyor.
-    if cat_code == "BIST" and _bist_seans_acik():
-        if st.button("Canlı Fiyatları Yenile (ilk 100 hisse)", key="btn_bist_canli_yenile"):
-            _hedef = df_cat[df_cat["Son_Fiyat"] > 0].head(100)["Ticker"].tolist()
-            with st.spinner(f"{len(_hedef)} hisse için canlı fiyat çekiliyor..."):
-                _t_baslangic = __import__("time").time()
-                df_uni = _ld_refresh_bist_sel(df_uni, _hedef)
-                _sure = __import__("time").time() - _t_baslangic
-            st.caption(f"Tamamlandı ({fmt_tr(_sure,1)} sn) — {len(_hedef)} hisse yenilendi.")
-            df_cat = df_uni[df_uni["Kategori"] == cat_code].copy()
-    elif cat_code == "BIST":
-        st.caption("Canlı yenileme sadece BIST seans saatlerinde (hafta içi 10:00-18:00) kullanılabilir.")
+    # v2.0.7.64 - KALDIRILDI (Bahri'nin talebi, 15 Temmuz): v2.0.4.50'den
+    # (6 Temmuz) beri duran manuel "Canli Fiyatlari Yenile (ilk 100
+    # hisse)" butonu gereksiz bulunup kaldirildi. Sebep: Firsat Radari
+    # (firsat_radari.py) zaten BIST seans saatlerinde 15 dk'da bir TUM
+    # 772 hisseyi tariyor, Supabase intraday_scores'a yaziyor, ve
+    # load_universe() bunu 45 dk tazelik penceresinde otomatik yansitiyor
+    # (bkz. yukaridaki "Firsat Radari overlay" notu) - yani bu buton hem
+    # gereksizdi hem de kapsadigi 100 hisse otomatik sistemin kapsadigi
+    # 772'den azdi.
 
     # Optima Skoru hesapla (BIST icin oncelikle worker.py'nin onceden
     # hesapladigi tam skor kullanilir - bkz. v2.0.4.57 notu, Ana Sayfa'daki
