@@ -4004,19 +4004,26 @@ elif page in CAT:
         ret3y_x = float(sel_row.get("Ret3Y", 0) or 0) if "Ret3Y" in sel_row.index else 0.0
         ret5y_x = float(sel_row.get("Ret5Y", 0) or 0) if "Ret5Y" in sel_row.index else 0.0
 
+        # v2.0.7.70 - DUZELTME (Bahri'nin bulgusu: rakamlar hizali degil):
+        # onceki halde satirlar FARKLI sutun sayisi kullaniyordu (4, sonra
+        # 3, sonra 2) - Streamlit her st.columns() cagrisinda esit genislik
+        # ureten AYRI bir izgara olusturur, bu yuzden farkli satirlarin
+        # sutun sinirlari alt alta gelmiyordu. Artik TUM satirlar sabit
+        # 4 sutunlu tek bir izgarada - kullanilmayan hucreler bos birakilir,
+        # boylece butun degerler dikey olarak hizali gorunur.
         ta,tb,tc,td = st.columns(4)
         ta.metric("1 Ay",  fmt_tr_isaretli(ret1m_x,2,yuzde=True))
         tb.metric("3 Ay",  fmt_tr_isaretli(ret3m_x,2,yuzde=True))
         tc.metric("6 Ay",  fmt_tr_isaretli(ret6m_x,2,yuzde=True))
         td.metric("1 Yil", fmt_tr_isaretli(ret1y_x,2,yuzde=True))
 
+        te,tf,tg,th = st.columns(4)
         if ret3y_x != 0 or ret5y_x != 0:
-            te,tf,tg = st.columns(3)
             te.metric("3 Yil", fmt_tr_isaretli(ret3y_x,2,yuzde=True))
             tf.metric("5 Yil", fmt_tr_isaretli(ret5y_x,2,yuzde=True))
             tg.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
         else:
-            st.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
+            te.metric("Risk Puani", f"{risk_val}/7 — {risk_labels.get(risk_val,'')}")
 
         if not d["hist"].empty:
             pr = d["hist"]["Close"].dropna() if "Close" in d["hist"].columns else d["hist"].iloc[:,0].dropna()
@@ -4024,8 +4031,8 @@ elif page in CAT:
                 rets=pr.pct_change().dropna(); rf=0.42/252; ex=rets-rf
                 sharpe=round(float(ex.mean()/ex.std()*np.sqrt(252)),3)
                 maxdd=round(float(((pr-pr.cummax())/pr.cummax()).min()*100),2)
-                s1,s2=st.columns(2)
-                s1.metric("Tahmini Sharpe",f"{sharpe:.3f}",
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Tahmini Sharpe",fmt_tr(sharpe,3),
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
                 s2.metric("Tahmini Max Drawdown",f"{fmt_tr(maxdd,2)}%",
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
