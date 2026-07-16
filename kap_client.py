@@ -14,63 +14,56 @@ import requests
 import streamlit as st
 from typing import Optional
 
-# ─── KAP SLUG HARİTASI ─────────────────────────────────────
-# worker.py ile uyumlu — en sık kullanılan 100 şirket
-KAP_SLUG_MAP = {
-    "THYAO":"1107-turk-hava-yollari-a-o","GARAN":"2422-turkiye-garanti-bankasi-a-s",
-    "ISCTR":"2425-turkiye-is-bankasi-a-s","AKBNK":"2413-akbank-t-a-s",
-    "YKBNK":"2429-yapi-ve-kredi-bankasi-a-s","SISE":"1087-turkiye-sise-ve-cam-fabrikalari-a-s",
-    "KCHOL":"1005-koc-holding-a-s","SAHOL":"976-haci-omer-sabanci-holding-a-s",
-    "TUPRS":"1105-tupras-turkiye-petrol-rafinerileri-a-s",
-    "EREGL":"944-eregli-demir-ve-celik-fabrikalari-t-a-s",
-    "FROTO":"956-ford-otomotiv-sanayi-a-s","TOASO":"1096-tofas-turk-otomobil-fabrikasi-a-s",
-    "BIMAS":"1406-bim-birlesik-magazalar-a-s","ARCLK":"863-arcelik-a-s",
-    "ASELS":"866-aselsan-elektronik-sanayi-ve-ticaret-a-s",
-    "TAVHL":"1452-tav-havalimanlari-holding-a-s",
-    "EKGYO":"1531-emlak-konut-gayrimenkul-yatirim-ortakligi-a-s",
-    "ENKAI":"942-enka-insaat-ve-sanayi-a-s","TKFEN":"1470-tekfen-holding-a-s",
-    "PGSUS":"1710-pegasus-hava-tasimaciligi-a-s",
-    "TCELL":"1103-turkcell-iletisim-hizmetleri-a-s",
-    "TTKOM":"1473-turk-telekomunikasyon-a-s","PETKM":"1053-petkim-petrokimya-holding-a-s",
-    "AKSEN":"1505-aksa-enerji-uretim-a-s",
-    "GUBRF":"974-gubre-fabrikalari-t-a-s","CCOLA":"1424-coca-cola-icecek-a-s",
-    "AEFES":"858-anadolu-efes-biracilik-ve-malt-sanayii-a-s",
-    "ULKER":"859-ulker-biskuvi-sanayi-a-s","TATGD":"1091-tat-gida-sanayi-a-s",
-    "DOAS":"1391-dogus-otomotiv-servis-ve-ticaret-a-s",
-    "MGROS":"1494-migros-ticaret-a-s","SOKM":"3913-sok-marketler-ticaret-a-s",
-    "LOGO":"1016-logo-yazilim-sanayi-ve-ticaret-a-s",
-    "OTKAR":"1046-otokar-otomotiv-ve-savunma-sanayi-a-s",
-    "BRISA":"891-brisa-bridgestone-sabanci-lastik-sanayi-ve-ticaret-a-s",
-    "SARKY":"1067-sarkuysan-elektrolitik-bakir-sanayi-ve-ticaret-a-s",
-    "SASA":"1068-sasa-polyester-sanayi-a-s",
-    "VESTL":"1122-vestel-elektronik-sanayi-ve-ticaret-a-s",
-    "VESBE":"1419-vestel-beyaz-esya-sanayi-ve-ticaret-a-s",
-    "DOHOL":"919-dogan-sirketler-grubu-holding-a-s",
-    "HALKB":"2423-turkiye-halk-bankasi-a-s","VAKBN":"2428-turkiye-vakiflar-bankasi-t-a-o",
-    "TSKB":"2427-turkiye-sinai-kalkinma-bankasi-a-s",
-    "ALBRK":"2414-albaraka-turk-katilim-bankasi-a-s",
-    "ZOREN":"1133-zorlu-enerji-elektrik-uretim-a-s","AYGAZ":"873-aygaz-a-s",
-    "TRGYO":"1524-torunlar-gayrimenkul-yatirim-ortakligi-a-s",
-    "ISGYO":"987-is-gayrimenkul-yatirim-ortakligi-a-s",
-    "MAVI":"3843-mavi-giyim-sanayi-ve-ticaret-a-s",
-    "DESA":"1389-desa-deri-sanayi-ve-ticaret-a-s",
-    "NUHCM":"1042-nuh-cimento-sanayi-a-s","CIMSA":"908-cimsa-cimento-sanayi-ve-ticaret-a-s",
-    "AKCNS":"838-akcansa-cimento-sanayi-ve-ticaret-a-s",
-    "ISDMR":"2528-iskenderun-demir-ve-celik-a-s",
-    "KRDMD":"994-kardemir-karabuk-demir-celik-sanayi-ve-ticaret-a-s",
-    "EGEEN":"930-ege-endustri-ve-ticaret-a-s",
-    "CLEBI":"903-celebi-hava-servisi-a-s",
-    "MPARK":"2118-mlp-saglik-hizmetleri-a-s",
-    "ANSGR":"856-anadolu-anonim-turk-sigorta-sirketi",
-    "ANHYT":"860-anadolu-hayat-emeklilik-a-s",
-    "TTRAK":"1393-turk-traktor-ve-ziraat-makineleri-a-s",
-    "KORDS":"1009-kordsa-teknik-tekstil-a-s",
-    "INDES":"1390-indeks-bilgisayar-sistemleri-muhendislik-sanayi-ve-ticaret-a-s",
-    "NETAS":"1041-netas-telekomunikasyon-a-s",
-    # v2.0.7.66 - Bahri'nin bulgusu uzerine dogrulandi (web_fetch ile
-    # gercek KAP sayfasindan teyit edildi, 15 Temmuz 2026):
-    "AHGAZ":"3064-ahlatci-dogal-gaz-dagitim-enerji-ve-yatirim-a-s",
-}
+# ─── KAP SLUG HARİTASI (Bahri'nin onayladığı KAP_BIST.xlsx'ten) ──
+# v2.0.7.67 - KRITIK DUZELTME (Bahri'nin bulgusu, 16 Temmuz 2026): daha
+# once burada SADECE 65 sirketlik ELLE yazilmis kucuk bir liste vardi.
+# Ama Bahri sistemi ilk kurarken KAP_BIST.xlsx dosyasini TAM OLARAK bu
+# amac icin (ticker -> KAP finansal-bilgiler URL'si, 730 sirket) zaten
+# vermisti - bu dosya repoda DURUYORDU ama worker.py sadece isim
+# sutununu (kolon 1) okuyup URL sutununu (kolon 2) hic kullanmiyordu.
+# Simdi bu HAZIR, ONAYLI kaynak dogrudan buradan okunuyor - elle
+# yazilmis kucuk liste TAMAMEN TERK EDILDI.
+#
+# BILEREK OTOMATIK DEGIL: Bahri'nin acik talebi geregi, yeni halka arz
+# olan sirketler burada OTOMATIK belirmez - sadece KAP_BIST.xlsx'te
+# listelenenler kapsanir. Yeni bir sirket eklemek icin Bahri bu dosyayi
+# kendisi guncelleyip yukler (worker.py'nin BIST evren genislemesindeki
+# NTGAZ gibi otomatik-kesif mantigindan BILINCLI olarak AYRI tutuldu).
+def _kap_slug_map_yukle() -> dict:
+    import os, glob
+    result = {}
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = (
+        glob.glob(os.path.join(base_dir, "KAP_BIST.xlsx")) +
+        glob.glob(os.path.join(base_dir, "KAP_BIST*.xlsx")) +
+        glob.glob(os.path.join(base_dir, "kap_bist*.xlsx"))
+    )
+    if not candidates:
+        print("[kap_client] UYARI: KAP_BIST.xlsx bulunamadi, KAP verisi devre disi.")
+        return result
+    try:
+        import pandas as _pd
+        df = _pd.read_excel(candidates[0], header=None)
+        for _, row in df.iterrows():
+            ticker_raw = str(row.iloc[0]).strip()
+            url_raw = str(row.iloc[2]).strip() if len(row) > 2 else ""
+            if ticker_raw in ("nan", "") or url_raw in ("nan", ""):
+                continue
+            # ".../sirket-finansal-bilgileri/{slug}" -> sadece {slug} kismi
+            slug = url_raw.rstrip("/").split("/")[-1]
+            if not slug:
+                continue
+            for t in ticker_raw.split(","):
+                t = t.strip().upper()
+                if t:
+                    result[t] = slug
+        print(f"[kap_client] KAP_BIST.xlsx: {len(result)} sirket icin KAP slug'i yuklendi.")
+    except Exception as e:
+        print(f"[kap_client] KAP_BIST.xlsx okunamadi: {e}")
+    return result
+
+
+KAP_SLUG_MAP = _kap_slug_map_yukle()
 
 KAP_HEADERS = {
     "User-Agent": (
