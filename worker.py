@@ -1244,6 +1244,7 @@ def build():
 
     for t, yf_s in MADEN:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0
+        _gecmis_veri_var = False
 
         # Kademe 1: Bigpara TL fiyatı (gram bazlı, direkt TL)
         bp_p = bp_maden.get(t, 0.0)
@@ -1278,6 +1279,7 @@ def build():
                 ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
                 rets_m = col.pct_change().dropna()
                 vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
+                _gecmis_veri_var = True
                 # USD → TRY dönüşümü + ons → gram (gerekiyorsa) - SADECE
                 # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
                 # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
@@ -1291,6 +1293,7 @@ def build():
                 if not _sentetik_yasak:
                     p2, rsi, ret, vol_v = single_full(yf_s, t)
                     if p2 > 0:
+                        _gecmis_veri_var = True
                         if yf_s in ONS_TO_GRAM:
                             p = round(p2 * usdtry_rate / 31.1035, 4)
                         else:
@@ -1306,13 +1309,22 @@ def build():
                     rsi   = float(_row["RSI"].iloc[0])
                     ret   = float(_row["Ret1M"].iloc[0])
                     vol_v = float(_row.get("Vol", pd.Series([25.0])).iloc[0])
+                    # Onceki calistirmada bu satir da isaretliyse (veya
+                    # isaret yoksa - eski CSV) durumu koru/varsay.
+                    _gecmis_veri_var = not bool(_row.get("_gecmis_veri_yok", pd.Series([False])).iloc[0])
                     print(f"    [cache] {t} maden fiyati CSV'den alindi.")
             except Exception:
                 pass
 
         all_rows.append({"Ticker": t, "Ad": MADEN_ADLAR.get(t, t),
                          "Kategori": "MADEN", "Son_Fiyat": p,
-                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s})
+                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
+                         # v2.0.7.69 - bkz. DOVIZ dongusundeki ayni bayragin
+                         # yorumu: Bigpara'dan gelen Gram Altin/Gumus gibi
+                         # varliklar da SIRF fiyat var diye "veri var"
+                         # sanilip RSI=50 (en iyi bolge) yuzunden yapay
+                         # yuksek skor almasin diye acikca isaretleniyor.
+                         "_gecmis_veri_yok": not _gecmis_veri_var})
 
     # Döviz — her parite ayrı çek (=X pariteler toplu download'da sorunlu)
     # JPYTRY, AUDTRY, CADTRY için cross rate hesabı kullan
@@ -1336,6 +1348,7 @@ def build():
     ok_d = 0
     for t, yf_s in DOVIZ:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
+        _gecmis_veri_var = False
         if yf_s in CROSS_PAIRS:
             # Cross rate ile hesapla
             pr = get_cross_rate_hist(t, yf_s, maden_start, maden_end)
@@ -1345,9 +1358,12 @@ def build():
                 ret = round((float(pr.iloc[-1]) / float(pr.iloc[-22]) - 1) * 100, 2) if len(pr) >= 22 else 0.0
                 rets_x = pr.pct_change().dropna()
                 vol_v  = round(float(rets_x.std() * (252 ** 0.5) * 100), 1) if len(rets_x) > 10 else 10.0
+                _gecmis_veri_var = True
         if p == 0.0:
             # Normal çekim dene
             p, rsi, ret, vol_v = single_full(yf_s, t)
+            if p > 0:
+                _gecmis_veri_var = True
         if p == 0.0:
             # v2.0.7.43 - yfinance basarisizsa Truncgil'e dus (RSI/Ret1M
             # icin gecmis veri yok - Bigpara-kaynakli MADEN varliklari gibi
@@ -1356,11 +1372,23 @@ def build():
             if _tg_kod and _tg_kod in truncgil_doviz:
                 p = truncgil_doviz[_tg_kod]
                 rsi, ret, vol_v = 50.0, 0.0, 15.0
+                # _gecmis_veri_var = False (zaten baslangic degeri)
         if p > 0:
             ok_d += 1
         all_rows.append({"Ticker": t, "Ad": DOVIZ_ADLAR.get(t, t),
                          "Kategori": "DOVIZ", "Son_Fiyat": p,
-                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s})
+                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
+                         # v2.0.7.69 - KRITIK DUZELTME (Bahri'nin bulgusu):
+                         # fiyat Truncgil'den geldigi icin Son_Fiyat>0 oluyor
+                         # ama RSI/Ret1M/Vol SAHTE NOTR degerler (50/0/15) -
+                         # eskiden bu, "Son_Fiyat<=0 ise skor 0" guvenlik
+                         # onlemini atlatip RSI=50'nin (en iyi RSI bolgesi!)
+                         # ve dusuk sahte Vol'un YAPAY OLARAK YUKSEK bir skor
+                         # (66.7 gibi) uretmesine yol aciyordu - veri OLMAYAN
+                         # bir varlik, veri OLAN bir varliktan daha iyi
+                         # gorunuyordu. Artik bu durum acikca isaretleniyor,
+                         # app.py skoru sifirlayacak.
+                         "_gecmis_veri_yok": not _gecmis_veri_var})
     print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi.")
 
     # ── TCMB yedek: yfinance'den gelemeyen kurları TCMB ile tamamla ──

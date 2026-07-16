@@ -1047,10 +1047,19 @@ def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=Non
     return min(100, round(raw * (100.0 / 75.0), 1))
 
 def get_signal(score,rsi,trend):
+    # v2.0.7.68 - KRITIK DUZELTME (Bahri'nin bulgusu, CNYTRY ornegi):
+    # onceki halde skor<40 oldugunda trend/RSI NE OLURSA OLSUN kosulsuz
+    # "NET SAT" veriliyordu - diger tum esikler (40/60/80) trend/RSI
+    # kontrolu yaparken bu en alttaki esik hicbir kontrol yapmiyordu.
+    # Sonuc: RSI=87.5 (asiri alim) + trend=YUKSELIS olan CNYTRY gibi bir
+    # varlik, sirf RSI-zonu dusuk puan verdigi icin toplam skoru 40'in
+    # altina dusunce trend hala yukselisteyken "NET SAT" damgasi yiyordu.
+    # Artik bu esik de digerleriyle TUTARLI: trend hala YUKSELIS ise
+    # "TUT IZLE" (temkinli), sadece trend de DUSUS/zayifsa "NET SAT".
     if score>=80: lbl,cls=("GÜÇLÜ AL","sig-g") if trend=="YUKSELIS" and 35<=rsi<=65 else ("KADEMELİ AL","sig-k")
     elif score>=60: lbl,cls=("KADEMELİ AL","sig-k") if (trend=="YUKSELIS" or 35<=rsi<=65) else ("TUT İZLE","sig-t")
     elif score>=40: lbl,cls=("KADEMELİ SAT","sig-s") if trend=="DUSUS" and rsi>70 else ("TUT İZLE","sig-t")
-    else: lbl,cls=("NET SAT","sig-n")
+    else: lbl,cls=("TUT İZLE","sig-t") if trend=="YUKSELIS" else ("NET SAT","sig-n")
     return lbl,cls
 
 def enrich(row,period="1y"):
@@ -1171,6 +1180,13 @@ def live_optima_score(row, period="1mo"):
     yoksa performans sorunu geri doner. get_hist() zaten 5 dk onbellekli
     oldugundan tekrar gorunumler hizli olur. Basarisizlikta CSV'deki
     onceden hesaplanmis Optima_Skor'a (veya ham optima_score()'a) duser."""
+    # v2.0.7.69 - KRITIK DUZELTME (Bahri'nin bulgusu): worker.py bu
+    # satirin RSI/Ret1M/Vol'unun SAHTE NOTR degerler oldugunu (gercek
+    # gecmis veri bulunamadigi icin) acikca isaretlemisse, asagidaki
+    # hesaplamalara hic girmeden dogrudan 0 dondur - Son_Fiyat<=0 ile
+    # AYNI mantik (bkz. kategori sayfasindaki ayni yorum).
+    if bool(row.get("_gecmis_veri_yok", False)):
+        return 0.0
     try:
         d = enrich(row, period)
         return float(d["score"])
@@ -3732,6 +3748,17 @@ elif page in CAT:
     # yok" durumu vasat skor gibi gorunuyordu. CSV eski olsa bile burada
     # sifirlanir (worker.py'ye de ayni kural eklendi).
     df_cat.loc[df_cat["Son_Fiyat"] <= 0, "Optima_Skor"] = 0.0
+    # v2.0.7.69 - KRITIK DUZELTME (Bahri'nin bulgusu: Doviz'de ilk ~50
+    # varlik "gecmis fiyat verisi yuklenemedi" diyor ama Optima Skoru
+    # digerlerinden YUKSEKTI): yukaridaki satir sadece Son_Fiyat<=0 olan
+    # varliklari yakaliyordu. Ama bu Doviz/Maden varliklarinin fiyati VAR
+    # (Truncgil/Bigpara'dan) - sadece RSI/Ret1M/Vol SAHTE NOTR degerler
+    # (50/0/dusuk-vol). RSI=50 tam da "en iyi RSI bolgesi" oldugu ve sahte
+    # vol dusuk oldugu icin, veri OLMAYAN bir varlik veri OLAN bir
+    # varliktan daha yuksek skor aliyordu. worker.py artik bu durumu acikca
+    # "_gecmis_veri_yok" ile isaretliyor - burada da skor sifirlanir.
+    if "_gecmis_veri_yok" in df_cat.columns:
+        df_cat.loc[df_cat["_gecmis_veri_yok"] == True, "Optima_Skor"] = 0.0
     df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
     df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
     df_cat = df_cat.drop(columns=["_fiyatli"])
