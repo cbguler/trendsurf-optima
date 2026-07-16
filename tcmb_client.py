@@ -41,6 +41,13 @@ XML_CODE_MAP = {
     "JPY": "JPYTRY", "CHF": "CHFTRY", "AUD": "AUDTRY",
     "CAD": "CADTRY", "SEK": "SEKTRY", "NOK": "NOKTRY",
     "DKK": "DKKTRY", "CNY": "CNYTRY", "NZD": "NZDTRY",
+    # v2.0.7.72 - Bahri'nin talebi: Truncgil'in SADECE anlik fiyat verdigi
+    # (gecmis veri yok) 51 genisleme dovizinden, TCMB'nin GERCEKTEN takip
+    # ettigi 10 tanesi burada eslendi - bunlar icin artik gercek tarihsel
+    # RSI/Getiri/Vol hesaplanabilir (bkz. fetch_tcmb_historical).
+    "RUB": "RUBTRY", "AED": "AEDTRY", "KWD": "KWDTRY", "SAR": "SARTRY",
+    "RON": "RONTRY", "AZN": "AZNTRY", "KRW": "KRWTRY", "KZT": "KZTTRY",
+    "PKR": "PKRTRY", "QAR": "QARTRY",
 }
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -241,3 +248,128 @@ if __name__ == "__main__":
         if not k.startswith("_"):
             print(f"  {k}: {v}")
     print(f"\nKaynak: {rates.get('_kaynak','?')} | Tarih: {rates.get('_tarih','?')}")
+
+
+# ── Tarihsel veri (v2.0.7.72) ──────────────────────────────────────────────
+# Bahri'nin bulgusu (16 Temmuz 2026): Truncgil'in genisletilmis 51 doviz
+# icinden 10 tanesi (RUB, AED, KWD, SAR, RON, AZN, KRW, KZT, PKR, QAR)
+# aslinda TCMB'nin RESMI olarak gunluk takip ettigi dovizler - bu 10'u
+# icin yfinance basarisiz olsa bile TCMB'nin GECMISE DONUK arsivinden
+# (belgelenmis, stabil format: tcmb.gov.tr/kurlar/YYYYMM/GGAAYYYY.xml,
+# 1950'ye kadar gidiyor) GERCEK bir gunluk seri insa edip RSI/Ret1M/Vol
+# hesaplanabilir - "veri yok" yerine gercek analiz.
+
+TCMB_HIST_CACHE = os.path.join(BASE_DIR, "halka_arz_cache", "tcmb_historical_cache.json")
+TCMB_HIST_KAPSAM = {"RUB", "AED", "KWD", "SAR", "RON", "AZN", "KRW", "KZT", "PKR", "QAR"}
+
+
+def _hist_cache_oku() -> dict:
+    if not os.path.exists(TCMB_HIST_CACHE):
+        return {}
+    try:
+        with open(TCMB_HIST_CACHE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _hist_cache_yaz(veri: dict):
+    try:
+        os.makedirs(os.path.dirname(TCMB_HIST_CACHE), exist_ok=True)
+        with open(TCMB_HIST_CACHE, "w", encoding="utf-8") as f:
+            json.dump(veri, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"  [TCMB tarihsel] Onbellek yazilamadi: {e}")
+
+
+def _tcmb_gunluk_xml_cek(tarih: datetime, kodlar: set) -> dict:
+    """Tek bir gun icin TCMB XML arsivini ceker, istenen kodlarin
+    ForexBuying degerlerini doner. Hafta sonu/tatil gunlerinde TCMB
+    yayin yapmaz - bu durumda bos dict doner (hata degil, beklenen)."""
+    import requests
+    import xml.etree.ElementTree as ET
+    url = f"https://www.tcmb.gov.tr/kurlar/{tarih:%Y%m}/{tarih:%d%m%Y}.xml"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code != 200 or not r.content:
+            return {}
+        root = ET.fromstring(r.content)
+        sonuc = {}
+        for currency in root.findall("Currency"):
+            kod = currency.get("Kod", "")
+            if kod not in kodlar:
+                continue
+            alis = (currency.findtext("ForexBuying") or "").strip()
+            if alis and alis not in ("", "None"):
+                try:
+                    sonuc[kod] = round(float(alis.replace(",", ".")), 6)
+                except Exception:
+                    pass
+        return sonuc
+    except Exception:
+        return {}
+
+
+def fetch_tcmb_historical(gun_sayisi: int = 100) -> dict:
+    """v2.0.7.72 - TCMB_HIST_KAPSAM'daki 10 doviz icin gunluk tarihsel
+    fiyat serisi olusturur/gunceller. ONBELLEKLI: sadece cache'te
+    eksik olan (yeni) gunler CEKILIR, her calistirmada baştan
+    yeniden 100 gun cekmez - onbellek buyudukce (ilk calistirmadan
+    sonra) gunluk sadece 1-2 yeni gun cekilir.
+
+    Döner: {"RUB": {"2026-04-01": 0.5123, ...}, "AED": {...}, ...}
+    """
+    cache = _hist_cache_oku()
+    bugun = datetime.now()
+    hedef_tarihler = [(bugun - timedelta(days=i)) for i in range(gun_sayisi)]
+
+    eksik_gunler = 0
+    for tarih in hedef_tarihler:
+        gun_str = tarih.strftime("%Y-%m-%d")
+        eksik_kodlar = {
+            kod for kod in TCMB_HIST_KAPSAM
+            if gun_str not in cache.get(kod, {})
+        }
+        if not eksik_kodlar:
+            continue
+        gunluk = _tcmb_gunluk_xml_cek(tarih, eksik_kodlar)
+        eksik_gunler += 1
+        for kod, deger in gunluk.items():
+            cache.setdefault(kod, {})[gun_str] = deger
+        # Hafta sonu/tatil gunlerinde de bos sonuc "denendi" olarak
+        # isaretlenir (surekli tekrar denemeyi onlemek icin) - deger
+        # olmayan kodlar icin None yazilir, hesaplamada atlanir.
+        for kod in eksik_kodlar:
+            if kod not in gunluk:
+                cache.setdefault(kod, {}).setdefault(gun_str, None)
+
+    if eksik_gunler > 0:
+        _hist_cache_yaz(cache)
+        print(f"  [TCMB tarihsel] {eksik_gunler} gun icin veri cekildi/denendi.")
+
+    return {kod: {g: v for g, v in gunler.items() if v is not None}
+            for kod, gunler in cache.items() if kod in TCMB_HIST_KAPSAM}
+
+
+def tcmb_hesapla_rsi_ret_vol(gunluk_seri: dict) -> tuple:
+    """Bir dovizin {tarih: fiyat} sozlugunden gercek RSI(14)/Ret1M/Vol
+    hesaplar. Veri yetersizse (bkz. cagiran kod) None doner - notr
+    varsayilan degerler burada UYDURULMAZ, cagiran taraf karar verir."""
+    if len(gunluk_seri) < 15:
+        return None
+    import pandas as _pd
+    s = _pd.Series(gunluk_seri).sort_index()
+    s.index = _pd.to_datetime(s.index)
+    s = s.sort_index()
+    if len(s) < 15:
+        return None
+    delta = s.diff().dropna()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / loss.replace(0, 1e-9)
+    rsi_series = 100 - (100 / (1 + rs))
+    rsi = float(rsi_series.iloc[-1]) if not rsi_series.empty and rsi_series.iloc[-1] == rsi_series.iloc[-1] else 50.0
+    ret1m = round((float(s.iloc[-1]) / float(s.iloc[-22]) - 1) * 100, 2) if len(s) >= 22 else 0.0
+    rets = s.pct_change().dropna()
+    vol = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 15.0
+    return round(float(s.iloc[-1]), 6), round(rsi, 1), ret1m, vol

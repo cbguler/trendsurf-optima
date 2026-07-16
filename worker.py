@@ -1345,6 +1345,18 @@ def build():
         print(f"  [Truncgil] Ek doviz cekimi atlandi: {_tg_err}")
 
     print(f"  Doviz: {len(DOVIZ)} parite (cross rate destekli)...")
+    # v2.0.7.72 - Bahri'nin talebi: 10 dovizin (RUB/AED/KWD/SAR/RON/AZN/
+    # KRW/KZT/PKR/QAR) yfinance'te calismayan gecmis verisi yerine
+    # TCMB'nin GERCEK gunluk arsivinden gercek RSI/Ret1M/Vol hesaplanir.
+    try:
+        from tcmb_client import fetch_tcmb_historical, tcmb_hesapla_rsi_ret_vol, TCMB_HIST_KAPSAM
+        _tcmb_hist_veri = fetch_tcmb_historical()
+        print(f"  [TCMB tarihsel] {len(_tcmb_hist_veri)} doviz icin arsiv hazir.")
+    except Exception as _tcmb_hist_err:
+        _tcmb_hist_veri = {}
+        TCMB_HIST_KAPSAM = set()
+        print(f"  [TCMB tarihsel] Devre disi: {_tcmb_hist_err}")
+
     ok_d = 0
     for t, yf_s in DOVIZ:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
@@ -1364,6 +1376,19 @@ def build():
             p, rsi, ret, vol_v = single_full(yf_s, t)
             if p > 0:
                 _gecmis_veri_var = True
+        if p == 0.0:
+            # v2.0.7.72 - YENI KATMAN: yfinance basarisiz olsa da, bu
+            # doviz TCMB'nin RESMI olarak takip ettigi 10'dan biriyse
+            # (bkz. TCMB_HIST_KAPSAM), Truncgil'in SAHTE notr degerlerine
+            # (RSI=50/Ret=0) dusmeden once TCMB'nin GERCEK gunluk
+            # arsivinden gercek RSI/Ret1M/Vol hesaplamayi dene.
+            _tg_kod_hist = _DOVIZ_TRUNCGIL_KOD.get(t)
+            if _tg_kod_hist and _tg_kod_hist in TCMB_HIST_KAPSAM and _tg_kod_hist in _tcmb_hist_veri:
+                _sonuc_tcmb = tcmb_hesapla_rsi_ret_vol(_tcmb_hist_veri[_tg_kod_hist])
+                if _sonuc_tcmb is not None:
+                    p, rsi, ret, vol_v = _sonuc_tcmb
+                    _gecmis_veri_var = True
+                    print(f"    [TCMB tarihsel] {t}: gercek RSI/Ret1M hesaplandi.")
         if p == 0.0:
             # v2.0.7.43 - yfinance basarisizsa Truncgil'e dus (RSI/Ret1M
             # icin gecmis veri yok - Bigpara-kaynakli MADEN varliklari gibi
