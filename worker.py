@@ -1345,19 +1345,58 @@ def build():
         print(f"  [Truncgil] Ek doviz cekimi atlandi: {_tg_err}")
 
     print(f"  Doviz: {len(DOVIZ)} parite (cross rate destekli)...")
-    # v2.0.7.72 - Bahri'nin talebi: 10 dovizin (RUB/AED/KWD/SAR/RON/AZN/
-    # KRW/KZT/PKR/QAR) yfinance'te calismayan gecmis verisi yerine
-    # TCMB'nin GERCEK gunluk arsivinden gercek RSI/Ret1M/Vol hesaplanir.
+    # v2.0.7.73 - Bahri'nin talebi (Harem/Kapalicarsi serbest piyasa
+    # kurlari): borsapy kutuphanesinin canlidoviz saglayicisi TUM 51
+    # genisleme dovizini (RUB'dan Bulgar Levasi'na kadar) numarali kod
+    # olarak tanidigi ve institution_history("harem", ...) ile GERCEK
+    # tarihsel Harem/serbest piyasa verisi dondugu icin bu artik BIRINCIL
+    # katman - TCMB (v2.0.7.72, sadece 10 doviz) IKINCIL yedek olarak kalir.
+    try:
+        import borsapy as _bp_doviz
+        _CANLIDOVIZ_OK = True
+    except Exception as _cd_imp_err:
+        _CANLIDOVIZ_OK = False
+        print(f"  [canlidoviz] borsapy import edilemedi: {_cd_imp_err}")
+
+    def _canlidoviz_hesapla(kod: str):
+        """RUB/BGN/RSD gibi bir ISO kod icin Harem (yoksa genel canlidoviz
+        serbest piyasa) tarihsel serisinden gercek fiyat/RSI/Ret1M/Vol
+        hesaplar. Basarisizlikta None doner - notr deger UYDURULMAZ."""
+        if not _CANLIDOVIZ_OK:
+            return None
+        try:
+            fx = _bp_doviz.FX(kod)
+            try:
+                hist = fx.institution_history("harem", period="3mo")
+            except Exception:
+                hist = fx.history(period="3mo")
+            if hist is None or hist.empty or "Close" not in hist.columns:
+                return None
+            col = hist["Close"].dropna()
+            if len(col) < 15:
+                return None
+            fiyat = round(float(col.iloc[-1]), 6)
+            rsi   = calc_rsi(col)
+            ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
+            rets  = col.pct_change().dropna()
+            vol   = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 15.0
+            return fiyat, rsi, ret, vol
+        except Exception:
+            return None
+
+    # v2.0.7.72 - TCMB IKINCIL yedek (sadece 10 doviz - RUB/AED/KWD/SAR/
+    # RON/AZN/KRW/KZT/PKR/QAR): canlidoviz de basarisiz olursa denenir.
     try:
         from tcmb_client import fetch_tcmb_historical, tcmb_hesapla_rsi_ret_vol, TCMB_HIST_KAPSAM
         _tcmb_hist_veri = fetch_tcmb_historical()
-        print(f"  [TCMB tarihsel] {len(_tcmb_hist_veri)} doviz icin arsiv hazir.")
+        print(f"  [TCMB tarihsel] {len(_tcmb_hist_veri)} doviz icin arsiv hazir (ikincil yedek).")
     except Exception as _tcmb_hist_err:
         _tcmb_hist_veri = {}
         TCMB_HIST_KAPSAM = set()
         print(f"  [TCMB tarihsel] Devre disi: {_tcmb_hist_err}")
 
     ok_d = 0
+    _cd_basarili = 0
     for t, yf_s in DOVIZ:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
         _gecmis_veri_var = False
@@ -1377,11 +1416,22 @@ def build():
             if p > 0:
                 _gecmis_veri_var = True
         if p == 0.0:
-            # v2.0.7.72 - YENI KATMAN: yfinance basarisiz olsa da, bu
-            # doviz TCMB'nin RESMI olarak takip ettigi 10'dan biriyse
-            # (bkz. TCMB_HIST_KAPSAM), Truncgil'in SAHTE notr degerlerine
-            # (RSI=50/Ret=0) dusmeden once TCMB'nin GERCEK gunluk
-            # arsivinden gercek RSI/Ret1M/Vol hesaplamayi dene.
+            # v2.0.7.73 - YENI BIRINCIL KATMAN: yfinance basarisiz olsa da,
+            # bu dovizin canlidoviz'de (Harem/serbest piyasa) bir kodu
+            # varsa (DOVIZ_GENISLEME'deki 51 dovizin TAMAMI icin gecerli),
+            # sahte notr degerlere dusmeden once GERCEK Harem tarihsel
+            # verisinden RSI/Ret1M/Vol hesaplamayi dene.
+            _tg_kod_cd = _DOVIZ_TRUNCGIL_KOD.get(t)
+            if _tg_kod_cd:
+                _sonuc_cd = _canlidoviz_hesapla(_tg_kod_cd)
+                if _sonuc_cd is not None:
+                    p, rsi, ret, vol_v = _sonuc_cd
+                    _gecmis_veri_var = True
+                    _cd_basarili += 1
+                    print(f"    [Harem/canlidoviz] {t}: gercek RSI/Ret1M hesaplandi.")
+        if p == 0.0:
+            # v2.0.7.72 - IKINCIL YEDEK: TCMB'nin resmi olarak takip
+            # ettigi 10 doviz icin (canlidoviz de basarisiz olduysa).
             _tg_kod_hist = _DOVIZ_TRUNCGIL_KOD.get(t)
             if _tg_kod_hist and _tg_kod_hist in TCMB_HIST_KAPSAM and _tg_kod_hist in _tcmb_hist_veri:
                 _sonuc_tcmb = tcmb_hesapla_rsi_ret_vol(_tcmb_hist_veri[_tg_kod_hist])
@@ -1414,7 +1464,7 @@ def build():
                          # gorunuyordu. Artik bu durum acikca isaretleniyor,
                          # app.py skoru sifirlayacak.
                          "_gecmis_veri_yok": not _gecmis_veri_var})
-    print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi.")
+    print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi ({_cd_basarili} tanesi Harem/canlidoviz tarihsel ile).")
 
     # ── TCMB yedek: yfinance'den gelemeyen kurları TCMB ile tamamla ──
     try:
