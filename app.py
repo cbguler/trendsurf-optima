@@ -3715,10 +3715,7 @@ elif page in CAT:
     # (resmi/banka kuru) kullanimi tamamen birakildi, cunku yatirimcilarin
     # gercekte kullandigi fiyatlar serbest piyasa fiyatlaridir.
     if cat_code == "DOVIZ":
-        st.caption(
-            "Fiyatlar serbest piyasa (Harem/Kapalıçarşı) kaynaklıdır - "
-            "TCMB resmi/banka kuru değildir. Yatırımcıların günlük "
-            "işlemlerde kullandığı fiili piyasa fiyatlarını yansıtır.")
+        st.caption("Fiyatlar Serbest Piyasa kaynaklıdır - TCMB resmi kuru değildir.")
 
     # v2.0.7.45 - Ons Altın (USD) - Bahri'nin talebi: SADECE bilgi amaçlı,
     # TL'ymiş gibi gizlenmeden USD olarak gösterilir. Evrene/skorlamaya/
