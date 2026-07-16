@@ -1345,12 +1345,18 @@ def build():
         print(f"  [Truncgil] Ek doviz cekimi atlandi: {_tg_err}")
 
     print(f"  Doviz: {len(DOVIZ)} parite (cross rate destekli)...")
-    # v2.0.7.73 - Bahri'nin talebi (Harem/Kapalicarsi serbest piyasa
-    # kurlari): borsapy kutuphanesinin canlidoviz saglayicisi TUM 51
-    # genisleme dovizini (RUB'dan Bulgar Levasi'na kadar) numarali kod
-    # olarak tanidigi ve institution_history("harem", ...) ile GERCEK
-    # tarihsel Harem/serbest piyasa verisi dondugu icin bu artik BIRINCIL
-    # katman - TCMB (v2.0.7.72, sadece 10 doviz) IKINCIL yedek olarak kalir.
+    # v2.0.7.73/74 - Bahri'nin talebi (Harem/Kapalicarsi serbest piyasa
+    # kurlari, YATIRIMCILARIN GERCEKTE KULLANDIGI FIYAT): borsapy
+    # kutuphanesinin canlidoviz saglayicisi TUM 51 genisleme dovizini
+    # (RUB'dan Bulgar Levasi'na kadar) numarali kod olarak tanidigi ve
+    # institution_history("harem", ...) ile GERCEK tarihsel Harem/serbest
+    # piyasa verisi dondugu icin BIRINCIL/TEK katman budur.
+    # v2.0.7.74 - TCMB (resmi/banka kuru) TAMAMEN BIRAKILDI - Bahri'nin
+    # acik talebi: "yatirimcilarin kullandigi fiyatlar daha cok serbest
+    # piyasa fiyatlaridir". Harem 51 dovizin tamamini kapsadigi icin
+    # TCMB'nin sadece 10 doviz kapsayan onceki (v2.0.7.72) katmanina
+    # artik hic gerek yok - koddan tamamen cikarildi (asagida ve dosya
+    # sonundaki "TCMB yedek" blogunda).
     try:
         import borsapy as _bp_doviz
         _CANLIDOVIZ_OK = True
@@ -1383,17 +1389,6 @@ def build():
             return fiyat, rsi, ret, vol
         except Exception:
             return None
-
-    # v2.0.7.72 - TCMB IKINCIL yedek (sadece 10 doviz - RUB/AED/KWD/SAR/
-    # RON/AZN/KRW/KZT/PKR/QAR): canlidoviz de basarisiz olursa denenir.
-    try:
-        from tcmb_client import fetch_tcmb_historical, tcmb_hesapla_rsi_ret_vol, TCMB_HIST_KAPSAM
-        _tcmb_hist_veri = fetch_tcmb_historical()
-        print(f"  [TCMB tarihsel] {len(_tcmb_hist_veri)} doviz icin arsiv hazir (ikincil yedek).")
-    except Exception as _tcmb_hist_err:
-        _tcmb_hist_veri = {}
-        TCMB_HIST_KAPSAM = set()
-        print(f"  [TCMB tarihsel] Devre disi: {_tcmb_hist_err}")
 
     ok_d = 0
     _cd_basarili = 0
@@ -1430,16 +1425,6 @@ def build():
                     _cd_basarili += 1
                     print(f"    [Harem/canlidoviz] {t}: gercek RSI/Ret1M hesaplandi.")
         if p == 0.0:
-            # v2.0.7.72 - IKINCIL YEDEK: TCMB'nin resmi olarak takip
-            # ettigi 10 doviz icin (canlidoviz de basarisiz olduysa).
-            _tg_kod_hist = _DOVIZ_TRUNCGIL_KOD.get(t)
-            if _tg_kod_hist and _tg_kod_hist in TCMB_HIST_KAPSAM and _tg_kod_hist in _tcmb_hist_veri:
-                _sonuc_tcmb = tcmb_hesapla_rsi_ret_vol(_tcmb_hist_veri[_tg_kod_hist])
-                if _sonuc_tcmb is not None:
-                    p, rsi, ret, vol_v = _sonuc_tcmb
-                    _gecmis_veri_var = True
-                    print(f"    [TCMB tarihsel] {t}: gercek RSI/Ret1M hesaplandi.")
-        if p == 0.0:
             # v2.0.7.43 - yfinance basarisizsa Truncgil'e dus (RSI/Ret1M
             # icin gecmis veri yok - Bigpara-kaynakli MADEN varliklari gibi
             # notr kalir, bu bir hata degil).
@@ -1466,17 +1451,29 @@ def build():
                          "_gecmis_veri_yok": not _gecmis_veri_var})
     print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi ({_cd_basarili} tanesi Harem/canlidoviz tarihsel ile).")
 
-    # ── TCMB yedek: yfinance'den gelemeyen kurları TCMB ile tamamla ──
-    try:
-        from tcmb_client import enrich_worker_doviz
-        all_rows = enrich_worker_doviz(all_rows)
-        tcmb_ok = sum(1 for r in all_rows
-                      if r.get("Kategori") == "DOVIZ"
-                      and r.get("_tcmb_guncellendi"))
-        if tcmb_ok:
-            print(f"  [TCMB] {tcmb_ok} kur TCMB ile guncellendi/tamamlandi.")
-    except Exception as _tcmb_ex:
-        print(f"  [TCMB] Atlanıyor: {_tcmb_ex}")
+    # v2.0.7.74 - DUZELTME (Bahri'nin talebi: "yatirimcilarin kullandigi
+    # fiyatlar daha cok serbest piyasa fiyatlaridir, TCMB'yi birakabiliriz"):
+    # eskiden burada TCMB (resmi/banka kuru) yedegi vardi - artik TAMAMEN
+    # kaldirildi, yerine ayni Harem/canlidoviz serbest piyasa kaynagi
+    # kullaniliyor. Bu, orijinal 12 dovizi de (USD/EUR/GBP vb.) kapsar -
+    # onlar da "XXXTRY" formatinda oldugu icin son 3 harf (TRY) silinerek
+    # ISO kodu (USD, EUR...) elde edilir, ayri bir esleme sozlugune gerek yok.
+    _harem_yedek_sayisi = 0
+    for _row in all_rows:
+        if _row.get("Kategori") != "DOVIZ":
+            continue
+        if float(_row.get("Son_Fiyat", 0) or 0) > 0:
+            continue
+        _iso_kod = _row["Ticker"][:-3] if _row["Ticker"].endswith("TRY") else None
+        if not _iso_kod:
+            continue
+        _sonuc_yedek = _canlidoviz_hesapla(_iso_kod)
+        if _sonuc_yedek is not None:
+            _row["Son_Fiyat"], _row["RSI"], _row["Ret1M"], _row["Vol"] = _sonuc_yedek
+            _row["_gecmis_veri_yok"] = False
+            _harem_yedek_sayisi += 1
+    if _harem_yedek_sayisi:
+        print(f"  [Harem/canlidoviz yedek] {_harem_yedek_sayisi} kur tamamlandi.")
 
     # ── Kaydet ────────────────────────────────────────────────
     df = pd.DataFrame(all_rows)

@@ -3710,6 +3710,16 @@ elif page in CAT:
     st.title(page)
     if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
+    # v2.0.7.74 - Bahri'nin talebi: Doviz fiyatlarinin SERBEST PIYASA
+    # (Harem/Kapalicarsi kaynakli) oldugu acikca belirtiliyor - TCMB
+    # (resmi/banka kuru) kullanimi tamamen birakildi, cunku yatirimcilarin
+    # gercekte kullandigi fiyatlar serbest piyasa fiyatlaridir.
+    if cat_code == "DOVIZ":
+        st.caption(
+            "Fiyatlar serbest piyasa (Harem/Kapalıçarşı) kaynaklıdır - "
+            "TCMB resmi/banka kuru değildir. Yatırımcıların günlük "
+            "işlemlerde kullandığı fiili piyasa fiyatlarını yansıtır.")
+
     # v2.0.7.45 - Ons Altın (USD) - Bahri'nin talebi: SADECE bilgi amaçlı,
     # TL'ymiş gibi gizlenmeden USD olarak gösterilir. Evrene/skorlamaya/
     # bütçe dağıtımına KATILMAZ (bkz. bigpara_client.fetch_truncgil_ons_usd
