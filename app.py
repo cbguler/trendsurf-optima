@@ -2641,6 +2641,15 @@ if page=="Ana Sayfa":
                     # sayfasindaki not): fiyatsiz varligin skoru daima 0.
                     if float(sel_row_ana.get("Son_Fiyat", 0) or 0) <= 0:
                         disp_score_ana = 0.0
+                    # v2.0.7.71 - KRITIK DUZELTME (Bahri'nin bulgusu, BGNTRY
+                    # ornegi): v2.0.7.69'daki "_gecmis_veri_yok" duzeltmesi
+                    # SADECE liste/tablo gorunumunun yerel kopyasina (df_cat)
+                    # uygulanmisti - sel_row_ana ise DUZELTILMEMIS df_uni'den
+                    # okundugu icin bu Detay sayfasi hala eski (yanlis
+                    # yuksek) skoru gosteriyordu. Ayni Son_Fiyat kontrolu
+                    # gibi burada da acikca tekrarlaniyor.
+                    if bool(sel_row_ana.get("_gecmis_veri_yok", False)):
+                        disp_score_ana = 0.0
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
@@ -3298,6 +3307,10 @@ elif page=="Portföyüm":
                 # v2.0.7.34 - ayni tutarlilik kurali: fiyatsiz varligin skoru daima 0.
                 if float(_sr.get("Son_Fiyat", 0) or 0) <= 0:
                     disp_score_pf = 0.0
+                # v2.0.7.71 - bkz. Ana Sayfa/Kategori Detay'daki ayni not:
+                # _sr de DUZELTILMEMIS df_uni'den okunuyor.
+                if bool(_sr.get("_gecmis_veri_yok", False)):
+                    disp_score_pf = 0.0
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   fmt_tr(float(_sr['Son_Fiyat']),4))
@@ -3863,6 +3876,14 @@ elif page in CAT:
         # veri yoklugundan kaynaklanan celiskili sinyaller uretiyordu.
         # Ayni kural burada da uygulanir.
         if float(sel_row.get("Son_Fiyat", 0) or 0) <= 0:
+            disp_score_cat = 0.0
+        # v2.0.7.71 - KRITIK DUZELTME (Bahri'nin bulgusu, BGNTRY ornegi):
+        # v2.0.7.69'daki "_gecmis_veri_yok" duzeltmesi SADECE liste/tablo
+        # gorunumunun yerel kopyasina (df_cat) uygulanmisti - sel_row ise
+        # DUZELTILMEMIS df_uni'den okundugu icin bu Detay sayfasi hala
+        # eski (yanlis yuksek, orn. 66.7) skoru gosteriyordu. Ayni
+        # Son_Fiyat kontrolu gibi burada da acikca tekrarlaniyor.
+        if bool(sel_row.get("_gecmis_veri_yok", False)):
             disp_score_cat = 0.0
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 
