@@ -278,14 +278,15 @@ def _fetch_kripto_bigpara(usdtry: float = 38.0) -> dict:
 
 # ── Ana fonksiyon ─────────────────────────────────────────────────────────────
 
-# v2.0.4.55: Platin ve Paladyum icin GERCEK bir Turkiye TL piyasasi var
-# (Akbank, Papara, doviz.com gibi kurumlar gram bazinda TL alis/satis
-# yapiyor) - Bigpara'da bu sayfalar sadece USD/ons gosterdigi icin, bu
-# ikisi ozelinde doviz.com kullaniliyor (sayfa yapisi guvenilir: hem
-# tekrar eden bir cumle kalibi hem yapilandirilmis bir tablo var).
+# v2.0.4.55: Platin icin GERCEK bir Turkiye TL piyasasi var (Akbank,
+# Papara, doviz.com gibi kurumlar gram bazinda TL alis/satis yapiyor) -
+# Bigpara'da bu sayfa sadece USD/ons gosterdigi icin doviz.com kullaniliyor
+# (sayfa yapisi guvenilir: hem tekrar eden bir cumle kalibi hem
+# yapilandirilmis bir tablo var).
+# v2.0.7.76: Paladyum bu yedekten cikarildi (Bahri'nin talebi - RSI/Ret1M
+# icin hicbir kaynakta gecmis veri bulunamadigindan sistem disi birakildi).
 DOVIZCOM_PAGES = {
     "PLATIN_TRY":   "https://altin.doviz.com/gram-platin",
-    "PALADYUM_TRY": "https://altin.doviz.com/gram-paladyum",
 }
 
 def _fetch_dovizcom_gram_fiyat(url: str) -> float:
@@ -305,14 +306,11 @@ def _fetch_dovizcom_gram_fiyat(url: str) -> float:
         pass
     return 0.0
 
-def _fetch_platin_paladyum_dovizcom() -> dict:
+def _fetch_platin_dovizcom() -> dict:
     result = {}
     val = _fetch_dovizcom_gram_fiyat(DOVIZCOM_PAGES["PLATIN_TRY"])
     if 500 < val < 20000:
         result["PLATIN_TRY"] = round(val, 4)
-    val = _fetch_dovizcom_gram_fiyat(DOVIZCOM_PAGES["PALADYUM_TRY"])
-    if 500 < val < 20000:
-        result["PALADYUM_TRY"] = round(val, 4)
     return result
 
 
@@ -320,7 +318,7 @@ def _fetch_platin_paladyum_dovizcom() -> dict:
 # istekte tum degerli madenleri (+ 60 doviz + onlarca altin sikke turu)
 # yapilandirilmis JSON (Buying/Selling alanlari net) olarak veren kaynak.
 # Bahri'nin gercek bir istekle dogruladigi yanit uzerinden test edildi -
-# artik ALTIN/GUMUS/PLATIN/PALADYUM icin BIRINCIL kaynak bu. Bigpara/
+# artik ALTIN/GUMUS/PLATIN icin BIRINCIL kaynak bu. Bigpara/
 # doviz.com sentence-pattern yontemleri SADECE bu kaynak basarisiz olursa
 # devreye giren yedek olarak kaliyor.
 TRUNCGIL_URL = "https://finans.truncgil.com/v3/today.json"
@@ -328,7 +326,6 @@ TRUNCGIL_MADEN_KEYLERI = {
     "ALTIN_TRY":    "gram-altin",
     "GUMUS_TRY":    "gumus",
     "PLATIN_TRY":   "gram-platin",
-    "PALADYUM_TRY": "gram-paladyum",
     # v2.0.7.43 - GENISLEME (Bahri'nin talebi): Bahri'nin bizzat cektigi
     # gercek Truncgil yanitinda (13 Temmuz 2026) bu 9 ek altin/gumus
     # turunun de "Buying"/"Selling" alanlariyla yapilandirilmis, guvenilir
@@ -489,12 +486,12 @@ def fetch_all_bigpara(force_refresh: bool = False, usdtry: float = 38.0) -> dict
                 result[t] = maden[t]
                 print(f"  [Bigpara] {t}: yedek kaynaktan alindi")
 
-    _eksik2 = [t for t in ("PLATIN_TRY", "PALADYUM_TRY") if t not in result]
+    _eksik2 = [t for t in ("PLATIN_TRY",) if t not in result]
     if _eksik2:
-        platin_paladyum = _fetch_platin_paladyum_dovizcom()
+        platin = _fetch_platin_dovizcom()
         for t in _eksik2:
-            if t in platin_paladyum:
-                result[t] = platin_paladyum[t]
+            if t in platin:
+                result[t] = platin[t]
                 print(f"  [doviz.com] {t}: yedek kaynaktan alindi")
 
     kripto = _fetch_kripto_bigpara(usdtry=usdtry)

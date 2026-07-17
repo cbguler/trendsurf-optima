@@ -709,12 +709,24 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                     # kaynagi fiyat icin donuk/guvenilmez cikti). RSI ve
                     # Ret1M icin gorece daha az riskli oldugundan (ve
                     # Optima Skoru'nun bir bileseni oldugundan) korunuyor.
+                    # v2.0.7.76: RSI/Ret1M yalnizca fetch GERCEKTEN basariliysa
+                    # (son is not None) yazilir; basarisizsa worker.py'nin
+                    # gece hesapladigi deger dokunulmadan korunur. Ayrica
+                    # basarili fetch'te "_gecmis_veri_yok" bayragi temizlenir
+                    # - aksi halde app.py bu satirlarin Optima Skor'unu
+                    # (ekranda gercek RSI/Ret1M gorunse bile) 0'a sifirlamaya
+                    # devam ediyordu (ALTIN_TRY/GUMUS_TRY/PLATIN_TRY hatasi).
+                    _has_flag_col = "_gecmis_veri_yok" in df.columns
                     for ticker, son, rsi, ret in results:
                         row_mask = df["Ticker"] == ticker
                         if not row_mask.any():
                             continue
+                        if son is None:
+                            continue
                         df.loc[row_mask, "RSI"]   = float(rsi)
                         df.loc[row_mask, "Ret1M"] = float(ret)
+                        if _has_flag_col:
+                            df.loc[row_mask, "_gecmis_veri_yok"] = False
 
         return df
 

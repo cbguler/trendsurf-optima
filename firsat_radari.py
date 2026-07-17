@@ -258,7 +258,7 @@ def tara_fx_maden_kripto(df_uni):
         return out
 
     _MADEN_BP = {"ALTIN_TRY": "gram-altin", "GUMUS_TRY": "gumus",
-                 "PLATIN_TRY": "platin", "PALADYUM_TRY": "paladyum"}
+                 "PLATIN_TRY": "platin"}
     _DOVIZ_BP = {"USDTRY": "USD", "EURTRY": "EUR", "GBPTRY": "GBP",
                  "JPYTRY": "JPY", "CHFTRY": "CHF", "AUDTRY": "AUD",
                  "CADTRY": "CAD", "NZDTRY": "NZD", "NOKTRY": "NOK",

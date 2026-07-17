@@ -299,18 +299,21 @@ KRIPTO = _kripto_evrenini_olustur()
 
 # POL yfinance'de cevap vermezse MATIC-USD ile dene
 
-# ─── 12 Maden / Emtia ────────────────────────────────────────
+# ─── 11 Maden / Emtia (v2.0.7.76: Paladyum kaldirildi - Truncgil'den
+# anlik fiyat gelse de RSI/Ret1M icin hicbir kaynakta (canlidoviz'de
+# slug yok, Harem/doviz.com arsivi 401 ile kapali) gecmis veri
+# bulunamadigi icin Bahri'nin talebiyle sistemden tamamen cikarildi) ──
 MADEN = [
     ("ALTIN_TRY","GC=F"),("GUMUS_TRY","SI=F"),
-    ("PLATIN_TRY","PL=F"),("PALADYUM_TRY","PA=F"),
+    ("PLATIN_TRY","PL=F"),
     # v2.0.7.43 - GENISLEME (Bahri'nin talebi): Truncgil'in ayni yanitinda
     # zaten yapilandirilmis olarak duran 9 ek altin/gumus turu. Bunlarin
     # HICBIRINDE yfinance karsiligi yok (Turkiye'ye ozgu urunler - ceyrek/
     # yarim/tam altin sikkeler, 14/18 ayar, bilezik vb.) - bu yuzden
     # yf sembolu olarak gercekte VAR OLMAYAN, benzersiz bir yer tutucu
-    # kullanilir ve _MADEN_SENTETIK_CEVRIM_YASAK'a eklenir: Platin/
-    # Paladyum'daki gibi SADECE Truncgil/Bigpara'nin gercek TL fiyati
-    # kullanilir, hicbir sentetik USD->TL cevrimi denenmez.
+    # kullanilir ve _MADEN_SENTETIK_CEVRIM_YASAK'a eklenir: Platin'deki
+    # gibi SADECE Truncgil/Bigpara'nin gercek TL fiyati kullanilir,
+    # hicbir sentetik USD->TL cevrimi denenmez.
     ("GRAM_HAS_ALTIN","NOYF_GRAMHAS"),("AYAR14_ALTIN","NOYF_AYAR14"),
     ("AYAR18_ALTIN","NOYF_AYAR18"),("BILEZIK22_ALTIN","NOYF_BILEZIK22"),
     ("IKIBUCUK_ALTIN","NOYF_IKIBUCUK"),("BESLI_ALTIN","NOYF_BESLI"),
@@ -328,7 +331,7 @@ MADEN = [
 # kaynagi (Kademe 1) veya onceki CSV degeri (Kademe 3) kullanilir -
 # hicbir sekilde sentetik cevrim yapilmaz.
 _MADEN_SENTETIK_CEVRIM_YASAK = {
-    "PL=F", "PA=F",
+    "PL=F",
     "NOYF_GRAMHAS", "NOYF_AYAR14", "NOYF_AYAR18", "NOYF_BILEZIK22",
     "NOYF_IKIBUCUK", "NOYF_BESLI", "NOYF_GREMSE", "NOYF_RESAT", "NOYF_HAMIT",
 }
@@ -1143,7 +1146,7 @@ def build():
     # ── 4. Maden + Döviz ─────────────────────────────────────
     MADEN_ADLAR = {
         "ALTIN_TRY": "Altin (TL)", "GUMUS_TRY": "Gumus (TL)",
-        "PLATIN_TRY": "Platin (TL)", "PALADYUM_TRY": "Paladyum (TL)",
+        "PLATIN_TRY": "Platin (TL)",
         # v2.0.7.43 - genisleme
         "GRAM_HAS_ALTIN": "Gram Has Altin", "AYAR14_ALTIN": "14 Ayar Altin",
         "AYAR18_ALTIN": "18 Ayar Altin", "BILEZIK22_ALTIN": "22 Ayar Bilezik",
@@ -1231,7 +1234,7 @@ def build():
     try:
         from bigpara_client import fetch_all_bigpara
         bp_maden = fetch_all_bigpara(usdtry=usdtry_rate)
-        bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","PLATIN_TRY","PALADYUM_TRY"] if bp_maden.get(k, 0) > 0)
+        bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","PLATIN_TRY"] if bp_maden.get(k, 0) > 0)
         if bp_ok:
             print(f"  [Bigpara] {bp_ok} maden fiyati Bigpara'dan alindi.")
     except Exception as _bp_err:
@@ -1256,7 +1259,7 @@ def build():
             print(f"    [Bigpara] {t}: {p:,.4f} TL (birincil)")
 
         # Kademe 2: yfinance USD fiyatı → TRY dönüşümü
-        # v2.0.4.56: PLATIN/PALADYUM icin bu kademe SADECE RSI/Ret1M/Vol
+        # v2.0.4.56: PLATIN icin bu kademe SADECE RSI/Ret1M/Vol
         # (teknik gösterge) hesaplamak icin kullanilir - Son_Fiyat ASLA
         # buradan atanmaz (Bahri'nin ilkesi: sentetik USD*kur fiyati asla
         # goruntulenmez). Bu iki varlik icin Son_Fiyat sadece Kademe 1

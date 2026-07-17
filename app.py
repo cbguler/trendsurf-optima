@@ -1525,8 +1525,13 @@ def _simple_portfolio(portfolio, df_uni):
         c2.metric("Toplam K/Z", fmt_tr_isaretli(df_p['K/Z (₺)'].sum())+" ₺")
 
 def fmt_tr(val, decimals=2):
-    """Float -> Türkçe format: 1.234,56"""
-    if val is None: return "—"
+    """Float -> Türkçe format: 1.234,56
+    v2.0.7.76 (Bahri'nin talebi): eskiden eksik/None deger icin "—"
+    isareti gosteriliyordu - artik hicbir isaret yok, hucre BOS kalir
+    (emoji/widget yok kuraliyla ayni ruhta: sistemde gereksiz gorsel
+    isaretleyici olmasin)."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return ""
     sign = "-" if val < 0 else ""
     s = f"{abs(val):,.{decimals}f}"          # "1,234.56"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1536,7 +1541,8 @@ def fmt_tr_isaretli(val, decimals=2, yuzde=False):
     """v2.0.7.60 - Türkçe format + acik +/- isareti (eskiden "%+.2f" gibi
     Ingilizce format spec'leri kullanilan onlarca yerde tek noktadan
     tekrar kullanilir: 1A Getiri%, K/Z, MACD degisimi vb."""
-    if val is None: return "—"
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return ""
     try:
         val = float(val)
     except (TypeError, ValueError):
@@ -2889,7 +2895,7 @@ elif page=="Portföyüm":
             # Gram-bazli kiymetli madenler
             if t in {"ALTIN_TRY", "GUMUS_TRY", "PLATIN_TRY"}:
                 return "Gram"
-            # Sikkeler ve diger madenler (Bakir, Paladyum vb.) -> Adet
+            # Sikkeler ve diger madenler (Bakir vb.) -> Adet
             return "Adet"
         # TEFAS, KRIPTO, DOVIZ ve digerleri -> Adet
         return "Adet"
@@ -3779,6 +3785,13 @@ elif page in CAT:
     # "_gecmis_veri_yok" ile isaretliyor - burada da skor sifirlanir.
     if "_gecmis_veri_yok" in df_cat.columns:
         df_cat.loc[df_cat["_gecmis_veri_yok"] == True, "Optima_Skor"] = 0.0
+        # v2.0.7.76 (Bahri'nin talebi): gercek gecmis verisi olmayan
+        # satirlarda RSI/Ret1M artik sahte notr (50/0) gostermiyor - hucre
+        # BOS kalir (fmt_tr artik None/NaN icin "" donduruyor). Boylece
+        # "RSI hep 50 gorunuyor, kafa karistirici" durumu ortadan kalkar.
+        for _col in ("RSI", "Ret1M"):
+            if _col in df_cat.columns:
+                df_cat.loc[df_cat["_gecmis_veri_yok"] == True, _col] = None
     df_cat["_fiyatli"] = (df_cat["Son_Fiyat"] > 0).astype(int)
     df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
     df_cat = df_cat.drop(columns=["_fiyatli"])
