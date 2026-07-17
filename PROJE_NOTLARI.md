@@ -231,6 +231,33 @@ vermez — bu dosya o boşluğu dolduruyor.
   edilemezse devreye giren yedek) hâlâ eski (sahte-sıfır) formülü kullanıyor
   — bu yol pratikte neredeyse hiç çalışmadığı için düzeltilmedi, ama ileride
   akla gelirse burası da not düşülsün.
+- **"Skor Bileşimi" paneli üçe bölünmüş, birbirinden habersiz hesap
+  (v2.0.7.79, 17 Temmuz 2026, Bahri'nin bulgusu, YAYLA örneği — Teknik
+  Skor "40,7 / 70" gösteriyordu ama gerçek max 75; Temel Skor Master
+  Skor'u hiç etkilemeyen ayrı bir formüldü).** Üç kopukluk: (1) ekrandaki
+  "Teknik Skor" aslında `enrich()`'in `_d['score']`'u — 0-100'e normalize
+  edilmiş (TEFAS/Kripto/Döviz/Maden'i BIST ile karşılaştırmak için
+  tasarlanmış AYRI bir mantık) + DD/hacim düzeltmesi dahil bir değerdi,
+  ama "/70" diye etiketleniyordu; gerçekte `optima_score()`'un kendi RSI+
+  Momentum+Vol ağırlıkları toplamı 75'tir (70 değil). (2) Ekrandaki "Temel
+  Skor", Master Skor'u belirleyen `optima_score()`'un İÇ temel-analiz
+  hesabından TAMAMEN FARKLI, `kap_client.py`'deki `score_from_fundamentals()`
+  (farklı F/K/PD/DD/Temettü eşikleri + net kâr bonusu, max 30) kullanıyordu
+  — ekranda görünen sayı Master Skor'a hiç girmiyordu. (3) "Master Skor"
+  genelde bu ikisinin toplamı değil, worker.py'nin geceden hesaplayıp
+  CSV'ye yazdığı bağımsız bir değerdi. **Düzeltme:** `optima_score()`
+  `_teknik_alt_skor()` (0-75) ve `_temel_alt_skor()` (0-25) yardımcılarına
+  bölündü — dışarıya dönen davranış AYNI kaldı, ama artık "Skor Bileşimi"
+  paneli (3 yerde: Ana Sayfa/Kategori Detay/Portföyüm) BU İKİ fonksiyonu
+  DOĞRUDAN çağırıyor, `kap_client.score_from_fundamentals()` artık
+  KULLANILMIYOR (kaldırılmadı, sadece çağrılmıyor). Etiketler "/75" ve
+  "/25" olarak düzeltildi. **Bilinmesi gereken kalıntı:** Master Skor BIST
+  için hâlâ genelde worker.py'nin ÖNCEDEN HESAPLANMIŞ (gece, DD/hacim
+  düzeltmesi dahil) değeri olduğundan, Teknik+Temel toplamı Master Skor'u
+  HÂLÂ tam tutturamayabilir (farklı an'ın verisi + düzeltme payı bu
+  panelde ayrıca gösterilmiyor) — ama artık her iki alt bileşen kendi
+  içinde doğru ve TEK kaynaktan, önceki gibi üç bağımsız/çelişkili sayı
+  değil.
 - **Türkçe sayı formatı HER YERDE zorunlu** (`fmt_tr()`/`fmt_tr_isaretli()`
   kullan, asla ham `f"{x:.2f}"` veya `f"{x:,.2f}"` yazma). Bu kural bir kez
   ihlal edilip ~50 yerde toplu düzeltme gerekmişti (v2.0.7.60) — yeni bir
@@ -278,6 +305,11 @@ vermez — bu dosya o boşluğu dolduruyor.
   arasındaki DD/hacim cezası farkı (GZL örneği) için kalıcı çözüm kararı
   alındı (worker.py'nin TEFAS için de tam skoru geceden hesaplaması) ama
   fizibilite testi sonucu bekleniyor.
+- v2.0.7.79 (17 Temmuz 2026, Oturum XVIII): "Skor Bileşimi" paneli
+  (YAYLA örneği) tek kaynağa bağlandı — `_teknik_alt_skor()`/
+  `_temel_alt_skor()` yardımcıları eklendi, `kap_client.
+  score_from_fundamentals()` artık kullanılmıyor, etiketler /75+/25
+  olarak düzeltildi.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

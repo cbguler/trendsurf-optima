@@ -1004,18 +1004,18 @@ def calc_macd(s):
     m=s.ewm(span=12).mean()-s.ewm(span=26).mean()
     return round(float(m.iloc[-1]),4),round(float(m.ewm(span=9).mean().iloc[-1]),4)
 
-def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=None):
-    """
-    Optima Skoru (0-100): teknik + temel faktörler.
-    Ağırlıklar: RSI Zonu 25%, Momentum 35%, Volatilite 15%, Temel 25%.
-    """
-    # RSI Zonu (0-25)
+def _teknik_alt_skor(rsi, ret1m, vol=30.0):
+    """RSI Zonu (0-25) + Momentum (0-35) + Volatilite (0-15) = maks 75.
+    v2.0.7.79'da optima_score()'dan ayrildi (Bahri'nin talebi, YAYLA
+    ornegi) - "Skor Bilesimi" paneli artik BUNU dogrudan cagirir, boylece
+    ekranda gorunen "Teknik Skor" gercekten bu fonksiyonun urettigi HAM
+    (normalize edilmemis) degerdir, /70 gibi yanlis bir etiketle 0-100
+    olcekli baska bir sayi gosterilmez."""
     if 40<=rsi<=60: rsi_s=25
     elif 35<=rsi<=65: rsi_s=18
     elif 30<=rsi<35 or 65<rsi<=70: rsi_s=10
     else: rsi_s=0
 
-    # Momentum / Getiri (0-35)
     if ret1m>=30: mom=35
     elif ret1m>=20: mom=30
     elif ret1m>=10: mom=24
@@ -1024,27 +1024,48 @@ def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=Non
     elif ret1m>=-5: mom=4
     else: mom=0
 
-    # Volatilite cezası (0-15; düşük vol = yüksek puan)
     if vol<20: vol_s=15
     elif vol<35: vol_s=10
     elif vol<55: vol_s=5
     else: vol_s=0
 
-    # Temel analiz (0-25) — yfinance'den gelen F/K ve PD/DD
+    return rsi_s+mom+vol_s   # maks 75
+
+def _temel_alt_skor(pb=None, pe=None, dy=None):
+    """F/K + PD/DD + Temettu = maks 25.
+    v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi): eskiden ekranda gosterilen
+    "Temel Skor" burada degil, kap_client.py'deki AYRI ve FARKLI esik
+    degerlerine (F/K<8 vb.) sahip score_from_fundamentals() ile
+    hesaplaniyordu - ekranda gorunen sayi Master Skor'u hic etkilemiyordu.
+    Artik TEK kaynak burasi: hem "Skor Bilesimi" paneli hem Master Skor'un
+    kendisi (optima_score() araciligiyla) AYNI bu fonksiyonu kullanir.
+    kap_client.score_from_fundamentals() artik hicbir yerde cagrilmiyor."""
     fund_s=0
+    if pe and 0<float(pe)<12: fund_s+=10
+    elif pe and 0<float(pe)<25: fund_s+=5
+    if pb and 0<float(pb)<1.5: fund_s+=8
+    elif pb and 0<float(pb)<3: fund_s+=4
+    if dy and float(dy)>0.08: fund_s+=7
+    elif dy and float(dy)>0.04: fund_s+=3
+    return min(25, fund_s)   # maks 25
+
+def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=None):
+    """
+    Optima Skoru (0-100): teknik + temel faktörler.
+    Ağırlıklar: RSI Zonu 25%, Momentum 35%, Volatilite 15% (teknik toplam
+    75), Temel analiz 25%. v2.0.7.79'da _teknik_alt_skor()/_temel_alt_skor()
+    yardımcılarına bölündü - dış davranış (dönen sayı) DEĞİŞMEDİ, sadece
+    tek kaynak haline getirildi.
+    """
+    teknik = _teknik_alt_skor(rsi, ret1m, vol)   # 0-75
+
     if has_fundamental:
-        if pe and 0<float(pe)<12: fund_s+=10
-        elif pe and 0<float(pe)<25: fund_s+=5
-        if pb and 0<float(pb)<1.5: fund_s+=8
-        elif pb and 0<float(pb)<3: fund_s+=4
-        if dy and float(dy)>0.08: fund_s+=7
-        elif dy and float(dy)>0.04: fund_s+=3
-        return min(100, round(rsi_s+mom+vol_s+fund_s, 1))
+        temel = _temel_alt_skor(pb, pe, dy)      # 0-25
+        return min(100, round(teknik+temel, 1))
 
     # Temel analiz verisi YOKSA: 75 üzerinden hesaplanan skoru 100'e normalize et
     # Böylece TEFAS/Kripto/Döviz/Maden varlıkları BIST ile adil karşılaştırılır
-    raw = rsi_s + mom + vol_s          # max 75
-    return min(100, round(raw * (100.0 / 75.0), 1))
+    return min(100, round(teknik * (100.0 / 75.0), 1))
 
 def get_signal(score,rsi,trend):
     # v2.0.7.68 - KRITIK DUZELTME (Bahri'nin bulgusu, CNYTRY ornegi):
@@ -2728,15 +2749,24 @@ if page=="Ana Sayfa":
                     try:
                         from kap_client import (fetch_kap_fundamentals,
                                                 fundamentals_to_display,
-                                                score_from_fundamentals, get_kap_url)
+                                                get_kap_url)
                         kap_url = get_kap_url(sel_ana)
                         with st.spinner("Temel veriler yukleniyor..."):
                             raw  = fetch_kap_fundamentals(sel_ana)
                             disp = fundamentals_to_display(raw)
-                            fund_skor = score_from_fundamentals(
-                                raw, float(sel_row_ana["Son_Fiyat"]))
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
+                        # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi): Skor
+                        # Bilesimi paneli artik Master Skor'u BELIRLEYEN
+                        # AYNI fonksiyonlari kullanir - eskiden ekranda
+                        # gorunen "Teknik Skor" _d['score'] (0-100'e
+                        # normalize edilmis, DD/hacim dahil) idi ama "/70"
+                        # etiketliydi; "Temel Skor" da Master Skor'u hic
+                        # etkilemeyen ayri bir formuldu (kap_client.
+                        # score_from_fundamentals). Ikisi de artik tek
+                        # kaynaktan (_teknik_alt_skor/_temel_alt_skor).
+                        teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
+                        fund_skor = _temel_alt_skor(pb, pe, dy)
                         # v2.0.4.57: Onceden hesaplanmis (worker.py, gece)
                         # Optima_Skor varsa ONU kullan - boylece bu sayfa,
                         # Ana Sayfa/BIST listesi/Portfoyum ile AYNI sayiyi
@@ -2767,9 +2797,9 @@ if page=="Ana Sayfa":
                             <div class="ts-card">
                             <b>Skor Bilesimi</b><br><br>
                             <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(d['score'],1)} / 70</b><br><br>
-                            <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu + Kar)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 30</b><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
+                            <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu)</small><br>
+                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>
                             <hr style='border-color:#e0e8f4;margin:10px 0'>
                             <small style='color:#6c7a9c'>Master Skor</small><br>
                             <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
@@ -3385,16 +3415,21 @@ elif page=="Portföyüm":
                 st.divider()
                 st.subheader("Temel Analiz")
                 try:
-                    from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
-                                            score_from_fundamentals, get_kap_url)
+                    from kap_client import (fetch_kap_fundamentals,
+                                            fundamentals_to_display, get_kap_url)
                     _kap_url = get_kap_url(_sel_tkr)
 
                     with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
                         _raw  = fetch_kap_fundamentals(_sel_tkr)
                         _disp = fundamentals_to_display(_raw)
-                        _fund_skor = score_from_fundamentals(_raw, float(_sr["Son_Fiyat"]))
 
                     _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
+                    # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz.
+                    # yukaridaki Ana Sayfa blogundaki ayni not: Skor
+                    # Bilesimi artik Master Skor'u belirleyen AYNI
+                    # fonksiyonlari kullanir.
+                    _teknik_skor = _teknik_alt_skor(_d["rsi"], _d["ret1m"], _d["vol"])
+                    _fund_skor = _temel_alt_skor(_pb, _pe, _dy)
                     _precomp2 = _sr.get("Optima_Skor")
                     if _precomp2 is not None and _precomp2 == _precomp2:
                         _combined = float(_precomp2)
@@ -3430,9 +3465,9 @@ elif page=="Portföyüm":
                         <div class="ts-card">
                         <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                         <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_d['score'],1)} / 70</b><br><br>
-                        <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_fund_skor,1)} / 30</b><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_teknik_skor,1)} / 75</b><br><br>
+                        <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
+                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_fund_skor,1)} / 25</b><br>
                         <hr style='border-color:#e0e8f4;margin:10px 0'>
                         <small style='color:#6c7a9c'>Master Skor</small><br>
                         <b style='font-size:30px;color:{_clr}'>{_combined}</b> <small>/100</small><br><br>
@@ -3987,15 +4022,18 @@ elif page in CAT:
         st.subheader("Temel Analiz")
         try:
             from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
-                                    score_from_fundamentals, get_kap_url)
+                                    get_kap_url)
             kap_url = get_kap_url(sel)
 
             with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
                 raw  = fetch_kap_fundamentals(sel)
                 disp = fundamentals_to_display(raw)
-                fund_skor = score_from_fundamentals(raw, float(sel_row["Son_Fiyat"]))
 
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
+            # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz. yukaridaki
+            # diger iki detay blogundaki ayni not.
+            teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
+            fund_skor = _temel_alt_skor(pb, pe, dy)
             # v2.0.4.57: Onceden hesaplanmis skoru tercih et (bkz. yukaridaki
             # diger iki detay bloguyla ayni mantik)
             _precomp3 = sel_row.get("Optima_Skor")
@@ -4038,9 +4076,9 @@ elif page in CAT:
                 <div class="ts-card">
                 <b style='font-size:14px'>Skor Bileşimi</b><br><br>
                 <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(d['score'],1)} / 70</b><br><br>
-                <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü + Kâr)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 30</b><br>
+                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
+                <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
+                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>
                 <hr style='border-color:#e0e8f4;margin:10px 0'>
                 <small style='color:#6c7a9c'>Master Skor</small><br>
                 <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
