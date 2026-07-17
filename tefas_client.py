@@ -70,8 +70,21 @@ def _calc_rsi(prices: pd.Series, period: int = 14) -> float:
     return round(100 - (100 / (1 + g.iloc[-1] / ll)), 1)
 
 
-def _rsi_from_rets(ret1m: float, ret3m: float, ret1y: float) -> float:
-    momentum = ret1m * 0.5 + ret3m * 0.3 + ret1y * 0.2
+def _rsi_from_rets(ret1m, ret3m, ret1y) -> float:
+    """v2.0.7.78 - DUZELTME (Bahri'nin bulgusu, DTH ornegi): eskiden
+    eksik donem (None/NaN yerine 0.0 varsayilan) agirlikli ortalamaya
+    SIFIR getiri olarak giriyordu - bu, henuz 1 yillik (ya da 3 aylik)
+    gecmisi olmayan ama gercekte yukselmis bir fonun RSI'sini yapay
+    olarak asagi cekiyordu (DTH: gercek RSI ~61 yerine 59 cikiyordu).
+    Artik eksik donemler agirlikli ortalamadan TAMAMEN CIKARILIR, kalan
+    donemlerin agirliklari kendi aralarinda yeniden olceklenir. Hicbir
+    donem yoksa (cok nadir) notr RSI=50.0 donulur."""
+    bilesenler = [(ret1m, 0.5), (ret3m, 0.3), (ret1y, 0.2)]
+    gecerli = [(v, w) for v, w in bilesenler if v is not None]
+    if not gecerli:
+        return 50.0
+    toplam_agirlik = sum(w for _, w in gecerli)
+    momentum = sum(v * w for v, w in gecerli) / toplam_agirlik
     return round(max(15.0, min(85.0, 50.0 + (momentum / 30.0) * 20.0)), 1)
 
 
@@ -134,11 +147,28 @@ def load_excel_all(excel_dir: str = "") -> pd.DataFrame:
             def _pct(col_name):
                 v = row.get(col_name)
                 if v is None or (isinstance(v, float) and np.isnan(v)):
-                    return 0.0
+                    # v2.0.7.78 - DUZELTME (Bahri'nin bulgusu, DTH ornegi:
+                    # 6 Ay/1 Yil "%0,00" gosteriyordu ama fon o donemde
+                    # acikca yukselmisti). Eskiden burada 0.0 donuyordu -
+                    # "veri yok" (fon o kadar eski degil / Excel'de bos)
+                    # ile "gercekten %0 getiri" ayirt edilemiyordu. Artik
+                    # None doner - asagida RSI hesabinda eksik donem
+                    # agirlikli ortalamadan CIKARILIR (sifir sayilmaz),
+                    # ekranda da bos gosterilir (fmt_tr None/NaN icin
+                    # bos metin donduruyor, v2.0.7.76).
+                    return None
                 v = float(v)
                 return round(v * 100, 4) if abs(v) <= 2.0 else round(v, 4)
-            ret1m = _pct("1 Ay (%)")
-            ret3m = _pct("3 Ay (%)")
+            ret1m_raw = _pct("1 Ay (%)")
+            ret3m_raw = _pct("3 Ay (%)")
+            ret6m_raw = _pct("6 Ay (%)")
+            ret1y_raw = _pct("1 Yıl (%)")
+            ret3y_raw = _pct("3 Yıl (%)")
+            ret5y_raw = _pct("5 Yıl (%)")
+            # Ret1M sadece optima_score()'un dogrudan girdisi oldugu icin
+            # (RSI/Ret3M/Ret6M/Ret1Y/Ret3Y/Ret5Y'nin aksine) NaN kabul
+            # etmez - eksikse 0.0'a duser (cok nadir: ~1348 fonun 12'si).
+            ret1m = ret1m_raw if ret1m_raw is not None else 0.0
             risk_v = (int(float(row.get(col_risk,4) or 4))
                       if col_risk and pd.notna(row.get(col_risk,4)) else 4)
             # Risk degerinden yillik volatilite tahmini (TEFAS resmi risk skalasi 1-7)
@@ -152,14 +182,13 @@ def load_excel_all(excel_dir: str = "") -> pd.DataFrame:
                 "Tur":        str(row.get(col_tur,"")) if col_tur else "",
                 "Risk_Deger": risk_v,
                 "Son_Fiyat":  0.0,
-                "RSI":        _rsi_from_rets(ret1m, _pct("3 Ay (%)"),
-                                             _pct("1 Yıl (%)")),
+                "RSI":        _rsi_from_rets(ret1m_raw, ret3m_raw, ret1y_raw),
                 "Ret1M":  ret1m,
-                "Ret3M":  _pct("3 Ay (%)"),
-                "Ret6M":  _pct("6 Ay (%)"),
-                "Ret1Y":  _pct("1 Yıl (%)"),
-                "Ret3Y":  _pct("3 Yıl (%)"),
-                "Ret5Y":  _pct("5 Yıl (%)"),
+                "Ret3M":  ret3m_raw,
+                "Ret6M":  ret6m_raw,
+                "Ret1Y":  ret1y_raw,
+                "Ret3Y":  ret3y_raw,
+                "Ret5Y":  ret5y_raw,
                 "Vol":    RISK_TO_VOL.get(risk_v, 18.0),
                 "YF_Symbol": "",
             })

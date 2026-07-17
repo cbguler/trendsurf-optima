@@ -178,6 +178,59 @@ vermez — bu dosya o boşluğu dolduruyor.
   `fmt_tr_isaretli()` artık None/NaN için boş metin (`""`) döndürür, tire
   değil. Yeni bir yerde eksik veri göstermek gerekirse bu iki fonksiyonu
   kullan, elle `"—"` yazma.
+- **Liste ile Detay arasında DD/hacim cezası farkı (17 Temmuz 2026, Bahri'nin
+  bulgusu, GZL/TEFAS örneği — 60,0 liste / 53,0 Detay).** `enrich()` (Detay
+  sayfası) skoru `base_score + hacim_trendi_duzeltmesi + Max_Drawdown_cezasi`
+  olarak hesaplar; liste tablosu (`df_cat["Optima_Skor"]`) SADECE
+  `optima_score(RSI,Ret1M,Vol)` — DD/hacim düzeltmesi hiç yok. BIST'te sorun
+  yok çünkü worker.py TAM skoru (DD/hacim dahil) geceden hesaplayıp CSV'ye
+  yazıyor, liste de onu kullanıyor (`df_cat["Optima_Skor"].notna().any()`
+  kontrolü). **TEFAS/Kripto/Döviz/Maden'de worker.py bu ön-hesaplamayı hiç
+  yapmıyor** — liste bu yüzden basit formüle düşüyor.
+  **TEFAS'ın özel zorluğu:** günlük NAV geçmişi worker.py'de YOK, sadece
+  kullanıcı bir fonun detayına tıklayınca `app.py`'nin `_load_tefas_cache`/
+  `_save_tefas_cache` (pytefas `Crawler.fetch()`, fon başına TEK istek,
+  toplu uç nokta yok) ile TEMBEL (lazy) doldurulan bir önbellek var — 1340
+  fonun tamamı için değil. **KARAR (Bahri, 17 Temmuz): kalıcı çözüm
+  isteniyor — worker.py BIST gibi TAM skoru geceden hesaplayacak şekilde
+  genişletilecek, ama önce 1340 fonu toplu çekmenin ne kadar sürdüğü
+  fizibilite testiyle doğrulanacak.** Test betiği hazırlandı
+  (`test_tefas_bulk_fizibilite.py`, sıralı vs paralel/ThreadPoolExecutor
+  zamanlama karşılaştırması) — Bahri'nin proje klasöründe çalıştırıp
+  sonucu iletmesi bekleniyor. **Sonuç gelmeden worker.py'yi TEFAS için
+  genişletme kararını uygulamaya kalkma — süre kabul edilemez çıkarsa
+  (örn. GitHub Actions'ın pratik limitlerini aşarsa) farklı bir yaklaşım
+  (örn. sadece portföydeki/en çok görüntülenen fonlar için önceden
+  hesaplama, BIST'in `refresh_bist_selective` mantığına benzer) gerekebilir.**
+  Kripto/Döviz/Maden için ise durum muhtemelen çok daha kolay: PROJE_NOTLARI
+  §1'de belirtildiği gibi bu kategorilerin RSI/Ret1M'i ZATEN gerçek günlük
+  geçmişten (aynı API çağrısından, atomik) geliyor — yani DD hesaplaması
+  için EK bir ağ isteği gerekmeyebilir, sadece mevcut veriden bir hesaplama
+  eklemek yeterli olabilir. Bu, TEFAS'tan bağımsız, daha ucuz bir kazanım
+  olabilir — ayrıca değerlendirilebilir.
+- **TEFAS Ret6M/Ret1Y için sahte %0,00 (v2.0.7.78, 17 Temmuz 2026, Bahri'nin
+  bulgusu, DTH örneği).** "TEFAS Getiri ve Risk Analizi" panelinde 6 Ay ve
+  1 Yıl getirisi "%0,00" gösteriyordu ama fonun mum grafiği o dönemde
+  açıkça yükselmişti — `tefas_client.py`'nin `_pct()` fonksiyonu Excel'de
+  boş/NaN olan hücreleri (fon o kadar eski değilse TEFAS'ın kendi 6 Ay/
+  1 Yıl sütunu boş kalıyor) sessizce `0.0`'a çeviriyordu, "veri yok" ile
+  "gerçekten %0 getiri" ayırt edilemiyordu — TAM OLARAK `_gecmis_veri_yok`
+  ile çözülen sorunun aynısı, farklı bir veri yolunda. **Kapsam küçük değil:
+  1348 fonun 201'i (1 Yıl) ve 61'i (6 Ay) etkileniyordu.** Daha kötüsü, bu
+  sahte sıfır `_rsi_from_rets(ret1m,ret3m,ret1y)` ağırlıklı ortalamasına da
+  giriyordu (ret1y ağırlığı %20) — RSI'yi yapay olarak aşağı çekiyordu (DTH:
+  59,0 yerine gerçek değer 61,2). **Düzeltme:** `_pct()` artık `None` döner
+  (0.0 değil); `_rsi_from_rets()` eksik dönemi ağırlıklı ortalamadan
+  ÇIKARIR, kalan dönemlerin ağırlığını yeniden ölçekler (hiçbiri yoksa nötr
+  50.0); `worker.py`'nin Kaydet bölümündeki Ret3M/Ret1Y için eski
+  `.fillna(0.0)` kaldırıldı (gerçek NaN korunuyor, `fmt_tr` bunu otomatik
+  boş gösteriyor). **Ret1M dokunulmadı** (optima_score()'un doğrudan
+  girdisi olduğu için hâlâ 0.0'a düşüyor — ama bu sadece ~1348 fonun 12'sini
+  etkiliyor, çok nadir). **Henüz dokunulmayan, düşük öncelikli bir yer var:**
+  worker.py'nin "Minimal fallback" yolu (tefas_client.py hiç import
+  edilemezse devreye giren yedek) hâlâ eski (sahte-sıfır) formülü kullanıyor
+  — bu yol pratikte neredeyse hiç çalışmadığı için düzeltilmedi, ama ileride
+  akla gelirse burası da not düşülsün.
 - **Türkçe sayı formatı HER YERDE zorunlu** (`fmt_tr()`/`fmt_tr_isaretli()`
   kullan, asla ham `f"{x:.2f}"` veya `f"{x:,.2f}"` yazma). Bu kural bir kez
   ihlal edilip ~50 yerde toplu düzeltme gerekmişti (v2.0.7.60) — yeni bir
@@ -219,6 +272,12 @@ vermez — bu dosya o boşluğu dolduruyor.
   PLATIN skor sıfırlanması) düzeltildi; eksik veri için `"—"` yerine boş
   gösterim; **`bool(NaN)==True` hatası** (TEFAS/BIST/KRIPTO Detay
   sayfalarının hepsini etkileyen, 4 konumda tekrarlanan) düzeltildi.
+- v2.0.7.78 (17 Temmuz 2026, Oturum XVIII): TEFAS Ret6M/Ret1Y için sahte
+  %0,00 düzeltildi (DTH örneği, `_pct()`/`_rsi_from_rets()`/worker.py Kaydet
+  bölümü) — RSI hesabı artık eksik dönemi doğru dışlıyor. Liste/Detay
+  arasındaki DD/hacim cezası farkı (GZL örneği) için kalıcı çözüm kararı
+  alındı (worker.py'nin TEFAS için de tam skoru geceden hesaplaması) ama
+  fizibilite testi sonucu bekleniyor.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

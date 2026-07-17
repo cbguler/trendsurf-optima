@@ -1482,10 +1482,17 @@ def build():
     df = pd.DataFrame(all_rows)
     for col in ["RSI", "Ret1M"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(50.0 if col == "RSI" else 0.0)
+    # v2.0.7.78 - DUZELTME (Bahri'nin bulgusu, DTH ornegi): Ret3M/Ret1Y
+    # icin buradaki eski ".fillna(0.0)" satiri, tefas_client.py'nin artik
+    # BILEREK None birakip "veri yok" ile "gercekten %0 getiri"yi ayirt
+    # ettigi degerleri tekrar sahte sifira ceviriyordu - "TEFAS Getiri ve
+    # Risk Analizi" panelinde 6 Ay/1 Yil icin yanlis %0,00 gorunmesinin
+    # kaynagi buydu. Artik sadece numerik tipe cevriliyor, GERCEK NaN
+    # (veri yoksa) korunuyor - ekranda fmt_tr bunu otomatik bos gosterir.
     for col in ["Ret3M", "Ret1Y"]:
         if col not in df.columns:
-            df[col] = 0.0
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
     if "Vol" not in df.columns:
         df["Vol"] = 30.0
     df["Vol"] = pd.to_numeric(df["Vol"], errors="coerce").fillna(30.0)
