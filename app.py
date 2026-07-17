@@ -1185,7 +1185,16 @@ def live_optima_score(row, period="1mo"):
     # gecmis veri bulunamadigi icin) acikca isaretlemisse, asagidaki
     # hesaplamalara hic girmeden dogrudan 0 dondur - Son_Fiyat<=0 ile
     # AYNI mantik (bkz. kategori sayfasindaki ayni yorum).
-    if bool(row.get("_gecmis_veri_yok", False)):
+    # v2.0.7.77 - KRITIK DUZELTME (Bahri'nin bulgusu, FZJ/TEFAS ornegi):
+    # bool(x) Python'da NaN icin de True doner ("NaN sifir degil" mantigi
+    # yuzunden) - ama bu bayrak SADECE DOVIZ/MADEN satirlarinda ayarlanir,
+    # TEFAS/BIST/KRIPTO'da hic yok, yani df birlestirilince NaN olur.
+    # bool(NaN)==True oldugu icin TEFAS/BIST/KRIPTO'nun HEPSI yanlislikla
+    # "veri yok" sanilip skoru sifirlaniyordu - liste tablosu ise "== True"
+    # kullandigindan (NaN==True daima False) bu hataya hic dusmuyordu, bu
+    # yuzden liste dogru/detay yanlis gibi bir celiski olusuyordu. Asagidaki
+    # "== True" karsilastirmasi liste ile AYNI (dogru) mantigi kullanir.
+    if row.get("_gecmis_veri_yok") == True:
         return 0.0
     try:
         d = enrich(row, period)
@@ -2654,7 +2663,10 @@ if page=="Ana Sayfa":
                     # okundugu icin bu Detay sayfasi hala eski (yanlis
                     # yuksek) skoru gosteriyordu. Ayni Son_Fiyat kontrolu
                     # gibi burada da acikca tekrarlaniyor.
-                    if bool(sel_row_ana.get("_gecmis_veri_yok", False)):
+                    # v2.0.7.77 - bkz. live_optima_score()'daki ayni not:
+                    # bool(NaN)==True oldugu icin TEFAS/BIST/KRIPTO burada
+                    # yanlislikla hep 0 gosteriyordu - "== True" ile duzeltildi.
+                    if sel_row_ana.get("_gecmis_veri_yok") == True:
                         disp_score_ana = 0.0
                     sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
 
@@ -3315,7 +3327,10 @@ elif page=="Portföyüm":
                     disp_score_pf = 0.0
                 # v2.0.7.71 - bkz. Ana Sayfa/Kategori Detay'daki ayni not:
                 # _sr de DUZELTILMEMIS df_uni'den okunuyor.
-                if bool(_sr.get("_gecmis_veri_yok", False)):
+                # v2.0.7.77 - bkz. live_optima_score()'daki ayni not:
+                # bool(NaN)==True oldugu icin TEFAS/BIST/KRIPTO burada
+                # yanlislikla hep 0 gosteriyordu - "== True" ile duzeltildi.
+                if _sr.get("_gecmis_veri_yok") == True:
                     disp_score_pf = 0.0
                 _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
@@ -3903,7 +3918,15 @@ elif page in CAT:
         # DUZELTILMEMIS df_uni'den okundugu icin bu Detay sayfasi hala
         # eski (yanlis yuksek, orn. 66.7) skoru gosteriyordu. Ayni
         # Son_Fiyat kontrolu gibi burada da acikca tekrarlaniyor.
-        if bool(sel_row.get("_gecmis_veri_yok", False)):
+        # v2.0.7.77 - KRITIK DUZELTME (Bahri'nin bulgusu, FZJ/TEFAS ornegi:
+        # liste tablosunda Optima Skor 66,7 ama hemen altindaki Detay
+        # panelinde 0,0 gorunuyordu). bool(NaN)==True oldugu icin (Python'da
+        # NaN "sifir degil" sayildigindan) bu bayragin hic ayarlanmadigi
+        # TEFAS/BIST/KRIPTO kategorilerinde skor yanlislikla hep 0'a
+        # sifirlaniyordu - liste tablosu "== True" kullandigi icin (NaN==True
+        # daima False) bu hataya dusmuyordu. Asagidaki karsilastirma artik
+        # liste ile birebir ayni (dogru) mantigi kullanir.
+        if sel_row.get("_gecmis_veri_yok") == True:
             disp_score_cat = 0.0
         sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
 

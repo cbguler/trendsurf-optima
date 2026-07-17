@@ -47,6 +47,20 @@ vermez — bu dosya o boşluğu dolduruyor.
      bu 51 dövizin hepsini numaralı kod olarak tanıyor.
   3. Truncgil (`finans.truncgil.com/v3/today.json`) — SADECE anlık fiyat,
      geçmiş veri YOK. Son çare, `_gecmis_veri_yok=True` ile işaretlenir.
+- **GÜNCELLEME (17 Temmuz 2026, Oturum XVIII): Yukarıdaki 2. madde artık
+  ÇALIŞMIYOR.** `doviz.com`'un kurumsal arşiv API'si (`api.doviz.com/api/
+  v12/assets/.../archive`) — hem borsapy'nin kendi canlı token çekme
+  mekanizması hem elle denenen 3 farklı sayfadan (www.doviz.com,
+  altin.doviz.com, kur.doviz.com) token kazıma denemesi **401 Unauthorized**
+  ile karşılaştı. Site artık token'ı sayfa HTML'sine gömmüyor gibi
+  görünüyor (muhtemelen JS bundle'ına taşınmış, Ocak 2026'daki kütüphane
+  doğrulamasından beri değişmiş). **Harem kurumsal tarihçesi şu an dıştan
+  erişilemez durumda** — 51 genişleme dövizi büyük ihtimalle Truncgil'e
+  (sadece anlık fiyat, `_gecmis_veri_yok=True`) düşüyor olmalı, canlidoviz
+  METAL_IDS/CURRENCY_IDS gibi doğrudan (auth gerektirmeyen) kanallar hâlâ
+  çalışıyor. **Bu maddeyi "çalışıyor" varsayıp tekrar test etmeden Harem
+  üzerine yeni bir özellik kurma — önce `test_maden_kaynak.py` tarzı bir
+  betikle (repoda örneği var) güncel durumu doğrula.**
 - **TCMB KULLANILMIYOR — BİLİNÇLİ OLARAK REDDEDİLDİ (v2.0.7.74).**
   Sebep: Bahri'nin talebi — "yatırımcıların kullandığı fiyatlar daha çok
   serbest piyasa fiyatlarıdır". TCMB sadece 21 döviz kapsıyordu (Harem/
@@ -54,13 +68,28 @@ vermez — bu dosya o boşluğu dolduruyor.
   `tcmb_client.py` dosyası hâlâ duruyor ama worker.py'nin DOVIZ döngüsünde
   ARTIK ÇAĞRILMIYOR. **Tekrar TCMB önerme — zaten denendi, terk edildi.**
 - Sayfada "Fiyatlar serbest piyasa (Harem/Kapalıçarşı) kaynaklıdır"
-  notu var (Bahri'nin talebiyle eklendi).
+  notu var (Bahri'nin talebiyle eklendi) — Harem şu an erişilemez olsa da
+  bu not güncel kalabilir (canlidoviz de serbest piyasa verisi).
 
-### Değerli Madenler (18: 4 ana + 9 Truncgil türü + 5 canlı overlay sikke)
-- Bigpara (TL bazlı, doğrudan) — birincil, Gram Altın/Gümüş için.
-- yfinance USD→TRY çevrimi — SADECE Platin/Paladyum'un teknik göstergesi
-  (RSI/Ret/Vol) için, **Son_Fiyat'ı ASLA sentetik USD*kur ile doldurmaz**
-  (Bahri'nin ilkesi: gerçek TL fiyatı yoksa sentetik gösterilmez).
+### Değerli Madenler (17: 3 ana + 9 Truncgil türü + 5 canlı overlay sikke)
+- **v2.0.7.76 (17 Temmuz 2026) - Paladyum TAMAMEN KALDIRILDI.** Sebep:
+  RSI/Ret1M için hiçbir kaynakta (canlidoviz'de gram-paladyum slug'ı yok,
+  Harem 401 ile kapalı) geçmiş veri bulunamıyordu, sonsuza dek 0 skor/boş
+  RSI gösterecekti. Bahri'nin talebiyle worker.py/bigpara_client.py/
+  firsat_radari.py'den tüm izleri silindi. **Tekrar eklemeyi önerme.**
+- Bigpara/Truncgil (TL bazlı, doğrudan) — birincil, Gram Altın/Gümüş/
+  Platin için.
+- **canlidoviz (`bp.FX(slug).history()`) 9/9 doğrulandı çalışıyor**
+  (17 Temmuz 2026 testi, bkz. `test_maden_kaynak.py`): gram-altin,
+  ceyrek/yarim/tam/cumhuriyet/ata-altin, gram-gumus, ons-altin,
+  gram-platin — bunların hepsi GERÇEK geçmiş veri döndürüyor, Harem'e
+  hiç ihtiyaç yok. Bu, ALTIN_TRY/GUMUS_TRY/PLATIN_TRY + 5 sikkenin RSI/
+  Ret1M/skor hesaplarının kaynağı.
+- 9 Truncgil-türü sikke/ayar (Gram Has, 14/18 Ayar, Bilezik22, İkibuçuk,
+  Beşli, Gremse, Reşat, Hamit) — HİÇBİR kaynakta geçmiş veri yok (Truncgil
+  sadece anlık, canlidoviz'de slug yok, Harem 401). **Bahri'nin kararı
+  (17 Temmuz): şimdilik sistemde kalsınlar, RSI/Skor boş görünsün — Paladyum
+  gibi kaldırılmaları henüz onaylanmadı, bekleniyor.**
 - Ons Altın (USD) sadece bilgi amaçlı gösterilir, evrene/skora katılmaz.
 
 ---
@@ -124,6 +153,31 @@ vermez — bu dosya o boşluğu dolduruyor.
 - **`column_config`'in gerçek bir `alignment="left/center/right"`
   parametresi var** — CSS "text-align" hack'ine gerek yok, bu daha
   güvenilir ve daha az işlem gerektirir.
+- **`bool(x)` Python'da NaN için de `True` döner — NaN "sıfır değil"
+  sayıldığından ("truthy").** Bu, `_gecmis_veri_yok` bayrağını okuyan 4
+  yerde (v2.0.7.71'de yazılmış, "KRITIK DUZELTME" olarak) `bool(row.get(
+  "_gecmis_veri_yok", False))` deseniyle gizli bir hataya yol açmıştı:
+  bu bayrak SADECE DOVIZ/MADEN satırlarında ayarlanır, TEFAS/BIST/KRIPTO'da
+  hiç yoktur — `pd.DataFrame(all_rows)` birleştirince bu kategorilerde
+  sütun NaN olur, `bool(NaN)==True` olduğundan TEFAS/BIST/KRIPTO'nun TÜM
+  Detay sayfaları (Ana Sayfa, kategori sayfası, Portföyüm satış-analizi,
+  `live_optima_score()`) yanlışlıkla "veri yok" sanılıp skoru 0'a
+  sıfırlanıyordu. Liste tablosu ise pandas'ın vektörel `== True`
+  karşılaştırmasını kullandığından (`NaN == True` HER ZAMAN `False`
+  döner) bu hataya hiç düşmüyordu — sonuç: liste doğru skor gösterirken
+  hemen altındaki Detay paneli 0,0 gösteriyordu (17 Temmuz 2026, Bahri'nin
+  bulgusu, FZJ/TEFAS örneği; v2.0.7.77'de düzeltildi). **Bahri aynı gün
+  örnekleme ile TÜM TEFAS varlıklarını kontrol etti, HEPSİNDE aynı sorunu
+  doğruladı** — beklenen sonuç, çünkü `_gecmis_veri_yok` TEFAS'ın 1340
+  satırının TAMAMINDA NaN (worker.py bu bayrağı hiç yazmıyor). **Kural: pandas
+  satırından/DataFrame'den okunan, NaN olabilecek bir bayrak/işaret sütunu
+  test edilirken ASLA `bool(x)` kullanma, HER ZAMAN `x == True` (ya da
+  `x is True`) kullan.**
+- **Eksik/None/NaN sayısal değer için `"—"` (tire) işareti YASAK (v2.0.7.76,
+  Bahri'nin talebi — emoji/widget yasağıyla aynı ruhta).** `fmt_tr()` ve
+  `fmt_tr_isaretli()` artık None/NaN için boş metin (`""`) döndürür, tire
+  değil. Yeni bir yerde eksik veri göstermek gerekirse bu iki fonksiyonu
+  kullan, elle `"—"` yazma.
 - **Türkçe sayı formatı HER YERDE zorunlu** (`fmt_tr()`/`fmt_tr_isaretli()`
   kullan, asla ham `f"{x:.2f}"` veya `f"{x:,.2f}"` yazma). Bu kural bir kez
   ihlal edilip ~50 yerde toplu düzeltme gerekmişti (v2.0.7.60) — yeni bir
@@ -147,6 +201,8 @@ vermez — bu dosya o boşluğu dolduruyor.
 | Muhasebe Toplam satırını ayrı tabloya taşımak | GERİ ALINDI (v2.0.7.60) | Görsel kopukluk yarattı, checkbox sorunundan daha kötüydü. |
 | VBA makrosu (KAP şirket listesi taraması) | Python'a çevrildi | `bist-sirketler` sayfası JS'e bağımlı olabilir, Python + requests daha güvenilir. |
 | Excel'deki (Şirketler.xlsx) hyperlink'lerden URL çekmek | Mümkün değil | Bu spesifik KAP export'unda gizli hyperlink yok, düz metin. |
+| Paladyum (Değerli Madenler) | KALDIRILDI (v2.0.7.76) | RSI/Ret1M için hiçbir kaynakta (canlidoviz'de slug yok, Harem 401) geçmiş veri yok, sonsuza dek 0 skor gösterecekti. |
+| Harem/doviz.com kurumsal arşivi (yeni tür eklemek için) | ERİŞİLEMEZ (17 Tem 2026) | Token çıkarma mekanizması (hem borsapy'ninki hem elle deneme) 401 alıyor - site token'ı artık HTML'e gömmüyor. Tekrar denemeden önce güncel durumu test et. |
 
 ---
 
@@ -157,6 +213,12 @@ vermez — bu dosya o boşluğu dolduruyor.
 - v2.0.7.47-67: Muhasebe sistemi (portfolio_ledger.py), Türkçe format düzeltmeleri (sistem geneli), KAP gerçek entegrasyonu
 - v2.0.7.68-71: Sinyal mantığı düzeltmeleri, veri-yok tespiti (`_gecmis_veri_yok` bayrağı)
 - v2.0.7.72-74: TCMB tarihsel deneme → Harem/canlidoviz'e geçiş (TCMB tamamen terk edildi)
+- v2.0.7.76-77 (17 Temmuz 2026, Oturum XVIII): Paladyum kaldırıldı; Harem/
+  doviz.com arşiv API'sinin 401 ile kapandığı keşfedildi (bkz. Döviz/Maden
+  bölümü); MADEN `_gecmis_veri_yok` bayrak temizleme hatası (ALTIN/GUMUS/
+  PLATIN skor sıfırlanması) düzeltildi; eksik veri için `"—"` yerine boş
+  gösterim; **`bool(NaN)==True` hatası** (TEFAS/BIST/KRIPTO Detay
+  sayfalarının hepsini etkileyen, 4 konumda tekrarlanan) düzeltildi.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
