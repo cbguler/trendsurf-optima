@@ -832,51 +832,14 @@ def single_full(yf_sym, label="", period="1y"):
 
 
 
-def get_cross_rate_hist(ticker: str, yf_sym: str,
-                         start: str, end: str) -> "pd.Series":
-    """
-    JPYTRY, AUDTRY, CADTRY gibi doğrudan yfinance'de güvenilmez olan çiftler için
-    USD üzerinden cross rate hesaplar.
-    JPYTRY = USDTRY / USDJPY
-    AUDTRY = AUDUSD * USDTRY
-    CADTRY = USDCAD^-1 * USDTRY  (veya CADUSD * USDTRY)
-    """
-    import yfinance as yf
-
-    cross_map = {
-        "JPYTRY=X": ("USDTRY=X", "JPY=X",    "div"),   # USDTRY / USDJPY
-        "AUDTRY=X": ("USDTRY=X", "AUDUSD=X",  "mul"),   # AUDUSD * USDTRY
-        "CADTRY=X": ("USDTRY=X", "CAD=X",     "div"),   # USDTRY / USDCAD
-        "NZDTRY=X": ("USDTRY=X", "NZDUSD=X",  "mul"),
-        "NOKTRY=X": ("USDTRY=X", "NOK=X",     "div"),   # USDTRY / USDNOK
-        "SEKTRY=X": ("USDTRY=X", "SEK=X",     "div"),   # USDTRY / USDSEK
-        "DKKTRY=X": ("USDTRY=X", "DKK=X",     "div"),   # USDTRY / USDDKK
-        "CNYTRY=X": ("USDTRY=X", "CNY=X",     "div"),   # USDTRY / USDCNY
-    }
-
-    if yf_sym not in cross_map:
-        return pd.Series(dtype=float)
-
-    sym_a, sym_b, op = cross_map[yf_sym]
-    try:
-        raw = yf.download([sym_a, sym_b], start=start, end=end,
-                          auto_adjust=True, progress=False, group_by="ticker")
-        if raw.empty:
-            return pd.Series(dtype=float)
-        ca = raw[sym_a]["Close"].dropna().squeeze() if sym_a in raw.columns.get_level_values(0) else pd.Series()
-        cb = raw[sym_b]["Close"].dropna().squeeze() if sym_b in raw.columns.get_level_values(0) else pd.Series()
-        if ca.empty or cb.empty:
-            return pd.Series(dtype=float)
-        # Ortak tarihler
-        idx = ca.index.intersection(cb.index)
-        ca, cb = ca.loc[idx], cb.loc[idx]
-        if op == "div":
-            result = ca / cb
-        else:
-            result = ca * cb
-        return result.dropna()
-    except:
-        return pd.Series(dtype=float)
+# v2.0.7.81 - get_cross_rate_hist() KALDIRILDI (Bahri'nin ilkesi: bir
+# paritenin Turkiye'de kendi gercek piyasasi (canlidoviz/Harem) varsa,
+# USD uzerinden matematiksel turetme kullanilmamali - MADEN'deki "Son_
+# Fiyat'a sentetik USD*kur yazilmaz" ilkesinin DOVIZ'e de uygulanmasi).
+# Eskiden JPYTRY/AUDTRY/CADTRY/NZDTRY/NOKTRY/SEKTRY/DKKTRY/CNYTRY icin
+# burada USD uzerinden capraz kur hesaplaniyordu - artik DOVIZ dongusu
+# bu 8 parite icin de dogrudan canlidoviz'in gercek Turkiye fiyatini
+# (Harem/serbest piyasa) ilk once deniyor.
 
 def build():
     global BIST_TICKERS
@@ -1330,14 +1293,13 @@ def build():
                          "_gecmis_veri_yok": not _gecmis_veri_var})
 
     # Döviz — her parite ayrı çek (=X pariteler toplu download'da sorunlu)
-    # JPYTRY, AUDTRY, CADTRY için cross rate hesabı kullan
-    CROSS_PAIRS = {"JPYTRY=X", "AUDTRY=X", "CADTRY=X", "NZDTRY=X",
-                     "NOKTRY=X", "SEKTRY=X", "DKKTRY=X", "CNYTRY=X"}
+    # v2.0.7.81 - CROSS_PAIRS (JPYTRY/AUDTRY/CADTRY/... icin USD uzerinden
+    # capraz kur hesabi) TAMAMEN KALDIRILDI - bkz. asagidaki dongudeki not.
     # v2.0.7.43 - GENISLEME: 51 yeni doviz icin Truncgil'i TEK istekte
     # onceden cek (ayni sekilde MADEN'in Bigpara/Truncgil kullandigi gibi).
     # yfinance'in bu kodlarin cogunda "XXXTRY=X" karsiligi olmadigi icin,
-    # yfinance denemeleri (cross-rate + single_full) basarisiz olursa bu
-    # sozluk YEDEK/tamamlayici kaynak olarak devreye girer.
+    # yfinance denemeleri (single_full) basarisiz olursa bu sozluk YEDEK/
+    # tamamlayici kaynak olarak devreye girer.
     try:
         from bigpara_client import fetch_truncgil_doviz
         truncgil_doviz = fetch_truncgil_doviz()
@@ -1398,40 +1360,33 @@ def build():
     for t, yf_s in DOVIZ:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
         _gecmis_veri_var = False
-        if yf_s in CROSS_PAIRS:
-            # Cross rate ile hesapla
-            pr = get_cross_rate_hist(t, yf_s, maden_start, maden_end)
-            if len(pr) >= 2:
-                p   = round(float(pr.iloc[-1]), 6)
-                rsi = calc_rsi(pr)
-                ret = round((float(pr.iloc[-1]) / float(pr.iloc[-22]) - 1) * 100, 2) if len(pr) >= 22 else 0.0
-                rets_x = pr.pct_change().dropna()
-                vol_v  = round(float(rets_x.std() * (252 ** 0.5) * 100), 1) if len(rets_x) > 10 else 10.0
+        # v2.0.7.81 - KRITIK DUZELTME (Bahri'nin talebi/ilkesi - daha
+        # once MADEN icin de belirtilmisti: "bir urunun Turkiye'de kendi
+        # piyasasi varsa, USD fiyatini kur ile carpip TURETMEK yerine o
+        # gercek Turkiye fiyati kullanilmali - cunku Turkiye'deki arz/talep
+        # kosullari farkli gelismis olabilir"). Eskiden JPY/AUD/CAD/NZD/
+        # NOK/SEK/DKK/CNY icin USD uzerinden CAPRAZ KUR HESABI (get_
+        # cross_rate_hist/CROSS_PAIRS) canlidoviz'in GERCEK Harem/serbest
+        # piyasa fiyatindan ONCE deneniyordu - bu, Bahri'nin ilkesinin
+        # TAM TERSIYDI. Capraz kur hesaplamasi TAMAMEN KALDIRILDI;
+        # canlidoviz (gercek Turkiye piyasasi) artik TUM 63 doviz icin
+        # HER ZAMAN ilk denenir.
+        _cd_kod = t[:-3] if t.endswith("TRY") else None
+        if _cd_kod:
+            _sonuc_cd = _canlidoviz_hesapla(_cd_kod)
+            if _sonuc_cd is not None:
+                p, rsi, ret, vol_v = _sonuc_cd
                 _gecmis_veri_var = True
+                _cd_basarili += 1
         if p == 0.0:
-            # Normal çekim dene
+            # Yedek: dogrudan yfinance (canlidoviz basarisizsa)
             p, rsi, ret, vol_v = single_full(yf_s, t)
             if p > 0:
                 _gecmis_veri_var = True
         if p == 0.0:
-            # v2.0.7.73 - YENI BIRINCIL KATMAN: yfinance basarisiz olsa da,
-            # bu dovizin canlidoviz'de (Harem/serbest piyasa) bir kodu
-            # varsa (DOVIZ_GENISLEME'deki 51 dovizin TAMAMI icin gecerli),
-            # sahte notr degerlere dusmeden once GERCEK Harem tarihsel
-            # verisinden RSI/Ret1M/Vol hesaplamayi dene.
-            _tg_kod_cd = _DOVIZ_TRUNCGIL_KOD.get(t)
-            if _tg_kod_cd:
-                _sonuc_cd = _canlidoviz_hesapla(_tg_kod_cd)
-                if _sonuc_cd is not None:
-                    p, rsi, ret, vol_v = _sonuc_cd
-                    _gecmis_veri_var = True
-                    _cd_basarili += 1
-                    print(f"    [Harem/canlidoviz] {t}: gercek RSI/Ret1M hesaplandi.")
-        if p == 0.0:
-            # v2.0.7.43 - yfinance basarisizsa Truncgil'e dus (RSI/Ret1M
-            # icin gecmis veri yok - Bigpara-kaynakli MADEN varliklari gibi
-            # notr kalir, bu bir hata degil).
-            _tg_kod = _DOVIZ_TRUNCGIL_KOD.get(t)
+            # Son care: Truncgil (SADECE anlik fiyat - RSI/Ret1M/Vol icin
+            # gecmis veri yok, notr kalir; bu bir hata degil).
+            _tg_kod = _DOVIZ_TRUNCGIL_KOD.get(t, _cd_kod)
             if _tg_kod and _tg_kod in truncgil_doviz:
                 p = truncgil_doviz[_tg_kod]
                 rsi, ret, vol_v = 50.0, 0.0, 15.0
@@ -1452,7 +1407,7 @@ def build():
                          # gorunuyordu. Artik bu durum acikca isaretleniyor,
                          # app.py skoru sifirlayacak.
                          "_gecmis_veri_yok": not _gecmis_veri_var})
-    print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi ({_cd_basarili} tanesi Harem/canlidoviz tarihsel ile).")
+    print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi ({_cd_basarili} tanesi Harem/canlidoviz'den - BIRINCIL kaynak).")
 
     # v2.0.7.74 - DUZELTME (Bahri'nin talebi: "yatirimcilarin kullandigi
     # fiyatlar daha cok serbest piyasa fiyatlaridir, TCMB'yi birakabiliriz"):

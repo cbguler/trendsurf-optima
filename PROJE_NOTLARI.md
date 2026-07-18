@@ -13,6 +13,34 @@ vermez — bu dosya o boşluğu dolduruyor.
 
 ---
 
+## 0. TEMEL İLKE (her kategoriye uygulanır — asla ihlal etme)
+
+**Bahri'nin çekirdek prensibi (birden fazla oturumda tekrarlanmış,
+en son 18 Temmuz 2026'da DOVIZ için hatırlatıldı):** Bir ürünün/paritenin
+**Türkiye'de kendi gerçek piyasası** varsa (arz-talep koşulları uluslararası
+piyasadan FARKLI gelişebilir), o gerçek Türkiye fiyatı HER ZAMAN tercih
+edilir — USD (veya başka bir yabancı para) fiyatını alıp bir kurla ÇARPARAK/
+BÖLEREK **türetilmiş (sentetik) bir fiyat asla kullanılmaz**, gerçek
+kaynak bulunamıyorsa "veri yok" durumu dürüstçe gösterilir.
+
+Bu ilkenin şimdiye kadarki uygulamaları:
+- **Değerli Madenler (en eski uygulama):** Ons Altın'ın USD fiyatını
+  USDTRY ile çarpıp sentetik bir TL fiyatı üretmek YASAK
+  (`_MADEN_SENTETIK_CEVRIM_YASAK` seti) — gerçek TL fiyatı yoksa (Bigpara/
+  Truncgil/canlidoviz'den), varlık "veri yok" kalır.
+- **Döviz (v2.0.7.81, 18 Temmuz 2026):** JPYTRY/AUDTRY/CADTRY/NZDTRY/
+  NOKTRY/SEKTRY/DKKTRY/CNYTRY için worker.py'de USD üzerinden **çapraz kur
+  hesabı** (`get_cross_rate_hist`/`CROSS_PAIRS`) vardı — bu, canlidoviz'in
+  GERÇEK Harem/serbest piyasa fiyatından (Türkiye'nin kendi piyasası) ÖNCE
+  deneniyordu, yani ilkenin TAM TERSİYDİ. **Tamamen kaldırıldı** — artık
+  DOVIZ döngüsünde canlidoviz (gerçek Türkiye fiyatı) HER ZAMAN ilk denenir,
+  yfinance doğrudan sorgu ikinci, Truncgil (anlık-sadece) son çaredir.
+
+**Yeni bir kategori/varlık türü eklerken bu ilkeyi baştan uygula — "yabancı
+fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ara.**
+
+---
+
 ## 1. Veri Kaynağı Mimarisi (kategori bazlı, öncelik sırasıyla)
 
 ### BIST (772 hisse)
@@ -337,6 +365,10 @@ vermez — bu dosya o boşluğu dolduruyor.
   (worker.py'nin zaten çalışan `_DOVIZ_TRUNCGIL_KOD` yoluyla aynı
   kodlar), "geçmiş fiyat verisi yüklenemedi" hatası ve boş MA/DD
   tablosu düzeltildi.
+- v2.0.7.81 (18 Temmuz 2026, Oturum XVIII): Döviz'de USD-çapraz-kur
+  hesabı (JPY/AUD/CAD/NZD/NOK/SEK/DKK/CNY) tamamen kaldırıldı — Bahri'nin
+  temel ilkesine (bkz. dosya başı §0) aykırıydı. canlidoviz artık TÜM 63
+  döviz için birincil kaynak.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
