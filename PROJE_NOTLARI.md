@@ -362,6 +362,20 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.86 (Kripto/Döviz/Maden Liste=Detay skor
+  tutarlılığı).** CSKY örneği (Liste 70,7 / Detay 60,7, Hacim cezası -10)
+  ile keşfedildi — TEFAS'ta bulunanla AYNI hata (BIST-tarzı DD/hacim dahil
+  TAM skorun sadece BIST için önceden hesaplanması), ama Kripto/Döviz/Maden
+  için TEFAS'ın rate-limit engeli YOK (worker.py zaten gerekli geçmiş
+  veriyi çekiyordu, sadece DD/hacim'i skora katmıyordu). Düzeltildi:
+  worker.py'nin KRIPTO ve DOVIZ döngüleri artık `Optima_Skor`'u (DD+hacim
+  dahil) doğrudan CSV'ye yazıyor; MADEN için ise bu hesap `live_data.py`'nin
+  canlı overlay'inde yapılıyor (MADEN'in gerçek geçmiş verisi zaten SADECE
+  orada çekiliyor, worker.py'de değil). Bahri push'tan ve worker.py'nin
+  bir kez daha çalışmasından sonra birkaç Kripto/Döviz/Maden varlığında
+  Liste=Detay skorunun eşleştiğini doğrulamalı. **TEFAS hâlâ kapsam
+  dışı** (rate-limit engeli hâlâ geçerli, ayrı bir konu).
+
 - **[KOD PUSH EDİLDİ, KULLANICI DOĞRULAMASI BEKLİYOR] v2.0.7.84 (performans
   - get_bist_dividend önbellekleme).** Kod GitHub'da doğrulandı (18 Temmuz).
   Bahri'nin Ana Sayfa'da bütçe girip Bütçe Optimizasyonu tablosunun açılma
@@ -493,6 +507,10 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   eklendi — Actions #70 çalışmasının "non-fast-forward" ile tamamen
   başarısız olup `kripto_parite_map.json` dahil ürettiği her şeyi
   kaybetmesinin kalıcı çözümü.
+- v2.0.7.86 (18 Temmuz 2026, Oturum XVIII): Kripto/Döviz/Maden'de Liste
+  skoru artık BIST gibi DD/hacim cezası dahil (CSKY örneği) — worker.py
+  (Kripto/Döviz) ve live_data.py (Maden) canlı overlay'i güncellendi.
+  TEFAS hâlâ rate-limit engeli yüzünden kapsam dışı.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

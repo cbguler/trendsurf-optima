@@ -288,18 +288,78 @@ def _compute_ret_1m(closes: pd.Series) -> float:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def _fetch_maden_history_summary(bp_code: str) -> tuple:
-    """Bir madenin 1 aylik tarihcesinden anlik fiyat, RSI, Ret1M dondur.
+def _teknik_skor_100(rsi, ret1m, vol=30.0):
+    """v2.0.7.86 (Bahri'nin talebi, CSKY ornegi) - worker.py'deki
+    _bist_optima_score(...,has_fundamental=False) ile BIREBIR AYNI mantik
+    (0-100'e normalize edilmis teknik-sadece skor). worker.py'yi buraya
+    import etmek riskli (modul yuklenirken _kripto_evrenini_olustur() gibi
+    yan etkili kod calisir) - bu yuzden kucuk/saf kisim burada AYRICA
+    tanimlanir. Biri degisirse OBUR IKISI de (worker.py + app.py'deki
+    optima_score/_teknik_alt_skor) guncellenmeli."""
+    if 40 <= rsi <= 60: rsi_s = 25
+    elif 35 <= rsi <= 65: rsi_s = 18
+    elif 30 <= rsi < 35 or 65 < rsi <= 70: rsi_s = 10
+    else: rsi_s = 0
+    if ret1m >= 30: mom = 35
+    elif ret1m >= 20: mom = 30
+    elif ret1m >= 10: mom = 24
+    elif ret1m >= 5: mom = 18
+    elif ret1m >= 0: mom = 10
+    elif ret1m >= -5: mom = 4
+    else: mom = 0
+    if vol < 20: vol_s = 15
+    elif vol < 35: vol_s = 10
+    elif vol < 55: vol_s = 5
+    else: vol_s = 0
+    raw = rsi_s + mom + vol_s
+    return min(100.0, round(raw * (100.0 / 75.0), 1))
 
-    Returns: (son_fiyat, rsi, ret1m) - hata olursa (None, 50.0, 0.0)
+
+def _hacim_dd_duzeltmesi_maden(close_series, volume_series, ret1m):
+    """v2.0.7.86 - worker.py'deki _hacim_dd_duzeltmesi() ile BIREBIR AYNI
+    esik degerleri (senkron tutulmali). MADEN icin bu duzeltme worker.py
+    yerine BURADA (canli overlay) hesaplanir, cunku MADEN'in gercek
+    gecmis verisi zaten SADECE burada (uygulama calisirken) cekiliyor."""
+    score_adj, dd_adj = 0, 0
+    trend = "YUKSELIS" if ret1m >= 0 else "DUSUS"
+    if volume_series is not None and len(volume_series) >= 20:
+        vs = volume_series.fillna(0)
+        if hasattr(vs, "squeeze"):
+            vs = vs.squeeze()
+        if float(vs.sum()) > 0:
+            last5_avg = float(vs.tail(5).mean())
+            last20_avg = float(vs.tail(20).mean())
+            if last20_avg > 0:
+                vol_ratio = last5_avg / last20_avg
+                vol_trend = ("ARTIYOR" if vol_ratio >= 1.2 else
+                             "AZALIYOR" if vol_ratio <= 0.8 else "NORMAL")
+                if trend == "YUKSELIS" and vol_trend == "ARTIYOR": score_adj = +5
+                elif trend == "YUKSELIS" and vol_trend == "AZALIYOR": score_adj = -10
+                elif trend == "DUSUS" and vol_trend == "ARTIYOR": score_adj = -3
+                elif trend == "DUSUS" and vol_trend == "AZALIYOR": score_adj = +2
+    if close_series is not None and len(close_series) >= 20:
+        win = close_series.tail(252) if len(close_series) >= 252 else close_series
+        cummax = win.cummax()
+        dd_series = (win - cummax) / cummax * 100
+        max_dd = float(dd_series.min())
+        if max_dd < -70: dd_adj = -7
+        elif max_dd < -50: dd_adj = -3
+    return score_adj, dd_adj
+
+
+def _fetch_maden_history_summary(bp_code: str) -> tuple:
+    """Bir madenin 1 aylik tarihcesinden anlik fiyat, RSI, Ret1M, tam skor dondur.
+
+    Returns: (son_fiyat, rsi, ret1m, full_skor) - hata olursa (None, 50.0, 0.0, None)
+    v2.0.7.86: full_skor eklendi (DD+hacim dahil, BIST tutarliligi icin).
     """
     if not BORSAPY_OK:
-        return (None, 50.0, 0.0)
+        return (None, 50.0, 0.0, None)
     try:
         h = bp.FX(bp_code).history(period="3mo", interval="1d")
         if h is None or h.empty:
             print(f"  [live_data] MADEN history BOS ({bp_code}) - CSV degeri korunacak")
-            return (None, 50.0, 0.0)
+            return (None, 50.0, 0.0, None)
         # Close sutununu bul
         col = None
         for c in ("Close", "close", "PRICE", "price"):
@@ -308,19 +368,25 @@ def _fetch_maden_history_summary(bp_code: str) -> tuple:
                 break
         if col is None:
             print(f"  [live_data] MADEN history Close sutunu yok ({bp_code}), kolonlar: {list(h.columns)}")
-            return (None, 50.0, 0.0)
+            return (None, 50.0, 0.0, None)
         closes = pd.to_numeric(h[col], errors="coerce").dropna()
         if closes.empty:
-            return (None, 50.0, 0.0)
+            return (None, 50.0, 0.0, None)
         son = float(closes.iloc[-1])
         rsi = _compute_rsi(closes)
         ret = _compute_ret_1m(closes)
+        rets = closes.pct_change().dropna()
+        vol = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 25.0
+        _vol_series = h["Volume"] if "Volume" in h.columns else None
+        _score_adj, _dd_adj = _hacim_dd_duzeltmesi_maden(closes, _vol_series, ret)
+        _base = _teknik_skor_100(rsi, ret, vol)
+        full_skor = max(0.0, min(100.0, round(_base + _score_adj + _dd_adj, 1)))
         print(f"  [live_data] MADEN history OK ({bp_code}): son={son}, son_veri_tarihi={h.index[-1] if hasattr(h,'index') else '?'}")
-        return (son, rsi, ret)
+        return (son, rsi, ret, full_skor)
     except Exception as e:
         # v2.0.4.47: Daha once tamamen sessizdi - artik logluyoruz.
         print(f"  [live_data] MADEN history hatasi ({bp_code}): {type(e).__name__}: {e}")
-        return (None, 50.0, 0.0)
+        return (None, 50.0, 0.0, None)
 
 
 def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
@@ -342,7 +408,7 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
             bp_code = _MADEN_TO_BP.get(ticker)
             if not bp_code:
                 continue
-            son, rsi, ret1m = _fetch_maden_history_summary(bp_code)
+            son, rsi, ret1m, full_skor = _fetch_maden_history_summary(bp_code)
             # Fiyat yoksa satiri ekleme (anlamsiz olur)
             if son is None or son <= 0:
                 continue
@@ -375,7 +441,10 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
                 # Optima Skor=0 gosteriyordu. Simdi acikca NaN yazilarak
                 # app.py'nin optima_score(RSI,Ret1M,Vol) ile gercek bir
                 # skor hesaplamasi saglaniyor.
-                "Optima_Skor": float("nan"),
+                # v2.0.7.86: full_skor (DD+hacim dahil) mevcutsa dogrudan
+                # kullanilir - boylece bu 5 sikke de Detay sayfasiyla AYNI
+                # sayiyi gosterir. Yoksa (nadir) NaN kalir, eski davranis.
+                "Optima_Skor": float(full_skor) if full_skor is not None else float("nan"),
             }
             yeni_satirlar.append(row)
 
@@ -721,8 +790,8 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                     # Paralel cagri (her birinin cache_data koruması var, kosey durumlarda hizli doner)
                     def _fetch_one(item):
                         ticker, bp_code = item
-                        son, rsi, ret = _fetch_maden_history_summary(bp_code)
-                        return (ticker, son, rsi, ret)
+                        son, rsi, ret, full_skor = _fetch_maden_history_summary(bp_code)
+                        return (ticker, son, rsi, ret, full_skor)
 
                     with ThreadPoolExecutor(max_workers=min(8, len(to_fetch))) as ex:
                         results = list(ex.map(_fetch_one, to_fetch))
@@ -740,8 +809,12 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                     # - aksi halde app.py bu satirlarin Optima Skor'unu
                     # (ekranda gercek RSI/Ret1M gorunse bile) 0'a sifirlamaya
                     # devam ediyordu (ALTIN_TRY/GUMUS_TRY/PLATIN_TRY hatasi).
+                    # v2.0.7.86 (Bahri'nin talebi, CSKY ornegi): full_skor
+                    # (DD+hacim dahil) de yaziliyor - boylece Maden listesi
+                    # de Detay sayfasiyla AYNI sayiyi gosterir.
                     _has_flag_col = "_gecmis_veri_yok" in df.columns
-                    for ticker, son, rsi, ret in results:
+                    _has_skor_col = "Optima_Skor" in df.columns
+                    for ticker, son, rsi, ret, full_skor in results:
                         row_mask = df["Ticker"] == ticker
                         if not row_mask.any():
                             continue
@@ -751,6 +824,11 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                         df.loc[row_mask, "Ret1M"] = float(ret)
                         if _has_flag_col:
                             df.loc[row_mask, "_gecmis_veri_yok"] = False
+                        if full_skor is not None:
+                            if not _has_skor_col:
+                                df["Optima_Skor"] = pd.NA
+                                _has_skor_col = True
+                            df.loc[row_mask, "Optima_Skor"] = full_skor
 
         return df
 

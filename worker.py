@@ -785,6 +785,44 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=25):
     return sonuc
 
 
+def _hacim_dd_duzeltmesi(close_series, volume_series, ret1m):
+    """v2.0.7.86 (Bahri'nin talebi, CSKY ornegi): BIST'in batch_bist()'inde
+    ve app.py'nin enrich()'inde kullanilan hacim trendi + Max Drawdown skor
+    duzeltmesini, artik KRIPTO/DOVIZ/MADEN icin de AYNI mantikla hesaplar.
+    Eskiden bu kategorilerin Liste skoru bu duzeltmeyi hic icermiyordu,
+    Detay sayfasi (enrich()) iceriyordu - CSKY'nin Liste'de 70,7, Detay'da
+    60,7 (Hacim cezasi -10) gostermesinin sebebi buydu. Bu fonksiyon
+    app.py'deki enrich()'in AYNI esik degerlerini kullanir - biri
+    degisirse digeri de guncellenmeli.
+    Donen: (score_adj, dd_adj) - ikisi de int, varsayilan 0.
+    """
+    score_adj, dd_adj = 0, 0
+    trend = "YUKSELIS" if ret1m >= 0 else "DUSUS"
+    if volume_series is not None and len(volume_series) >= 20:
+        vs = volume_series.fillna(0)
+        if hasattr(vs, "squeeze"):
+            vs = vs.squeeze()
+        if float(vs.sum()) > 0:
+            last5_avg = float(vs.tail(5).mean())
+            last20_avg = float(vs.tail(20).mean())
+            if last20_avg > 0:
+                vol_ratio = last5_avg / last20_avg
+                vol_trend = ("ARTIYOR" if vol_ratio >= 1.2 else
+                             "AZALIYOR" if vol_ratio <= 0.8 else "NORMAL")
+                if trend == "YUKSELIS" and vol_trend == "ARTIYOR": score_adj = +5
+                elif trend == "YUKSELIS" and vol_trend == "AZALIYOR": score_adj = -10
+                elif trend == "DUSUS" and vol_trend == "ARTIYOR": score_adj = -3
+                elif trend == "DUSUS" and vol_trend == "AZALIYOR": score_adj = +2
+    if close_series is not None and len(close_series) >= 20:
+        win = close_series.tail(252) if len(close_series) >= 252 else close_series
+        cummax = win.cummax()
+        dd_series = (win - cummax) / cummax * 100
+        max_dd = float(dd_series.min())
+        if max_dd < -70: dd_adj = -7
+        elif max_dd < -50: dd_adj = -3
+    return score_adj, dd_adj
+
+
 def single_full(yf_sym, label="", period="1y"):
     """
     Tek sembol için fiyat + RSI + Ret1M.
@@ -1084,25 +1122,36 @@ def build():
                 ret  = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
                 rets_k = col.pct_change().dropna()
                 vol_k  = round(float(rets_k.std() * (252 ** 0.5) * 100), 1) if len(rets_k) > 10 else 60.0
-                return (t, p, rsi, ret, vol_k)
+                # v2.0.7.86 (Bahri'nin talebi, CSKY ornegi): BIST'teki gibi
+                # tam (DD+hacim dahil) skoru burada (gece, bir kez) hesapla
+                # - boylece Kripto listesi de Detay sayfasiyla AYNI sayiyi
+                # gosterir. Ek ag istegi YOK - h zaten cekilmisti.
+                _vol_series = h["Volume"] if "Volume" in h.columns else None
+                _score_adj, _dd_adj = _hacim_dd_duzeltmesi(col, _vol_series, ret)
+                _base = _bist_optima_score(rsi, ret, vol_k, False)
+                _full_skor = max(0.0, min(100.0, round(_base + _score_adj + _dd_adj, 1)))
+                return (t, p, rsi, ret, vol_k, _full_skor)
             except Exception as e:
                 print(f"    [Kripto/borsapy] {t} hatasi: {type(e).__name__}: {e}")
-                return (t, 0.0, 50.0, 0.0, 30.0)
+                return (t, 0.0, 50.0, 0.0, 30.0, None)
 
         with ThreadPoolExecutor(max_workers=min(10, len(KRIPTO))) as ex:
             sonuclar = list(ex.map(_tek_kripto_cek, KRIPTO))
-        for t, p, rsi, ret, vol_k in sonuclar:
-            kripto_results[t] = (p, rsi, ret, vol_k)
+        for t, p, rsi, ret, vol_k, full_skor in sonuclar:
+            kripto_results[t] = (p, rsi, ret, vol_k, full_skor)
     except Exception as e:
         print(f"  Kripto borsapy toplu cekim hatasi: {e}")
 
     for t, yf_s in KRIPTO:
-        p, rsi, ret, vol_v = kripto_results.get(t, (0.0, 50.0, 0.0, 30.0))
-        all_rows.append({
+        p, rsi, ret, vol_v, full_skor = kripto_results.get(t, (0.0, 50.0, 0.0, 30.0, None))
+        _row_k = {
             "Ticker": t, "Ad": KRIPTO_ADLAR.get(t, t),
             "Kategori": "KRIPTO", "Son_Fiyat": p,
             "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
-        })
+        }
+        if full_skor is not None:
+            _row_k["Optima_Skor"] = full_skor
+        all_rows.append(_row_k)
     ok_k = sum(1 for r in all_rows if r["Kategori"] == "KRIPTO" and r["Son_Fiyat"] > 0)
     print(f"  {ok_k}/{len(KRIPTO)} kripto fiyati alindi (dogrudan TL, BtcTurk/borsapy).")
 
@@ -1331,8 +1380,11 @@ def build():
 
     def _canlidoviz_hesapla(kod: str):
         """RUB/BGN/RSD gibi bir ISO kod icin Harem (yoksa genel canlidoviz
-        serbest piyasa) tarihsel serisinden gercek fiyat/RSI/Ret1M/Vol
-        hesaplar. Basarisizlikta None doner - notr deger UYDURULMAZ."""
+        serbest piyasa) tarihsel serisinden gercek fiyat/RSI/Ret1M/Vol/tam
+        skor hesaplar. Basarisizlikta None doner - notr deger UYDURULMAZ.
+        v2.0.7.86 (Bahri'nin talebi): artik DD/hacim dahil TAM skoru da
+        (full_skor) dondurur - BIST'teki gibi Liste/Detay tutarliligi icin.
+        """
         if not _CANLIDOVIZ_OK:
             return None
         try:
@@ -1351,7 +1403,11 @@ def build():
             ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
             rets  = col.pct_change().dropna()
             vol   = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 15.0
-            return fiyat, rsi, ret, vol
+            _vol_series = hist["Volume"] if "Volume" in hist.columns else None
+            _score_adj, _dd_adj = _hacim_dd_duzeltmesi(col, _vol_series, ret)
+            _base = _bist_optima_score(rsi, ret, vol, False)
+            full_skor = max(0.0, min(100.0, round(_base + _score_adj + _dd_adj, 1)))
+            return fiyat, rsi, ret, vol, full_skor
         except Exception:
             return None
 
@@ -1359,6 +1415,7 @@ def build():
     _cd_basarili = 0
     for t, yf_s in DOVIZ:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 30.0
+        _full_skor_d = None
         _gecmis_veri_var = False
         # v2.0.7.81 - KRITIK DUZELTME (Bahri'nin talebi/ilkesi - daha
         # once MADEN icin de belirtilmisti: "bir urunun Turkiye'de kendi
@@ -1375,7 +1432,7 @@ def build():
         if _cd_kod:
             _sonuc_cd = _canlidoviz_hesapla(_cd_kod)
             if _sonuc_cd is not None:
-                p, rsi, ret, vol_v = _sonuc_cd
+                p, rsi, ret, vol_v, _full_skor_d = _sonuc_cd
                 _gecmis_veri_var = True
                 _cd_basarili += 1
         if p == 0.0:
@@ -1393,7 +1450,7 @@ def build():
                 # _gecmis_veri_var = False (zaten baslangic degeri)
         if p > 0:
             ok_d += 1
-        all_rows.append({"Ticker": t, "Ad": DOVIZ_ADLAR.get(t, t),
+        _row_d = {"Ticker": t, "Ad": DOVIZ_ADLAR.get(t, t),
                          "Kategori": "DOVIZ", "Son_Fiyat": p,
                          "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
                          # v2.0.7.69 - KRITIK DUZELTME (Bahri'nin bulgusu):
@@ -1406,7 +1463,10 @@ def build():
                          # bir varlik, veri OLAN bir varliktan daha iyi
                          # gorunuyordu. Artik bu durum acikca isaretleniyor,
                          # app.py skoru sifirlayacak.
-                         "_gecmis_veri_yok": not _gecmis_veri_var})
+                         "_gecmis_veri_yok": not _gecmis_veri_var}
+        if _full_skor_d is not None:
+            _row_d["Optima_Skor"] = _full_skor_d
+        all_rows.append(_row_d)
     print(f"  {ok_d}/{len(DOVIZ)} doviz fiyati alindi ({_cd_basarili} tanesi Harem/canlidoviz'den - BIRINCIL kaynak).")
 
     # v2.0.7.74 - DUZELTME (Bahri'nin talebi: "yatirimcilarin kullandigi
@@ -1427,8 +1487,9 @@ def build():
             continue
         _sonuc_yedek = _canlidoviz_hesapla(_iso_kod)
         if _sonuc_yedek is not None:
-            _row["Son_Fiyat"], _row["RSI"], _row["Ret1M"], _row["Vol"] = _sonuc_yedek
+            _row["Son_Fiyat"], _row["RSI"], _row["Ret1M"], _row["Vol"], _full_skor_y = _sonuc_yedek
             _row["_gecmis_veri_yok"] = False
+            _row["Optima_Skor"] = _full_skor_y
             _harem_yedek_sayisi += 1
     if _harem_yedek_sayisi:
         print(f"  [Harem/canlidoviz yedek] {_harem_yedek_sayisi} kur tamamlandi.")
