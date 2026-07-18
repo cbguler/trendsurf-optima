@@ -66,51 +66,34 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   olan tickerlara "C" öneki eklenir (LINK→CLINK, TRA→CTRA, SKY→CSKY).
 
 ### Döviz (63 parite: 12 ana + 51 genişleme)
-- **ÖNCELİK SIRASI (v2.0.7.74 itibarıyla):**
-  1. yfinance (cross-rate veya doğrudan `=X`) — 12 ana döviz için genelde
-     çalışır.
-  2. **Harem/canlidoviz (`borsapy.FX(kod).institution_history("harem",...)`)**
-     — 51 genişleme dövizinin **TAMAMI** için gerçek tarihsel serbest
-     piyasa verisi. `canlidoviz.CURRENCY_IDS` (bkz. borsapy kaynak kodu)
-     bu 51 dövizin hepsini numaralı kod olarak tanıyor.
+- **GÜNCEL ÖNCELİK SIRASI (v2.0.7.81 itibarıyla, 18 Temmuz 2026'da
+  BAŞTAN YAZILDI — aşağıdaki eski notlar sadece tarihsel bağlam için
+  korunuyor, GÜNCEL DAVRANIŞ bu maddedir):**
+  1. **canlidoviz (`bp.FX(kod).history()`)** — TÜM 63 döviz için HER ZAMAN
+     ilk denenir (Bahri'nin §0'daki temel ilkesi: gerçek Türkiye/serbest
+     piyasa fiyatı, USD üzerinden türetmeden önce gelir). Kod = ticker'ın
+     "TRY" son eki çıkarılmış hali (`"ZARTRY"` → `"ZAR"`).
+  2. yfinance doğrudan sorgu (`single_full`) — SADECE canlidoviz
+     başarısız olursa.
   3. Truncgil (`finans.truncgil.com/v3/today.json`) — SADECE anlık fiyat,
-     geçmiş veri YOK. Son çare, `_gecmis_veri_yok=True` ile işaretlenir.
-- **GÜNCELLEME (17 Temmuz 2026, Oturum XVIII): Yukarıdaki 2. madde
-  (Harem/`institution_history`) artık ÇALIŞMIYOR — ama worker.py
-  ÇÖKMÜYOR, kendi içinde sessizce daha basit bir yedeğe düşüyor.**
+     geçmiş veri YOK, son çare. `_gecmis_veri_yok=True` ile işaretlenir.
+  **USD üzerinden çapraz kur hesabı (`get_cross_rate_hist`/`CROSS_PAIRS`,
+  eskiden JPY/AUD/CAD/NZD/NOK/SEK/DKK/CNY için 1. sıradaydı) v2.0.7.81'de
+  TAMAMEN KALDIRILDI — bkz. §0.**
+- **Harem'in kendisi (`institution_history("harem",...)`) 17 Temmuz
+  2026'dan beri 401 (erişilemez) — ama bu ARTIK ÖNEMLİ DEĞİL**, çünkü
+  1. maddedeki `bp.FX(kod).history()` Harem'e ihtiyaç duymuyor (MADEN'in
+  9 metalinde de kanıtlanan, auth gerektirmeyen düz canlidoviz metodu).
   `doviz.com`'un kurumsal arşiv API'si (`api.doviz.com/api/v12/assets/
-  .../archive`) — hem borsapy'nin kendi canlı token çekme mekanizması hem
-  elle denenen 3 farklı sayfadan (www.doviz.com, altin.doviz.com,
-  kur.doviz.com) token kazıma denemesi **401 Unauthorized** ile
-  karşılaştı. Site artık token'ı sayfa HTML'sine gömmüyor gibi görünüyor.
-  **DÜZELTME (18 Temmuz 2026): Bir önceki notta "51 döviz muhtemelen
-  Truncgil'e düşüyor" diye YANLIŞ bir tahminde bulunulmuştu — gerçek CSV
-  verisiyle doğrulandı, bu YANLIŞ.** worker.py'nin `_canlidoviz_hesapla()`
-  fonksiyonu `institution_history("harem",...)` başarısız olunca kendi
-  içinde **`fx.history(period="3mo")` (Harem'e ihtiyaç duymayan, MADEN'in
-  9 metalinde zaten kanıtlanan düz canlidoviz metodu) ile SESSİZCE
-  yedekleniyor** ve bu neredeyse her zaman başarılı oluyor — 63 dövizin
-  61'i `_gecmis_veri_yok=False` (gerçek veri) gösteriyor, sadece 2 tanesi
-  gerçekten Truncgil'e (anlık-sadece) düşüyor. **Yani Döviz'in RSI/Ret1M/
-  Skor tarafı zaten sağlıklı, Harem'in 401 olması worker.py'yi neredeyse
-  hiç etkilemiyor.**
-- **Detay sayfasının KENDİ geçmiş veri fonksiyonu (`get_fx_history()` /
-  `_DOVIZ_TO_BP`, live_data.py) worker.py'nin bu yedek yolunu HİÇ
-  BİLMİYORDU — v2.0.7.80'de düzeltildi (Bahri'nin bulgusu, ZARTRY örneği:
-  liste/üst metrikler gerçek RSI 62,7/Skor 57,3 gösteriyordu ama Detay'daki
-  grafik + MA/DD tablosu "geçmiş fiyat verisi yüklenemedi" veriyordu).**
-  Kök neden: `_DOVIZ_TO_BP` sözlüğü sadece 12 ana dövizin canlidoviz
-  kodunu içeriyordu, 51 genişleme dövizinin (worker.py'nin
-  `_DOVIZ_TRUNCGIL_KOD`'unda zaten mevcut) kodları hiç yoktu — bu yüzden
-  `get_fx_history()` hemen boş dönüyor, kod tek başına güvenilmez bir
-  düz yfinance "XXXTRY=X" sorgusuna düşüyordu (bu, çoğu egzotik parite
-  için gerçekten çalışmıyor). **Düzeltme:** `_DOVIZ_TO_BP`, worker.py'nin
-  `_DOVIZ_TRUNCGIL_KOD`'u ile BİREBİR AYNI 51 kodla genişletildi (tek
-  kaynak, kopya değil — iki dosyada aynı sözlük elle senkron tutulmalı,
-  biri değişirse diğeri de güncellenmeli). Bu, TÜM 51 genişleme
-  dövizinin Detay sayfasındaki grafik/MA20/MA50/52H/Max Drawdown/MACD
-  tablosunu düzeltmesi beklenir (worker.py zaten bu kodlarla veri
-  çekebildiğine göre).
+  .../archive`) — hem borsapy'nin kendi token çekme mekanizması hem elle
+  denenen 3 sayfa (www.doviz.com, altin.doviz.com, kur.doviz.com) token
+  kazıma denemesi 401 aldı. **Harem'in kendisini tekrar test etmeden
+  üzerine yeni bir özellik kurma** ama bu artık DOVIZ'i bloklamıyor.
+- Detay sayfasının kendi geçmiş veri fonksiyonu (`get_fx_history()` /
+  `_DOVIZ_TO_BP`, live_data.py) v2.0.7.80'de 51 genişleme döviziyle
+  genişletildi (worker.py'nin `_DOVIZ_TRUNCGIL_KOD`'u ile birebir aynı
+  kodlar) — **iki dosyada aynı sözlük elle senkron tutulmalı**, biri
+  değişirse diğeri de güncellenmeli.
 - **TCMB KULLANILMIYOR — BİLİNÇLİ OLARAK REDDEDİLDİ (v2.0.7.74).**
   Sebep: Bahri'nin talebi — "yatırımcıların kullandığı fiyatlar daha çok
   serbest piyasa fiyatlarıdır". TCMB sadece 21 döviz kapsıyordu (Harem/
@@ -192,6 +175,20 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 4. Bilinen Teknik Tuzaklar (bir daha düşme)
 
+- **TEFAS'ın resmi API'si dakikada SADECE 6 istek kabul eder** (bu, kütüphanenin
+  kendi `pytefas/_ratelimit.py` docstring'inde açıkça yazıyor: "TEFAS API'si
+  dakikada 6 istek sınırına sahiptir"). 18 Temmuz 2026'da Bahri'nin
+  çalıştırdığı fizibilite testinde (`test_tefas_bulk_fizibilite.py`) fon
+  başına ~400-430 saniye (bazen 13.250 saniye/3,7 saat!) gibi anormal
+  süreler gözlendi — bunun sebebi bir hata/timeout DEĞİL, `pytefas`'ın rate
+  limit'e her çarptığında `reset` süresi kadar otomatik BEKLEMESİ. **Sonuç:**
+  1348 TEFAS fonunun TAMAMI için tek bir gece koşusunda geçmiş veri çekmek
+  pratik değil (en iyi ihtimalle ~3,7 saat, muhtemelen çok daha fazla —
+  kind-fallback/retry çarpanı yüzünden). **PARALEL ÇALIŞTIRMAK YARDIMCI
+  OLMAZ** — rate limit IP/hesap bazlı olduğu için birden fazla worker aynı
+  6/dakika kotasını paylaşıp durumu kötüleştirir. Bu yüzden TEFAS için
+  BIST tarzı "tüm evreni geceden tam skorla önceden hesapla" yaklaşımı
+  şu an TERK EDİLDİ (bkz. §5 Bekleyen İşler).
 - **`_CompatRow` (db.py) bir dict alt sınıfıdır.** `a, b, c = row` şeklinde
   tuple-unpacking yaparsan DEĞERLERİ değil ANAHTARLARI (sütun adlarını)
   açar — bu, "ValueError: could not convert string to float: 'quantity'"
@@ -321,7 +318,48 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ---
 
-## 5. Denenip Reddedilen / Geri Alınan Yaklaşımlar
+## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
+
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.80/81 push'u (Döviz düzeltmeleri).**
+  Bahri push'u yaptıktan ve worker.py bir kez daha çalıştıktan sonra:
+  ZARTRY'nin Detay sayfasındaki grafik/MA/DD tablosunun artık dolu
+  geldiğini, ana 12 dövizin (özellikle eskiden çapraz-kur kullanan JPY/
+  AUD/CAD/NZD/NOK/SEK/DKK/CNY) hâlâ doğru çalıştığını doğrula.
+- **[ERTELENDİ/BEKLEMEDE] TEFAS Liste/Detay skor farkı (DD/hacim cezası,
+  GZL örneği).** Kalıcı çözüm (worker.py'nin TEFAS için de BIST gibi tam
+  skoru geceden hesaplaması) TEFAS'ın kendi API'sinin **dakikada 6 istek**
+  sınırı yüzünden 1348 fonun tamamı için pratik değil (en iyi ihtimalle
+  ~3,7 saat, muhtemelen çok daha fazla — bkz. §4'teki rate-limit notu).
+  Bahri bu konudan bir süre yorulduğunu belirtti ("bu işten vazgeçelim"),
+  sonra "bugünlük bırakalım" ile yumuşattı. **Şu anki durum: HİÇBİR
+  KOD DEĞİŞİKLİĞİ YAPILMADI, TEFAS'ta liste skorunda basit (DD'siz) hesap
+  kullanılmaya devam ediyor.** Bahri kendisi tekrar gündeme getirmeden
+  bu konuyu proaktif olarak açma — yorulduğu bir konuydu.
+- **[BEKLEMEDE] 9 Truncgil-türü sikke/ayar için nihai karar (Gram Has,
+  14/18 Ayar, Bilezik22, İkibuçuk, Beşli, Gremse, Reşat, Hamit).**
+  Bahri 17 Temmuz'da "Paladyum'un CSV'den düşmesini önce göreyim" deyip
+  bu kararı ertelemişti — bir daha dönülmedi. Şu an bu 9 tür sistemde
+  duruyor, RSI/Skor boş gösteriliyor (Paladyum gibi kaldırılmaları HENÜZ
+  ONAYLANMADI). Bahri sorarsa: seçenekler (a) böyle kalsın (b) Paladyum
+  gibi tamamen kaldır.
+- **[SORULDU] Genel uygulama yavaşlığı.** Bahri "hâlâ devam ediyor" dedi
+  ama nerede (açılış/sayfa geçişi/detay tıklama) hiç netleşmedi. Bir
+  sonraki oturumda bunu sorup somut bir yer/sayfa öğrenilmeli, körlemesine
+  performans avına çıkma.
+- **[DÜŞÜK ÖNCELİK] ~19 adet bağımsız `"—"` kullanımı** (radar tablosu,
+  admin paneli, portföy metrikleri gibi `fmt_tr()`'den GEÇMEYEN sabit
+  metinler) hâlâ temizlenmedi — sadece merkezi `fmt_tr`/`fmt_tr_isaretli`
+  düzeltildi (v2.0.7.76). Bahri isterse ayrı bir taramada hepsi bulunup
+  düzeltilebilir.
+- **[DÜŞÜK ÖNCELİK] worker.py'nin TEFAS "Minimal fallback" yolu**
+  (tefas_client.py import edilemezse devreye giren, nadiren çalışan yedek)
+  hâlâ eski sahte-sıfır RSI formülünü kullanıyor (bkz. §4'teki "TEFAS
+  Ret6M/Ret1Y için sahte %0,00" notu) — bu yol pratikte neredeyse hiç
+  tetiklenmediği için düzeltilmedi.
+
+---
+
+## 6. Denenip Reddedilen / Geri Alınan Yaklaşımlar
 
 | Yaklaşım | Durum | Sebep |
 |---|---|---|
@@ -336,7 +374,7 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ---
 
-## 6. Versiyon Kilometre Taşları (özet)
+## 7. Versiyon Kilometre Taşları (özet)
 
 - v2.0.4.x: Temel sistem (BIST/TEFAS/Kripto/Döviz/Maden, KAP entegrasyonu ilk hali)
 - v2.0.7.30-45: UI iyileştirmeleri, kripto/döviz/maden genişletme (20→186, 12→63, 4→18)
