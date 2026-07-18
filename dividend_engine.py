@@ -54,7 +54,6 @@ TL_FAIZ_REFERANS    = 0.42   # %42 mevduat referansı
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-@st.cache_data(ttl=86400, show_spinner=False)
 def _fetch_bist_dividend_raw(ticker: str) -> dict:
     """yfinance .info cagrisinin PAHALI/YAVAS kismini onbellekler.
     v2.0.7.84: current_price BURADA YOK, cunku fiyat surekli degisir -
