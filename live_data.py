@@ -120,6 +120,30 @@ _DOVIZ_TO_BP = {
     "JPYTRY": "JPY", "CHFTRY": "CHF", "AUDTRY": "AUD",
     "CADTRY": "CAD", "NZDTRY": "NZD", "NOKTRY": "NOK",
     "SEKTRY": "SEK", "DKKTRY": "DKK", "CNYTRY": "CNY",
+    # v2.0.7.80 - KRITIK DUZELTME (Bahri'nin bulgusu, ZARTRY ornegi):
+    # bu sozluk eskiden SADECE 12 ana dovizi taniyordu. 51 genisleme
+    # dovizi (worker.py'de DOVIZ_GENISLEME) icin worker.py kendi
+    # _canlidoviz_hesapla() fonksiyonuyla bp.FX(kod).history() ile GERCEK
+    # tarihsel veri alabiliyordu (Harem'e ihtiyac yok - MADEN'deki 9
+    # metal gibi dogrudan canlidoviz endpoint'i), ama Detay sayfasinin
+    # kendi get_fx_history() fonksiyonu bu kodlari hic bilmedigi icin
+    # dogrudan bp.FX(...) denemeden, guvenilmez tek-sembol yfinance
+    # sorgusuna (\"ZARTRY=X\" gibi) dusuyordu - "gecmis fiyat verisi
+    # yuklenemedi" hatasi ve bos MA/DD tablosunun sebebi buydu. Kodlar
+    # worker.py'deki _DOVIZ_TRUNCGIL_KOD ile BIREBIR AYNI (tek kaynak).
+    "RUBTRY": "RUB", "AEDTRY": "AED", "KWDTRY": "KWD", "ZARTRY": "ZAR",
+    "BHDTRY": "BHD", "LYDTRY": "LYD", "SARTRY": "SAR", "IQDTRY": "IQD",
+    "ILSTRY": "ILS", "INRTRY": "INR", "MXNTRY": "MXN", "HUFTRY": "HUF",
+    "BRLTRY": "BRL", "IDRTRY": "IDR", "CZKTRY": "CZK", "PLNTRY": "PLN",
+    "RONTRY": "RON", "ARSTRY": "ARS", "ALLTRY": "ALL", "AZNTRY": "AZN",
+    "BAMTRY": "BAM", "CLPTRY": "CLP", "COPTRY": "COP", "CRCTRY": "CRC",
+    "DZDTRY": "DZD", "EGPTRY": "EGP", "HKDTRY": "HKD", "ISKTRY": "ISK",
+    "KRWTRY": "KRW", "KZTTRY": "KZT", "LBPTRY": "LBP", "LKRTRY": "LKR",
+    "MADTRY": "MAD", "MDLTRY": "MDL", "MKDTRY": "MKD", "MYRTRY": "MYR",
+    "OMRTRY": "OMR", "PENTRY": "PEN", "PHPTRY": "PHP", "PKRTRY": "PKR",
+    "QARTRY": "QAR", "RSDTRY": "RSD", "SGDTRY": "SGD", "SYPTRY": "SYP",
+    "THBTRY": "THB", "TWDTRY": "TWD", "UAHTRY": "UAH", "UYUTRY": "UYU",
+    "GELTRY": "GEL", "TNDTRY": "TND", "BGNTRY": "BGN",
 }
 
 # MADEN: TRY-direkt gram bazli kiymetli madenler + sikke altinlar

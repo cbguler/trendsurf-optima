@@ -47,20 +47,42 @@ vermez — bu dosya o boşluğu dolduruyor.
      bu 51 dövizin hepsini numaralı kod olarak tanıyor.
   3. Truncgil (`finans.truncgil.com/v3/today.json`) — SADECE anlık fiyat,
      geçmiş veri YOK. Son çare, `_gecmis_veri_yok=True` ile işaretlenir.
-- **GÜNCELLEME (17 Temmuz 2026, Oturum XVIII): Yukarıdaki 2. madde artık
-  ÇALIŞMIYOR.** `doviz.com`'un kurumsal arşiv API'si (`api.doviz.com/api/
-  v12/assets/.../archive`) — hem borsapy'nin kendi canlı token çekme
-  mekanizması hem elle denenen 3 farklı sayfadan (www.doviz.com,
-  altin.doviz.com, kur.doviz.com) token kazıma denemesi **401 Unauthorized**
-  ile karşılaştı. Site artık token'ı sayfa HTML'sine gömmüyor gibi
-  görünüyor (muhtemelen JS bundle'ına taşınmış, Ocak 2026'daki kütüphane
-  doğrulamasından beri değişmiş). **Harem kurumsal tarihçesi şu an dıştan
-  erişilemez durumda** — 51 genişleme dövizi büyük ihtimalle Truncgil'e
-  (sadece anlık fiyat, `_gecmis_veri_yok=True`) düşüyor olmalı, canlidoviz
-  METAL_IDS/CURRENCY_IDS gibi doğrudan (auth gerektirmeyen) kanallar hâlâ
-  çalışıyor. **Bu maddeyi "çalışıyor" varsayıp tekrar test etmeden Harem
-  üzerine yeni bir özellik kurma — önce `test_maden_kaynak.py` tarzı bir
-  betikle (repoda örneği var) güncel durumu doğrula.**
+- **GÜNCELLEME (17 Temmuz 2026, Oturum XVIII): Yukarıdaki 2. madde
+  (Harem/`institution_history`) artık ÇALIŞMIYOR — ama worker.py
+  ÇÖKMÜYOR, kendi içinde sessizce daha basit bir yedeğe düşüyor.**
+  `doviz.com`'un kurumsal arşiv API'si (`api.doviz.com/api/v12/assets/
+  .../archive`) — hem borsapy'nin kendi canlı token çekme mekanizması hem
+  elle denenen 3 farklı sayfadan (www.doviz.com, altin.doviz.com,
+  kur.doviz.com) token kazıma denemesi **401 Unauthorized** ile
+  karşılaştı. Site artık token'ı sayfa HTML'sine gömmüyor gibi görünüyor.
+  **DÜZELTME (18 Temmuz 2026): Bir önceki notta "51 döviz muhtemelen
+  Truncgil'e düşüyor" diye YANLIŞ bir tahminde bulunulmuştu — gerçek CSV
+  verisiyle doğrulandı, bu YANLIŞ.** worker.py'nin `_canlidoviz_hesapla()`
+  fonksiyonu `institution_history("harem",...)` başarısız olunca kendi
+  içinde **`fx.history(period="3mo")` (Harem'e ihtiyaç duymayan, MADEN'in
+  9 metalinde zaten kanıtlanan düz canlidoviz metodu) ile SESSİZCE
+  yedekleniyor** ve bu neredeyse her zaman başarılı oluyor — 63 dövizin
+  61'i `_gecmis_veri_yok=False` (gerçek veri) gösteriyor, sadece 2 tanesi
+  gerçekten Truncgil'e (anlık-sadece) düşüyor. **Yani Döviz'in RSI/Ret1M/
+  Skor tarafı zaten sağlıklı, Harem'in 401 olması worker.py'yi neredeyse
+  hiç etkilemiyor.**
+- **Detay sayfasının KENDİ geçmiş veri fonksiyonu (`get_fx_history()` /
+  `_DOVIZ_TO_BP`, live_data.py) worker.py'nin bu yedek yolunu HİÇ
+  BİLMİYORDU — v2.0.7.80'de düzeltildi (Bahri'nin bulgusu, ZARTRY örneği:
+  liste/üst metrikler gerçek RSI 62,7/Skor 57,3 gösteriyordu ama Detay'daki
+  grafik + MA/DD tablosu "geçmiş fiyat verisi yüklenemedi" veriyordu).**
+  Kök neden: `_DOVIZ_TO_BP` sözlüğü sadece 12 ana dövizin canlidoviz
+  kodunu içeriyordu, 51 genişleme dövizinin (worker.py'nin
+  `_DOVIZ_TRUNCGIL_KOD`'unda zaten mevcut) kodları hiç yoktu — bu yüzden
+  `get_fx_history()` hemen boş dönüyor, kod tek başına güvenilmez bir
+  düz yfinance "XXXTRY=X" sorgusuna düşüyordu (bu, çoğu egzotik parite
+  için gerçekten çalışmıyor). **Düzeltme:** `_DOVIZ_TO_BP`, worker.py'nin
+  `_DOVIZ_TRUNCGIL_KOD`'u ile BİREBİR AYNI 51 kodla genişletildi (tek
+  kaynak, kopya değil — iki dosyada aynı sözlük elle senkron tutulmalı,
+  biri değişirse diğeri de güncellenmeli). Bu, TÜM 51 genişleme
+  dövizinin Detay sayfasındaki grafik/MA20/MA50/52H/Max Drawdown/MACD
+  tablosunu düzeltmesi beklenir (worker.py zaten bu kodlarla veri
+  çekebildiğine göre).
 - **TCMB KULLANILMIYOR — BİLİNÇLİ OLARAK REDDEDİLDİ (v2.0.7.74).**
   Sebep: Bahri'nin talebi — "yatırımcıların kullandığı fiyatlar daha çok
   serbest piyasa fiyatlarıdır". TCMB sadece 21 döviz kapsıyordu (Harem/
@@ -310,6 +332,11 @@ vermez — bu dosya o boşluğu dolduruyor.
   `_temel_alt_skor()` yardımcıları eklendi, `kap_client.
   score_from_fundamentals()` artık kullanılmıyor, etiketler /75+/25
   olarak düzeltildi.
+- v2.0.7.80 (18 Temmuz 2026, Oturum XVIII): Döviz Detay sayfası
+  (ZARTRY örneği) — `_DOVIZ_TO_BP` 51 genişleme döviziyle genişletildi
+  (worker.py'nin zaten çalışan `_DOVIZ_TRUNCGIL_KOD` yoluyla aynı
+  kodlar), "geçmiş fiyat verisi yüklenemedi" hatası ve boş MA/DD
+  tablosu düzeltildi.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
