@@ -309,6 +309,23 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   kullan, asla ham `f"{x:.2f}"` veya `f"{x:,.2f}"` yazma). Bu kural bir kez
   ihlal edilip ~50 yerde toplu düzeltme gerekmişti (v2.0.7.60) — yeni bir
   sayısal değer eklerken baştan `fmt_tr` kullan.
+- **`kripto_parite_map.json` (BIST ile çakışan kriptoların gerçek BtcTurk
+  kodu — CSKY→SKY gibi) worker.py tarafından her koşuda üretilir ama
+  18 Temmuz 2026'ya kadar HİÇBİR ZAMAN git'e commit edilmiyordu**
+  (GitHub Actions workflow'u sadece `optimized_universe.csv` ekliyordu).
+  Sonuç: deploy edilen uygulama hep eski `{"CLINK":"LINKTRY"}` yedeğini
+  kullanıyordu — CLINK dışındaki HER çakışma-yeniden-adlandırılmış kripto
+  (örn. CSKY) için Detay sayfası var-olmayan bir parite ("CSKYTRY")
+  sorguluyor, "geçmiş fiyat verisi yüklenemedi" veriyordu; worker.py'nin
+  KENDİ atomik hesaplaması doğru eşlemeyi bildiği için liste skoru
+  (80,0 gibi) GERÇEK ve doğruydu — bu yüzden liste/detay arasında bir
+  celiski degil, "veri var ama detay sayfasi yanlis paritede ariyor"
+  durumu vardı. **Düzeltme (v2.0.7.82):** hem `.github/workflows/
+  update_data.yml` hem `guncelle_ve_push.bat`'a `git add -f
+  kripto_parite_map.json` eklendi. **Genel ders: worker.py'nin ürettiği
+  YARDIMCI dosyalar (CSV dışında) commit listesine bilerek eklenmezse,
+  deploy edilen uygulama onları asla göremez — yeni bir yardımcı dosya
+  eklerken bunu unutma.**
 - **Emoji/dekoratif sembol YASAK** — ne kod/UI'da ne chat yanıtlarında.
 - **Her zaman GitHub'dan taze klon ile başla, yerel sandbox'a güvenme.**
   Bir oturumda yerel çalışma klasöründe GERÇEK GITHUB'A HİÇ GÖNDERİLMEMİŞ
@@ -320,6 +337,12 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.82/83 push'u (kripto_parite_map.json +
+  alarm eşiği).** Bahri push'u yaptıktan ve worker.py bir kez daha
+  çalıştıktan sonra: CSKY'nin (ve varsa BIST ile çakışan diğer
+  kriptoların) Detay sayfasındaki grafiğinin artık dolu geldiğini,
+  alarm e-postalarının günlük ~48'den makul bir sayıya düştüğünü
+  doğrula.
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.80/81 push'u (Döviz düzeltmeleri).**
   Bahri push'u yaptıktan ve worker.py bir kez daha çalıştıktan sonra:
   ZARTRY'nin Detay sayfasındaki grafik/MA/DD tablosunun artık dolu
@@ -407,6 +430,13 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   hesabı (JPY/AUD/CAD/NZD/NOK/SEK/DKK/CNY) tamamen kaldırıldı — Bahri'nin
   temel ilkesine (bkz. dosya başı §0) aykırıydı. canlidoviz artık TÜM 63
   döviz için birincil kaynak.
+- v2.0.7.82 (18 Temmuz 2026, Oturum XVIII): `kripto_parite_map.json`
+  artık git'e commit ediliyor (CSKY örneği) — BIST ile çakışan kriptoların
+  Detay sayfası düzeldi.
+- v2.0.7.83 (18 Temmuz 2026, Oturum XVIII): Fırsat Radarı alarm eşikleri
+  75/+10'dan 85/+15'e yükseltildi (Bahri'nin talebi) — kripto evreninin
+  19'dan 186'ya genişlemesiyle günlük ~48 e-postaya çıkan alarm seli
+  için.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -70,8 +70,15 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 CSV_PATH      = "optimized_universe.csv"
-RADAR_ESIK    = float(os.environ.get("RADAR_ESIK", "75"))
-RADAR_SICRAMA = float(os.environ.get("RADAR_SICRAMA", "10"))
+# v2.0.7.83 (18 Temmuz 2026, Bahri'nin talebi): esikler 75/+10'dan 85/+15'e
+# yukseltildi. Sebep: kripto evreni v2.0.7.39'da 19'dan 186'ya genisledi
+# ama esikler hic ayarlanmadi - 10 kat daha fazla (7/24, 15-20 dakikada bir
+# taranan) varlikla gunluk alarm e-postasi sayisi 48'e kadar cikti (asiri
+# gurultu, kullanilamaz hale geldi). Eski varsayilanlara donmek istersen
+# GitHub Actions secrets'a RADAR_ESIK=75 / RADAR_SICRAMA=10 ekleyebilirsin
+# (kod hicbir sey degistirmeden env degiskenini onceliklendirir).
+RADAR_ESIK    = float(os.environ.get("RADAR_ESIK", "85"))
+RADAR_SICRAMA = float(os.environ.get("RADAR_SICRAMA", "15"))
 # v2.0.6.2: Sicrama alarmi ANLAMLILIK TABANI. Basamakli skor formulunde
 # (RSI/momentum bantlari + hacim isareti) kucuk bir fiyat hareketi birkac
 # bandi ayni anda atlatip +10 uretebilir - 14->24 gibi dusuk skorlar
