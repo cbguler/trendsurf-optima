@@ -341,6 +341,16 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   çağrısı eklerken bu deseni tekrarlama — `kap_client.
   fetch_kap_fundamentals()` doğru yapılmış bir örnek (sadece ticker'a
   göre, 24 saat önbellekli).
+- **GitHub Actions workflow'ları git push yapıyorsa, commit sonrası/push
+  öncesi MUTLAKA `git pull` (merge) olmalı.** Aksi halde, workflow uzun
+  sürdüğü (worker.py dakikalarca çalışabilir) VEYA Bahri workflow ile AYNI
+  anda elle push yaptığı sürece, uzak dal ilerlemiş olabilir - push
+  "non-fast-forward" ile reddedilir ve TÜM iş (o çalışmanın ürettiği HER
+  ŞEY dahil) başarısız sayılıp atılır (v2.0.7.85, 18 Temmuz 2026, Bahri'nin
+  bulgusu — Actions #70 çalışması, `kripto_parite_map.json` üretilmiş ama
+  push edilemediği için kaybolmuştu). Bahri'nin kendi manuel push akışı
+  zaten bu deseni kullanıyor (commit → pull → push) - workflow'lar da
+  aynı deseni izlemeli.
 - **Emoji/dekoratif sembol YASAK** — ne kod/UI'da ne chat yanıtlarında.
 - **Her zaman GitHub'dan taze klon ile başla, yerel sandbox'a güvenme.**
   Bir oturumda yerel çalışma klasöründe GERÇEK GITHUB'A HİÇ GÖNDERİLMEMİŞ
@@ -352,10 +362,11 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[DOĞRULAMA BEKLİYOR] v2.0.7.84 push'u (performans - get_bist_dividend
-  önbellekleme).** Bahri push'tan sonra Ana Sayfa'da bütçe girip Bütçe
-  Optimizasyonu tablosunun açılma hızını ve bir varlığı işaretleyince
-  (checkbox) beklemenin azalıp azalmadığını doğrulamalı.
+- **[KOD PUSH EDİLDİ, KULLANICI DOĞRULAMASI BEKLİYOR] v2.0.7.84 (performans
+  - get_bist_dividend önbellekleme).** Kod GitHub'da doğrulandı (18 Temmuz).
+  Bahri'nin Ana Sayfa'da bütçe girip Bütçe Optimizasyonu tablosunun açılma
+  hızının ve checkbox tıklamasının gerçekten hızlandığını onaylaması
+  bekleniyor.
 - **[ÇÖZÜLMEDİ/MİMARİ ÖDÜNLEŞİM] "İlk açılış" yavaşlığı.** `load_universe()`
   zaten 10 dakika önbellekli — ama önbellek her dolduğunda Döviz/Maden/
   Kripto'nun canlı fiyat overlay'i (266 varlık için canlidoviz/BtcTurk
@@ -366,13 +377,19 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   çözülemez). Bahri bunu hâlâ sorun olarak görürse: (a) önbellek süresini
   uzatmak (10dk→30dk, tazelik/hız takası) (b) overlay'i sadece belirli
   kategorilerde/varlıklarda çalıştırmak gibi seçenekler değerlendirilebilir.
-
-- **[DOĞRULAMA BEKLİYOR] v2.0.7.82/83 push'u (kripto_parite_map.json +
-  alarm eşiği).** Bahri push'u yaptıktan ve worker.py bir kez daha
-  çalıştıktan sonra: CSKY'nin (ve varsa BIST ile çakışan diğer
-  kriptoların) Detay sayfasındaki grafiğinin artık dolu geldiğini,
-  alarm e-postalarının günlük ~48'den makul bir sayıya düştüğünü
-  doğrula.
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.85 push'u (workflow git pull-before-push).**
+  18 Temmuz 2026'da GitHub Actions "update_data" manuel çalıştırması
+  (#70), Bahri AYNI ANDA elle push yaptığı için "non-fast-forward"
+  hatasıyla tamamen BAŞARISIZ oldu — worker.py'nin ürettiği
+  `kripto_parite_map.json` dahil TÜM veri kayboldu (commit edildi ama
+  push edilemedi, iş başarısız sayılınca atıldı). Workflow'a commit
+  sonrası/push öncesi `git pull --no-edit` eklendi (Bahri'nin kendi
+  manuel push akışındaki AYNI desen). **Push'tan sonra "update_data"
+  workflow'unu TEKRAR manuel çalıştır** ve bu sefer başarıyla bitip
+  bitmediğini doğrula — bitmeden CSKY (v2.0.7.82) düzelmeyecek.
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.83 (alarm eşiği 85/+15).** Bahri'nin
+  günlük e-posta sayısının makul bir seviyeye düşüp düşmediğini
+  onaylaması bekleniyor.
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.80/81 push'u (Döviz düzeltmeleri).**
   Bahri push'u yaptıktan ve worker.py bir kez daha çalıştıktan sonra:
   ZARTRY'nin Detay sayfasındaki grafik/MA/DD tablosunun artık dolu
@@ -471,6 +488,11 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   önbelleklendi (24 saat, sadece ticker'a göre) — Ana Sayfa Bütçe
   Optimizasyonu tablosunun açılması ve checkbox tıklamalarındaki ciddi
   yavaşlığın kök nedeniydi (Bahri'nin bulgusu).
+- v2.0.7.85 (18 Temmuz 2026, Oturum XVIII): GitHub Actions
+  "update_data" workflow'una commit sonrası/push öncesi `git pull`
+  eklendi — Actions #70 çalışmasının "non-fast-forward" ile tamamen
+  başarısız olup `kripto_parite_map.json` dahil ürettiği her şeyi
+  kaybetmesinin kalıcı çözümü.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -101,6 +101,19 @@ jobs:
             echo "Degisiklik yok - commit atlandi"
           else
             git commit -m "Veri guncelleme (otomatik) - $(date +'%Y-%m-%d %H:%M TRT')"
+            # v2.0.7.85 - KRITIK DUZELTME (Bahri'nin bulgusu, Actions #70
+            # calismasi): worker.py uzun surdugu icin, bu adima gelene
+            # kadar UZAKTAKI (remote) main dalinda YENI commit'ler
+            # birikmis olabilir (ozellikle Bahri ayni sirada elle push
+            # yapiyorsa - tam da bu calismada oldugu gibi). Eskiden burada
+            # dogrudan "git push" deneniyordu - remote ilerlemisse "non-
+            # fast-forward" ile REDDEDILIYOR ve TUM is basarisiz oluyordu,
+            # worker.py'nin urettigi (kripto_parite_map.json dahil) veri
+            # kaybolup gidiyordu. Artik push'tan ONCE "git pull" (merge)
+            # yapiliyor - Bahri'nin kendi manuel push akisindaki AYNI
+            # desen (commit -> pull -> push). Bu, iki tarafin degisikligini
+            # de korur.
+            git pull --no-edit origin main
             git push origin main
             echo "CSV pushlandi"
           fi
