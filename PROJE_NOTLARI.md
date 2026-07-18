@@ -378,6 +378,17 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI, PUSH BEKLİYOR] El kitapları güncellemesi (18 Temmuz 2026).**
+  Abone ve Yönetici El Kitabı'nda (Word) birikmiş güncel-olmayan bilgiler
+  bulundu ve düzeltildi: döviz/maden/kripto sayıları (63/17/188), Paladyum
+  kaldırılması, alarm eşiği (85/+15), Yönetici kitabındaki veri kaynağı
+  tablosunun ÇOK ESKİ olan Döviz (TCMB/EVDS — asla doğru değildi artık)
+  ve Maden/Kripto (sentetik USD×kur yedek — artık yasak) satırları, "⚠/✓/
+  ⓘ" gibi emoji/dekoratif sembollerin TAMAMEN temizlenmesi (kalıcı emoji
+  yasağı kurala Word dosyaları da dahil), ve Yönetici kitabına bugünkü
+  oturumun (v2.0.7.76-88) özet bir versiyon geçmişi eklenmesi. Bahri henüz
+  push etmedi — dosyalar hazır, bekliyor.
+
 - **[BAŞARISIZ, GERİ ALINDI] v2.0.7.87 (giriş ekranı kalıntısı UX
   düzeltmesi) — v2.0.7.88 ile geri alındı, 18 Temmuz 2026.** Bahri'nin
   bulgusu: giriş yapıp bütçe girdikten sonra bile ana alanda eski Giriş/
