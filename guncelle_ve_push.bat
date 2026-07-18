@@ -14,6 +14,7 @@ if %errorlevel% neq 0 (
 echo [%date% %time%] CSV GitHub'a push ediliyor... >> guncelle_log.txt
 
 git add -f optimized_universe.csv >> guncelle_log.txt 2>&1
+git add -f kripto_parite_map.json >> guncelle_log.txt 2>&1
 git diff --cached --quiet
 if %errorlevel% neq 0 (
     git commit -m "otomatik guncelleme %date% %time%" >> guncelle_log.txt 2>&1
