@@ -362,6 +362,16 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.87 (giriş ekranı kalıntısı UX düzeltmesi).**
+  Bahri'nin bulgusu: giriş yapıp bütçe girdikten sonra bile ana alanda
+  eski Giriş/Kayıt ekranı görüntüsü kalıyordu. Kök neden "ilk açılış
+  yavaşlığı" ile AYNI (`load_universe()` yavaş olduğunda ana alana yeni
+  bir şey yazılmıyor, kenar çubuğu daha hızlı güncellendiği için tarayıcı
+  ana alanda eskiyi göstermeye devam ediyordu). Auth gate sonrası hemen
+  `st.empty()` ile "Yükleniyor..." yer tutucusu eklendi, sayfa içeriği
+  hazır olunca kaldırılıyor. Bahri'nin bunu deneyip artık boş/yükleniyor
+  ekranı görüp görmediğini (eski giriş formu değil) doğrulaması bekleniyor.
+
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.86 (Kripto/Döviz/Maden Liste=Detay skor
   tutarlılığı).** CSKY örneği (Liste 70,7 / Detay 60,7, Hacim cezası -10)
   ile keşfedildi — TEFAS'ta bulunanla AYNI hata (BIST-tarzı DD/hacim dahil
@@ -511,6 +521,9 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   skoru artık BIST gibi DD/hacim cezası dahil (CSKY örneği) — worker.py
   (Kripto/Döviz) ve live_data.py (Maden) canlı overlay'i güncellendi.
   TEFAS hâlâ rate-limit engeli yüzünden kapsam dışı.
+- v2.0.7.87 (18 Temmuz 2026, Oturum XVIII): Giriş sonrası ana alanda eski
+  Giriş/Kayıt ekranı görüntüsü kalması düzeltildi — auth gate sonrası
+  hemen "Yükleniyor..." yer tutucusu eklendi.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
