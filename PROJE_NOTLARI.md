@@ -326,6 +326,21 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   YARDIMCI dosyalar (CSV dışında) commit listesine bilerek eklenmezse,
   deploy edilen uygulama onları asla göremez — yeni bir yardımcı dosya
   eklerken bunu unutma.**
+- **`yf.Ticker(...).info` yfinance'in EN YAVAŞ çağrılarından biri (genelde
+  1-5+ saniye/hisse) ve ÖNBELLEKSİZ kullanılırsa (Streamlit her widget
+  etkileşiminde TÜM sayfayı yeniden çalıştırdığından) HER checkbox
+  tıklamasında/sayfa etkileşiminde TEKRAR TEKRAR çağrılır.** Bu,
+  `dividend_engine.get_bist_dividend()`'de bulundu (v2.0.7.84, Bahri'nin
+  bulgusu — Ana Sayfa Bütçe Optimizasyonu tablosunun açılması VE herhangi
+  bir checkbox tıklaması yavaştı). **Önbelleklerken dikkat:** fiyat gibi
+  sık değişen bir parametreyi `@st.cache_data`'nın önbellek anahtarına
+  KATMA — her fiyat güncellemesinde önbellek isabetsiz olur, yavaş çağrı
+  yine tekrarlanır. Pahalı/nadiren-değişen kısmı (örn. temettü oranı,
+  sadece ticker'a göre) AYRI bir önbellekli fonksiyona taşı, fiyata bağlı
+  ucuz hesabı dışarıda, önbellek dışında yap. Yeni bir yfinance `.info`
+  çağrısı eklerken bu deseni tekrarlama — `kap_client.
+  fetch_kap_fundamentals()` doğru yapılmış bir örnek (sadece ticker'a
+  göre, 24 saat önbellekli).
 - **Emoji/dekoratif sembol YASAK** — ne kod/UI'da ne chat yanıtlarında.
 - **Her zaman GitHub'dan taze klon ile başla, yerel sandbox'a güvenme.**
   Bir oturumda yerel çalışma klasöründe GERÇEK GITHUB'A HİÇ GÖNDERİLMEMİŞ
@@ -336,6 +351,21 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 ---
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
+
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.84 push'u (performans - get_bist_dividend
+  önbellekleme).** Bahri push'tan sonra Ana Sayfa'da bütçe girip Bütçe
+  Optimizasyonu tablosunun açılma hızını ve bir varlığı işaretleyince
+  (checkbox) beklemenin azalıp azalmadığını doğrulamalı.
+- **[ÇÖZÜLMEDİ/MİMARİ ÖDÜNLEŞİM] "İlk açılış" yavaşlığı.** `load_universe()`
+  zaten 10 dakika önbellekli — ama önbellek her dolduğunda Döviz/Maden/
+  Kripto'nun canlı fiyat overlay'i (266 varlık için canlidoviz/BtcTurk
+  gerçek zamanlı çağrısı) yeniden ödenen bir maliyet. Bu, "daha taze veri"
+  ile "daha hızlı açılış" arasında BİLİNÇLİ bir tasarım tercihi - kesin
+  bir hata değil. Ayrıca Streamlit Cloud'un ücretsiz katmanı uzun süre
+  kullanılmayan uygulamaları uyutabilir (platform kaynaklı, kodla
+  çözülemez). Bahri bunu hâlâ sorun olarak görürse: (a) önbellek süresini
+  uzatmak (10dk→30dk, tazelik/hız takası) (b) overlay'i sadece belirli
+  kategorilerde/varlıklarda çalıştırmak gibi seçenekler değerlendirilebilir.
 
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.82/83 push'u (kripto_parite_map.json +
   alarm eşiği).** Bahri push'u yaptıktan ve worker.py bir kez daha
@@ -437,6 +467,10 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   75/+10'dan 85/+15'e yükseltildi (Bahri'nin talebi) — kripto evreninin
   19'dan 186'ya genişlemesiyle günlük ~48 e-postaya çıkan alarm seli
   için.
+- v2.0.7.84 (18 Temmuz 2026, Oturum XVIII): `get_bist_dividend()`
+  önbelleklendi (24 saat, sadece ticker'a göre) — Ana Sayfa Bütçe
+  Optimizasyonu tablosunun açılması ve checkbox tıklamalarındaki ciddi
+  yavaşlığın kök nedeniydi (Bahri'nin bulgusu).
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -17,6 +17,7 @@ vadeli fiyat momentumunun basit bir projeksiyonudur, yatırım tavsiyesi değild
 
 import pandas as pd
 import numpy as np
+import streamlit as st
 from typing import Optional
 
 # ─── SABİT TABLO: Kripto Staking APY ───────────────────────
@@ -52,10 +53,47 @@ TCMB_POLITIKA_FAIZI = 0.46   # %46 (Haziran 2026 yaklaşık)
 TL_FAIZ_REFERANS    = 0.42   # %42 mevduat referansı
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner=False)
+def _fetch_bist_dividend_raw(ticker: str) -> dict:
+    """yfinance .info cagrisinin PAHALI/YAVAS kismini onbellekler.
+    v2.0.7.84: current_price BURADA YOK, cunku fiyat surekli degisir -
+    onbellek anahtarina fiyat eklenirse her fiyat guncellemesinde
+    onbellek ISABETSIZ olur ve yavas .info cagrisi yine tekrar tekrar
+    yapilir. Fiyata bagli hesap (temettu verimi) get_bist_dividend()'de,
+    bu ONBELLEKSIZ (ama anlik/ucretsiz) fonksiyonun DISINDA yapilir."""
+    raw = {"div_rate": None, "div_yield_yf": None, "ex_date": None,
+           "frequency": None, "_error": None}
+    try:
+        import yfinance as yf
+        info = yf.Ticker(f"{ticker}.IS").info
+        raw["div_rate"]      = info.get("dividendRate")
+        raw["div_yield_yf"]  = info.get("dividendYield")
+        raw["ex_date"]       = info.get("exDividendDate")
+        raw["frequency"]     = info.get("dividendFrequency")
+    except Exception as e:
+        raw["_error"] = str(e)[:40]
+    return raw
+
+
 def get_bist_dividend(ticker: str, current_price: float) -> dict:
     """
     yfinance'den BIST hissesi için temettü verilerini çeker.
     Returns: {div_per_share, div_yield, ex_date, frequency, annual_div}
+
+    v2.0.7.84 - KRITIK PERFORMANS DUZELTMESI (Bahri'nin bulgusu: Ana
+    Sayfa Butce Optimizasyonu tablosunun acilmasi VE herhangi bir
+    checkbox tiklamasi cok yavas). Kok neden: yf.Ticker(...).info
+    yfinance'in EN YAVAS cagrilarindan biri (genelde 1-5+ saniye/hisse),
+    ve bu fonksiyon HICBIR ONBELLEK kullanmiyordu. Streamlit HER widget
+    etkilesiminde (checkbox tiklama dahil) TUM sayfayi yeniden calistirdigi
+    icin, bu yavas cagri HER tiklamada BIST sonuclarindaki her hisse icin
+    TEKRAR TEKRAR yapiliyordu. Temettu verisi (yillik/ceyreklik odeme)
+    gercekte cok NADIR degisir (ceyrekte bir, yilda bir) - 24 saatlik
+    onbellek guvenli ve dogru, performans farkini dramatik sekilde
+    (saniyelerden ~0'a) dusurur. Pahali .info cagrisi _fetch_bist_
+    dividend_raw()'a tasindi (sadece ticker'a gore onbellekli); burada
+    sadece HIZLI/anlik fiyata-bagli verim hesabi yapilir.
     """
     result = {
         "div_per_share":  0.0,
@@ -65,39 +103,34 @@ def get_bist_dividend(ticker: str, current_price: float) -> dict:
         "annual_div":     0.0,
         "source":         "—",
     }
-    try:
-        import yfinance as yf
-        t = yf.Ticker(f"{ticker}.IS")
-        info = t.info
+    raw = _fetch_bist_dividend_raw(ticker)
+    if raw.get("_error"):
+        result["source"] = f"hata: {raw['_error']}"
+        return result
 
-        # Temettü verisi
-        div_rate  = info.get("dividendRate")    # Yıllık temettü / hisse (₺)
-        div_yield = info.get("dividendYield")   # Yıllık getiri oranı
-        last_div  = info.get("lastDividendValue")  # Son ödenen temettü
-        ex_date   = info.get("exDividendDate")
-        freq      = info.get("dividendFrequency")  # 1=yıllık, 4=çeyreklik
+    div_rate  = raw.get("div_rate")     # Yıllık temettü / hisse (₺)
+    div_yield = raw.get("div_yield_yf") # Yıllık getiri oranı
+    ex_date   = raw.get("ex_date")
+    freq      = raw.get("frequency")    # 1=yıllık, 4=çeyreklik
 
-        # Temizle ve hesapla
-        if div_rate and float(div_rate) > 0:
-            result["div_per_share"] = round(float(div_rate), 4)
-            result["annual_div"]    = round(float(div_rate), 4)
-            result["source"] = "yfinance"
+    # Temizle ve hesapla
+    if div_rate and float(div_rate) > 0:
+        result["div_per_share"] = round(float(div_rate), 4)
+        result["annual_div"]    = round(float(div_rate), 4)
+        result["source"] = "yfinance"
 
-        if div_yield and 0 < float(div_yield) <= 0.5:
-            result["div_yield"] = round(float(div_yield) * 100, 2)
-        elif result["div_per_share"] > 0 and current_price > 0:
-            result["div_yield"] = round(result["div_per_share"] / current_price * 100, 2)
+    if div_yield and 0 < float(div_yield) <= 0.5:
+        result["div_yield"] = round(float(div_yield) * 100, 2)
+    elif result["div_per_share"] > 0 and current_price > 0:
+        result["div_yield"] = round(result["div_per_share"] / current_price * 100, 2)
 
-        if ex_date:
-            import datetime
-            try:
-                result["ex_date"] = datetime.datetime.fromtimestamp(ex_date).strftime("%d.%m.%Y")
-            except: pass
+    if ex_date:
+        import datetime
+        try:
+            result["ex_date"] = datetime.datetime.fromtimestamp(ex_date).strftime("%d.%m.%Y")
+        except: pass
 
-        result["frequency"] = {1: "Yıllık", 2: "Yarıyıllık", 4: "Çeyreklik"}.get(freq, "Yıllık")
-
-    except Exception as e:
-        result["source"] = f"hata: {str(e)[:40]}"
+    result["frequency"] = {1: "Yıllık", 2: "Yarıyıllık", 4: "Çeyreklik"}.get(freq, "Yıllık")
 
     return result
 
