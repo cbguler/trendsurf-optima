@@ -663,16 +663,14 @@ if _cur_user is None:
     render_auth_gate()
     st.stop()
 
-# v2.0.7.87 - KRITIK UX DUZELTMESI (Bahri'nin bulgusu): Giris yapip butce
-# girdikten sonra bile ana alanda eski Giris/Kayit ekrani goruntusu
-# kaliyordu. Sebep: bu noktadan sonra load_universe() gibi yavas isler
-# bitene kadar ana alana YENI HICBIR SEY yazilmiyordu - kenar cubugu daha
-# once render edildigi icin hizli guncelleniyor, tarayici da ana alanda
-# EN SON gordugu seyi (giris formu) gostermeye devam ediyordu. Asagidaki
-# yer tutucu ana alani HEMEN "Yukleniyor..." ile degistirir - sayfa
-# hazir oldugunda (asagida _main_yukleniyor.empty() ile) kaldirilir.
-_main_yukleniyor = st.empty()
-_main_yukleniyor.info("Yükleniyor...")
+# v2.0.7.88 - GERI ALINDI (Bahri'nin bulgusu): v2.0.7.87'de eklenen
+# st.empty()+"Yukleniyor..." yer tutucusu beklenen isi yapmadi - Streamlit
+# yeni elemani ESKI elemanlarin YERINE koymuyor, yanina/ustune EKLIYOR;
+# script bitene kadar onceki calismadan kalan (giris formu gibi) elemanlar
+# sayfada kalmaya devam ediyor. Sonuc, sorunu cozmek yerine ustune bir
+# mesaj daha eklemek oldu (daha karisik gorunum). Asil cozum yukleme
+# suresinin KISALTILMASI (bkz. "Ilk acilis yavasligi" - mimari odunlesim,
+# PROJE_NOTLARI.md) - kozmetik bir yama ile duzeltilemez.
 
 # v2.0.7.9 - "Yeni Abonelik Basvurusu" mailindeki dogrudan link icin:
 # ?go=admin URL parametresi, ADMIN kullanicisini otomatik Admin Paneli'ne
@@ -2296,9 +2294,6 @@ RISK_W={
 # ══════════════════════════════════════════════════════════════
 # ANA SAYFA
 # ══════════════════════════════════════════════════════════════
-# v2.0.7.87: gercek sayfa icerigi render edilmeye hazir - "Yukleniyor..."
-# yer tutucusunu kaldir (bkz. yukaridaki auth gate sonrasi not).
-_main_yukleniyor.empty()
 
 if page=="Ana Sayfa":
     st.title("Bütçe Optimizasyonu")

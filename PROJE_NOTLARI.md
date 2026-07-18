@@ -120,9 +120,10 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   Ret1M/skor hesaplarının kaynağı.
 - 9 Truncgil-türü sikke/ayar (Gram Has, 14/18 Ayar, Bilezik22, İkibuçuk,
   Beşli, Gremse, Reşat, Hamit) — HİÇBİR kaynakta geçmiş veri yok (Truncgil
-  sadece anlık, canlidoviz'de slug yok, Harem 401). **Bahri'nin kararı
-  (17 Temmuz): şimdilik sistemde kalsınlar, RSI/Skor boş görünsün — Paladyum
-  gibi kaldırılmaları henüz onaylanmadı, bekleniyor.**
+  sadece anlık, canlidoviz'de slug yok, Harem 401). **KESİN KARAR (Bahri,
+  18 Temmuz 2026): böyle kalsınlar — fiyat gösterilmeye devam eder, RSI/
+  Skor boş kalır. Kaldırılmayacaklar (Paladyum'dan farklı olarak). Bu
+  konu KAPANDI, tekrar sorma.**
 - Ons Altın (USD) sadece bilgi amaçlı gösterilir, evrene/skora katılmaz.
 
 ---
@@ -351,6 +352,21 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   push edilemediği için kaybolmuştu). Bahri'nin kendi manuel push akışı
   zaten bu deseni kullanıyor (commit → pull → push) - workflow'lar da
   aynı deseni izlemeli.
+- **Streamlit yeni bir elemanı (st.empty() dahil) eskisinin YERİNE
+  koymaz — script bitene kadar önceki çalışmadan kalan elemanlar sayfada
+  kalmaya devam eder.** v2.0.7.87'de bu yanlış varsayılıp "auth gate
+  sonrası hemen st.empty() ile 'Yükleniyor...' yazarsam eski giriş formu
+  kaybolur" denendi — olmadı, yeni mesaj eskinin ÜSTÜNE/YANINA eklendi,
+  görüntü DAHA karışık hale geldi (Bahri'nin bulgusu, 18 Temmuz 2026,
+  v2.0.7.88'de geri alındı). Streamlit'in element-degistirme/temizleme
+  davranışı, ancak script TAMAMEN bittiğinde (ya da o pozisyona TEKRAR
+  bir eleman yazıldığında) devreye girer - "erken bir yer tutucu
+  koyarsam sonraki (yavaş) icerik gelene kadar eski goruntu gizlenir"
+  varsayımı YANLIŞ. Bu tür bir "yükleniyor" ekranı gerekiyorsa, gerçek
+  çözüm ya (a) yavaş işlemi gerçekten hızlandırmak ya da (b) TÜM sayfa
+  içeriğini TEK bir `st.empty().container()` içine alıp o container'ı
+  script başında bir kez temizlemek gibi çok daha kapsamlı bir yeniden
+  yapılandırma - küçük/nokta atışı bir yama yeterli değil.
 - **Emoji/dekoratif sembol YASAK** — ne kod/UI'da ne chat yanıtlarında.
 - **Her zaman GitHub'dan taze klon ile başla, yerel sandbox'a güvenme.**
   Bir oturumda yerel çalışma klasöründe GERÇEK GITHUB'A HİÇ GÖNDERİLMEMİŞ
@@ -362,15 +378,19 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[DOĞRULAMA BEKLİYOR] v2.0.7.87 (giriş ekranı kalıntısı UX düzeltmesi).**
-  Bahri'nin bulgusu: giriş yapıp bütçe girdikten sonra bile ana alanda
-  eski Giriş/Kayıt ekranı görüntüsü kalıyordu. Kök neden "ilk açılış
-  yavaşlığı" ile AYNI (`load_universe()` yavaş olduğunda ana alana yeni
-  bir şey yazılmıyor, kenar çubuğu daha hızlı güncellendiği için tarayıcı
-  ana alanda eskiyi göstermeye devam ediyordu). Auth gate sonrası hemen
-  `st.empty()` ile "Yükleniyor..." yer tutucusu eklendi, sayfa içeriği
-  hazır olunca kaldırılıyor. Bahri'nin bunu deneyip artık boş/yükleniyor
-  ekranı görüp görmediğini (eski giriş formu değil) doğrulaması bekleniyor.
+- **[BAŞARISIZ, GERİ ALINDI] v2.0.7.87 (giriş ekranı kalıntısı UX
+  düzeltmesi) — v2.0.7.88 ile geri alındı, 18 Temmuz 2026.** Bahri'nin
+  bulgusu: giriş yapıp bütçe girdikten sonra bile ana alanda eski Giriş/
+  Kayıt ekranı görüntüsü kalıyordu. Denenen çözüm: auth gate sonrası
+  hemen `st.empty()` ile "Yükleniyor..." yer tutucusu eklemek. **BU
+  YANLIŞ VARSAYIMA DAYANIYORDU VE İŞE YARAMADI** — bkz. §4'teki
+  "Streamlit yeni elemani eskinin YERINE koymaz" notu. Sonuç: "Yükleniyor"
+  mesajı eski giriş formunun ÜSTÜNE eklendi, ikisi birlikte görünüp durum
+  daha karışık hale geldi ("daha beter oldu" - Bahri). Kod tamamen geri
+  alındı (v2.0.7.88). **Kök sorun (yükleme süresinin kendisi) hâlâ
+  çözülmedi** — bkz. hemen altındaki "İlk açılış yavaşlığı" maddesi,
+  gerçek çözüm o mimari ödünleşimi ele almaktan geçiyor, kozmetik bir
+  yama ile olmuyor.
 
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.86 (Kripto/Döviz/Maden Liste=Detay skor
   tutarlılığı).** CSKY örneği (Liste 70,7 / Detay 60,7, Hacim cezası -10)
@@ -429,13 +449,6 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   KOD DEĞİŞİKLİĞİ YAPILMADI, TEFAS'ta liste skorunda basit (DD'siz) hesap
   kullanılmaya devam ediyor.** Bahri kendisi tekrar gündeme getirmeden
   bu konuyu proaktif olarak açma — yorulduğu bir konuydu.
-- **[BEKLEMEDE] 9 Truncgil-türü sikke/ayar için nihai karar (Gram Has,
-  14/18 Ayar, Bilezik22, İkibuçuk, Beşli, Gremse, Reşat, Hamit).**
-  Bahri 17 Temmuz'da "Paladyum'un CSV'den düşmesini önce göreyim" deyip
-  bu kararı ertelemişti — bir daha dönülmedi. Şu an bu 9 tür sistemde
-  duruyor, RSI/Skor boş gösteriliyor (Paladyum gibi kaldırılmaları HENÜZ
-  ONAYLANMADI). Bahri sorarsa: seçenekler (a) böyle kalsın (b) Paladyum
-  gibi tamamen kaldır.
 - **[SORULDU] Genel uygulama yavaşlığı.** Bahri "hâlâ devam ediyor" dedi
   ama nerede (açılış/sayfa geçişi/detay tıklama) hiç netleşmedi. Bir
   sonraki oturumda bunu sorup somut bir yer/sayfa öğrenilmeli, körlemesine
@@ -522,8 +535,9 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   (Kripto/Döviz) ve live_data.py (Maden) canlı overlay'i güncellendi.
   TEFAS hâlâ rate-limit engeli yüzünden kapsam dışı.
 - v2.0.7.87 (18 Temmuz 2026, Oturum XVIII): Giriş sonrası ana alanda eski
-  Giriş/Kayıt ekranı görüntüsü kalması düzeltildi — auth gate sonrası
-  hemen "Yükleniyor..." yer tutucusu eklendi.
+  Giriş/Kayıt ekranı görüntüsü kalması için "Yükleniyor..." yer tutucusu
+  denendi — **BAŞARISIZ, v2.0.7.88 ile GERİ ALINDI** (Streamlit'in
+  element-degistirme modeli yanlış anlaşılmıştı, bkz. §4).
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
