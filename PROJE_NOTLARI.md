@@ -389,28 +389,27 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[AKTİF TEŞHİS SÜRÜYOR] v2.0.7.92 (Bütçe Optimizasyonu askıda kalma
-  sorunu, 19 Temmuz 2026) — v2.0.7.90/91 (yfinance/borsapy zaman aşımı)
-  SORUNU ÇÖZMEDİ, sayfa hâlâ AYNI noktada (MADEN mesajından hemen sonra)
-  takılıyor.** Yeni şüpheli: Ana Sayfa'daki bütçe dağıtım (round-robin
-  lot ekleme) döngüsünün HİÇBİR üst sınırı yoktu — seçili varlıklardan
-  biri aşırı düşük fiyatlıysa (örn. bazı genişleme dövizleri, IDR gibi,
-  1 birimi kuruşun çok altında olabilir), kalan bütçeyi o fiyata bölüp
-  tüketmek milyonlarca iterasyon gerektirip hatasız/sessizce neredeyse
-  süresiz çalışabilirdi. **Düzeltme (kesin değil, hâlâ teşhis
-  aşamasında):** döngüye 100.000 iterasyon / 5 saniye duvar-saati güvenlik
-  freni eklendi (aşılırsa döngü güvenle durur, o ana kadarki kısmi sonuç
-  kullanılır). **Ayrıca bu bölüme GEÇİCİ teşhis satırları (`st.caption
-  ("[TEŞHİS]: ...")`) eklendi** — bir sonraki takılmada Bahri ekranda
-  hangi satırın en son göründüğünü bildirirse, tam olarak nerede
-  kalındığı netleşir. **Bu teşhis satırları sorun kesin çözülünce
-  KALDIRILMALI** (kalıcı bir özellik değil, geçici debug aracı).
-  Eğer güvenlik freni tetiklenirse (ekranda "GÜVENLİK FRENİNE TAKILDI"
-  mesajı görünürse), bu, düşük fiyatlı bir varlığın gerçekten sorunun
-  kaynağı olduğunu doğrular — o zaman hangi varlık olduğunu (muhtemelen
-  Döviz'in genişleme listesindeki çok düşük değerli bir para birimi)
-  bulup köklü çözüm (örn. çok düşük fiyatlı varlıkları round-robin'den
-  hariç tutmak) uygulanmalı.
+- **[ÇÖZÜLDÜ] v2.0.7.92 (Bütçe Optimizasyonu askıda kalma sorunu, 19 Temmuz
+  2026) — KÖK NEDEN DOĞRULANDI.** v2.0.7.90/91 (yfinance/borsapy zaman
+  aşımı) sorunun sadece bir kısmıydı; asıl neden Ana Sayfa'daki bütçe
+  dağıtım (round-robin lot ekleme) döngüsünün HİÇBİR üst sınırının
+  olmamasıydı — geçici teşhis satırları eklenip sorun tekrarlanınca,
+  tabloda **PEPE (Kripto) 0,0001 TL fiyatla 8.185.865 birim** olarak
+  önerilmiş görüldü — aşırı düşük fiyatlı bir varlık (IDR gibi bir döviz
+  değil, meme-coin bir kripto para) kalan bütçeyi tüketmek için
+  milyonlarca iterasyon gerektiriyordu, bu da döngüyü etkin olarak
+  süresiz askıda bırakıyordu. **100.000 iterasyon / 5 saniye güvenlik
+  freni işe yaradı, tablo başarıyla geldi.** Geçici teşhis satırları
+  (`st.caption("[TEŞHİS]: ...")`) v2.0.7.93'te kaldırıldı — güvenlik
+  freni mekanizmasının kendisi KALICI olarak kaldı.
+- **[TAMAMLANDI] v2.0.7.93 (19 Temmuz 2026, Bahri'nin talebi).** (1)
+  v2.0.7.92'nin geçici teşhis satırları temizlendi. (2) Ana Sayfa'nın
+  Bütçe Optimizasyonu tablosunun altına KALICI bir açıklama eklendi:
+  istenen `max_assets` sayısından daha az varlık önerildiğinde (örn.
+  bir kategori uygun fiyatlı/sinyalli varlık bulamadığında), abonelerin
+  "neden 10 istedim 8 geldi" sorusuna sohbette birine ihtiyaç duymadan
+  kendi başlarına cevap bulabilmesi için hangi kategori(ler)in boş
+  kaldığı açıkça yazılır.
 
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.91 (KAPSAMLI zaman aşımı koruması —
   muhtemel asıl kök neden, 19 Temmuz 2026).** Bahri'nin ikinci log
