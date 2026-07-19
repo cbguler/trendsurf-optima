@@ -378,6 +378,21 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.90 (Bütçe Optimizasyonu 8-9 dakika
+  takılma sorunu, 19 Temmuz 2026, Bahri'nin bulgusu).** Reboot sonrası
+  önbellek boşken Bütçe Optimizasyonu sayfası 8-9 dakika hiç ilerlemedi.
+  Kök neden adayı: `calc_optimization_income()` BIST hisseleri için
+  `get_bist_dividend()`'i ARDIŞIK (sıralı) çağırıyor, ve altındaki
+  `yf.Ticker(...).info` çağrısında HİÇBİR zaman aşımı koruması yoktu -
+  Yahoo Finance yavaş/rate-limit'e takılırsa (bugün onlarca kez
+  sorgulandıktan sonra olası) tek bir hisse bile dakikalarca askıda
+  kalıp tüm sayfayı bekletebiliyordu. `_fetch_bist_dividend_raw()`'a
+  8 saniyelik zaman aşımı eklendi (ThreadPoolExecutor ile) - zaman aşımı
+  olursa o hissenin temettü verisi olmadan devam edilir. **Bahri'nin bu
+  düzeltmeden sonra Bütçe Optimizasyonu sayfasının makul sürede
+  (soğuk başlangıçta bile birkaç dakikayı geçmeden) açıldığını
+  doğrulaması bekleniyor.**
+
 - **[TAMAMLANDI] v2.0.7.89 — Streamlit `use_container_width` deprecation
   düzeltmesi (19 Temmuz 2026, Bahri'nin bulgusu: "sisteme giremiyorum",
   logları inceleyince gerçek çökme YOKTU — Streamlit'in kendi deprecation

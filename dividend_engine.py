@@ -60,16 +60,36 @@ def _fetch_bist_dividend_raw(ticker: str) -> dict:
     onbellek anahtarina fiyat eklenirse her fiyat guncellemesinde
     onbellek ISABETSIZ olur ve yavas .info cagrisi yine tekrar tekrar
     yapilir. Fiyata bagli hesap (temettu verimi) get_bist_dividend()'de,
-    bu ONBELLEKSIZ (ama anlik/ucretsiz) fonksiyonun DISINDA yapilir."""
+    bu ONBELLEKSIZ (ama anlik/ucretsiz) fonksiyonun DISINDA yapilir.
+
+    v2.0.7.90 - KRITIK DUZELTME (Bahri'nin bulgusu: Butce Optimizasyonu
+    sayfasi 8-9 dakika takildi kaldi, reboot sonrasi onbellek bossken).
+    yf.Ticker(...).info ZAMAN ASIMI KORUMASI OLMADAN cagriliyordu -
+    Yahoo Finance yavas/rate-limit'e takilirsa (bugun onlarca kez
+    sorgulandiktan sonra gayet olasi) TEK BIR hisse bile dakikalarca
+    askida kalip calc_optimization_income()'un ARDISIK dongusunu (ve
+    dolayisiyla TUM sayfayi) bekletebiliyordu. Artik cagri ayri bir
+    thread'de en fazla 8 saniye bekleniyor - zaman asimi olursa o
+    hissenin temettu verisi olmadan devam edilir, sayfa asla kilitlenmez."""
     raw = {"div_rate": None, "div_yield_yf": None, "ex_date": None,
            "frequency": None, "_error": None}
-    try:
+
+    def _gercek_cagri():
         import yfinance as yf
-        info = yf.Ticker(f"{ticker}.IS").info
-        raw["div_rate"]      = info.get("dividendRate")
-        raw["div_yield_yf"]  = info.get("dividendYield")
-        raw["ex_date"]       = info.get("exDividendDate")
-        raw["frequency"]     = info.get("dividendFrequency")
+        return yf.Ticker(f"{ticker}.IS").info
+
+    try:
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            _gelecek = _ex.submit(_gercek_cagri)
+            try:
+                info = _gelecek.result(timeout=8)
+                raw["div_rate"]      = info.get("dividendRate")
+                raw["div_yield_yf"]  = info.get("dividendYield")
+                raw["ex_date"]       = info.get("exDividendDate")
+                raw["frequency"]     = info.get("dividendFrequency")
+            except _FutTimeout:
+                raw["_error"] = "zaman asimi (8s) - Yahoo Finance yanit vermedi"
     except Exception as e:
         raw["_error"] = str(e)[:40]
     return raw
