@@ -367,6 +367,17 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   içeriğini TEK bir `st.empty().container()` içine alıp o container'ı
   script başında bir kez temizlemek gibi çok daha kapsamlı bir yeniden
   yapılandırma - küçük/nokta atışı bir yama yeterli değil.
+- **Dış API çağrısı (yfinance/.info, borsapy/canlidoviz/BtcTurk .history()
+  vb.) EKLERKEN HER ZAMAN zaman aşımı koruması ekle — varsayılan olarak
+  bu kütüphanelerin çoğu SINIRSIZ bekler.** 19 Temmuz 2026'da aynı gün
+  içinde İKİ AYRI yerde bu tuzağa düşüldü (dividend_engine.py'nin
+  yfinance çağrısı - v2.0.7.90; live_data.py'nin borsapy çağrıları -
+  v2.0.7.91) — dış servis yavaş/rate-limit'e takılırsa TEK bir çağrı
+  bile tüm sayfayı dakikalarca (bazen görünüşte süresiz) kilitleyebiliyor.
+  Kalıcı desen: `_borsapy_zaman_asimili()` (live_data.py) tarzı bir
+  `ThreadPoolExecutor(max_workers=1).submit(fn).result(timeout=N)`
+  sarmalayıcısı kullan, zaman aşımında sessizce None/varsayılan dön -
+  ASLA çıplak bir dış API çağrısı ekleme.
 - **Emoji/dekoratif sembol YASAK** — ne kod/UI'da ne chat yanıtlarında.
 - **Her zaman GitHub'dan taze klon ile başla, yerel sandbox'a güvenme.**
   Bir oturumda yerel çalışma klasöründe GERÇEK GITHUB'A HİÇ GÖNDERİLMEMİŞ
@@ -378,20 +389,48 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[DOĞRULAMA BEKLİYOR] v2.0.7.90 (Bütçe Optimizasyonu 8-9 dakika
-  takılma sorunu, 19 Temmuz 2026, Bahri'nin bulgusu).** Reboot sonrası
-  önbellek boşken Bütçe Optimizasyonu sayfası 8-9 dakika hiç ilerlemedi.
-  Kök neden adayı: `calc_optimization_income()` BIST hisseleri için
-  `get_bist_dividend()`'i ARDIŞIK (sıralı) çağırıyor, ve altındaki
-  `yf.Ticker(...).info` çağrısında HİÇBİR zaman aşımı koruması yoktu -
-  Yahoo Finance yavaş/rate-limit'e takılırsa (bugün onlarca kez
-  sorgulandıktan sonra olası) tek bir hisse bile dakikalarca askıda
-  kalıp tüm sayfayı bekletebiliyordu. `_fetch_bist_dividend_raw()`'a
-  8 saniyelik zaman aşımı eklendi (ThreadPoolExecutor ile) - zaman aşımı
-  olursa o hissenin temettü verisi olmadan devam edilir. **Bahri'nin bu
-  düzeltmeden sonra Bütçe Optimizasyonu sayfasının makul sürede
-  (soğuk başlangıçta bile birkaç dakikayı geçmeden) açıldığını
-  doğrulaması bekleniyor.**
+- **[AKTİF TEŞHİS SÜRÜYOR] v2.0.7.92 (Bütçe Optimizasyonu askıda kalma
+  sorunu, 19 Temmuz 2026) — v2.0.7.90/91 (yfinance/borsapy zaman aşımı)
+  SORUNU ÇÖZMEDİ, sayfa hâlâ AYNI noktada (MADEN mesajından hemen sonra)
+  takılıyor.** Yeni şüpheli: Ana Sayfa'daki bütçe dağıtım (round-robin
+  lot ekleme) döngüsünün HİÇBİR üst sınırı yoktu — seçili varlıklardan
+  biri aşırı düşük fiyatlıysa (örn. bazı genişleme dövizleri, IDR gibi,
+  1 birimi kuruşun çok altında olabilir), kalan bütçeyi o fiyata bölüp
+  tüketmek milyonlarca iterasyon gerektirip hatasız/sessizce neredeyse
+  süresiz çalışabilirdi. **Düzeltme (kesin değil, hâlâ teşhis
+  aşamasında):** döngüye 100.000 iterasyon / 5 saniye duvar-saati güvenlik
+  freni eklendi (aşılırsa döngü güvenle durur, o ana kadarki kısmi sonuç
+  kullanılır). **Ayrıca bu bölüme GEÇİCİ teşhis satırları (`st.caption
+  ("[TEŞHİS]: ...")`) eklendi** — bir sonraki takılmada Bahri ekranda
+  hangi satırın en son göründüğünü bildirirse, tam olarak nerede
+  kalındığı netleşir. **Bu teşhis satırları sorun kesin çözülünce
+  KALDIRILMALI** (kalıcı bir özellik değil, geçici debug aracı).
+  Eğer güvenlik freni tetiklenirse (ekranda "GÜVENLİK FRENİNE TAKILDI"
+  mesajı görünürse), bu, düşük fiyatlı bir varlığın gerçekten sorunun
+  kaynağı olduğunu doğrular — o zaman hangi varlık olduğunu (muhtemelen
+  Döviz'in genişleme listesindeki çok düşük değerli bir para birimi)
+  bulup köklü çözüm (örn. çok düşük fiyatlı varlıkları round-robin'den
+  hariç tutmak) uygulanmalı.
+
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.91 (KAPSAMLI zaman aşımı koruması —
+  muhtemel asıl kök neden, 19 Temmuz 2026).** Bahri'nin ikinci log
+  dosyasında ("boş etiket" uyarısının tekrarlanma zamanları arasında
+  TAM 5 dakikalık boşluklar — autorefresh aralığıyla birebir örtüşüyor)
+  bulduğu kanıt, her script çalışmasının neredeyse tüm 5 dakikayı
+  doldurduğunu gösterdi. Kök neden: `live_data.py`'deki `bp.FX(...)`/
+  `bp.Crypto(...).history()` çağrılarının (canlidoviz/BtcTurk, 266
+  varlığı etkileyen ANA canlı overlay) **HİÇBİRİNDE** zaman aşımı
+  koruması yoktu — v2.0.7.90'daki BIST temettü düzeltmesi (~10 varlığı
+  etkiliyordu) bu sorunun sadece küçük bir parçasıydı. Paylaşılan
+  `_borsapy_zaman_asimili()` yardımcısı eklendi, 6 çağrı yeri (MADEN
+  özet, iki adet FX/anlık-fiyat yedek yolu, Döviz/Maden/Kripto detay
+  sayfası geçmiş verisi) 10 saniyelik zaman aşımıyla sarmalandı. **Bahri
+  push'tan ve reboot'tan sonra sayfa yüklemesinin makul sürede (birkaç
+  dakikayı geçmeden) tamamlandığını ve "sürekli çalışıyor" görüntüsünün
+  bitip bitmediğini doğrulamalı.**
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.90 (BIST temettü zaman aşımı).** Yukarıdaki
+  v2.0.7.91 ile aynı kökten, dar kapsamlı ilk düzeltme — hâlâ geçerli,
+  ayrıca doğrulanmasına gerek yok (v2.0.7.91'in bir parçası sayılabilir).
 
 - **[TAMAMLANDI] v2.0.7.89 — Streamlit `use_container_width` deprecation
   düzeltmesi (19 Temmuz 2026, Bahri'nin bulgusu: "sisteme giremiyorum",

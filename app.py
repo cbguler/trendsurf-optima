@@ -2520,6 +2520,12 @@ if page=="Ana Sayfa":
                 f"önerilemedi: {', '.join(karsilanamayan_kategoriler)}. "
                 f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
 
+    # v2.0.7.92 - GECICI TESHIS NOKTASI (Bahri'nin bulgusu: sayfa MADEN
+    # mesajindan sonra suresiz takiliyordu). Bu satir, bir sonraki
+    # takilmada TAM OLARAK nereye kadar gelindigini gostermek icin
+    # eklendi - sorun cozulunce kaldirilacak.
+    st.caption("[TEŞHİS]: bütçe dağıtım döngüsü başlıyor...")
+
     # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
     # sayiya yuvarlandigi icin her varlikta Tutar'dan az kalan bir
     # artik olusuyordu ve bu artik toplamda kullanilmadan kaliyordu (orn.
@@ -2532,12 +2538,29 @@ if page=="Ana Sayfa":
     # kalan butce hicbir secili varligin fiyatini karsilayamayana kadar
     # tekrarlanir) dagitilir. Sadece MEVCUT secili varliklara ek lot eklenir
     # - Max Varlik Sayisi kisitini bozmaz, yeni varlik eklemez.
+    #
+    # v2.0.7.92 - KRITIK GUVENLIK FRENI (Bahri'nin bulgusu, 19 Temmuz 2026):
+    # Bu donguye eskiden hicbir ust sinir yoktu. Secili varliklardan biri
+    # asiri dusuk fiyatliysa (orn. bazi genisleme dovizleri - IDR gibi -
+    # 1 birimi bir kurusun cok altinda olabilir), kalan butceyi o fiyata
+    # bolup tuketmek MILYONLARCA iterasyon gerektirebilir - hata vermeden,
+    # sessizce, etkin olarak SURESIZ calisir. Artik hem TOPLAM ITERASYON
+    # SAYISI (100.000) hem DUVAR SAATI SURESI (5 saniye) icin sert bir
+    # tavan var - ikisinden biri asilirsa dongu GUVENLI sekilde durur,
+    # o ana kadar dagitilmis olan kismi sonuc kullanilir (hic cokme/askida
+    # kalma olmaz).
     if opt_rows:
+        import time as _time_guard
+        _dongu_baslangic = _time_guard.time()
+        _iterasyon_sayaci = 0
+        _MAKS_ITERASYON = 100_000
+        _MAKS_SURE_SN = 5.0
         _kalan_butce = budget - sum(r["Tutar (₺)"] for r in opt_rows)
         _skor_sirali = sorted(
             [r for r in opt_rows if r.get("_gercek_fiyat")],
             key=lambda r: -r["Optima Skoru"])
         _ilerleme = True
+        _guvenlik_frenine_takildi = False
         while _kalan_butce > 0.01 and _ilerleme and _skor_sirali:
             _ilerleme = False
             for r in _skor_sirali:
@@ -2547,17 +2570,38 @@ if page=="Ana Sayfa":
                     r["Tutar (₺)"] = round(r["Tutar (₺)"] + _fiyat, 2)
                     _kalan_butce = round(_kalan_butce - _fiyat, 2)
                     _ilerleme = True
+                _iterasyon_sayaci += 1
+                if (_iterasyon_sayaci >= _MAKS_ITERASYON or
+                        _time_guard.time() - _dongu_baslangic > _MAKS_SURE_SN):
+                    _guvenlik_frenine_takildi = True
+                    break
+            if _guvenlik_frenine_takildi:
+                break
+        if _guvenlik_frenine_takildi:
+            st.caption(f"[TEŞHİS]: bütçe dağıtım döngüsü GÜVENLİK FRENİNE "
+                       f"TAKILDI ({_iterasyon_sayaci} iterasyon, "
+                       f"{_time_guard.time()-_dongu_baslangic:.1f}s) - "
+                       f"muhtemelen çok düşük fiyatlı bir varlık var, "
+                       f"kalan bütçe tam dağıtılamamış olabilir.")
+
+    # v2.0.7.92 - GECICI TESHIS NOKTASI
+    st.caption("[TEŞHİS]: bütçe dağıtım döngüsü bitti, tablo hazırlanıyor...")
 
     if opt_rows:
         df_opt=pd.DataFrame(opt_rows)
         # Optima Skoru'na göre azalan sırala
         df_opt=df_opt.sort_values("Optima Skoru", ascending=False).reset_index(drop=True)
 
+        # v2.0.7.92 - GECICI TESHIS NOKTASI
+        st.caption("[TEŞHİS]: gelir hesaplaması başlıyor (calc_optimization_income)...")
+
         # Gelir projeksiyonu sütunlarını ana tabloya ekle
         try:
             from dividend_engine import calc_optimization_income
             with st.spinner("Pasif gelir hesaplanıyor..."):
                 df_opt_gelir = calc_optimization_income(df_opt, df_uni, budget)
+            # v2.0.7.92 - GECICI TESHIS NOKTASI
+            st.caption("[TEŞHİS]: gelir hesaplaması bitti.")
             if not df_opt_gelir.empty and "Yıllık Gelir (₺)" in df_opt_gelir.columns:
                 toplam_gelir = df_opt_gelir["Yıllık Gelir (₺)"].sum()
                 # Gelir sütunlarını Ticker üzerinden birleştir
