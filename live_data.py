@@ -23,6 +23,33 @@ import pandas as pd
 import time as _time
 
 # ----------------------------------------------------------------------------
+# v2.0.7.91 - KRITIK GUVENLIK KATMANI (Bahri'nin bulgusu: Butce Optimizasyonu
+# ve genel sayfa yuklemesi dakikalarca takiliyordu, "Manage app" loglarinda
+# 5 dakikalik (autorefresh araligiyla BIREBIR ORTUSEN) bosluklar goruldu).
+# borsapy'nin bp.FX(...)/bp.Crypto(...).history() cagrilarinin HICBIRINDE
+# zaman asimi koruması YOKTU - canlidoviz/BtcTurk yavas/yanitsiz kalirsa
+# (bugun onlarca kez sorgulandiktan sonra olasi) TEK bir cagri bile
+# dakikalarca (hatta suresiz) askida kalip TUM sayfayi (266 varlik icin
+# calisan overlay) bekletebiliyordu. Asagidaki yardimci HER borsapy
+# cagrisini ayri bir thread'de sinirli sureyle calistirir - zaman asimi
+# olursa o tek varlik icin sessizce None doner, sayfa asla kilitlenmez.
+# ----------------------------------------------------------------------------
+def _borsapy_zaman_asimili(fn, timeout=10):
+    """fn (parametresiz bir callable) icin zaman asimi korumasi. Basarili
+    olursa fn()'in sonucunu, zaman asimi/hata olursa None dondurur."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+    try:
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            _gelecek = _ex.submit(fn)
+            try:
+                return _gelecek.result(timeout=timeout)
+            except _FutTimeout:
+                return None
+    except Exception:
+        return None
+
+
+# ----------------------------------------------------------------------------
 # v1.9.3 — PROFILLEME ARACI
 # ----------------------------------------------------------------------------
 # Her ana fonksiyon kendi son cagri suresini buraya yazar. Streamlit
@@ -356,7 +383,7 @@ def _fetch_maden_history_summary(bp_code: str) -> tuple:
     if not BORSAPY_OK:
         return (None, 50.0, 0.0, None)
     try:
-        h = bp.FX(bp_code).history(period="3mo", interval="1d")
+        h = _borsapy_zaman_asimili(lambda: bp.FX(bp_code).history(period="3mo", interval="1d"), timeout=10)
         if h is None or h.empty:
             print(f"  [live_data] MADEN history BOS ({bp_code}) - CSV degeri korunacak")
             return (None, 50.0, 0.0, None)
@@ -557,7 +584,7 @@ def _safe_current(bp_obj) -> float | None:
             continue
     # 2. Son care: history son satir
     try:
-        h = bp_obj.history(period="5d", interval="1d")
+        h = _borsapy_zaman_asimili(lambda: bp_obj.history(period="5d", interval="1d"), timeout=10)
         if h is not None and not h.empty:
             for col in ("Close", "close", "PRICE", "price"):
                 if col in h.columns:
@@ -678,7 +705,7 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
                 pass
             # 2) Yedek: 1 gunluk history (yine de hizli)
             try:
-                h = tobj.history(period="2d", interval="1d")
+                h = _borsapy_zaman_asimili(lambda: tobj.history(period="2d", interval="1d"), timeout=10)
                 if h is not None and len(h) > 0:
                     for col in ("Close", "close", "CLOSE"):
                         if col in h.columns:
@@ -931,7 +958,7 @@ def get_fx_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
     if not bp_code:
         return pd.DataFrame()
     try:
-        h = bp.FX(bp_code).history(period=period, interval="1d")
+        h = _borsapy_zaman_asimili(lambda: bp.FX(bp_code).history(period=period, interval="1d"), timeout=10)
         out = _normalize_ohlc(h)
         if not out.empty:
             divisor = _PER_N_UNITS.get(ticker.upper())
@@ -953,7 +980,7 @@ def get_maden_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
     if not bp_code:
         return pd.DataFrame()
     try:
-        h = bp.FX(bp_code).history(period=period, interval="1d")
+        h = _borsapy_zaman_asimili(lambda: bp.FX(bp_code).history(period=period, interval="1d"), timeout=10)
         return _normalize_ohlc(h)
     except Exception:
         return pd.DataFrame()
@@ -965,7 +992,7 @@ def get_kripto_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
     if not BORSAPY_OK:
         return pd.DataFrame()
     try:
-        h = bp.Crypto(_kripto_bp_code(ticker)).history(period=period, interval="1d")
+        h = _borsapy_zaman_asimili(lambda: bp.Crypto(_kripto_bp_code(ticker)).history(period=period, interval="1d"), timeout=10)
         return _normalize_ohlc(h)
     except Exception:
         return pd.DataFrame()
