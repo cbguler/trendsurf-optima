@@ -2394,7 +2394,7 @@ if page=="Ana Sayfa":
     # bir varligin (orn. TEFAS/ILU 78,7) sirf kendi kategorisinin GENEL
     # ORTALAMASI dusuk diye elenip, objektif olarak DAHA DUSUK skorlu
     # baska bir varligin (DOVIZ/ZARTRY 66,7 - kendi kategorisinin
-    # ortalamasi yuksek oldugu icin) secilmesine yol aciyordu. Artik
+    # ortalamasi yuksek oldugu icin) secilmesine yol acıyordu. Artik
     # max_assets < n_cats durumunda kategori ayrimi YOK - TUM havuzlardan
     # (kategori farketmeksizin) en yuksek Optima_Skor'lu max_assets varlik
     # DOGRUDAN secilir. Cesitlendirme garantisi kalkar (hepsi ayni
@@ -2448,11 +2448,10 @@ if page=="Ana Sayfa":
         if cat not in cat_pools:
             continue
         mpc = max_per_cat_map.get(cat, 1)
-        # v2.0.7.94 - GUVENLIK (Bahri'nin talebi ile eklenen global-secim
-        # mantigindan sonra bazi kategoriler mpc=0 alabilir - bos bir
-        # Optima_Skor serisinin .mean()'i NaN doner, bu NaN total_adj'a
-        # sizip TUM agirliklari bozardi. mpc<=0 olan kategoriyi tamamen
-        # atla (zaten secilmedi, agirliga da girmemeli).
+        # v2.0.7.94 - GUVENLIK (global-secim mantigindan sonra bazi
+        # kategoriler mpc=0 alabilir - bos bir Optima_Skor serisinin
+        # .mean()'i NaN doner, bu NaN total_adj'a sizip TUM agirliklari
+        # bozardi. mpc<=0 olan kategoriyi tamamen atla.
         if mpc <= 0:
             continue
         top_scores = cat_pools[cat]["Optima_Skor"].head(mpc)
@@ -2534,12 +2533,6 @@ if page=="Ana Sayfa":
                 f"önerilemedi: {', '.join(karsilanamayan_kategoriler)}. "
                 f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
 
-    # v2.0.7.92 - GECICI TESHIS NOKTASI (Bahri'nin bulgusu: sayfa MADEN
-    # mesajindan sonra suresiz takiliyordu). Bu satir, bir sonraki
-    # takilmada TAM OLARAK nereye kadar gelindigini gostermek icin
-    # eklendi - sorun cozulunce kaldirilacak.
-    st.caption("[TEŞHİS]: bütçe dağıtım döngüsü başlıyor...")
-
     # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
     # sayiya yuvarlandigi icin her varlikta Tutar'dan az kalan bir
     # artik olusuyordu ve bu artik toplamda kullanilmadan kaliyordu (orn.
@@ -2591,31 +2584,17 @@ if page=="Ana Sayfa":
                     break
             if _guvenlik_frenine_takildi:
                 break
-        if _guvenlik_frenine_takildi:
-            st.caption(f"[TEŞHİS]: bütçe dağıtım döngüsü GÜVENLİK FRENİNE "
-                       f"TAKILDI ({_iterasyon_sayaci} iterasyon, "
-                       f"{_time_guard.time()-_dongu_baslangic:.1f}s) - "
-                       f"muhtemelen çok düşük fiyatlı bir varlık var, "
-                       f"kalan bütçe tam dağıtılamamış olabilir.")
-
-    # v2.0.7.92 - GECICI TESHIS NOKTASI
-    st.caption("[TEŞHİS]: bütçe dağıtım döngüsü bitti, tablo hazırlanıyor...")
 
     if opt_rows:
         df_opt=pd.DataFrame(opt_rows)
         # Optima Skoru'na göre azalan sırala
         df_opt=df_opt.sort_values("Optima Skoru", ascending=False).reset_index(drop=True)
 
-        # v2.0.7.92 - GECICI TESHIS NOKTASI
-        st.caption("[TEŞHİS]: gelir hesaplaması başlıyor (calc_optimization_income)...")
-
         # Gelir projeksiyonu sütunlarını ana tabloya ekle
         try:
             from dividend_engine import calc_optimization_income
             with st.spinner("Pasif gelir hesaplanıyor..."):
                 df_opt_gelir = calc_optimization_income(df_opt, df_uni, budget)
-            # v2.0.7.92 - GECICI TESHIS NOKTASI
-            st.caption("[TEŞHİS]: gelir hesaplaması bitti.")
             if not df_opt_gelir.empty and "Yıllık Gelir (₺)" in df_opt_gelir.columns:
                 toplam_gelir = df_opt_gelir["Yıllık Gelir (₺)"].sum()
                 # Gelir sütunlarını Ticker üzerinden birleştir
@@ -2710,6 +2689,28 @@ if page=="Ana Sayfa":
             f"</span></div>",
             unsafe_allow_html=True
         )
+
+        # v2.0.7.93 - KALICI ACIKLAMA, SADECE EKSIK OLDUGUNDA (Bahri'nin
+        # talebi, 19 Temmuz 2026: "sadece bu durum bir daha gerceklesirse
+        # not ciksin istemistim" - basari durumunda HICBIR SEY gosterme,
+        # onceki surumde yanlislikla her zaman gosteriyordum). Bir kategori
+        # uygun fiyatli/sinyalli varlik bulamadiginda, istenen "Max Varlik
+        # Sayisi"ndan daha az varlik onerilir - abonelerin sohbette
+        # aciklayacak biri olmadan "neden 10 istedim 8 geldi" sorusuna
+        # kendi basina cevap bulabilmesi icin SADECE bu durumda bir not
+        # gosterilir.
+        _teslim_edilen = len(df_opt)
+        if _teslim_edilen < max_assets:
+            _eksik_kategoriler = sorted(set(elenen) | set(karsilanamayan_kategoriler))
+            _kategori_metni = (f" ({', '.join(_eksik_kategoriler)} kategorisinde/lerinde "
+                               f"uygun fiyatlı/sinyalli varlık bulunamadığı için)"
+                               if _eksik_kategoriler else "")
+            st.caption(
+                f"İstenen varlık sayısı **{max_assets}**, önerilen **{_teslim_edilen}**"
+                f"{_kategori_metni}. Sistem, boş kalan slotları uygun olmayan bir "
+                f"varlıkla zorla doldurmaz — bütçeyi artırmak veya Max Varlık "
+                f"Sayısı'nı azaltmak bu durumu çözebilir."
+            )
 
         if _yeni_secim and _yeni_secim != sel_ana:
             st.session_state["sel_Ana Sayfa"] = _yeni_secim

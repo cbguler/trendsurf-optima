@@ -389,6 +389,22 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI, DOĞRULANDI] v2.0.7.94 (Max Varlık Sayısı az olduğunda
+  kategori ortalaması yanılgısı, 19 Temmuz 2026, Bahri'nin bulgusu:
+  ILU/ZARTRY örneği).** Max Varlık Sayısı kategori sayısından (5) azken
+  (v2.0.7.65'ten beri), sistem kategorileri KENDİ HAVUZ ORTALAMASINA göre
+  sıralayıp en iyi N kategoriye 1'er slot veriyordu — bu, TEK BAŞINA en
+  yüksek skorlu bir varlığın (TEFAS/ILU 78,7) sırf kendi kategorisinin
+  GENEL ORTALAMASI düşük diye elenip, objektif olarak DAHA DÜŞÜK skorlu
+  başka bir varlığın (DOVIZ/ZARTRY 66,7) seçilmesine yol açıyordu.
+  **Bahri'nin seçtiği çözüm (B seçeneği):** kategori ayrımı kaldırıldı —
+  artık max_assets < kategori sayısı durumunda TÜM havuzlardan (kategori
+  farketmeksizin) en yüksek Optima_Skor'lu max_assets varlık doğrudan
+  seçiliyor. Çeşitlendirme garantisi kalktı (hepsi aynı kategoriden
+  çıkabilir) ama "en iyi skor her zaman kazanır" beklentisi karşılanıyor.
+  Gerçek verilerle (PEPE 80,0/ILU 78,7/ZARTRY 66,7) elle doğrulandı —
+  artık PEPE+ILU seçiliyor, ZARTRY dışarıda kalıyor.
+
 - **[ÇÖZÜLDÜ] v2.0.7.92 (Bütçe Optimizasyonu askıda kalma sorunu, 19 Temmuz
   2026) — KÖK NEDEN DOĞRULANDI.** v2.0.7.90/91 (yfinance/borsapy zaman
   aşımı) sorunun sadece bir kısmıydı; asıl neden Ana Sayfa'daki bütçe
