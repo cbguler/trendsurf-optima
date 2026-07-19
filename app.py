@@ -400,7 +400,7 @@ def render_auth_gate():
                 st.info(f"Hesap: {_verify['email']}")
                 _np1 = st.text_input("Yeni Şifre", type="password", key="rp_new1", placeholder="En az 8 karakter")
                 _np2 = st.text_input("Yeni Şifre (Tekrar)", type="password", key="rp_new2")
-                if st.button("Şifremi Güncelle", use_container_width=True, key="btn_rp"):
+                if st.button("Şifremi Güncelle", width='stretch', key="btn_rp"):
                     if not _np1 or not _np2:
                         st.warning("Lütfen her iki alanı doldurun.")
                     elif _np1 != _np2:
@@ -506,7 +506,7 @@ def render_auth_gate():
                 </script>
                 """, height=0)
 
-                submitted = st.form_submit_button("Giris Yap", use_container_width=True)
+                submitted = st.form_submit_button("Giris Yap", width='stretch')
 
             if submitted:
                 if email and pwd:
@@ -556,7 +556,7 @@ def render_auth_gate():
             email_r   = st.text_input("E-posta",    key="reg_email",  placeholder="ornek@gmail.com")
             pass_r    = st.text_input("Sifre",      key="reg_pass",   type="password", placeholder="En az 8 karakter")
             pass_r2   = st.text_input("Sifre (Tekrar)", key="reg_pass2", type="password", placeholder="Sifreyi tekrar girin")
-            if st.button("Kayit Ol", key="btn_register", use_container_width=True):
+            if st.button("Kayit Ol", key="btn_register", width='stretch'):
                 if not all([full_name, email_r, pass_r, pass_r2]):
                     st.warning("Lutfen tum alanlari doldurun.")
                 elif pass_r != pass_r2:
@@ -593,7 +593,7 @@ def render_auth_gate():
         with tab_reset:
             st.markdown("E-posta adresinizi girin, şifre sıfırlama bağlantısı göndereceğiz.")
             reset_email = st.text_input("E-posta", key="rst_email", placeholder="ornek@gmail.com")
-            if st.button("Sıfırlama Bağlantısı Gönder", use_container_width=True, key="btn_reset"):
+            if st.button("Sıfırlama Bağlantısı Gönder", width='stretch', key="btn_reset"):
                 if not reset_email:
                     st.warning("Lütfen e-posta adresinizi girin.")
                 else:
@@ -1338,7 +1338,7 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
 
     evt = st.dataframe(
         df_render,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
@@ -1558,7 +1558,7 @@ def _simple_portfolio(portfolio, df_uni):
         for _c, _dec in [("Alış",4),("Güncel",4),("Toplam",2),("K/Z (₺)",2)]:
             df_p_g[_c] = df_p_g[_c].apply(lambda v: fmt_tr(v, _dec))
         df_p_g["K/Z %"] = df_p_g["K/Z %"].apply(lambda v: fmt_tr_isaretli(v,2,yuzde=True))
-        st.dataframe(df_p_g, use_container_width=True, hide_index=True)
+        st.dataframe(df_p_g, width='stretch', hide_index=True)
         c1, c2 = st.columns(2)
         c1.metric("Toplam Değer", f"{fmt_tr(df_p['Toplam'].sum())} ₺")
         c2.metric("Toplam K/Z", fmt_tr_isaretli(df_p['K/Z (₺)'].sum())+" ₺")
@@ -1888,7 +1888,7 @@ with st.sidebar:
         e_t1=st.text_input("1. Gönderim (HH:MM)",value=ecfg.get("times",["09:00"])[0])
         e_t2=st.text_input("2. Gönderim (HH:MM)",value=ecfg.get("times",["09:00","12:00"])[-1])
         st.markdown('<style>[data-testid="stSidebar"] button{color:#ffffff!important;font-weight:700!important;opacity:1!important;}</style>', unsafe_allow_html=True)
-        if st.button("Ayarları Kaydet", key="ecfg_save", use_container_width=True):
+        if st.button("Ayarları Kaydet", key="ecfg_save", width='stretch'):
             save_email_cfg({"address":e_addr,"smtp_host":"smtp.gmail.com","smtp_port":587,
                              "smtp_user":ecfg.get("smtp_user",""),
                              "smtp_pass":ecfg.get("smtp_pass",""),
@@ -1896,7 +1896,7 @@ with st.sidebar:
                              "tcmb_key":ecfg.get("tcmb_key","")},
                             user_id=_uid_for_cfg)
             st.success("Kaydedildi! (Saatler Supabase'de kalıcı)")
-        if st.button("Şimdi Gönder", key="send_now", use_container_width=True):
+        if st.button("Şimdi Gönder", key="send_now", width='stretch'):
             try:
                 # Streamlit Cloud için: Secrets'dan cfg oku, email_config.json'a yaz
                 import json as _ej
@@ -2020,7 +2020,7 @@ with st.sidebar:
                            "kontrol sıklığı, uyarı modu ve emir fiyatı formülü "
                            "ayarlarınızı kalıcı olarak kaydeder (Supabase).")
                 if st.button("Uyarı Ayarlarını Kaydet", key="alert_save",
-                             use_container_width=True):
+                             width='stretch'):
                     ok = save_alert_settings(_uid_for_alert, {
                         "threshold_pct":      float(a_thr),
                         "kar_only":           bool(a_kar_only),
@@ -2044,7 +2044,7 @@ with st.sidebar:
             st.caption("**Manuel Test** — Portföyünüzdeki varlıkların peak değerlerini "
                        "güncelleyip threshold kontrolü yapar. Mail gönderilmez.")
             if st.button("Şimdi Kontrol Et (Test)", key="alert_test_run",
-                         use_container_width=True):
+                         width='stretch'):
                 with st.spinner("Peak kontrol ediliyor..."):
                     try:
                         df_uni_test = load_universe()
@@ -2091,7 +2091,7 @@ with st.sidebar:
                             "Toplam (TL)": fmt_tr(a['toplam_deger'],2),
                         })
                     if _alert_rows:
-                        st.dataframe(_alert_rows, use_container_width=True,
+                        st.dataframe(_alert_rows, width='stretch',
                                      hide_index=True)
 
                     # v2.0 asama 3b - Mail gonder butonu
@@ -2107,7 +2107,7 @@ with st.sidebar:
                     )
                     if st.button("Bekleyen Uyarıları Mail Gönder",
                                  key="alert_send_email",
-                                 use_container_width=True):
+                                 width='stretch'):
                         with st.spinner("Mail gönderiliyor..."):
                             _alert_settings = load_alert_settings(_uid_for_alert)
                             _mail_res = send_peak_alert(
@@ -2158,7 +2158,7 @@ with st.sidebar:
                            "siler. Bir sonraki kontrolde mevcut fiyatlardan yeni "
                            "peak başlatılır.")
                 if st.button("Tüm Peak'leri Sıfırla", key="alert_peak_reset",
-                             use_container_width=True):
+                             width='stretch'):
                     ok = reset_peaks_for_user(_uid_for_alert)
                     if ok:
                         # Test sonucunu da temizle - eski peak kayitlari gosterilmesin
@@ -2216,7 +2216,7 @@ with st.sidebar:
                                     unsafe_allow_html=True)
                 else:
                     st.caption("Henüz ölçüm yok — bir sayfa açın.")
-                if st.button("Olcumleri Sifirla", key="diag_reset", use_container_width=True):
+                if st.button("Olcumleri Sifirla", key="diag_reset", width='stretch'):
                     _ld_reset_timings()
                     st.rerun()
                 st.caption(
@@ -2227,10 +2227,10 @@ with st.sidebar:
             except Exception as _e:
                 st.caption(f"Tanilama yuklenemedi: {_e}")
 
-        if st.button("Admin Paneli", use_container_width=True):
+        if st.button("Admin Paneli", width='stretch'):
             st.session_state["page_override"] = "admin"
             st.rerun()
-    if st.button("Cikis Yap", use_container_width=True):
+    if st.button("Cikis Yap", width='stretch'):
         # v2.0.7.36 -> v2.0.7.41 - CookieManager ile gercek cerez silme.
         # KeyError korumasi: cerez hic yoksa kutuphane kendi ic sozlugunde
         # bulamayip KeyError firlatiyor - bkz. login blogundaki not.
@@ -2748,7 +2748,7 @@ if page=="Ana Sayfa":
 
                 if not d["hist"].empty:
                     fig = candle_fig(d["hist"], sel_ana)
-                    if fig: st.plotly_chart(fig, use_container_width=True)
+                    if fig: st.plotly_chart(fig, width='stretch')
                 else:
                     st.warning(f"{sel_ana} icin gecmis fiyat verisi yuklenemedi.")
 
@@ -3005,7 +3005,7 @@ elif page=="Portföyüm":
                                f"  |  Tahmini toplam: {fmt_tr(pa*auto_price)} TL")
                 pf_note = st.text_input("Not (isteğe bağlı)", key="pf_not",
                                         placeholder="Örn: İlk alım, uzun vadeli")
-                if st.button("EKLE", use_container_width=True, key="pf_ekle"):
+                if st.button("EKLE", width='stretch', key="pf_ekle"):
                     if pa > 0:
                         add_portfolio_item(pt, pa, pm, asset_type=pt_cat, note=pf_note,
                                            purchase_date=satin_tarih.strftime("%Y-%m-%d"),
@@ -3168,7 +3168,7 @@ elif page=="Portföyüm":
     # st.dataframe — Daraltilmis sutunlar + Sinyal eklendi
     _event = st.dataframe(
         df_show_styled,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         on_select="rerun",
         selection_mode="multi-row",
@@ -3415,7 +3415,7 @@ elif page=="Portföyüm":
 
             if not _d["hist"].empty:
                 _fig = candle_fig(_d["hist"],_sel_tkr)
-                if _fig: st.plotly_chart(_fig, use_container_width=True)
+                if _fig: st.plotly_chart(_fig, width='stretch')
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
 
@@ -3599,11 +3599,11 @@ elif page=="Portföyüm":
 
         st.markdown("**Aylık Özet**")
         st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"], df=_pl_tum)),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
 
         st.markdown("**Yıllık Özet**")
         st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"], df=_pl_tum)),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
 
         st.markdown("**Tüm İşlem Geçmişi**")
         from portfolio_ledger import delete_sale_record, update_sale_record
@@ -3664,7 +3664,7 @@ elif page=="Portföyüm":
             "Net K/Z":       st.column_config.Column(width="small", alignment="right"),
         }
         _pl_event = st.dataframe(
-            _pl_styled, use_container_width=True, hide_index=True,
+            _pl_styled, width='stretch', hide_index=True,
             column_config=_pl_col_config,
             on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
         _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
@@ -4022,7 +4022,7 @@ elif page in CAT:
     # Mum grafiği
     if not d["hist"].empty:
         fig=candle_fig(d["hist"],sel)
-        if fig: st.plotly_chart(fig,use_container_width=True)
+        if fig: st.plotly_chart(fig,width='stretch')
     else:
         st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
 
@@ -4331,7 +4331,7 @@ elif page=="Halka Arz":
         ha_ara = st.text_input("Ara (ticker veya şirket adı)", placeholder="GUNDG, Güldoğdu...", key="ha_ara")
     with ha_col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        ha_refresh = st.button("Yenile", key="ha_refresh", use_container_width=True)
+        ha_refresh = st.button("Yenile", key="ha_refresh", width='stretch')
 
     # ── Veri yükle ──────────────────────────────────────────
     try:
@@ -4429,7 +4429,7 @@ elif page=="Halka Arz":
     if "Optima_Skor" in tablo_df.columns:
         tablo_df["Optima_Skor"] = tablo_df["Optima_Skor"].apply(lambda v: fmt_tr(v,1))
         col_cfg["Optima_Skor"] = st.column_config.TextColumn("Optima Skor")
-    st.dataframe(tablo_df, use_container_width=True, hide_index=True, column_config=col_cfg)
+    st.dataframe(tablo_df, width='stretch', hide_index=True, column_config=col_cfg)
 
     # ── CSV indir ────────────────────────────────────────────
     csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
@@ -4455,7 +4455,7 @@ elif page=="Temettü":
                                placeholder="THYAO, Türk Hava...")
     with tm_col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        tm_refresh = st.button("Yenile", key="tm_refresh", use_container_width=True)
+        tm_refresh = st.button("Yenile", key="tm_refresh", width='stretch')
 
     # ── Veri yükle ───────────────────────────────────────────
     try:

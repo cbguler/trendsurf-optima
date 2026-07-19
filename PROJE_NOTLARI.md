@@ -378,6 +378,24 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI] v2.0.7.89 — Streamlit `use_container_width` deprecation
+  düzeltmesi (19 Temmuz 2026, Bahri'nin bulgusu: "sisteme giremiyorum",
+  logları inceleyince gerçek çökme YOKTU — Streamlit'in kendi deprecation
+  uyarılarıydı; asıl yavaşlık container'ın 29+ saattir kesintisiz açık
+  olmasından kaynaklanıyordu, reboot çözdü).** Loglarda "`use_container_
+  width` will be removed after 2025-12-31" uyarısı görüldü — bu tarih
+  ZATEN GEÇMİŞ (bugün 19 Temmuz 2026). 27 kullanım `width='stretch'`
+  olarak düzeltildi (Streamlit'in kendi önerdiği birebir karşılık).
+  **Kalan, düşük öncelikli, DOKUNULMAYAN uyarılar:**
+  - `st.radio("", ..., label_visibility="collapsed")` gibi boş etiket
+    kullanımları ("may be disallowed in the future" — kesin tarih yok,
+    henüz acil değil).
+  - `components.html(...)` → `st.iframe` önerisi — **DİKKAT: bunu kör
+    kör değiştirme**, `components.html` ham HTML/JS içeriği render eder,
+    `st.iframe` ise muhtemelen bir URL (`src`) bekler — API'ler birebir
+    aynı olmayabilir, önce Streamlit'in güncel dokümantasyonu
+    doğrulanmadan değiştirilirse splash ekranı (`_splash_html`) bozulabilir.
+
 - **[TAMAMLANDI, PUSH BEKLİYOR] El kitapları güncellemesi (18 Temmuz 2026).**
   Abone ve Yönetici El Kitabı'nda (Word) birikmiş güncel-olmayan bilgiler
   bulundu ve düzeltildi: döviz/maden/kripto sayıları (63/17/188), Paladyum
