@@ -2377,67 +2377,33 @@ if page=="Ana Sayfa":
         if not df_c.empty:
             cat_pools[cat] = df_c
 
-    # 2. Adım: Slot dağıtımı — garantili max_assets varlık
-    # Strateji:
-    #   a) Her kategoriye başlangıç slotu ver (eşit bölme)
-    #   b) Bir kategori kendi slotunu dolduramıyorsa (az varlık),
-    #      boş kalan slotlar en yüksek skorlu diğer kategorilere aktarılır
-    #   c) Bu döngü max_assets dolana veya aktarılacak slot kalmayana kadar sürer
-    cat_quality  = {c: float(df["Optima_Skor"].mean()) for c, df in cat_pools.items()}
-    cats_by_qual = sorted(cat_quality, key=cat_quality.get, reverse=True)
-    n_cats       = len(cat_pools)
-
-    # v2.0.7.94 - KRITIK DUZELTME (Bahri'nin talebi, ILU/ZARTRY ornegi,
-    # 19 Temmuz 2026): Eskiden (v2.0.7.65) kategoriler KENDI HAVUZ
-    # ORTALAMASINA gore siralanip en iyi max_assets kategoriye 1'er slot
-    # veriliyordu - bu, kendi kategorisinde TEK BASINA en yuksek skorlu
-    # bir varligin (orn. TEFAS/ILU 78,7) sirf kendi kategorisinin GENEL
-    # ORTALAMASI dusuk diye elenip, objektif olarak DAHA DUSUK skorlu
-    # baska bir varligin (DOVIZ/ZARTRY 66,7 - kendi kategorisinin
-    # ortalamasi yuksek oldugu icin) secilmesine yol acıyordu. Artik
-    # max_assets < n_cats durumunda kategori ayrimi YOK - TUM havuzlardan
-    # (kategori farketmeksizin) en yuksek Optima_Skor'lu max_assets varlik
-    # DOGRUDAN secilir. Cesitlendirme garantisi kalkar (hepsi ayni
-    # kategoriden cikabilir) ama "en iyi skor her zaman kazanir" beklentisi
-    # karsilanir - Bahri'nin acik tercihi buydu.
-    if max_assets < n_cats:
-        _tum_havuz = pd.concat(
-            [df.assign(_Kategori=c) for c, df in cat_pools.items()],
-            ignore_index=True
-        ).sort_values("Optima_Skor", ascending=False)
-        _secilenler = _tum_havuz.head(max_assets)
-        slots = {c: 0 for c in cat_pools}
-        for _cat, _grp in _secilenler.groupby("_Kategori"):
-            slots[_cat] = len(_grp)
-    else:
-        slots     = {c: max(1, max_assets // n_cats) for c in cat_pools}
-        # Toplam slotu max_assets'e tamamla (bölme artığı)
-        deficit   = max_assets - sum(slots.values())
-        for cat in cats_by_qual:
-            if deficit <= 0: break
-            slots[cat] += 1
-            deficit    -= 1
-
-    # Kapasitesi az olan kategorilerin slotlarını yeniden dağıt
-    changed = True
-    while changed:
-        changed   = False
-        overflow  = 0
-        for cat in list(slots):
-            cap = len(cat_pools[cat])
-            if slots[cat] > cap:
-                overflow    += slots[cat] - cap
-                slots[cat]   = cap
-                changed      = True
-        # Taşan slotları yüksek skorlu kategorilere ver (kapasiteleri varsa)
-        for cat in cats_by_qual:
-            if overflow <= 0: break
-            cap   = len(cat_pools[cat])
-            room  = cap - slots[cat]
-            if room > 0:
-                give        = min(room, overflow)
-                slots[cat] += give
-                overflow   -= give
+    # 2. Adım: Slot dağıtımı — TÜM havuzdan en yüksek skorlu max_assets varlık
+    #
+    # v2.0.7.95 - KRITIK DUZELTME (Bahri'nin talebi, 19 Temmuz 2026, PEPE/
+    # ETHFI/ALLO/ILU ornegi): v2.0.7.94'te bu mantik SADECE max_assets <
+    # kategori_sayisi (5) iken uygulanmisti - max_assets=4 iken 3 tane
+    # Kripto (80,0) + ILU (78,7) dogru seciliyordu, ama max_assets=5 olunca
+    # (5 < 5 YANLIS oldugu icin) ESKI "her kategoriye en az 1 slot" mantigina
+    # GERI DONULUYORDU - Kripto'nun 2 tane 80,0 puanli varligi (ETHFI, ALLO)
+    # sirf "her kategoriye pay" kurali yuzunden elenip, yerlerine DAHA DUSUK
+    # puanli BIST/Doviz varliklari (ISGYO 70,0, ZARTRY 66,7) zorla ekleniyordu.
+    # Bahri'nin acik karari: "her zaman en iyi skor kazansin, kategori
+    # cesitlendirme garantisi TAMAMEN kalksin" - artik max_assets'in
+    # kategori sayisiyla karsilastirilmasi YOK, HER DURUMDA (Max Varlik
+    # Sayisi ne olursa olsun) tum havuzlardan objektif olarak en yuksek
+    # Optima_Skor'lu max_assets varlik dogrudan secilir. Eski "esit
+    # bolusum + kalite bazli acik/dolu slot transferi" mantigi (v2.0.7.65
+    # ve oncesi) TAMAMEN KALDIRILDI - artik gereksiz, cunku secim zaten
+    # gercek havuzdan yapildigindan bir kategorinin kapasitesini asma
+    # riski hic olusmaz.
+    _tum_havuz = pd.concat(
+        [df.assign(_Kategori=c) for c, df in cat_pools.items()],
+        ignore_index=True
+    ).sort_values("Optima_Skor", ascending=False)
+    _secilenler = _tum_havuz.head(max_assets)
+    slots = {c: 0 for c in cat_pools}
+    for _cat, _grp in _secilenler.groupby("_Kategori"):
+        slots[_cat] = len(_grp)
 
     max_per_cat_map = slots
 
