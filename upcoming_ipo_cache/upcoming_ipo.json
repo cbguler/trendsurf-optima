@@ -1,5 +1,19 @@
 [
   {
+    "Tarih": "20.07.2026 18:45:38",
+    "Kod": "DZY, DZYMK",
+    "Sirket": "Masfen Enerji A.Ş",
+    "Konu": "İzahname (SPK Tarafından Onaylanan)",
+    "Ozet": "Masfen Enerji A.Ş. onaylı halka arz izahnamesinin sehven eksik yayımlanan 412. Sayfası ilave edilerek tek metin haline getirilmiş onaylı izahname 2",
+    "Durum": "Onaylandı Talep Toplanıyor Yakında",
+    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1635170",
+    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1634697",
+    "Arz_Fiyati": null,
+    "Iskonto_Orani": null,
+    "Graham_Degeri": null,
+    "Carpan_Bazli_Deger": null
+  },
+  {
     "Tarih": "18.07.2026 00:49:04",
     "Kod": "TAC, TCRYT",
     "Sirket": "Albayrak Hazır Beton A.Ş.",
@@ -136,20 +150,6 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620801",
     "Arz_Fiyati": 15.0,
     "Iskonto_Orani": 37.0,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
-  },
-  {
-    "Tarih": "18.06.2026 08:11:25",
-    "Kod": "TSK, TSKB",
-    "Sirket": "Beta Enerji ve Teknoloji A.Ş",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "Beta Enerji ve Teknoloji A.Ş. İzahnamedeki Değişiklikler",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1618394",
-    "Fiyat_Tespit_URL": "",
-    "Arz_Fiyati": null,
-    "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   }
