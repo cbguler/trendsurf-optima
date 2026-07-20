@@ -264,6 +264,28 @@ def tara_fx_maden_kripto(df_uni):
         print(f"[radar] borsapy yok, FX/MADEN/KRIPTO atlandi: {e}")
         return out
 
+    # v2.0.7.97 - KRITIK DUZELTME (Bahri'nin bulgusu, 20 Temmuz 2026: Actions
+    # gecmisinde bir "Firsat Radari" calismasi 2 saat 30 dakika, ardindan
+    # birkaci 14-15 dakika surmustu - normali ~2 dakika). Kok neden:
+    # asagidaki bp.FX(...)/bp.Crypto(...).history() cagrilarinin HICBIRINDE
+    # zaman asimi korumasi yoktu (live_data.py'de v2.0.7.91'de duzeltilen
+    # AYNI sorun - ama bu AYRI bir dosya/script oldugu icin o duzeltme
+    # buraya hic yansimamisti). canlidoviz/BtcTurk yavas/yanitsiz kalirsa,
+    # 188 kriptoyu tek tek dongude tarayan bu fonksiyon saatlerce
+    # askida kalabiliyordu. Asagidaki yardimci HER cagriyi ayri bir
+    # thread'de en fazla 8 saniye bekletir.
+    def _bp_zaman_asimili(fn, timeout=8):
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+        try:
+            with ThreadPoolExecutor(max_workers=1) as _ex:
+                _gelecek = _ex.submit(fn)
+                try:
+                    return _gelecek.result(timeout=timeout)
+                except _FutTimeout:
+                    return None
+        except Exception:
+            return None
+
     _MADEN_BP = {"ALTIN_TRY": "gram-altin", "GUMUS_TRY": "gumus",
                  "PLATIN_TRY": "platin"}
     _DOVIZ_BP = {"USDTRY": "USD", "EURTRY": "EUR", "GBPTRY": "GBP",
@@ -293,12 +315,14 @@ def tara_fx_maden_kripto(df_uni):
 
     for t, code in _MADEN_BP.items():
         try:
-            _skorla(t, "MADEN", _close_from(bp.FX(code).history(period="3mo", interval="1d")))
+            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"))
+            _skorla(t, "MADEN", _close_from(_h))
         except Exception:
             continue
     for t, code in _DOVIZ_BP.items():
         try:
-            _skorla(t, "DOVIZ", _close_from(bp.FX(code).history(period="3mo", interval="1d")))
+            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"))
+            _skorla(t, "DOVIZ", _close_from(_h))
         except Exception:
             continue
 
@@ -317,7 +341,8 @@ def tara_fx_maden_kripto(df_uni):
     for t in kripto_list:
         try:
             pair = _kripto_parite.get(t, f"{t}TRY")
-            _skorla(t, "KRIPTO", _close_from(bp.Crypto(pair).history(period="3mo", interval="1d")))
+            _h = _bp_zaman_asimili(lambda pair=pair: bp.Crypto(pair).history(period="3mo", interval="1d"))
+            _skorla(t, "KRIPTO", _close_from(_h))
         except Exception:
             continue
 

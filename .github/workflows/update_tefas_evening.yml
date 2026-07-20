@@ -57,6 +57,11 @@ jobs:
             echo "Degisiklik yok - commit atlandi"
           else
             git commit -m "TEFAS aksam guncelleme (otomatik) - $(date +'%Y-%m-%d %H:%M TRT')"
+            # v2.0.7.97 - KRITIK DUZELTME (Bahri'nin bulgusu, 20 Temmuz 2026):
+            # update_data.yml'de yasanan "non-fast-forward"/"divergent
+            # branches" hatalarinin (v2.0.7.85/97) AYNISI burada da
+            # olabilirdi - bu workflow push oncesi HIC pull yapmiyordu.
+            git pull --no-edit --no-rebase origin main
             git push origin main
             echo "TEFAS CSV pushlandi"
           fi

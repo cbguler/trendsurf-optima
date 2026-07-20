@@ -113,7 +113,17 @@ jobs:
             # yapiliyor - Bahri'nin kendi manuel push akisindaki AYNI
             # desen (commit -> pull -> push). Bu, iki tarafin degisikligini
             # de korur.
-            git pull --no-edit origin main
+            # v2.0.7.97 - KRITIK DUZELTME (Bahri'nin bulgusu, Actions #78
+            # calismasi, 20 Temmuz 2026): "git pull" tek basina yeterli
+            # degilmis - dallar GERCEKTEN ayrisinca (iki tarafta da farkli
+            # commit varsa) git, calisan (runner) ortaminda pull.rebase
+            # config'i HICBIR ZAMAN ayarlanmadigi icin "divergent branches,
+            # specify how to reconcile" hatasiyla REDDEDIYORDU (exit 128) -
+            # ayni "veri kaybi" sorunu farkli bir hata mesajiyla geri
+            # gelmisti. Artik "--no-rebase" ile birlestirme stratejisi
+            # ACIKCA belirtiliyor - runner'in global git config'inden
+            # BAGIMSIZ, HER ZAMAN calisir.
+            git pull --no-edit --no-rebase origin main
             git push origin main
             echo "CSV pushlandi"
           fi

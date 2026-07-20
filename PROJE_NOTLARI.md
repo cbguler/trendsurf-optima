@@ -389,6 +389,33 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI] v2.0.7.97 (20 Temmuz 2026, Bahri'nin bulgusu — Actions
+  logları/ekran görüntüleri).** İki ayrı ama muhtemelen ilişkili sorun:
+  1. **"Veri Güncelle" #78 çöktü** ("divergent branches... fatal: Need
+     to specify how to reconcile", exit 128). v2.0.7.85'teki `git pull`
+     düzeltmesi YETERSİZ kalmıştı — dallar gerçekten ayrışınca, runner
+     ortamında `pull.rebase` config'i hiç ayarlanmadığı için git
+     birleştirme stratejisini SORUYOR, reddediyordu. Üç workflow'un
+     (`update_data.yml`, `health_check.yml`, `update_tefas_evening.yml`)
+     push öncesi `git pull --no-edit --no-rebase origin main` kullanması
+     sağlandı — ilk ikisinde eksikti/yetersizdi, health_check ve TEFAS
+     akşam workflow'larında ise pull'un KENDİSİ hiç yoktu.
+  2. **Fırsat Radarı'nda bir çalışma 2 saat 30 dakika, ardından birkaçı
+     14-15 dakika sürmüş** (normali ~2 dakika) — tam olay penceresi
+     (03:30-05:45 TRT) "Veri Akışı Uyarısı" e-postasındaki 2,9 saatlik
+     gecikmeyle örtüşüyor. Kök neden: `firsat_radari.py`'nin KENDİ
+     `bp.FX(...)/bp.Crypto(...).history()` çağrılarının (MADEN/DOVIZ/
+     KRIPTO taraması, 188 kriptoya kadar) HİÇBİRİNDE zaman aşımı
+     koruması yoktu — `live_data.py`'de v2.0.7.91'de yapılan AYNI
+     düzeltme bu AYRI script'e hiç yansımamıştı. Şimdi 8 saniyelik
+     zaman aşımı eklendi (aynı `ThreadPoolExecutor` deseni, dosyaya
+     özel kopyalanmış — worker.py/live_data.py'yi import etmek yan
+     etkili olabileceği için).
+  **Doğrulama bekliyor:** Bahri push'tan sonra birkaç gün Actions
+  geçmişini izleyip hem "Veri Güncelle"nin artık divergent-branch
+  hatası vermediğini hem Fırsat Radarı çalışmalarının ~2 dakika
+  civarında kaldığını teyit etmeli.
+
 - **[TAMAMLANDI, DOĞRULANDI] v2.0.7.96 (Fırsat Radarı yanlış varlık adı,
   20 Temmuz 2026, Bahri'nin bulgusu — e-posta uyarıları).** Sabah 01:47
   alarmında KRIPTO/APT (Aptos) için "AK PORTFÖY ORTA VADELİ BORÇLANMA
@@ -406,19 +433,6 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
   benzersiz olduğu VARSAYILMAMALI**, benzer bir hata başka bir yerde
   (örn. BIST-Kripto çakışmaları zaten "C" öneki ile çözülmüştü, ama
   TEFAS-Kripto çakışması hiç düşünülmemişti) tekrar çıkabilir.
-- **[İNCELENMEDİ] Aynı sabah gelen diğer iki uyarı e-postası (20 Temmuz
-  2026) — henüz araştırılmadı, gelecek oturumda bakılmalı:**
-  1. GitHub Actions "Veri Güncelle" (update_data.yml/worker.py) workflow'u
-     06:09'da "All jobs have failed" ile TAMAMEN başarısız oldu (10 dakika
-     7 saniyede). Sebep henüz bilinmiyor — Bahri'nin Actions sekmesinden
-     gerçek hata logunu paylaşması gerekiyor.
-  2. "Veri Akışı Uyarısı" (05:59): DOVIZ/KRIPTO/MADEN kategorilerinin
-     radar tarafından Supabase'e 2,9 saattir yazılmadığı bildirilmiş
-     (eşik 1,0 saat) — radar'ın bu kategoriler için donmuş/takılmış
-     olabileceğine işaret ediyor. "Veri Güncelle" başarısızlığıyla aynı
-     zaman dilimine denk geliyor (gece yarısı - sabah erken saatler),
-     muhtemelen ilişkili ama henüz doğrulanmadı.
-
 - **[TAMAMLANDI, DOĞRULANDI] v2.0.7.94→95 (Kategori diversifikasyon
   garantisi TAMAMEN kaldırıldı, 19 Temmuz 2026, Bahri'nin bulgusu:
   ILU/ZARTRY, sonra PEPE/ETHFI/ALLO örnekleri).** Max Varlık Sayısı
