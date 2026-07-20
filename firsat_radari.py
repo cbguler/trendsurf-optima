@@ -453,7 +453,7 @@ def _radar_maili_gonder(yeni_alarmlar, ad_map):
 
         satirlar = []
         for t, tur, yeni_s, eski_s, v in yeni_alarmlar:
-            ad = ad_map.get(t, t)
+            ad = ad_map.get((v.get("kategori"), t), t)
             eski_txt = f"{eski_s:.1f}" if eski_s is not None else "-"
             tur_txt = ("esik ustu (" + str(int(RADAR_ESIK)) + "+)" if tur == "esik"
                        else f"sicrama (+{RADAR_SICRAMA:.0f}+)")
@@ -552,7 +552,18 @@ def main():
         print(f"[radar] KRITIK: {CSV_PATH} okunamadi: {e}")
         sys.exit(1)
 
-    ad_map = dict(zip(df_uni["Ticker"].astype(str), df_uni["Ad"].astype(str)))
+    # v2.0.7.96 - KRITIK DUZELTME (Bahri'nin bulgusu, 20 Temmuz 2026: APT
+    # kriptosu icin alarm mailinde "AK PORTFOY ORTA VADELI BORCLANMA
+    # ARAÇLAR" (bir TEFAS fon adi) gorunmustu). Eskiden ad_map SADECE
+    # Ticker'a gore kuruluyordu ("APT": "Aptos") - ama tickerlar kategoriler
+    # ARASINDA benzersiz DEGIL (TEFAS'ta da "APT" kodlu bir fon olabilir/
+    # olmustu). dict(zip(...)) tekrarlanan anahtarlarda SESSIZCE SON
+    # DEGERI kullanir - df_uni'de hangi kategori sonra geliyorsa o kazanir,
+    # bu da yanlis fon adinin kripto alarminda gorunmesine yol acti. Artik
+    # ad_map (Kategori, Ticker) ikilisiyle anahtarlanir - cakisma artik
+    # MUMKUN DEGIL.
+    ad_map = {(str(kat), str(tic)): str(ad) for tic, ad, kat in
+              zip(df_uni["Ticker"], df_uni["Ad"], df_uni["Kategori"])}
 
     # Gece worker'inin yazdigi temel analiz kolonlari (varsa)
     fund_map = {}

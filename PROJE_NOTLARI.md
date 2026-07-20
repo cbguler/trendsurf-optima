@@ -389,6 +389,36 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI, DOĞRULANDI] v2.0.7.96 (Fırsat Radarı yanlış varlık adı,
+  20 Temmuz 2026, Bahri'nin bulgusu — e-posta uyarıları).** Sabah 01:47
+  alarmında KRIPTO/APT (Aptos) için "AK PORTFÖY ORTA VADELİ BORÇLANMA
+  ARAÇLAR" (bir TEFAS fon adı) gösterilmişti. Kök neden:
+  `firsat_radari.py`'nin `ad_map`'i SADECE Ticker'a göre kuruluyordu
+  (`dict(zip(Ticker, Ad))`) — ama tickerlar kategoriler ARASINDA
+  benzersiz değil (TEFAS'ta da "APT" kodlu bir fon varmış/olmuş).
+  `dict(zip(...))` tekrarlanan anahtarlarda sessizce SON değeri kullanır
+  — hangi kategori df_uni'de sonra geliyorsa o kazanıyordu. **Düzeltme:**
+  `ad_map` artık `(Kategori, Ticker)` ikilisiyle anahtarlanıyor, çakışma
+  artık mümkün değil. Simüle edilen çakışma senaryosuyla doğrulandı.
+  **Not:** Şu anki CSV'de bu çakışma görünmüyor (APT sadece KRIPTO'da) —
+  yani TEFAS fon listesi zamanla değişip o gün geçici olarak çakışmış
+  olabilir. Bu, ayrıca genel bir ders: **tickerlar kategoriler arasında
+  benzersiz olduğu VARSAYILMAMALI**, benzer bir hata başka bir yerde
+  (örn. BIST-Kripto çakışmaları zaten "C" öneki ile çözülmüştü, ama
+  TEFAS-Kripto çakışması hiç düşünülmemişti) tekrar çıkabilir.
+- **[İNCELENMEDİ] Aynı sabah gelen diğer iki uyarı e-postası (20 Temmuz
+  2026) — henüz araştırılmadı, gelecek oturumda bakılmalı:**
+  1. GitHub Actions "Veri Güncelle" (update_data.yml/worker.py) workflow'u
+     06:09'da "All jobs have failed" ile TAMAMEN başarısız oldu (10 dakika
+     7 saniyede). Sebep henüz bilinmiyor — Bahri'nin Actions sekmesinden
+     gerçek hata logunu paylaşması gerekiyor.
+  2. "Veri Akışı Uyarısı" (05:59): DOVIZ/KRIPTO/MADEN kategorilerinin
+     radar tarafından Supabase'e 2,9 saattir yazılmadığı bildirilmiş
+     (eşik 1,0 saat) — radar'ın bu kategoriler için donmuş/takılmış
+     olabileceğine işaret ediyor. "Veri Güncelle" başarısızlığıyla aynı
+     zaman dilimine denk geliyor (gece yarısı - sabah erken saatler),
+     muhtemelen ilişkili ama henüz doğrulanmadı.
+
 - **[TAMAMLANDI, DOĞRULANDI] v2.0.7.94→95 (Kategori diversifikasyon
   garantisi TAMAMEN kaldırıldı, 19 Temmuz 2026, Bahri'nin bulgusu:
   ILU/ZARTRY, sonra PEPE/ETHFI/ALLO örnekleri).** Max Varlık Sayısı
