@@ -3615,7 +3615,8 @@ elif page=="Portföyüm":
         # uygulandi (onceki halde "68.35" gibi ingilizce noktali gorunuyordu).
         def _ozet_tablo_gostergisi(df_ozet):
             df_g = df_ozet.copy()
-            for _c in ["Ödenmiş Komisyon (₺)", "Ödenmiş Vergi (₺)", "Toplam Net K/Z"]:
+            for _c in ["Ödenmiş Komisyon (₺)", "Ödenmiş Vergi (₺)",
+                       "İşlem Tutarı (₺)", "Toplam Net K/Z"]:
                 if _c in df_g.columns:
                     df_g[_c] = df_g[_c].apply(lambda v: fmt_tr(v))
             if "Toplam Net K/Z" in df_g.columns:
@@ -3638,8 +3639,12 @@ elif page=="Portföyüm":
         # (3) Net K/Z pozitif/negatife gore yesil/kirmizi renklensin ve
         # genis rakamlar (100 bin+) icin sutun genisletilsin, (4) Miktar/
         # Komisyon/Vergi sutunlari daraltilsin.
+        # v2.0.7.99 - Bahri'nin talebi (20 Temmuz 2026): Alış/Satış Tutarı
+        # eklenince tablo genisleyip yatay scroll olusmustu. "Kategori"
+        # sutunu (zaten Ticker'dan cikarilabilecek, az bilgi tasiyan bir
+        # sutun) tamamen kaldirildi - yer acmak icin.
         _pl_gosterim = _pl_tum.drop(
-            columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
+            columns=["id", "Kategori", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
 
         # v2.0.7.98 - KRITIK EKSIKLIK DUZELTMESI (Bahri'nin bulgusu, 20
         # Temmuz 2026: gerçek bir altın satışı sonrası - ING dekontunda
@@ -3698,9 +3703,16 @@ elif page=="Portföyüm":
         # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
         # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
         # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
+        # v2.0.7.99 - Bahri'nin talebi: Alış/Satış Tutarı eklenince yatay
+        # scroll olustu - "Kategori" kaldirildi (yukarida), "Ticker"
+        # Portfoy Varliklari Tablosu'yla AYNI piksel genisligine (79px)
+        # cekildi, "Komisyon (₺)" basligi "Kom. (₺)" olarak kisaltilip
+        # daha da daraltildi (sutun ADI degismedi - column_config'in ilk
+        # pozisyonel argumanindan SADECE goruntu etiketi degistirildi,
+        # tipki asagidaki Portfoy Varliklari Tablosu'ndaki "Skor" ->
+        # "Optima Skor" deseninin aynisi).
         _pl_col_config = {
-            "Kategori":      st.column_config.Column(width="small"),
-            "Ticker":        st.column_config.Column(width="medium"),
+            "Ticker":        st.column_config.Column(width=79),
             "Miktar":        st.column_config.Column(width="small", alignment="right"),
             "Alış Fiyatı":   st.column_config.Column(width="small", alignment="right"),
             "Alış Tutarı":   st.column_config.Column(width="small", alignment="right"),
@@ -3708,7 +3720,7 @@ elif page=="Portföyüm":
             "Satış Fiyatı":  st.column_config.Column(width="small", alignment="right"),
             "Satış Tutarı":  st.column_config.Column(width="small", alignment="right"),
             "Satış Tarihi":  st.column_config.Column(width="small"),
-            "Komisyon (₺)":  st.column_config.Column(width="small", alignment="right"),
+            "Komisyon (₺)":  st.column_config.Column("Kom. (₺)", width=60, alignment="right"),
             "Vergi (₺)":     st.column_config.Column(width="small", alignment="right"),
             "Net K/Z":       st.column_config.Column(width="small", alignment="right"),
         }

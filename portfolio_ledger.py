@@ -389,46 +389,60 @@ def get_monthly_summary(user_id: int, df: pd.DataFrame = None) -> pd.DataFrame:
     ayrica calistiriyordu - Portfoyum sayfasinda AYNI veri 4 kez ayri
     ayri veritabanindan cekiliyordu. Artik cagiran taraf (app.py) veriyi
     BIR KEZ cekip "df" parametresiyle burada tekrar kullanabilir -
-    verilmezse eskisi gibi kendi sorgusunu yapar (geriye donuk uyumlu)."""
+    verilmezse eskisi gibi kendi sorgusunu yapar (geriye donuk uyumlu).
+
+    v2.0.7.99 - Bahri'nin talebi (20 Temmuz 2026): "İşlem Tutarı (₺)"
+    (o aydaki tum satislarin TOPLAM TL tutari, Miktar x Satis Fiyati)
+    "Toplam Net K/Z"'den HEMEN ONCE eklendi - banka dekontlarindaki
+    tutarlarla aylik mutabakat yapilabilsin diye (bkz. Tum Islem
+    Gecmisi'ndeki "Satis Tutari" sutunuyla ayni mantik/hesap)."""
     if df is None:
         df = get_sales_history(user_id)
     if df.empty:
         return pd.DataFrame(columns=["Ay", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
-                                      "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
+                                      "Ödenmiş Vergi (₺)", "İşlem Tutarı (₺)", "Toplam Net K/Z"])
     df = df.copy()
     df["Ay"] = pd.to_datetime(df["Satış Tarihi"], errors="coerce").dt.strftime("%Y-%m")
+    df["_Satış Tutarı"] = df["Miktar"] * df["Satış Fiyatı"]
     ozet = (df.groupby("Ay")
               .agg(**{"İşlem Sayısı": ("Net K/Z", "count"),
                       "Ödenmiş Komisyon (₺)": ("Komisyon (₺)", "sum"),
                       "Ödenmiş Vergi (₺)": ("Vergi (₺)", "sum"),
+                      "İşlem Tutarı (₺)": ("_Satış Tutarı", "sum"),
                       "Toplam Net K/Z": ("Net K/Z", "sum")})
               .reset_index()
               .sort_values("Ay", ascending=False))
     ozet["Ödenmiş Komisyon (₺)"] = ozet["Ödenmiş Komisyon (₺)"].round(2)
     ozet["Ödenmiş Vergi (₺)"] = ozet["Ödenmiş Vergi (₺)"].round(2)
+    ozet["İşlem Tutarı (₺)"] = ozet["İşlem Tutarı (₺)"].round(2)
     ozet["Toplam Net K/Z"] = ozet["Toplam Net K/Z"].round(2)
     return ozet
 
 
 def get_yearly_summary(user_id: int, df: pd.DataFrame = None) -> pd.DataFrame:
     """Yıllık bazda gerçekleşmiş net K/Z özeti (en yeni yıl en üstte).
-    v2.0.7.62 - bkz. get_monthly_summary docstring (ayni performans notu)."""
+    v2.0.7.62 - bkz. get_monthly_summary docstring (ayni performans notu).
+    v2.0.7.99 - bkz. get_monthly_summary docstring (ayni "İşlem Tutarı
+    (₺)" eklemesi, yıllık bazda)."""
     if df is None:
         df = get_sales_history(user_id)
     if df.empty:
         return pd.DataFrame(columns=["Yıl", "İşlem Sayısı", "Ödenmiş Komisyon (₺)",
-                                      "Ödenmiş Vergi (₺)", "Toplam Net K/Z"])
+                                      "Ödenmiş Vergi (₺)", "İşlem Tutarı (₺)", "Toplam Net K/Z"])
     df = df.copy()
     df["Yıl"] = pd.to_datetime(df["Satış Tarihi"], errors="coerce").dt.strftime("%Y")
+    df["_Satış Tutarı"] = df["Miktar"] * df["Satış Fiyatı"]
     ozet = (df.groupby("Yıl")
               .agg(**{"İşlem Sayısı": ("Net K/Z", "count"),
                       "Ödenmiş Komisyon (₺)": ("Komisyon (₺)", "sum"),
                       "Ödenmiş Vergi (₺)": ("Vergi (₺)", "sum"),
+                      "İşlem Tutarı (₺)": ("_Satış Tutarı", "sum"),
                       "Toplam Net K/Z": ("Net K/Z", "sum")})
               .reset_index()
               .sort_values("Yıl", ascending=False))
     ozet["Ödenmiş Komisyon (₺)"] = ozet["Ödenmiş Komisyon (₺)"].round(2)
     ozet["Ödenmiş Vergi (₺)"] = ozet["Ödenmiş Vergi (₺)"].round(2)
+    ozet["İşlem Tutarı (₺)"] = ozet["İşlem Tutarı (₺)"].round(2)
     ozet["Toplam Net K/Z"] = ozet["Toplam Net K/Z"].round(2)
     return ozet
 

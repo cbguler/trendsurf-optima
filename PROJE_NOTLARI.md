@@ -389,6 +389,22 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI, DOĞRULANDI] v2.0.7.99 (Portföyüm muhasebe tablosu
+  düzenlemeleri, 20 Temmuz 2026, Bahri'nin talebi).** v2.0.7.98'in
+  Alış/Satış Tutarı eklemesi "Tüm İşlem Geçmişi" tablosunu genişletip
+  yatay scroll'a yol açmıştı. Üç düzeltme: (1) "Kategori" sütunu
+  tamamen kaldırıldı; (2) "Ticker" sütunu "Portföy Varlıkları
+  Tablosu"yla BİREBİR AYNI piksel genişliğine (79px) çekildi; (3)
+  "Komisyon (₺)" başlığı "Kom. (₺)" olarak kısaltılıp daraltıldı (sütun
+  ADI/verisi değişmedi, sadece `column_config`'in ilk pozisyonel
+  argümanıyla görüntü etiketi değiştirildi — "Skor"→"Optima Skor"
+  deseninin aynısı). Ayrıca Aylık Özet ve Yıllık Özet tablolarına,
+  "Toplam Net K/Z"'den HEMEN ÖNCE, "İşlem Tutarı (₺)" sütunu eklendi
+  (`portfolio_ledger.py`'nin `get_monthly_summary()`/`get_yearly_summary()`
+  fonksiyonlarında, Miktar×Satış Fiyatı toplamı) — banka dekontlarıyla
+  aylık/yıllık bazda da mutabakat yapılabilsin diye. Gerçek verilerle
+  (3.256,43 TL) doğrulandı.
+
 - **[TAMAMLANDI, DOĞRULANDI] v2.0.7.98 (Portföyüm işlem geçmişinde
   Alış/Satış Tutarı eksikliği, 20 Temmuz 2026, Bahri'nin bulgusu —
   gerçek bir ING altın satışı sonrası).** "Tüm İşlem Geçmişi" tablosu
