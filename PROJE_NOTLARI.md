@@ -389,6 +389,18 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TAMAMLANDI, DOĞRULANDI] v2.0.7.98 (Portföyüm işlem geçmişinde
+  Alış/Satış Tutarı eksikliği, 20 Temmuz 2026, Bahri'nin bulgusu —
+  gerçek bir ING altın satışı sonrası).** "Tüm İşlem Geçmişi" tablosu
+  sadece birim fiyatları (Alış/Satış Fiyatı) ve Net K/Z gösteriyordu,
+  GERÇEK İŞLEM TUTARI (Miktar × birim fiyat) hiç yoktu — banka
+  dekontuyla (örn. "TL Karşılığı: 3.256,43 TL") doğrudan mutabakat
+  yapılamıyordu. "Alış Tutarı" ve "Satış Tutarı" sütunları eklendi
+  (ilgili fiyat sütununun hemen sağına), TOPLAM satırına da toplamları
+  eklendi. Bahri'nin gerçek rakamlarıyla (0,55 gr, 5.470,00/5.920,78
+  TL) doğrulandı — Satış Tutarı tam 3.256,43 TL çıkıyor, ING dekontuyla
+  birebir eşleşiyor.
+
 - **[TAMAMLANDI] v2.0.7.97 (20 Temmuz 2026, Bahri'nin bulgusu — Actions
   logları/ekran görüntüleri).** İki ayrı ama muhtemelen ilişkili sorun:
   1. **"Veri Güncelle" #78 çöktü** ("divergent branches... fatal: Need

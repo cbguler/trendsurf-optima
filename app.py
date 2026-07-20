@@ -3640,10 +3640,28 @@ elif page=="Portföyüm":
         # Komisyon/Vergi sutunlari daraltilsin.
         _pl_gosterim = _pl_tum.drop(
             columns=["id", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
+
+        # v2.0.7.98 - KRITIK EKSIKLIK DUZELTMESI (Bahri'nin bulgusu, 20
+        # Temmuz 2026: gerçek bir altın satışı sonrası - ING dekontunda
+        # "TL Karşılığı: 3.256,43 TL" yazarken, uygulamada sadece birim
+        # fiyat (Satış Fiyatı) ve Net K/Z görünüyordu, GERÇEK SATIŞ TUTARI
+        # (Miktar × Satış Fiyatı) hiçbir yerde gösterilmiyordu - banka
+        # dekontuyla doğrudan karşılaştırma/mutabakat yapılamıyordu). Aynı
+        # eksiklik Alış Tutarı için de geçerliydi. Artık ikisi de
+        # (Miktar × ilgili birim fiyat) hesaplanıp tabloya ekleniyor,
+        # ilgili fiyat sütununun hemen sağına yerleştiriliyor.
+        _pl_gosterim.insert(
+            _pl_gosterim.columns.get_loc("Alış Fiyatı") + 1, "Alış Tutarı",
+            (_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).round(2))
+        _pl_gosterim.insert(
+            _pl_gosterim.columns.get_loc("Satış Fiyatı") + 1, "Satış Tutarı",
+            (_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).round(2))
+
         for _dcol in ["Alış Tarihi", "Satış Tarihi"]:
             _pl_gosterim[_dcol] = pd.to_datetime(
                 _pl_gosterim[_dcol], errors="coerce").dt.strftime("%d.%m.%Y")
-        for _ncol in ["Miktar", "Alış Fiyatı", "Satış Fiyatı", "Komisyon (₺)", "Vergi (₺)"]:
+        for _ncol in ["Miktar", "Alış Fiyatı", "Alış Tutarı", "Satış Fiyatı",
+                      "Satış Tutarı", "Komisyon (₺)", "Vergi (₺)"]:
             _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
         _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
 
@@ -3657,8 +3675,12 @@ elif page=="Portföyüm":
         # daha az rahatsiz edici.
         _pl_satir_sayisi = len(_pl_gosterim)
         _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
+        _pl_toplam_alis  = float((_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).sum())
+        _pl_toplam_satis = float((_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).sum())
         _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
         _pl_toplam_satir["Ticker"] = "TOPLAM"
+        _pl_toplam_satir["Alış Tutarı"] = _tr_sayi(_pl_toplam_alis)
+        _pl_toplam_satir["Satış Tutarı"] = _tr_sayi(_pl_toplam_satis)
         _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
         _pl_gosterim = pd.concat(
             [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
@@ -3681,8 +3703,10 @@ elif page=="Portföyüm":
             "Ticker":        st.column_config.Column(width="medium"),
             "Miktar":        st.column_config.Column(width="small", alignment="right"),
             "Alış Fiyatı":   st.column_config.Column(width="small", alignment="right"),
+            "Alış Tutarı":   st.column_config.Column(width="small", alignment="right"),
             "Alış Tarihi":   st.column_config.Column(width="small"),
             "Satış Fiyatı":  st.column_config.Column(width="small", alignment="right"),
+            "Satış Tutarı":  st.column_config.Column(width="small", alignment="right"),
             "Satış Tarihi":  st.column_config.Column(width="small"),
             "Komisyon (₺)":  st.column_config.Column(width="small", alignment="right"),
             "Vergi (₺)":     st.column_config.Column(width="small", alignment="right"),
