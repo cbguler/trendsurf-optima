@@ -349,6 +349,32 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_user   ON portfolio(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_sales_user ON portfolio_sales(user_id)")
 
+    # v2.0.7.100 - KRITIK GUVENLIK DUZELTMESI (Bahri'nin bulgusu, 22 Temmuz
+    # 2026: Supabase "CRITICAL: Table publicly accessible - Row-Level
+    # Security is not enabled" uyarisi). Bu 6 tabloda (users, portfolio,
+    # sessions, password_resets, portfolio_sales, portfolio_fee_settings)
+    # RLS'i etkinlestiren HICBIR satir yoktu - oysa firsat_radari.py/
+    # worker.py'deki 3 tablo (intraday_scores, radar_alerts,
+    # bist_universe_dynamic) bunu zaten yapiyordu. portfolio_sales/
+    # portfolio_fee_settings ozellikle supheliydi: ikisi de 16 Temmuz'da
+    # (muhasebe sistemiyle, v2.0.7.47) eklenmisti - 1-2 Temmuz'daki
+    # (Session XII) manuel RLS taramasindan SONRA, o taramaya hic dahil
+    # olmadan. ALTIN TASI: uygulama Supabase'e DOGRUDAN Postgres
+    # baglantisiyla (psycopg2 tarzi, servis/sahip rolu ile) baglaniyor -
+    # bu rol RLS'i dogal olarak ATLAR (BYPASSRLS), yani asagidaki RLS
+    # ac,ma app'in KENDI erisimini ETKILEMEZ - SADECE Supabase'in genel
+    # PostgREST API'sinden (herkesin proje URL'siyle erisebildigi katman)
+    # gelen YETKISIZ erisimi kapatir. Politika (CREATE POLICY) eklenmedi -
+    # zaten calisan 3 tablodaki AYNI ("sadece RLS'i ac, politika yok")
+    # deseni izleniyor; RLS + politika yoksa PostgREST katmani o tabloya
+    # SIFIR erisim verir, bu tam istenen davranis.
+    for _rls_tablo in ("users", "portfolio", "sessions", "password_resets",
+                       "portfolio_sales", "portfolio_fee_settings"):
+        try:
+            c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
+        except Exception as _e:
+            print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
+
     conn.commit()
     conn.close()
 

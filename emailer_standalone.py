@@ -71,6 +71,13 @@ def _ensure_send_log_table(conn):
                 PRIMARY KEY (user_id, send_date, send_hour)
             )
         """)
+        # v2.0.7.100 - GUVENLIK DUZELTMESI (Bahri'nin bulgusu, 22 Temmuz
+        # 2026, Supabase "Table publicly accessible" uyarisi) - bkz.
+        # db.py'deki ayni notun aynisi.
+        try:
+            conn.execute("ALTER TABLE email_send_log ENABLE ROW LEVEL SECURITY")
+        except Exception as _e:
+            print(f"[send_log] RLS etkinlestirme atlandi: {_e}")
         conn.commit()
     except Exception as e:
         print(f"[send_log] CREATE TABLE hatasi (yok sayilir): {e}")

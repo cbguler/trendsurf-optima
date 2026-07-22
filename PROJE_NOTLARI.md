@@ -389,6 +389,31 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.100 (KRİTİK GÜVENLİK — RLS etkin olmayan
+  tablolar, 22 Temmuz 2026, Bahri'nin bulgusu — Supabase güvenlik
+  uyarısı e-postası: "Table publicly accessible... Row-Level Security
+  is not enabled").** Kod taraması: `db.py`'deki 6 tablonun (`users`,
+  `portfolio`, `sessions`, `password_resets`, `portfolio_sales`,
+  `portfolio_fee_settings`) HİÇBİRİNDE RLS'i etkinleştiren kod yoktu —
+  oysa `firsat_radari.py`/`worker.py`'deki 3 tablo (`intraday_scores`,
+  `radar_alerts`, `bist_universe_dynamic`) bunu zaten yapıyordu. En
+  güçlü şüpheli: `portfolio_sales`/`portfolio_fee_settings`, 16
+  Temmuz'da (muhasebe sistemiyle, v2.0.7.47) eklenmişti — 1-2 Temmuz'daki
+  (Session XII) manuel RLS taramasından SONRA, o taramaya hiç dahil
+  olmadan. `emailer_standalone.py`'deki `email_send_log` de aynı
+  şekilde eksikti. **Düzeltme:** Bu 7 tablonun hepsine `ALTER TABLE ...
+  ENABLE ROW LEVEL SECURITY` eklendi — mevcut 3 tablodaki AYNI desen
+  (politika/CREATE POLICY YOK, sadece RLS açık — uygulama Supabase'e
+  DOĞRUDAN Postgres bağlantısıyla, RLS'i doğal olarak atlayan bir rolle
+  bağlandığı için bu app'in kendi erişimini etkilemiyor, sadece genel
+  PostgREST API'sinden gelen yetkisiz erişimi kapatıyor). `init_db()`
+  uygulama her açıldığında zaten çalıştığı için, kod deploy olup
+  uygulama bir kez yeniden başlayınca OTOMATİK uygulanır — manuel
+  Supabase panel işlemi gerekmez. **Bahri'nin doğrulaması gereken:**
+  push+reboot sonrası birkaç gün içinde Supabase'in bu uyarıyı e-posta
+  ile tekrar göndermediğini, ve/veya Supabase Dashboard → Advisors
+  sekmesinde bu uyarının kaybolduğunu kontrol etmeli.
+
 - **[TAMAMLANDI, DOĞRULANDI] v2.0.7.99 (Portföyüm muhasebe tablosu
   düzenlemeleri, 20 Temmuz 2026, Bahri'nin talebi).** v2.0.7.98'in
   Alış/Satış Tutarı eklemesi "Tüm İşlem Geçmişi" tablosunu genişletip
