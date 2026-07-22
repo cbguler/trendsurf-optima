@@ -30,7 +30,9 @@ concurrency:
 jobs:
   radar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # v2.0.7.101 - 15 -> 20 dakika: Playwright kurulumu + gercek tarayici
+    # ile uyandirma adimlarina yer acmak icin.
+    timeout-minutes: 20
 
     steps:
       - name: Kodu indir
@@ -57,17 +59,21 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           RADAR_TEFAS_ZORLA: ${{ github.event.inputs.tefas_zorla || '0' }}
 
-      # v2.0.5.2: Keep-alive - Streamlit Cloud, 12 saat ziyaretsiz kalan
-      # uygulamayi uyutur. cron-job.org'un duz GET'i kenar katmanindaki
-      # auth yonlendirmesine (share.streamlit.io/-/auth) takilip uygulamaya
-      # ulasamiyor; curl -L ise yonlendirme zincirini cookie'lerle takip
-      # edip GERCEK uygulamaya ulasir. Radar zaten 15 dk'da bir kostugu
-      # icin ayri bir keep-alive isine gerek kalmaz.
-      - name: Uygulamayi uyandir (keep-alive)
+      # v2.0.7.101 - KRITIK DUZELTME (Bahri'nin bulgusu, 22 Temmuz 2026):
+      # v2.0.5.2'deki curl tabanli keep-alive ARTIK ISE YARAMIYOR -
+      # Streamlit'in guncel mimarisinde gercek bir tarayici JavaScript
+      # calistirip WebSocket baglantisi kurmadan uygulama hic baslamiyor;
+      # curl sadece STATIK bir HTML kabugu aliyor (HTTP 200 donse bile
+      # uygulama gercekte uyanmiyor). Playwright ile gercek (headless)
+      # Chromium kurup GERCEK bir tarayici ziyareti yapiliyor.
+      - name: Playwright kur
         if: always()
         continue-on-error: true
         run: |
-          curl -sL --max-redirs 10 -c /tmp/ka_cookies -b /tmp/ka_cookies \
-               -o /dev/null -w "keep-alive HTTP %{http_code}\n" \
-               --max-time 60 \
-               https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app/
+          pip install playwright --quiet
+          python -m playwright install --with-deps chromium
+
+      - name: Uygulamayi uyandir (gercek tarayici ile keep-alive)
+        if: always()
+        continue-on-error: true
+        run: python wake_app.py

@@ -389,6 +389,30 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR, GARANTİSİZ DENEME] v2.0.7.101 (Streamlit Cloud
+  uyku sorunu, 22 Temmuz 2026, Bahri'nin talebi).** Geçmiş bir oturumda
+  (v2.0.5.2) bu soruna karşı zaten bir "keep-alive" denenmişti — curl
+  ile yönlendirme zincirini takip edip uygulamayı ziyaret ediyordu.
+  Güncel araştırma (Temmuz 2026) bunun ARTIK İŞE YARAMADIĞINI gösterdi:
+  Streamlit'in güncel mimarisinde gerçek bir tarayıcı JavaScript
+  çalıştırıp WebSocket bağlantısı (`/_stcore/stream`) kurmadan uygulama
+  hiç başlamıyor; curl sadece statik bir HTML kabuğu alıyor (HTTP 200
+  dönse bile uygulama gerçekte uyanmıyor) — bu, Bahri'nin hâlâ uyku
+  ekranı görmesinin muhtemel açıklaması. **Denenen çözüm:**
+  `firsat_radari.yml`'deki curl adımı, Playwright ile GERÇEK bir
+  headless Chromium tarayıcısı açıp "Yes, get this app back up!"
+  butonunu arayıp (varsa) tıklayan bir Python betiğiyle (`wake_app.py`)
+  değiştirildi. Bu, Fırsat Radarı zaten 15-20 dakikada bir çalıştığı
+  için aynı sıklıkta devreye girer. **ÖNEMLİ SINIRLAMA: Bu resmi/garantili
+  bir çözüm DEĞİL** — topluluk kaynaklı bir workaround, Streamlit
+  altyapısı değişirse bozulabilir. Playwright'ın kendi API kullanımı
+  (yöntem isimleri) doğrulandı ama CANLI uygulamaya karşı uçtan uca test
+  EDİLEMEDİ (sandbox ağ kısıtlaması, streamlit.app'e erişim yok) — Bahri
+  push sonrası birkaç gün boyunca uygulamanın gerçekten uyku ekranına
+  düşüp düşmediğini gözlemlemeli. Eğer bu da işe yaramazsa, kalan seçenek
+  ücretli bir Streamlit katmanına geçmek (ayrıca araştırılmadı, Bahri
+  istemedi/gündeme gelmedi).
+
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.100 (KRİTİK GÜVENLİK — RLS etkin olmayan
   tablolar, 22 Temmuz 2026, Bahri'nin bulgusu — Supabase güvenlik
   uyarısı e-postası: "Table publicly accessible... Row-Level Security
