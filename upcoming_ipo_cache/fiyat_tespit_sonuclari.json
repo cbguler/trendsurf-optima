@@ -56,9 +56,9 @@
     "carpan_bazli_deger": null
   },
   "1620801": {
-    "arz_fiyati": null,
-    "iskonto_orani": null,
-    "tip": null,
+    "arz_fiyati": 15.0,
+    "iskonto_orani": 37.0,
+    "tip": "A",
     "graham_degeri": null,
     "carpan_bazli_deger": null
   }

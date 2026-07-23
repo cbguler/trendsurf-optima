@@ -148,8 +148,8 @@
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1620799",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1620801",
-    "Arz_Fiyati": null,
-    "Iskonto_Orani": null,
+    "Arz_Fiyati": 15.0,
+    "Iskonto_Orani": 37.0,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   }
