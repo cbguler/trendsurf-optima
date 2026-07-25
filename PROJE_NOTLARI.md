@@ -612,7 +612,8 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
     aynı olmayabilir, önce Streamlit'in güncel dokümantasyonu
     doğrulanmadan değiştirilirse splash ekranı (`_splash_html`) bozulabilir.
 
-- **[TAMAMLANDI, PUSH BEKLİYOR] El kitapları güncellemesi (18 Temmuz 2026).**
+- **[TAMAMLANDI, DOĞRULANDI] El kitapları güncellemesi (18 Temmuz 2026,
+  25 Temmuz'da GitHub'dan tekrar doğrulandı — gerçekten yayında).**
   Abone ve Yönetici El Kitabı'nda (Word) birikmiş güncel-olmayan bilgiler
   bulundu ve düzeltildi: döviz/maden/kripto sayıları (63/17/188), Paladyum
   kaldırılması, alarm eşiği (85/+15), Yönetici kitabındaki veri kaynağı
