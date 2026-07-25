@@ -389,6 +389,22 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[DOĞRULAMA BEKLİYOR] v2.0.7.102 (24 Temmuz 2026, Bahri'nin bulgusu —
+  v2.0.7.101'den sonra art arda "Cancelled"/"No jobs were run"/"Internal
+  server error" e-postaları).** İncelemede iki çalışma da (biri "Firsat
+  Radari calistir" adımının ORTASINDA "The operation was canceled" ile
+  kesilmiş — benim eklediğim Playwright adımlarına hiç sıra gelmeden;
+  diğeri "Internal server error" ile) GitHub Actions'ın kendi altyapı
+  sorununa işaret ediyordu, koddaki bir hataya değil. Yine de v2.0.7.101
+  her çalışmayı ~20-90sn uzattığı ve bu workflow zaten çok sık (15-20
+  dk'da bir) tetiklendiği için, bu ek yük üst üste binme riskini dolaylı
+  artırmış olabilir. **Risk azaltma:** Playwright uyandırma adımları
+  artık HER çalışmada değil, ~3 saatte bir (UTC saat % 3 == 0) çalışacak
+  şekilde sınırlandı — uyku eşiği saatler mertebesinde olduğu için
+  fazlasıyla yeterli, gereksiz yükü ~3'te 2 oranında azaltıyor. Bahri'nin
+  önümüzdeki günlerde bu tür hata e-postalarının sıklığının azalıp
+  azalmadığını gözlemlemesi gerekiyor.
+
 - **[DOĞRULAMA BEKLİYOR, GARANTİSİZ DENEME] v2.0.7.101 (Streamlit Cloud
   uyku sorunu, 22 Temmuz 2026, Bahri'nin talebi).** Geçmiş bir oturumda
   (v2.0.5.2) bu soruna karşı zaten bir "keep-alive" denenmişti — curl

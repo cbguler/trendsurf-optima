@@ -59,6 +59,26 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           RADAR_TEFAS_ZORLA: ${{ github.event.inputs.tefas_zorla || '0' }}
 
+      # v2.0.7.102 - RISK AZALTMA (Bahri'nin bulgusu, 24 Temmuz 2026: art
+      # arda gelen "Cancelled"/"No jobs were run" hatalari - GitHub'in
+      # kendi altyapisina ait gorunuyordu ama Playwright adimlari HER
+      # calismayi ~20-90sn uzattigi icin, bu workflow'un cok sik (15-20
+      # dk'da bir) tetiklenmesiyle birlesince ust uste binme/kuyruklanma
+      # riskini dolayli olarak artirmis olabilir). Uyandirma artik HER
+      # calismada degil, yaklasik 3 saatte bir calisir - uyku esigi
+      # (saatler mertebesinde) icin fazlasiyla yeterli, ama gereksiz
+      # yuku buyuk olcude azaltir.
+      - name: Uyandirma zamani mi kontrol et
+        id: uyandirma_kontrol
+        if: always()
+        run: |
+          saat=$(date -u +%H)
+          if [ $((10#$saat % 3)) -eq 0 ]; then
+            echo "calistir=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "calistir=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # v2.0.7.101 - KRITIK DUZELTME (Bahri'nin bulgusu, 22 Temmuz 2026):
       # v2.0.5.2'deki curl tabanli keep-alive ARTIK ISE YARAMIYOR -
       # Streamlit'in guncel mimarisinde gercek bir tarayici JavaScript
@@ -67,13 +87,13 @@ jobs:
       # uygulama gercekte uyanmiyor). Playwright ile gercek (headless)
       # Chromium kurup GERCEK bir tarayici ziyareti yapiliyor.
       - name: Playwright kur
-        if: always()
+        if: always() && steps.uyandirma_kontrol.outputs.calistir == 'true'
         continue-on-error: true
         run: |
           pip install playwright --quiet
           python -m playwright install --with-deps chromium
 
       - name: Uygulamayi uyandir (gercek tarayici ile keep-alive)
-        if: always()
+        if: always() && steps.uyandirma_kontrol.outputs.calistir == 'true'
         continue-on-error: true
         run: python wake_app.py
