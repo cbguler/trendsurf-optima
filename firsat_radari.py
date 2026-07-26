@@ -274,7 +274,18 @@ def tara_fx_maden_kripto(df_uni):
     # 188 kriptoyu tek tek dongude tarayan bu fonksiyon saatlerce
     # askida kalabiliyordu. Asagidaki yardimci HER cagriyi ayri bir
     # thread'de en fazla 8 saniye bekletir.
-    def _bp_zaman_asimili(fn, timeout=8):
+    # v2.0.7.103 - GECICI TESHIS (Bahri'nin bulgusu, 25 Temmuz 2026: saglik
+    # kontrolu sadece KRIPTO icin "1.9 saattir yazmiyor" uyarisi verdi,
+    # DOVIZ/MADEN etkilenmedi). Asagidaki "except Exception: return None"
+    # o ana kadar TUM gercek hatalari (RateLimitError, baglanti hatasi,
+    # API sema degisikligi, vb.) sessizce yutuyordu - ne DOVIZ/MADEN'in
+    # neden calisip KRIPTO'nun neden calismadigini gorebiliyorduk. Asagida
+    # ilk 5 ham hata (tur + mesaj) loglanir, sonrasi sessize alinir (186
+    # kripto icin log tasmasin diye). Kok neden netlesince bu blok geri
+    # sadelestirilebilir.
+    _HAM_HATA_SAYAC = {"n": 0}
+
+    def _bp_zaman_asimili(fn, timeout=8, etiket=""):
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
         try:
             with ThreadPoolExecutor(max_workers=1) as _ex:
@@ -283,7 +294,10 @@ def tara_fx_maden_kripto(df_uni):
                     return _gelecek.result(timeout=timeout)
                 except _FutTimeout:
                     return None
-        except Exception:
+        except Exception as e:
+            if _HAM_HATA_SAYAC["n"] < 5:
+                print(f"[radar] TESHIS ({etiket}): {type(e).__name__}: {str(e)[:200]}")
+                _HAM_HATA_SAYAC["n"] += 1
             return None
 
     _MADEN_BP = {"ALTIN_TRY": "gram-altin", "GUMUS_TRY": "gumus",
@@ -315,13 +329,15 @@ def tara_fx_maden_kripto(df_uni):
 
     for t, code in _MADEN_BP.items():
         try:
-            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"))
+            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"),
+                                    etiket=f"MADEN:{t}")
             _skorla(t, "MADEN", _close_from(_h))
         except Exception:
             continue
     for t, code in _DOVIZ_BP.items():
         try:
-            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"))
+            _h = _bp_zaman_asimili(lambda code=code: bp.FX(code).history(period="3mo", interval="1d"),
+                                    etiket=f"DOVIZ:{t}")
             _skorla(t, "DOVIZ", _close_from(_h))
         except Exception:
             continue
@@ -341,12 +357,22 @@ def tara_fx_maden_kripto(df_uni):
     for t in kripto_list:
         try:
             pair = _kripto_parite.get(t, f"{t}TRY")
-            _h = _bp_zaman_asimili(lambda pair=pair: bp.Crypto(pair).history(period="3mo", interval="1d"))
+            _h = _bp_zaman_asimili(lambda pair=pair: bp.Crypto(pair).history(period="3mo", interval="1d"),
+                                    etiket=f"KRIPTO:{t}")
             _skorla(t, "KRIPTO", _close_from(_h))
         except Exception:
             continue
 
-    print(f"[radar] FX/MADEN/KRIPTO: {len(out)} varlik degerlendirildi.")
+    # v2.0.7.103 - kategori bazli sayac: hangi kategorinin kac/kac
+    # basarili oldugu artik tek satirda goruluyor (once toplam sayi tek
+    # basinaydi, DOVIZ calisip KRIPTO calismasa bile ayni satirda
+    # gorunmuyordu).
+    _maden_ok = sum(1 for v in out.values() if v["kategori"] == "MADEN")
+    _doviz_ok = sum(1 for v in out.values() if v["kategori"] == "DOVIZ")
+    _kripto_ok = sum(1 for v in out.values() if v["kategori"] == "KRIPTO")
+    print(f"[radar] FX/MADEN/KRIPTO: {len(out)} varlik degerlendirildi "
+          f"(MADEN {_maden_ok}/{len(_MADEN_BP)}, DOVIZ {_doviz_ok}/{len(_DOVIZ_BP)}, "
+          f"KRIPTO {_kripto_ok}/{len(kripto_list)}).")
     return out
 
 

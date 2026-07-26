@@ -389,6 +389,31 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TEŞHİS BEKLİYOR] v2.0.7.103 (25 Temmuz 2026, Bahri'nin bulgusu —
+  bir "Firsat Radari" çalışması "All jobs have failed" ile ~2dk 3sn'de
+  bitti; ardından saglik kontrolü sadece KRIPTO için "1.9 saattir
+  Supabase'e yazmıyor" uyarısı verdi, DOVİZ/MADEN/BIST etkilenmedi.**
+  GitHub Actions'ın gerçek çalışma logu bu oturumda görülemedi (GitHub
+  API'ye kimlik doğrulamasız erişim rate-limit'e takıldı, Bahri log
+  metnini paylaşmadı). Semptom deseni (sadece KRIPTO, DOVİZ/MADEN sağlam)
+  tüm betiğin çökmesini değil, `tara_fx_maden_kripto()` içindeki
+  `bp.Crypto(...)` (BtcTurk) çağrılarına özgü bir sorunu işaret ediyor —
+  muhtemel neden: `firsat_radari.yml`'deki `pip install` satırı hiçbir
+  paketi sabitlemiyor (`websockets` hariç), bu yüzden `borsapy` her
+  çalışmada en güncel sürümü çekiyor ve API'de bir değişiklik/hız
+  sınırı (`bp.RateLimitError` sınıfı zaten mevcut) devreye girmiş
+  olabilir — ama bu SADECE bir hipotez, doğrulanmadı. **Uygulanan
+  değişiklik (kesin düzeltme DEĞİL, sadece teşhis):** `_bp_zaman_asimili()`
+  artık ilk 5 ham hatayı (tür + mesaj) `etiket` parametresiyle
+  (`MADEN:ALTIN_TRY`, `KRIPTO:BTC` gibi) logluyor — eskiden TÜM hatalar
+  (RateLimitError dahil) sessizce yutulup `None` dönüyordu, hiçbir iz
+  kalmıyordu. Ayrıca sonuç satırı artık kategori bazlı kırılım veriyor
+  (`MADEN X/3, DOVIZ X/12, KRIPTO X/186`). **Sıradaki adım:** bir sonraki
+  "Firsat Radari" çalışmasının GitHub Actions logunda bu yeni satırlar
+  görülüp gerçek hata netleşmeden kalıcı bir düzeltme (versiyon
+  sabitleme, throttling, vb.) yapılmamalı — körlemesine "muhtemelen
+  budur" fixi uygulama.
+
 - **[DOĞRULAMA BEKLİYOR] v2.0.7.102 (24 Temmuz 2026, Bahri'nin bulgusu —
   v2.0.7.101'den sonra art arda "Cancelled"/"No jobs were run"/"Internal
   server error" e-postaları).** İncelemede iki çalışma da (biri "Firsat
