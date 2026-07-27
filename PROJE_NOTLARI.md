@@ -389,6 +389,33 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[KISMEN DOĞRULANDI, İZLEMEDE] v2.0.7.103/104 (25 ve 27 Temmuz 2026,
+  Bahri'nin bulgusu — iki farklı "Fırsat Radari" olayı).**
+  25 Temmuz'da SADECE KRİPTO için sağlık uyarısı gelmişti (DOVİZ/MADEN/
+  BIST sağlam). 27 Temmuz 14:35 TRT'de (BIST seansı AÇIKKEN) ise "All
+  jobs have failed" ile TÜM çalışma 3dk45sn'de çökmüştü. Bu iki olayın
+  neden farklı göründüğünü açıklayan tutarlı hipotez: `borsapy` importu
+  zaten try/except içindeydi (patlarsa sadece o kategori boş dönüyordu),
+  ama `yfinance` importu HİÇ korumasızdı — BIST seansı kapalıyken
+  `tara_bist()` hiç çağrılmadığı için sorun görünmüyordu (25 Temmuz'daki
+  olay), seans açıkken çağrılınca (27 Temmuz) sarmalanmamış bir hata
+  `main()`'in tamamını coturuyordu (DOVİZ/MADEN/KRİPTO/TEFAS dahil —
+  Python'da yakalanmayan hata cagiran fonksiyonun TAMAMINI durdurur).
+  **NOT: Bu hipotez mantıken tutarlı ama gerçek hata metniyle henüz
+  doğrulanmadı** (GitHub Actions logu bu oturumda da görülemedi).
+  **Uygulanan değişiklik (v2.0.7.104):** (1) `tara_bist()` içindeki
+  `import yfinance` artık `borsapy` ile aynı desende try/except'e alındı
+  — patlarsa sadece BIST bu koşuda atlanır, hata tipi+mesajı loglanır.
+  (2) `main()`'deki 3 kategori çağrısı (`tara_fx_maden_kripto`,
+  `tara_bist`, `degerlendir_tefas`) artık HER BİRİ kendi try/except'i
+  içinde — bundan böyle hiçbir kategorideki beklenmeyen hata diğerlerini
+  ya da Supabase yazımını/radar alarmını etkilemeyecek (savunma
+  katmanı, ileride benzer bir hata sınıfı tekrar çıkarsa bile). **Sıradaki
+  adım:** birkaç gün gözlemleyip hem "All jobs have failed" hem de
+  kategoriye özel sağlık uyarılarının tekrarlanıp tekrarlanmadığını
+  izle; tekrarlanırsa artık her kategori kendi hata tipini/mesajını
+  loglayacağı için kök neden netleşecek.
+
 - **[TEŞHİS BEKLİYOR] v2.0.7.103 (25 Temmuz 2026, Bahri'nin bulgusu —
   bir "Firsat Radari" çalışması "All jobs have failed" ile ~2dk 3sn'de
   bitti; ardından saglik kontrolü sadece KRIPTO için "1.9 saattir

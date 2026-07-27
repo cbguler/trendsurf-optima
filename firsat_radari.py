@@ -162,9 +162,29 @@ def _bist_optima_score(rsi, ret1m, vol=30.0, has_fundamental=False,
 def tara_bist(tickers, fund_map):
     """worker.py.batch_bist ile ayni mantik: batch download + RSI/Ret1M/Vol
     + hacim trendi + Max DD duzeltmesi + (CSV'den gelen) temel analiz."""
-    import yfinance as yf
-    print(f"[radar] BIST tam tarama: {len(tickers)} hisse...")
     out = {}
+    # v2.0.7.104 - KRITIK DUZELTME (Bahri'nin bulgusu, 27 Temmuz 2026: 14:35
+    # TRT'de - yani BIST seansi ACIKKEN - "All jobs have failed" ile TUM
+    # calisma 3dk45sn'de coktu; oysa 25 Temmuz'daki onceki olayda SADECE
+    # KRIPTO etkilenmis, DOVIZ/MADEN/BIST saglam kalmisti). Kok neden ayni
+    # aile: `import borsapy` zaten yukarida try/except icinde korunuyordu
+    # (bir sorun olursa sadece o kategori bos donuyordu), ama asagidaki
+    # `import yfinance` HIC korumasizdi - sürüm sabitlenmemis oldugu icin
+    # (firsat_radari.yml, pip install satiri) yfinance'in yeni bir surumu
+    # import sirasinda patlarsa, bu BIST'e ozel degil, TUM main()'i
+    # (henuz calismamis DOVIZ/MADEN/KRIPTO dahil, cunku Python
+    # exception'i sarmalanmadan tepeye kadar firlar) coturuyordu. Bu, iki
+    # olayin neden farkli gorundugunu (biri "sadece KRIPTO", digeri "TUM
+    # is") aciklayan tutarli bir hipotez - ama KESIN DOGRULANMADI (gercek
+    # hata metni hala loglanmadi). Asagidaki import artik borsapy ile ayni
+    # desende korunuyor: patlarsa sadece BIST bu kosuda atlanir, DOVIZ/
+    # MADEN/KRIPTO/TEFAS etkilenmez.
+    try:
+        import yfinance as yf
+    except Exception as e:
+        print(f"[radar] KRITIK: yfinance import edilemedi, BIST atlandi: {type(e).__name__}: {str(e)[:200]}")
+        return out
+    print(f"[radar] BIST tam tarama: {len(tickers)} hisse...")
     chunk_size = 200
     import time as _time
     for i in range(0, len(tickers), chunk_size):
@@ -634,19 +654,38 @@ def main():
 
     sonuc = {}
 
+    # v2.0.7.104 - SAVUNMA KATMANI: her kategori artik kendi try/except'i
+    # icinde cagriliyor. Eskiden bu 3 satirin hicbiri sarmalanmamisti -
+    # ic fonksiyonlarin KENDI koruma katmanlari (borsapy/yfinance import
+    # hatasi vb.) yeterli olmazsa (ornegin beklenmeyen baska bir hata
+    # turu), tek bir kategorideki hata TUM main()'i coturup DOVIZ/MADEN/
+    # KRIPTO/BIST/TEFAS'in HICBIRINE Supabase yazilmamasina yol aciyordu.
+    # Artik bir kategori patlarsa sadece o kategori bu kosuda atlanir,
+    # digerleri (ve dosyanin sonundaki Supabase yazimi + radar) calismaya
+    # devam eder.
+
     # 1) DOVIZ / MADEN / KRIPTO - 7/24
-    sonuc.update(tara_fx_maden_kripto(df_uni))
+    try:
+        sonuc.update(tara_fx_maden_kripto(df_uni))
+    except Exception as e:
+        print(f"[radar] KRITIK: DOVIZ/MADEN/KRIPTO taramasi coktu, atlandi: {type(e).__name__}: {str(e)[:200]}")
 
     # 2) BIST - sadece seans saatleri
     if _bist_seans_acik(simdi):
-        bist_tickers = (df_uni[(df_uni["Kategori"] == "BIST")]["Ticker"]
-                        .dropna().astype(str).tolist())
-        sonuc.update(tara_bist(bist_tickers, fund_map))
+        try:
+            bist_tickers = (df_uni[(df_uni["Kategori"] == "BIST")]["Ticker"]
+                            .dropna().astype(str).tolist())
+            sonuc.update(tara_bist(bist_tickers, fund_map))
+        except Exception as e:
+            print(f"[radar] KRITIK: BIST taramasi coktu, atlandi: {type(e).__name__}: {str(e)[:200]}")
     else:
         print("[radar] BIST seansi kapali - BIST taramasi atlandi.")
 
     # 3) TEFAS - gunde 1 (aksam NAV guncellemesi sonrasi pencere)
-    sonuc.update(degerlendir_tefas(df_uni, simdi))
+    try:
+        sonuc.update(degerlendir_tefas(df_uni, simdi))
+    except Exception as e:
+        print(f"[radar] KRITIK: TEFAS degerlendirmesi coktu, atlandi: {type(e).__name__}: {str(e)[:200]}")
 
     if not sonuc:
         print("[radar] Degerlendirilecek sonuc yok, cikiliyor.")
