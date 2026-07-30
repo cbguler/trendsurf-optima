@@ -389,6 +389,47 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, İZLEMEDE] v2.0.7.110 (30 Temmuz 2026, Bahri'nin bulgusu —
+  IZMDC/BIGTK örnekleri: BIST evreninin %85'i F/K'siz, %71'i PD/DD'siz,
+  %98'i temettü verimsizdi — hepsi NaN, negatif/zararda olduğu için
+  değil).** Kök neden `worker.py`'nin `fetch_bist_fundamentals_parallel()`
+  fonksiyonu — 772 hisse için yfinance'in `.info` endpoint'ini (Yahoo'nun
+  en ağır/hız-sınırına en yatkın endpoint'i) 25 eş zamanlı worker ile ANINDA
+  çağırıyordu. **Kesin kök neden (hız sınırı mı, Yahoo'nun küçük BIST
+  hisseleri için veri eksikliği mi) bu ortamdan gerçek Yahoo API'sine
+  erişim olmadığından doğrulanamadı** — bu yüzden bu bir KESİN düzeltme
+  değil, **düşük riskli bir iyileştirme** olarak uygulandı: (1) eş
+  zamanlılık 25'ten 8'e düşürüldü, (2) ilk geçişte başarısız olan hisseler
+  15sn beklenip 4 worker ile TEKRAR deneniyor, (3) her çağrıya 15sn zaman
+  aşımı eklendi (tek bir asılı çağrı artık 45dk'lık iş zaman aşımını riske
+  atmıyor), (4) gereksiz bir yan etki de düzeltildi: eskiden bu fonksiyon
+  `fetch_kap_fundamentals()` (yfinance+KAP birlikte) çağırıp KAP kısmını
+  hiç KULLANMIYORDU (sadece pb/pe/dy okunuyordu, ikisi de yfinance
+  kaynaklı) — artık doğrudan `_fetch_yfinance()` çağrılıyor, hem gereksiz
+  KAP isteği kalkıyor hem de retry'nin `st.cache_data`'nın 24 saatlik
+  önbelleğine takılıp AYNI başarısız sonucu tekrar dönmesi önleniyor.
+  **Sıradaki adım:** bir sonraki gece çalışmasının logunda "İlk geçiş: X/772
+  ... (Y başarısız)" ve "SONUÇ (tekrar deneme sonrası): Z/772" satırlarını
+  karşılaştırıp gerçek iyileşme oranını gör.
+
+- **[ARAŞTIRMA BEKLİYOR, AYRI OTURUM] KAP'tan tam F/K + PD/DD hesaplama
+  (Bahri'nin talebi, 30 Temmuz 2026).** Bahri'nin uzun süredir tercihi:
+  Temel Skor'u belirleyen F/K, PD/DD, Temettü Verimi'nin yfinance yerine
+  KAP'tan (`KAP_BIST.xlsx` zaten repoda, `kap_client.py`'nin
+  `KAP_SLUG_MAP`'i buradan geliyor — bkz. Bölüm 2) hesaplanması. Şu an
+  sadece EK bilanço kalemleri (Dönen/Duran Varlık, Net Kâr, Özkaynak vb.)
+  KAP'tan çekiliyor, görüntüleme amaçlı — asıl 3 rasyo hâlâ yfinance
+  kaynaklı (`kap_client.py`'nin kendi docstring'i: "yfinance (birincil) +
+  KAP (ikincil)"). Bu oturumda BIGTK'nin gerçek KAP sayfası canlı
+  incelendi: Net Kâr ve Özkaynak var, ama **hisse sayısı YOK** — "Ödenmiş
+  Sermaye" tek başına güvenilir değil (2013'ten beri nominal hisse değeri
+  şirketten şirkete değişebiliyor, bu yüzden Ödenmiş Sermaye'den hisse
+  sayısı çıkarmak yanlış sonuç verebilir). F/K=Fiyat/(NetKâr/HisseSayısı)
+  ve PD/DD=Fiyat/(Özkaynak/HisseSayısı) hesaplamak için güvenilir bir hisse
+  sayısı kaynağı (MKK? BIST'in kendi sitesi? KAP'ın başka bir sekmesi?)
+  bulunmalı — bu araştırma AYRI bir oturumda ele alınacak, bu oturumda
+  yapılmadı.
+
 - **[UYGULANDI] v2.0.7.109 (30 Temmuz 2026, Bahri'nin talebi — BULGS
   örneği).** v2.0.7.108'de tek bir renk (skorun işaretine göre) hem
   hacim yazısına hem skor rakamına uygulanmıştı. Bahri: "Hacim ARTIYOR

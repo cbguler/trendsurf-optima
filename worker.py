@@ -753,35 +753,85 @@ def batch_bist(tickers):
     return result
 
 
-def fetch_bist_fundamentals_parallel(tickers, max_workers=25):
+def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, retry_delay=15):
     """v2.0.4.57: Optima Skoru'nun temel analiz bileşeni (P/B, P/E, temettü
-    verimi) icin kap_client.py'yi tum BIST hisseleri icin paralel olarak
+    verimi) icin yfinance'i tum BIST hisseleri icin paralel olarak
     cagirir. Bu, gecede BIR KEZ calisir (worker.py) - boylece Ana Sayfa/
     BIST listesi gibi sayfalar her acildiginda 772 kez bu cagriyi tekrar
-    yapmiyor (hem tutarlilik hem hiz kazanci)."""
+    yapmiyor (hem tutarlilik hem hiz kazanci).
+
+    v2.0.7.110 - GUVENILIRLIK DUZELTMESI (Bahri'nin bulgusu, IZMDC/BIGTK
+    ornekleri, 30 Temmuz 2026: BIST evreninin %85'i F/K'siz, %71'i
+    PD/DD'siz, %98'i temettu verimsizdi). Eskiden 25 es zamanli worker ile
+    yfinance'in `.info` endpoint'i (Yahoo'nun en agir/hiz-sinirina en
+    yatkin endpoint'i) 772 hisse icin ANINDA cagriliyordu. Kesin kok neden
+    (hiz siniri mi, Yahoo'nun kucuk BIST hisseleri icin veri eksikligi mi)
+    bu ortamdan gercek Yahoo API'sine erisim olmadigindan DOGRULANAMADI -
+    ama es zamanliligi dusurup basarisiz olanlari bir sure sonra dusuk
+    esizamanlilikla tekrar denemek, hiz siniri kaynakli basarisizliklari en
+    azindan KISMEN azaltmasi beklenen, dusuk riskli bir onlem. (KAP'tan tam
+    hesaplama - hisse sayisi sorunu nedeniyle - AYRI bir oturumda ele
+    alinacak, bkz. PROJE_NOTLARI Bolum 5.)
+
+    Ayrica: eskiden bu fonksiyon `fetch_kap_fundamentals()` (yfinance +
+    KAP birlikte) cagiriyordu ama KAP kismini hic kullanmiyordu (sadece
+    pb_ratio/pe_ratio/div_yield okunuyordu, hepsi yfinance kaynakli) -
+    yani her hisse icin bosa bir KAP HTTP istegi de yapiliyordu. Artik
+    dogrudan `_fetch_yfinance()` cagriliyor - hem gereksiz KAP isteklerini
+    kaldirir hem de RETRY'nin (asagida) `st.cache_data` onbellegine
+    takilip AYNI basarisiz sonucu tekrar dondurmesini onler (KAP fonksiyonu
+    24 saatlik cache'li, retry'nin ise gercekten YENIDEN denemesi lazim)."""
     from concurrent.futures import ThreadPoolExecutor
+    import time as _t
     try:
-        from kap_client import fetch_kap_fundamentals
+        from kap_client import _fetch_yfinance
     except Exception as e:
         print(f"  [Fundamentals] kap_client import edilemedi: {e}")
         return {}
 
-    print(f"  [Fundamentals] {len(tickers)} hisse icin P/B, P/E, temettu verimi cekiliyor...")
-    sonuc = {}
+    print(f"  [Fundamentals] {len(tickers)} hisse icin P/B, P/E, temettu verimi cekiliyor "
+          f"({max_workers} es zamanli worker)...")
 
     def _tek(t):
+        from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FutTimeout
         try:
-            raw = fetch_kap_fundamentals(t)
+            # v2.0.7.110 - _fetch_yfinance()'in kendi bir zaman asimi yok;
+            # tek bir asili/yavas cagri, ThreadPoolExecutor'un TUM
+            # ex.map() sonucunu bekletebilir (45dk'lik is zaman asimini
+            # riske atar). 15sn ile sinirlandi - bkz. ayni desen
+            # firsat_radari.py/live_data.py'de de kullaniliyor.
+            with _TPE(max_workers=1) as _one:
+                _fut = _one.submit(_fetch_yfinance, t)
+                try:
+                    raw = _fut.result(timeout=15)
+                except _FutTimeout:
+                    return (t, None, None, None)
             return (t, raw.get("pb_ratio"), raw.get("pe_ratio"), raw.get("div_yield"))
         except Exception:
             return (t, None, None, None)
 
+    sonuc = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for t, pb, pe, dy in ex.map(_tek, tickers):
             sonuc[t] = (pb, pe, dy)
 
-    ok = sum(1 for v in sonuc.values() if v[0] or v[1] or v[2])
-    print(f"  [Fundamentals] {ok}/{len(tickers)} hisse icin en az bir veri alindi.")
+    basarisiz = [t for t, v in sonuc.items() if v[0] is None and v[1] is None and v[2] is None]
+    ok = len(tickers) - len(basarisiz)
+    print(f"  [Fundamentals] Ilk gecis: {ok}/{len(tickers)} hisse icin en az bir veri alindi "
+          f"({len(basarisiz)} basarisiz).")
+
+    if basarisiz:
+        print(f"  [Fundamentals] {len(basarisiz)} basarisiz hisse icin {retry_delay}sn "
+              f"bekleyip dusuk esizamanlilikla ({retry_workers} worker) tekrar deneniyor...")
+        _t.sleep(retry_delay)
+        with ThreadPoolExecutor(max_workers=retry_workers) as ex:
+            for t, pb, pe, dy in ex.map(_tek, basarisiz):
+                if pb is not None or pe is not None or dy is not None:
+                    sonuc[t] = (pb, pe, dy)
+
+    ok_final = sum(1 for v in sonuc.values() if v[0] or v[1] or v[2])
+    print(f"  [Fundamentals] SONUC (tekrar deneme sonrasi): {ok_final}/{len(tickers)} "
+          f"hisse icin en az bir veri alindi.")
     return sonuc
 
 
