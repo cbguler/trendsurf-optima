@@ -389,6 +389,19 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.109 (30 Temmuz 2026, Bahri'nin talebi — BULGS
+  örneği).** v2.0.7.108'de tek bir renk (skorun işaretine göre) hem
+  hacim yazısına hem skor rakamına uygulanmıştı. Bahri: "Hacim ARTIYOR
+  yazısı yeşil olmalı (ham yön), skor kendi işaretiyle (-3 ise kırmızı)
+  ayrı boyansın" — haklı, ikisi farklı şeyi anlatıyor (biri ham hacim
+  yönü, biri o yönün BU TRENDDEKİ etkisi). **Uygulandı:** artık İKİ AYRI
+  renk değişkeni — `_vol_clr` (hacim yazısı, yön bazlı: ARTIYOR=yeşil/
+  AZALIYOR=kırmızı, v2.0.7.108 öncesi orijinal haline döndü) ve `_adj_clr`
+  (skor rakamı, işaret bazlı: pozitif=yeşil/negatif=kırmızı, v2.0.7.108'de
+  eklenen mantık). Örn. BULGS (DÜŞÜŞ + hacim ARTIYOR = panik satış onayı,
+  -3 skor): şimdi "ARTIYOR" yeşil, "(-3 skor)" kırmızı — ikisi de kendi
+  anlamıyla tutarlı.
+
 - **[UYGULANDI] v2.0.7.108 (30 Temmuz 2026, Bahri'nin bulgusu — AKSEN
   örneği: "Hacim: AZALIYOR (+2 skor)" kırmızı yazıyla gösteriliyordu,
   ama skor +2 pozitifti — neden kırmızı?).** Kök neden: rozetin rengi
