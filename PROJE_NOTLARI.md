@@ -389,6 +389,32 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, İZLEMEDE] v2.0.7.106 (30 Temmuz 2026, Bahri'nin bulgusu —
+  "sistem çok yavaşladı", reboot'tan BAĞIMSIZ, sürekli bir sorun).**
+  Kök neden `live_data.py`'de bulundu: `_fetch_live_kripto()` (uygulamanın
+  ana canlı fiyat katmanı, 5 dk cache) ~186 kripto parite için **sıralı**
+  (paralel değil) `bp.Crypto(...).current` çağrısı yapıyordu — ve bu
+  çağrının altındaki `_safe_current()`'ın birincil yolu (`.current`/
+  `.info`/`.fast_info` erişimi) **hiç zaman aşımı korumalı değildi**
+  (sadece yedek `history()` yolunda vardı). BtcTurk/borsapy tarafında bir
+  yavaşlama olduğunda (bkz. `firsat_radari.py` v2.0.7.103/104'teki AYNI
+  aile sorun) her 5 dakikada bir (cache süresi dolunca) sayfayı yükleyen
+  kullanıcı, 186 sıralı çağrının potansiyel olarak dakikalarca sürebilen
+  toplamını bekliyordu. **Uygulanan düzeltme:** (1) `_safe_current()`'ın
+  birincil yolu artık 8sn zaman aşımı korumalı (`_borsapy_zaman_asimili`
+  ile). (2) `_fetch_live_kripto()` artık `_fetch_live_bist()` ile aynı
+  desende `ThreadPoolExecutor` (20 worker) ile eş zamanlı çalışıyor. (3)
+  Tutarlılık için `_fetch_live_fx_maden()`'deki DÖVİZ döngüsü de aynı
+  şekilde paralelleştirildi (küçük risk ama aynı aile). **Bilinen, DOKUNULMAMIŞ
+  küçük kalıntı:** `get_harem_buy_prices()` içindeki 3 metal için olan
+  döngü hâlâ sıralı/korumasız — sadece 3 kalem olduğu için düşük risk,
+  kapsam dışı bırakıldı. **Sıradaki adım:** birkaç gün gözlemleyip
+  yavaşlığın tekrarlanıp tekrarlanmadığını izle; borsapy/BtcTurk tarafında
+  gerçek bir hız sınırı/API sorunu varsa (firsat_radari teşhisiyle
+  birleşince bu ihtimal güçleniyor) bu düzeltme etkiyi ORTADAN kaldırmaz
+  ama sıralıdan paralele geçtiği için TOPLAM bekleme süresini ciddi
+  şekilde azaltır (~186×8sn yerine ~8-16sn tavan).
+
 - **[UYGULANDI] v2.0.7.105 (29 Temmuz 2026, Bahri'nin bulgusu — AKSEN
   örneği: BIST Detay sayfasında "Skor Bileşimi" panelinde Teknik Skor
   54,0/75 + Temel Skor 9,0/25 = 63,0 gösteriyordu ama Master Skor 68,0

@@ -553,11 +553,23 @@ def _safe_current(bp_obj) -> float | None:
       - Ticker.fast_info -> dict (yfinance uyumlu)
     Hepsinde fiyat 'last' anahtarinda. Eski surumler veya degisiklikler icin
     bircok olasi anahtar denenir; hepsi bos ise history son satira duser.
+
+    v2.0.7.106 - KRITIK PERFORMANS DUZELTMESI (Bahri'nin bulgusu, 30 Temmuz
+    2026: "sistem cok yavasladi", reboot'tan BAGIMSIZ, surekli bir sorun).
+    Asagidaki `getattr(bp_obj, attr, None)` cagrisi bir borsapy property'si
+    olup ALTTA bir HTTP istegi tetikliyor - ama eskiden HICBIR zaman asimi
+    korumasi yoktu (sadece asagidaki history() yedek yolunda vardi). BtcTurk/
+    borsapy tarafinda bir yavaslama/hiz siniri olursa (bkz. firsat_radari.py
+    v2.0.7.103/104'teki ayni aile sorun) bu satir SANIYELERCE/DAKIKALARCA
+    asilabiliyordu - ve _fetch_live_kripto() bunu ~186 kripto icin SIRALI
+    (paralel degil) cagirdigindan, tek bir yavas/asili cagri TUM sayfa
+    yuklemesini kilitleyebiliyordu. Artik her attr erisimi 8 saniyeyle
+    sinirli - asilirsa sonraki attr'a/kaynaga geçilir, sonsuza kadar beklenmez.
     """
     # 1. .current ya da .info (dict beklenir)
     for attr in ("current", "info", "fast_info"):
         try:
-            v = getattr(bp_obj, attr, None)
+            v = _borsapy_zaman_asimili(lambda attr=attr: getattr(bp_obj, attr, None), timeout=8)
         except Exception:
             v = None
         if v is None:
@@ -628,38 +640,68 @@ def _fetch_live_fx_maden() -> dict:
     if not BORSAPY_OK:
         print("  [live_data] BORSAPY_OK=False, DOVIZ canli fiyat atlandi")
         return out
-    for ticker, bp_code in _DOVIZ_TO_BP.items():
+
+    # v2.0.7.106 - bkz. _fetch_live_kripto'daki ayni not: DOVIZ icin sadece
+    # ~12 kalem oldugundan risk daha kucuktu, ama ayni desen (paralel +
+    # zaman asimi korumali _safe_current) tutarlilik icin burada da uygulandi.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch_doviz_one(item):
+        ticker, bp_code = item
         try:
             v = _safe_current(bp.FX(bp_code))
             if v is not None:
-                out[ticker] = _normalize_fx_price(ticker, v)
-                print(f"  [live_data] DOVIZ canli fiyat OK ({ticker}/{bp_code}): {out[ticker]}")
-            else:
-                print(f"  [live_data] DOVIZ canli fiyat BOS/None ({ticker}/{bp_code}) - CSV degeri korunacak")
+                print(f"  [live_data] DOVIZ canli fiyat OK ({ticker}/{bp_code}): {_normalize_fx_price(ticker, v)}")
+                return (ticker, _normalize_fx_price(ticker, v))
+            print(f"  [live_data] DOVIZ canli fiyat BOS/None ({ticker}/{bp_code}) - CSV degeri korunacak")
         except Exception as e:
             print(f"  [live_data] DOVIZ canli fiyat hatasi ({ticker}/{bp_code}): {type(e).__name__}: {e}")
-            continue
+        return (ticker, None)
+
+    _doviz_items = list(_DOVIZ_TO_BP.items())
+    if _doviz_items:
+        with ThreadPoolExecutor(max_workers=min(12, len(_doviz_items))) as ex:
+            for ticker, v in ex.map(_fetch_doviz_one, _doviz_items):
+                if v is not None:
+                    out[ticker] = v
     return out
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_live_kripto(tickers_key: tuple) -> dict:
-    """borsapy'den kripto TRY fiyatlari getir. 5 dk cache."""
+    """borsapy'den kripto TRY fiyatlari getir. 5 dk cache.
+
+    v2.0.7.106 - KRITIK PERFORMANS DUZELTMESI (Bahri'nin bulgusu, 30 Temmuz
+    2026: "sistem cok yavasladi", surekli/bagimsiz bir sorun). Eskiden bu
+    dongu ~186 kripto icin SIRALI (tek tek) calisiyordu - _fetch_live_bist
+    (asagida) gibi paralellestirilmemisti. _safe_current() artik zaman
+    asimi korumali (bkz. yukaridaki not) ama 186 cagriyi sirayla yapmak
+    yine de (8sn * yavas/asili cagri sayisi) kadar surebiliyordu. Artik
+    _fetch_live_bist ile AYNI desen: ThreadPoolExecutor ile es zamanli."""
     if not BORSAPY_OK:
         print("  [live_data] BORSAPY_OK=False, KRIPTO canli fiyat atlandi")
         return {}
-    out = {}
-    for t in tickers_key:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch_one(t):
         try:
             v = _safe_current(bp.Crypto(_kripto_bp_code(t)))
             if v is not None:
-                out[t] = v
                 print(f"  [live_data] KRIPTO canli fiyat OK ({t}): {v}")
             else:
                 print(f"  [live_data] KRIPTO canli fiyat BOS/None ({t}) - CSV degeri korunacak")
+            return (t, v)
         except Exception as e:
             print(f"  [live_data] KRIPTO canli fiyat hatasi ({t}): {type(e).__name__}: {e}")
-            continue
+            return (t, None)
+
+    out = {}
+    if not tickers_key:
+        return out
+    with ThreadPoolExecutor(max_workers=min(20, len(tickers_key))) as ex:
+        for t, v in ex.map(_fetch_one, tickers_key):
+            if v is not None:
+                out[t] = v
     return out
 
 
