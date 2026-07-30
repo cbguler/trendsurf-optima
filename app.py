@@ -2754,7 +2754,17 @@ if page=="Ana Sayfa":
                     _vt = d["vol_trend"]
                     _vr = d.get("vol_ratio", 0.0)
                     _adj = d.get("score_adj", 0)
-                    _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+                    # v2.0.7.108 (Bahri'nin bulgusu, AKSEN ornegi, 30 Temmuz
+                    # 2026): Renk eskiden HAM hacim yonune gore belirleniyordu
+                    # (ARTIYOR=yesil, AZALIYOR=kirmizi) - ama DUSUS trendinde
+                    # azalan hacim ASLINDA olumlu bir isarettir (+2, "dusus
+                    # bitiyor olabilir") ve DUSUS trendinde artan hacim
+                    # olumsuzdur (-3, "panik satis onayi"). Yani rengin
+                    # anlami baglama gore TERSINE donebiliyordu (kirmizi
+                    # yaziyor ama skor pozitif gibi). Artik renk SKORUN
+                    # ISARETINE gore: pozitif->yesil, negatif->kirmizi,
+                    # sifir/NORMAL->gri.
+                    _vol_clr = "#27ae60" if _adj > 0 else ("#e74c3c" if _adj < 0 else "#7f8c8d")
                     _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                     _vol_html_ana = (
                         f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
@@ -3465,7 +3475,8 @@ elif page=="Portföyüm":
                 _vt = _d["vol_trend"]
                 _vr = _d.get("vol_ratio", 0.0)
                 _adj = _d.get("score_adj", 0)
-                _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+                # v2.0.7.108 - bkz. Ana Sayfa blogundaki ayni not.
+                _vol_clr = "#27ae60" if _adj > 0 else ("#e74c3c" if _adj < 0 else "#7f8c8d")
                 _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
                 _vol_html = (
                     f' | Hacim: <b style="color:{_vol_clr}">{_vt}</b> '
@@ -4126,7 +4137,8 @@ elif page in CAT:
         _vt = d["vol_trend"]
         _vr = d.get("vol_ratio", 0.0)
         _adj = d.get("score_adj", 0)
-        _vol_clr = {"ARTIYOR":"#27ae60","AZALIYOR":"#e74c3c","NORMAL":"#7f8c8d"}.get(_vt,"#7f8c8d")
+        # v2.0.7.108 - bkz. Ana Sayfa blogundaki ayni not.
+        _vol_clr = "#27ae60" if _adj > 0 else ("#e74c3c" if _adj < 0 else "#7f8c8d")
         _adj_str = f" <b style='color:{_vol_clr}'>({_adj:+d} skor)</b>" if _adj != 0 else ""
         vol_html = (
             f' &nbsp;|&nbsp; Hacim: <b style="color:{_vol_clr}">{_vt}</b> '

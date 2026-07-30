@@ -389,6 +389,20 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.108 (30 Temmuz 2026, Bahri'nin bulgusu — AKSEN
+  örneği: "Hacim: AZALIYOR (+2 skor)" kırmızı yazıyla gösteriliyordu,
+  ama skor +2 pozitifti — neden kırmızı?).** Kök neden: rozetin rengi
+  HAM hacim yönüne göre belirleniyordu (`ARTIYOR`→yeşil, `AZALIYOR`→
+  kırmızı), skorun işaretine göre DEĞİL. Ama skor mantığı (`app.py`
+  ~satır 1196-1203) şöyle: DÜŞÜŞ trendinde azalan hacim aslında OLUMLU
+  bir işaret (+2, "düşüş bitiyor olabilir" — satıcılar tükeniyor), ve
+  DÜŞÜŞ trendinde artan hacim OLUMSUZ (-3, "panik satış onayı"). Yani 4
+  kombinasyondan 2'sinde (DÜŞÜŞ+ARTIYOR ve DÜŞÜŞ+AZALIYOR) renk skorun
+  işaretiyle ÇELİŞİYORDU. **Düzeltme:** renk artık ham hacim yönüne değil
+  `score_adj`'ın işaretine göre: pozitif→yeşil, negatif→kırmızı, sıfır→
+  gri (3 blokta da). Skorlama formülünün kendisi DEĞİŞMEDİ, sadece renk
+  artık anlamıyla tutarlı.
+
 - **[UYGULANDI] v2.0.7.107 (30 Temmuz 2026, Bahri'nin talebi — ATATP
   örneği).** v2.0.7.105'ten sonra Teknik+Temel toplamı Master Skor ile
   hep tutarlıydı AMA hacim/DD ayarı (-10/-3/+2/+5, Max DD -3/-7) hâlâ
