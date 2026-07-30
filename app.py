@@ -1058,6 +1058,19 @@ def _temel_alt_skor(pb=None, pe=None, dy=None):
     elif dy and float(dy)>0.04: fund_s+=3
     return min(25, fund_s)   # maks 25
 
+def _csv_alan(row, kolon):
+    """CSV satirindan (worker.py'nin dondurulmus/toplu snapshot'i) bir
+    sayisal alani guvenle okur - kolon yoksa veya NaN ise None doner.
+    v2.0.7.105'te eklendi: bkz. asagidaki 3 Detay blogundaki ayni not."""
+    try:
+        v = row.get(kolon)
+        if v is None:
+            return None
+        v = float(v)
+        return None if v != v else v  # NaN kontrolu
+    except Exception:
+        return None
+
 def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=None):
     """
     Optima Skoru (0-100): teknik + temel faktörler.
@@ -2800,17 +2813,43 @@ if page=="Ana Sayfa":
                         # etkilemeyen ayri bir formuldu (kap_client.
                         # score_from_fundamentals). Ikisi de artik tek
                         # kaynaktan (_teknik_alt_skor/_temel_alt_skor).
-                        teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
-                        fund_skor = _temel_alt_skor(pb, pe, dy)
-                        # v2.0.4.57: Onceden hesaplanmis (worker.py, gece)
-                        # Optima_Skor varsa ONU kullan - boylece bu sayfa,
-                        # Ana Sayfa/BIST listesi/Portfoyum ile AYNI sayiyi
-                        # gosterir. Yoksa (henuz precompute edilmediyse)
-                        # eskisi gibi canli hesapla.
+                        #
+                        # v2.0.7.105 - KRITIK DUZELTME (Bahri'nin bulgusu,
+                        # AKSEN ornegi, 29 Temmuz 2026): Teknik/Temel skorlar
+                        # CANLI (bu sayfa acilirken enrich()'in dondurdugu
+                        # anlik RSI/Ret1M/Vol + tam simdi KAP'tan cekilen
+                        # PB/PE/DY) ile hesaplaniyordu, ama Master Skor
+                        # asagida CSV'deki (worker.py'nin GECE hesapladigi,
+                        # hacim/DD ayari zaten gomulu) Optima_Skor'u
+                        # kullaniyordu. Iki farkli anda, iki farkli
+                        # kaynaktan hesaplanan sayilar yan yana konunca
+                        # "54+9=63 ama Master Skor 68" gibi aciklanamayan
+                        # farklar ortaya cikiyordu (54+9 CANLI, 68 GECEDEN
+                        # DONDURULMUS). Artik: CSV'de Optima_Skor varsa
+                        # Teknik/Temel de AYNI CSV satirinin dondurulmus
+                        # RSI/Ret1M/Vol/PB/PE/DY degerlerinden hesaplanir -
+                        # boylece uc sayi da HER ZAMAN ayni anin/kaynagin
+                        # urunu olur. (Hacim/DD ayari GECE'den Optima_Skor'a
+                        # gomulu oldugu icin Teknik+Temel toplami, Master
+                        # Skor'dan o ayar kadar farkli GORUNEBILIR - bu artik
+                        # celiskili degil, sadece ayri bir katman.)
                         _precomp = sel_row_ana.get("Optima_Skor")
                         if _precomp is not None and _precomp == _precomp:
                             combined = float(_precomp)
+                            _csv_rsi  = _csv_alan(sel_row_ana, "RSI")
+                            _csv_ret1m = _csv_alan(sel_row_ana, "Ret1M")
+                            _csv_vol  = _csv_alan(sel_row_ana, "Vol")
+                            _csv_pb   = _csv_alan(sel_row_ana, "PB")
+                            _csv_pe   = _csv_alan(sel_row_ana, "PE")
+                            _csv_dy   = _csv_alan(sel_row_ana, "DY")
+                            teknik_skor = _teknik_alt_skor(
+                                _csv_rsi if _csv_rsi is not None else 50.0,
+                                _csv_ret1m if _csv_ret1m is not None else 0.0,
+                                _csv_vol if _csv_vol is not None else 30.0)
+                            fund_skor = _temel_alt_skor(_csv_pb, _csv_pe, _csv_dy)
                         else:
+                            teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
+                            fund_skor = _temel_alt_skor(pb, pe, dy)
                             tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
                             combined = max(0, min(100, round(tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
                         final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
@@ -3463,12 +3502,28 @@ elif page=="Portföyüm":
                     # yukaridaki Ana Sayfa blogundaki ayni not: Skor
                     # Bilesimi artik Master Skor'u belirleyen AYNI
                     # fonksiyonlari kullanir.
-                    _teknik_skor = _teknik_alt_skor(_d["rsi"], _d["ret1m"], _d["vol"])
-                    _fund_skor = _temel_alt_skor(_pb, _pe, _dy)
+                    #
+                    # v2.0.7.105 - bkz. Ana Sayfa Detay blogundaki ayni
+                    # KRITIK DUZELTME notu (Bahri'nin bulgusu, AKSEN ornegi):
+                    # CSV'de Optima_Skor varsa Teknik/Temel de AYNI CSV
+                    # satirinin dondurulmus degerlerinden hesaplanir.
                     _precomp2 = _sr.get("Optima_Skor")
                     if _precomp2 is not None and _precomp2 == _precomp2:
                         _combined = float(_precomp2)
+                        _csv_rsi2   = _csv_alan(_sr, "RSI")
+                        _csv_ret1m2 = _csv_alan(_sr, "Ret1M")
+                        _csv_vol2   = _csv_alan(_sr, "Vol")
+                        _csv_pb2    = _csv_alan(_sr, "PB")
+                        _csv_pe2    = _csv_alan(_sr, "PE")
+                        _csv_dy2    = _csv_alan(_sr, "DY")
+                        _teknik_skor = _teknik_alt_skor(
+                            _csv_rsi2 if _csv_rsi2 is not None else 50.0,
+                            _csv_ret1m2 if _csv_ret1m2 is not None else 0.0,
+                            _csv_vol2 if _csv_vol2 is not None else 30.0)
+                        _fund_skor = _temel_alt_skor(_csv_pb2, _csv_pe2, _csv_dy2)
                     else:
+                        _teknik_skor = _teknik_alt_skor(_d["rsi"], _d["ret1m"], _d["vol"])
+                        _fund_skor = _temel_alt_skor(_pb, _pe, _dy)
                         _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
                         _combined = max(0, min(100, round(_tech_with_fund + _d.get("total_adj", _d.get("score_adj", 0)), 1)))
                     _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
@@ -4103,14 +4158,30 @@ elif page in CAT:
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
             # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz. yukaridaki
             # diger iki detay blogundaki ayni not.
-            teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
-            fund_skor = _temel_alt_skor(pb, pe, dy)
-            # v2.0.4.57: Onceden hesaplanmis skoru tercih et (bkz. yukaridaki
-            # diger iki detay bloguyla ayni mantik)
+            #
+            # v2.0.7.105 - bkz. Ana Sayfa Detay blogundaki ayni KRITIK
+            # DUZELTME notu (Bahri'nin bulgusu, AKSEN ornegi, 29 Temmuz
+            # 2026): CSV'de Optima_Skor varsa Teknik/Temel de AYNI CSV
+            # satirinin dondurulmus degerlerinden hesaplanir - boylece
+            # ekranda yan yana gorunen 3 sayi (Teknik, Temel, Master) HER
+            # ZAMAN ayni anin/kaynagin urunu olur.
             _precomp3 = sel_row.get("Optima_Skor")
             if _precomp3 is not None and _precomp3 == _precomp3:
                 combined = float(_precomp3)
+                _csv_rsi3   = _csv_alan(sel_row, "RSI")
+                _csv_ret1m3 = _csv_alan(sel_row, "Ret1M")
+                _csv_vol3   = _csv_alan(sel_row, "Vol")
+                _csv_pb3    = _csv_alan(sel_row, "PB")
+                _csv_pe3    = _csv_alan(sel_row, "PE")
+                _csv_dy3    = _csv_alan(sel_row, "DY")
+                teknik_skor = _teknik_alt_skor(
+                    _csv_rsi3 if _csv_rsi3 is not None else 50.0,
+                    _csv_ret1m3 if _csv_ret1m3 is not None else 0.0,
+                    _csv_vol3 if _csv_vol3 is not None else 30.0)
+                fund_skor = _temel_alt_skor(_csv_pb3, _csv_pe3, _csv_dy3)
             else:
+                teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
+                fund_skor = _temel_alt_skor(pb, pe, dy)
                 _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
                 combined = max(0, min(100, round(_tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])

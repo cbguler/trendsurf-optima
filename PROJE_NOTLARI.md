@@ -389,6 +389,33 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.105 (29 Temmuz 2026, Bahri'nin bulgusu — AKSEN
+  örneği: BIST Detay sayfasında "Skor Bileşimi" panelinde Teknik Skor
+  54,0/75 + Temel Skor 9,0/25 = 63,0 gösteriyordu ama Master Skor 68,0
+  yazıyordu, 5 puanlık açıklanamayan fark).** Kök neden: Teknik/Temel
+  CANLI hesaplanıyordu (sayfa açılırken `enrich()`'in anlık RSI/Ret1M/Vol
+  + tam o an KAP'tan çekilen PB/PE/DY ile), ama Master Skor
+  `optimized_universe.csv`'deki `Optima_Skor` kolonundan geliyordu — bu
+  da `worker.py`'nin GECE hesapladığı, hacim/DD ayarı zaten gömülü,
+  dondurulmuş bir değer. İki farklı andan/kaynaktan gelen sayılar aynı
+  panelde "bunlar toplanır" izlenimiyle yan yana duruyordu.
+  Bahri'nin tercihi: Teknik/Temel de CSV'nin dondurulmuş RSI/Ret1M/Vol/
+  PB/PE/DY değerlerinden hesaplansın (canlı değil) — böylece CSV'de
+  Optima_Skor varken üç sayı da (Teknik, Temel, Master) HER ZAMAN aynı
+  anın/kaynağın ürünü olur. **Uygulandı:** yeni `_csv_alan()` yardımcı
+  fonksiyonu (app.py, `_temel_alt_skor`'un hemen üstünde) + bu mantığın
+  bulunduğu **3 ayrı Detay bloğu** güncellendi (Ana Sayfa, Portföyüm,
+  genel Kategori Detay — BIST/TEFAS/Döviz/Maden/Kripto hepsi aynı
+  fonksiyonu paylaşıyor). CSV'de Optima_Skor YOKSA (henüz precompute
+  edilmediyse) davranış değişmedi — hâlâ tamamen canlı hesaplanıyor.
+  **Bilinen kalıcı durum (kasıtlı, düzeltme değil):** hacim/DD ayarı
+  (-10/-3/+2/+5, Max DD -3/-7) sadece Master Skor'a (worker.py'nin gece
+  hesabına) gömülü olarak yansır; Teknik+Temel toplamı bu yüzden Master
+  Skor'dan o ayar kadar farklı KALABİLİR — bu artık çelişki değil, ayrı
+  bir katman (üstteki "Hacim: ... (X skor)" rozeti bunu zaten ayrıca
+  gösteriyor). Bahri bu ek katmanı panelde ayrıca satır olarak istemedi,
+  şimdilik sadece rozette kalıyor.
+
 - **[KISMEN DOĞRULANDI, İZLEMEDE] v2.0.7.103/104 (25 ve 27 Temmuz 2026,
   Bahri'nin bulgusu — iki farklı "Fırsat Radari" olayı).**
   25 Temmuz'da SADECE KRİPTO için sağlık uyarısı gelmişti (DOVİZ/MADEN/
