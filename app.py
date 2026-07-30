@@ -2847,11 +2847,25 @@ if page=="Ana Sayfa":
                                 _csv_ret1m if _csv_ret1m is not None else 0.0,
                                 _csv_vol if _csv_vol is not None else 30.0)
                             fund_skor = _temel_alt_skor(_csv_pb, _csv_pe, _csv_dy)
+                            # v2.0.7.107 (Bahri'nin talebi): hacim/DD ayari
+                            # artik Teknik Skor'un icine katlaniyor - ayri,
+                            # gorunmez bir katman olarak kalmiyor. Ayarin
+                            # kendisi CSV'deayri saklanmadigindan, artik
+                            # (Master Skor - Teknik - Temel) FARKI olarak
+                            # geri turetiliyor - bu fark matematiksel olarak
+                            # TAM OLARAK worker.py'nin uyguladigi hacim/DD
+                            # ayarina esittir (bkz. ATATP dogrulamasi,
+                            # 30 Temmuz 2026: 43+17=60, Master=65,
+                            # fark=+5 = "Hacim: ARTIYOR (+5 skor)" rozetiyle
+                            # birebir tutuyordu).
+                            teknik_skor = teknik_skor + (combined - teknik_skor - fund_skor)
                         else:
                             teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
                             fund_skor = _temel_alt_skor(pb, pe, dy)
                             tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-                            combined = max(0, min(100, round(tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
+                            _total_adj = d.get("total_adj", d.get("score_adj", 0))
+                            teknik_skor = teknik_skor + _total_adj
+                            combined = max(0, min(100, round(tech_with_fund + _total_adj, 1)))
                         final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
                         src_note = "yfinance"
                         if raw.get("_kap_available"): src_note += " + KAP"
@@ -2870,7 +2884,7 @@ if page=="Ana Sayfa":
                             st.markdown(f"""
                             <div class="ts-card">
                             <b>Skor Bilesimi</b><br><br>
-                            <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                            <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
                             <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
                             <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu)</small><br>
                             <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>
@@ -3521,11 +3535,17 @@ elif page=="Portföyüm":
                             _csv_ret1m2 if _csv_ret1m2 is not None else 0.0,
                             _csv_vol2 if _csv_vol2 is not None else 30.0)
                         _fund_skor = _temel_alt_skor(_csv_pb2, _csv_pe2, _csv_dy2)
+                        # v2.0.7.107 (Bahri'nin talebi) - bkz. Ana Sayfa
+                        # blogundaki ayni not: hacim/DD ayari artik Teknik
+                        # Skor'a katlaniyor (fark = Master - Teknik - Temel).
+                        _teknik_skor = _teknik_skor + (_combined - _teknik_skor - _fund_skor)
                     else:
                         _teknik_skor = _teknik_alt_skor(_d["rsi"], _d["ret1m"], _d["vol"])
                         _fund_skor = _temel_alt_skor(_pb, _pe, _dy)
                         _tech_with_fund = optima_score(_d["rsi"], _d["ret1m"], _d["vol"], True, _pb, _pe, _dy)
-                        _combined = max(0, min(100, round(_tech_with_fund + _d.get("total_adj", _d.get("score_adj", 0)), 1)))
+                        _total_adj2 = _d.get("total_adj", _d.get("score_adj", 0))
+                        _teknik_skor = _teknik_skor + _total_adj2
+                        _combined = max(0, min(100, round(_tech_with_fund + _total_adj2, 1)))
                     _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
 
                     # Kaynak bilgisi
@@ -3554,7 +3574,7 @@ elif page=="Portföyüm":
                         st.markdown(f"""
                         <div class="ts-card">
                         <b style='font-size:14px'>Skor Bileşimi</b><br><br>
-                        <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                        <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
                         <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_teknik_skor,1)} / 75</b><br><br>
                         <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
                         <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_fund_skor,1)} / 25</b><br>
@@ -4179,11 +4199,16 @@ elif page in CAT:
                     _csv_ret1m3 if _csv_ret1m3 is not None else 0.0,
                     _csv_vol3 if _csv_vol3 is not None else 30.0)
                 fund_skor = _temel_alt_skor(_csv_pb3, _csv_pe3, _csv_dy3)
+                # v2.0.7.107 (Bahri'nin talebi) - bkz. Ana Sayfa blogundaki
+                # ayni not: hacim/DD ayari artik Teknik Skor'a katlaniyor.
+                teknik_skor = teknik_skor + (combined - teknik_skor - fund_skor)
             else:
                 teknik_skor = _teknik_alt_skor(d["rsi"], d["ret1m"], d["vol"])
                 fund_skor = _temel_alt_skor(pb, pe, dy)
                 _tech_with_fund = optima_score(d["rsi"], d["ret1m"], d["vol"], True, pb, pe, dy)
-                combined = max(0, min(100, round(_tech_with_fund + d.get("total_adj", d.get("score_adj", 0)), 1)))
+                _total_adj3 = d.get("total_adj", d.get("score_adj", 0))
+                teknik_skor = teknik_skor + _total_adj3
+                combined = max(0, min(100, round(_tech_with_fund + _total_adj3, 1)))
             final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi
@@ -4217,7 +4242,7 @@ elif page in CAT:
                 st.markdown(f"""
                 <div class="ts-card">
                 <b style='font-size:14px'>Skor Bileşimi</b><br><br>
-                <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol)</small><br>
+                <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
                 <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
                 <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
                 <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>

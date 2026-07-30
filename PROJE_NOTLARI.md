@@ -389,6 +389,25 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.107 (30 Temmuz 2026, Bahri'nin talebi — ATATP
+  örneği).** v2.0.7.105'ten sonra Teknik+Temel toplamı Master Skor ile
+  hep tutarlıydı AMA hacim/DD ayarı (-10/-3/+2/+5, Max DD -3/-7) hâlâ
+  görünmez bir katman olarak sadece Master Skor'a yansıyordu (Teknik+
+  Temel'e değil) — örn. ATATP'de Teknik 43,0 + Temel 17,0 = 60,0 ama
+  Master Skor 65,0 (fark = üstteki rozetteki "Hacim: ARTIYOR +5 skor").
+  Bahri'nin sorusu üzerine ("hacimin +5 puanı teknik skora eklenmez
+  mi?") — haklı, hacim/DD zaten teknik bir gösterge. **Uygulandı:**
+  hacim/DD ayarı artık Teknik Skor'un İÇİNE katlanıyor (3 blokta da).
+  CSV-precomp yolunda ayar ayrı saklanmadığından `(Master Skor - Teknik
+  - Temel)` farkı olarak geri türetiliyor — bu fark matematiksel olarak
+  worker.py/radar'ın uyguladığı hacim/DD ayarına birebir eşit (ATATP ile
+  doğrulandı: 65-43-17=+5, tutarlı). Artık Teknik+Temel HER ZAMAN Master
+  Skor'a tam eşit — hiçbir gizli/açıklanamayan fark kalmadı. Etiket de
+  "Teknik Skor (RSI + Momentum + Vol + Hacim/DD)" olarak güncellendi.
+  **Küçük kozmetik not:** "/75" tavanı olduğu gibi bırakıldı ama artık
+  yumuşak bir referans (hacim/DD dahil olduğundan teorik üst sınır 80,
+  alt sınır -17 olabilir) — Bahri isterse bu da ayrıca netleştirilebilir.
+
 - **[UYGULANDI, İZLEMEDE] v2.0.7.106 (30 Temmuz 2026, Bahri'nin bulgusu —
   "sistem çok yavaşladı", reboot'tan BAĞIMSIZ, sürekli bir sorun).**
   Kök neden `live_data.py`'de bulundu: `_fetch_live_kripto()` (uygulamanın
