@@ -343,11 +343,32 @@ def init_db():
         PRIMARY KEY (user_id, asset_type)
     )""")
 
+    # v2.0.7.112 - Sermaye/Nakit takibi (Bahri'nin talebi): "başlangıç
+    # sermayesi tek seferlik sabit bir tutar degil, dinamiktir - zaman
+    # icinde ekleme/cikarma yapabilmeliyim" karari geregi, sabit bir
+    # "baslangic_sermaye" alani yerine bir MEVDUAT/CEKIM HAREKET
+    # defteri tutuluyor (portfolio_sales'in satis gecmisi tuttugu
+    # mantigin ayni). Nakit bakiyesi bundan + alis/satis islemlerinden
+    # TÜRETİLİR (bkz. portfolio_ledger.get_cash_balance) - negatife
+    # düşebilir, bilinçli olarak SINIRLANDIRILMADI (Bahri: "sermaye
+    # hayali değil, gerçek durumu göstersin").
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS portfolio_capital_tx (
+        id         SERIAL  PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tx_type    TEXT    NOT NULL,
+        amount     REAL    NOT NULL,
+        tx_date    TEXT    NOT NULL,
+        note       TEXT    DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
     # Idempotent index'ler
     c.execute("CREATE INDEX IF NOT EXISTS idx_users_email      ON users(LOWER(email))")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token   ON sessions(token)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_user   ON portfolio(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_sales_user ON portfolio_sales(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_capital_tx_user ON portfolio_capital_tx(user_id)")
 
     # v2.0.7.100 - KRITIK GUVENLIK DUZELTMESI (Bahri'nin bulgusu, 22 Temmuz
     # 2026: Supabase "CRITICAL: Table publicly accessible - Row-Level
@@ -368,8 +389,12 @@ def init_db():
     # zaten calisan 3 tablodaki AYNI ("sadece RLS'i ac, politika yok")
     # deseni izleniyor; RLS + politika yoksa PostgREST katmani o tabloya
     # SIFIR erisim verir, bu tam istenen davranis.
+    # v2.0.7.112 - yeni portfolio_capital_tx da bu listeye eklendi (ayni
+    # gerekce - kullanici finansal verisi tasiyan her yeni tablo icin
+    # kalici kural, bkz. Bolum 0).
     for _rls_tablo in ("users", "portfolio", "sessions", "password_resets",
-                       "portfolio_sales", "portfolio_fee_settings"):
+                       "portfolio_sales", "portfolio_fee_settings",
+                       "portfolio_capital_tx"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -377,6 +402,7 @@ def init_db():
 
     conn.commit()
     conn.close()
+
 
     # Streamlit Secrets'tan admin otomatik olustur
     _ensure_admin_from_secrets()

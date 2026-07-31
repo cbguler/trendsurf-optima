@@ -471,3 +471,136 @@ def get_realized_summary(user_id: int, start_date: str = None, end_date: str = N
         "vergi":    round(float(df["Vergi (₺)"].sum()), 2),
         "net_kz":   round(float(df["Net K/Z"].sum()), 2),
     }
+
+
+# ══════════════════════════════════════════════════════════════════
+# v2.0.7.112 - SERMAYE / NAKİT TAKİBİ (Bahri'nin talebi, 30 Temmuz 2026)
+# ══════════════════════════════════════════════════════════════════
+# Bahri'nin tarifi: "başlangıç sermaye miktarının, ne kadar zamanda kaça
+# geldiğinin, sattığımda ne kâr ettiğimin (bu kısım zaten portfolio_sales
+# ile vardı) ve elimde güncel olarak finansal varlık veya nakit olarak ne
+# miktarlar olduğunun kayıt altına alınması" isteniyor.
+#
+# Tasarım kararları (Bahri'nin onayıyla):
+# 1. Sermaye TEK SEFERLİK sabit bir sayı DEĞİL - zaman içinde MEVDUAT/ÇEKİM
+#    kayıtları eklenip çıkarılabilen bir HAREKET DEFTERİ (portfolio_sales'in
+#    satış geçmişi tuttuğu mantığın aynısı).
+# 2. Nakit bakiyesi NEGATİFE DÜŞEBİLİR - bilinçli olarak sınırlanmadı.
+#    Bahri: "sermaye hayali değil, gerçek durumu göstersin" - yani alım
+#    yaparken "yeterli nakit yok" diye engellenmiyor, sistem sadece
+#    olduğu gibi (borçlu bile olsa) gösteriyor.
+# 3. Nakit bakiyesi bir tablo SÜTUNU olarak SAKLANMIYOR - her seferinde
+#    şu formülle TÜRETİLİYOR (portfolio_sales'teki net_pl mantığıyla aynı
+#    "tek doğru kaynak" felsefesi):
+#
+#    Nakit = (Toplam Mevduat - Toplam Çekim)
+#            - (açık pozisyonların toplam maliyeti + satılmış lotların
+#               toplam maliyeti)      [= tüm zamanlarda alışa harcanan]
+#            + (satışlardan elde edilen NET tutarların toplamı)
+#               [= satış fiyatı x miktar - komisyon - vergi]
+#
+#    Böylece: hâlâ elde tutulan varlıkların maliyeti nakitten düşülmüş
+#    olur (o para varlığa dönüşmüştür), satılanların net geliri nakde geri
+#    eklenir - tıpkı gerçek bir yatırım hesabında olduğu gibi.
+
+def add_capital_tx(user_id: int, tx_type: str, amount: float, tx_date: str,
+                    note: str = "") -> dict:
+    """Yeni bir sermaye hareketi (mevduat/çekim) kaydeder.
+    tx_type: 'DEPOSIT' (para yatırma) veya 'WITHDRAWAL' (para çekme)."""
+    from db import get_conn
+    if tx_type not in ("DEPOSIT", "WITHDRAWAL"):
+        return {"basari": False, "hata": "Geçersiz işlem tipi."}
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return {"basari": False, "hata": "Geçersiz tutar."}
+    if amount <= 0:
+        return {"basari": False, "hata": "Tutar 0'dan büyük olmalı."}
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO portfolio_capital_tx (user_id, tx_type, amount, tx_date, note) "
+        "VALUES (?,?,?,?,?)",
+        (user_id, tx_type, amount, tx_date, note)
+    )
+    conn.commit(); conn.close()
+    return {"basari": True}
+
+
+def delete_capital_tx(user_id: int, tx_id: int) -> bool:
+    from db import get_conn
+    conn = get_conn()
+    conn.execute(
+        "DELETE FROM portfolio_capital_tx WHERE id=? AND user_id=?", (tx_id, user_id)
+    )
+    conn.commit(); conn.close()
+    return True
+
+
+def get_capital_tx_history(user_id: int) -> pd.DataFrame:
+    """Kullanıcının tüm mevduat/çekim geçmişini döner (en yeni üstte)."""
+    from db import get_conn
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, tx_type, amount, tx_date, note FROM portfolio_capital_tx "
+        "WHERE user_id=? ORDER BY tx_date DESC, id DESC", (user_id,)
+    ).fetchall()
+    conn.close()
+    cols = ["id", "Tip", "Tutar", "Tarih", "Not"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    veri = [[r[i] for i in range(len(cols))] for r in rows]
+    return pd.DataFrame(veri, columns=cols)
+
+
+def get_net_capital(user_id: int, df: pd.DataFrame = None) -> float:
+    """Net yatırılan sermaye = toplam mevduat - toplam çekim."""
+    if df is None:
+        df = get_capital_tx_history(user_id)
+    if df.empty:
+        return 0.0
+    yatirilan = float(df.loc[df["Tip"] == "DEPOSIT", "Tutar"].sum())
+    cekilen = float(df.loc[df["Tip"] == "WITHDRAWAL", "Tutar"].sum())
+    return round(yatirilan - cekilen, 2)
+
+
+def get_cash_balance(user_id: int, portfolio_rows: list = None,
+                      sales_df: pd.DataFrame = None,
+                      capital_df: pd.DataFrame = None) -> dict:
+    """Güncel nakit bakiyesini ve bileşenlerini döner. bkz. yukarıdaki
+    modül-üstü not - formül: net sermaye - toplam alış maliyeti (açık +
+    satılmış) + toplam net satış geliri. `portfolio_rows` verilmezse
+    (app.py'nin `portfolio` listesi, dict'ler: quantity, avg_cost)
+    açık pozisyon maliyeti 0 sayılır - çağıran taraf mutlaka vermeli."""
+    if capital_df is None:
+        capital_df = get_capital_tx_history(user_id)
+    if sales_df is None:
+        sales_df = get_sales_history(user_id)
+
+    net_sermaye = get_net_capital(user_id, df=capital_df)
+
+    acik_pozisyon_maliyeti = 0.0
+    if portfolio_rows:
+        acik_pozisyon_maliyeti = sum(
+            float(p.get("quantity", 0)) * float(p.get("avg_cost", 0))
+            for p in portfolio_rows
+        )
+
+    satilmis_lot_maliyeti = 0.0
+    net_satis_geliri = 0.0
+    if not sales_df.empty:
+        satilmis_lot_maliyeti = float((sales_df["Miktar"] * sales_df["Alış Fiyatı"]).sum())
+        net_satis_geliri = float(
+            (sales_df["Satış Fiyatı"] * sales_df["Miktar"]
+             - sales_df["Komisyon (₺)"] - sales_df["Vergi (₺)"]).sum()
+        )
+
+    toplam_alis_maliyeti = acik_pozisyon_maliyeti + satilmis_lot_maliyeti
+    nakit = net_sermaye - toplam_alis_maliyeti + net_satis_geliri
+
+    return {
+        "net_sermaye": round(net_sermaye, 2),
+        "acik_pozisyon_maliyeti": round(acik_pozisyon_maliyeti, 2),
+        "satilmis_lot_maliyeti": round(satilmis_lot_maliyeti, 2),
+        "net_satis_geliri": round(net_satis_geliri, 2),
+        "nakit_bakiye": round(nakit, 2),
+    }

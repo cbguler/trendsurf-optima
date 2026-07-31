@@ -389,6 +389,47 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.112 (30 Temmuz 2026, Bahri'nin talebi — büyük
+  özellik): "Başlangıç sermaye miktarının, ne kadar zamanda kaça
+  geldiğinin, sattığımda ne kâr ettiğimin ve elimde güncel olarak
+  finansal varlık veya nakit olarak ne miktarlar olduğunun kayıt altına
+  alınması."** Mevcut durumda satış geçmişi (`portfolio_sales`, tarih +
+  net K/Z) zaten vardı (bkz. v2.0.7.111), ama **nakit/sermaye kavramı
+  HİÇ yoktu** — bir varlık satıldığında para "hiçbir yere gitmiyordu".
+  **Tasarım kararları (Bahri'nin onayıyla, iki soru soruldu):**
+  1. Nakit bakiyesi **negatife düşebilir**, bilinçli olarak
+     SINIRLANMADI — Bahri: "sermaye hayali değil, gerçek durumu
+     göstersin", yetersiz nakitte alım engellenmiyor.
+  2. Sermaye **tek seferlik sabit bir sayı DEĞİL** — zaman içinde
+     mevduat/çekim eklenip çıkarılabilen bir **hareket defteri**
+     (`portfolio_sales`'in satış geçmişi tuttuğu mantığın aynısı).
+
+  **Uygulanan mimari:**
+  - Yeni tablo: `portfolio_capital_tx` (id, user_id, tx_type
+    DEPOSIT/WITHDRAWAL, amount, tx_date, note) — `db.py`'ye eklendi, RLS
+    listesine de dahil edildi (Bölüm 0'daki kalıcı kural).
+  - `portfolio_ledger.py`: `add_capital_tx`, `delete_capital_tx`,
+    `get_capital_tx_history`, `get_net_capital`, `get_cash_balance`.
+    Nakit bakiyesi bir SÜTUN olarak SAKLANMIYOR, her seferinde
+    türetiliyor: `Nakit = Net Sermaye − (açık pozisyon maliyeti +
+    satılmış lot maliyeti) + net satış geliri` — "tek doğru kaynak"
+    felsefesi (worker.py/Optima_Skor ile aynı prensip).
+  - `app.py`: yeni `_render_sermaye_nakit_ozeti()` fonksiyonu —
+    `_render_gerceklesmis_kar_zarar()` ile AYNI desende (bkz. v2.0.7.111),
+    hem boş hem dolu portföy durumunda çağrılıyor (sermaye/nakit açık
+    pozisyonlara bağlı değil). 5 metrik gösteriyor: Net Yatırılan
+    Sermaye, Nakit Bakiye, Güncel Varlık Değeri, Toplam Servet, Toplam
+    Getiri (TL+%). Mevduat/çekim ekleme formu + geçmiş tablosu + silme
+    de dahil.
+  - **Not:** "ne kadar zamanda kaça geldiği" (elde tutma süresi) için
+    ayrı bir "geçen gün/ay" kolonu EKLENMEDİ — Portföy Varlıkları
+    Tablosu'ndaki "Tarih" (alış tarihi) sütunundan zaten çıkarılabiliyor.
+    İstenirse ayrı bir "Elde Tutma Süresi" kolonu sonradan eklenebilir.
+  - **Doğrulanmadı:** Bu özellik bu oturumda yazıldı ama Bahri tarafından
+    henüz canlıda test edilmedi (mevduat ekleme, nakit hesabı doğruluğu).
+    İlk kullanımda bir test mevduatı girip rakamların beklenen şekilde
+    çıkıp çıkmadığını doğrulamak faydalı olur.
+
 - **[UYGULANDI, İZLEMEDE] v2.0.7.110 (30 Temmuz 2026, Bahri'nin bulgusu —
   IZMDC/BIGTK örnekleri: BIST evreninin %85'i F/K'siz, %71'i PD/DD'siz,
   %98'i temettü verimsizdi — hepsi NaN, negatif/zararda olduğu için

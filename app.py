@@ -2308,6 +2308,431 @@ RISK_W={
 # ANA SAYFA
 # ══════════════════════════════════════════════════════════════
 
+def _render_gerceklesmis_kar_zarar(_cur_user):
+    """v2.0.7.111 - Bahri'nin bulgusu (30 Temmuz 2026): portfoy tamamen
+    bosaldiginda (tum pozisyonlar satildiginda) bu bolum eskiden HIC
+    gorunmuyordu, cunku birazdan gorulecek 'Henuz pozisyon yok' mesajinin
+    hemen ardindan gelen st.stop() TUM sayfa calismasini durduruyordu -
+    bu bolume (portfolio_sales tablosundan gelen satis gecmisi/gerceklesen
+    kar-zarar) hic sira gelmiyordu. Bu bolum ACIK POZISYONLARA bagli
+    DEGIL (sadece _cur_user'a bagli) - fonksiyona cikarildi, hem bos hem
+    dolu portfoy durumunda cagrilabilsin diye."""
+    # ══════════════════════════════════════════════════════════
+    # v2.0.7.49 - GERÇEKLEŞMİŞ KÂR/ZARAR (Bahri'nin talebi): gerçek bir
+    # muhasebe katmanı - satış geçmişi, komisyon/vergi düşülmüş net K/Z,
+    # tarih aralığı + aylık/yıllık özet raporu.
+    # DUZELTME (v2.0.7.49): Bu blok yanlislikla "elif page in CAT:"
+    # (BIST/TEFAS/Doviz/Maden/Kripto ortak blogu) icine eklenmisti - bu
+    # yuzden TUM kategori sayfalarinda goruyordu. Dogru yere (yalnizca
+    # Portfoyum sayfasinin sonuna) tasindi. Ayrica emoji/widget KESINLIKLE
+    # kullanilmiyor - proje kuralinin ihlaliydi, duzeltildi.
+    # ══════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("Gerçekleşmiş Kâr/Zarar (Muhasebe)")
+    from portfolio_ledger import (get_fee_settings, save_fee_settings,
+                                   get_sales_history, get_monthly_summary,
+                                   get_yearly_summary, get_realized_summary)
+
+    with st.expander("Komisyon / Vergi Ayarları (kategori bazlı)"):
+        st.caption(
+            "Aşağıdaki oranlar genel/yaklaşık başlangıç değerleridir, kesin "
+            "mali müşavirlik veya vergi danışmanlığı yerine geçmez. Kendi "
+            "aracı kurumunuzun/borsanızın komisyon oranına ve güncel "
+            "mevzuata göre düzenleyin.")
+        _fee_ayarlari = get_fee_settings(_cur_user["id"])
+        for _cat_key, _cat_lbl in [("BIST","BIST"),("TEFAS","TEFAS"),
+                                     ("KRIPTO","Kripto"),("DOVIZ","Döviz"),
+                                     ("MADEN","Değerli Maden")]:
+            _fc1, _fc2, _fc3 = st.columns([1, 1, 1])
+            _mevcut = _fee_ayarlari.get(_cat_key, {"fee_pct":0.0,"tax_pct":0.0})
+            with _fc1:
+                st.markdown(f"**{_cat_lbl}**")
+            with _fc2:
+                _yeni_fee = parse_tr(st.text_input(
+                    "Komisyon %", value=fmt_tr(float(_mevcut["fee_pct"]), 2),
+                    key=f"fee_ayar_{_cat_key}"))
+            with _fc3:
+                _yeni_tax = parse_tr(st.text_input(
+                    "Vergi %", value=fmt_tr(float(_mevcut["tax_pct"]), 2),
+                    key=f"tax_ayar_{_cat_key}"))
+            if _yeni_fee != _mevcut["fee_pct"] or _yeni_tax != _mevcut["tax_pct"]:
+                save_fee_settings(_cur_user["id"], _cat_key, _yeni_fee, _yeni_tax)
+
+    _pl_tum = get_sales_history(_cur_user["id"])
+    if _pl_tum.empty:
+        st.caption("Henüz gerçekleşmiş (satılmış) bir işlem yok. Bir varlığı "
+                   "yukarıdaki tablodan seçip Sat butonuyla satış kaydı "
+                   "oluşturduğunuzda burada raporlanır.")
+    else:
+        # v2.0.7.58 - Yardimci Turkce format fonksiyonlari erken tanimlandi
+        # (Aylik/Yillik ozet + Tum Islem Gecmisi, hepsi bunlari kullanir).
+        def _tr_sayi(x, ondalik=2):
+            try:
+                return (f"{float(x):,.{ondalik}f}"
+                        .replace(",", "X").replace(".", ",").replace("X", "."))
+            except (TypeError, ValueError):
+                return str(x)
+
+        def _pl_netkz_renk(v):
+            # v2.0.7.61 - CSS "text-align" hack'i kaldirildi - artik
+            # column_config'in GERCEK alignment="right" parametresi
+            # kullaniliyor, sadece renk burada kaliyor.
+            try:
+                sayi = float(str(v).replace(".", "").replace(",", "."))
+            except (TypeError, ValueError):
+                return ""
+            if sayi > 0:
+                return "color: #1b8a4a; font-weight: 600;"
+            elif sayi < 0:
+                return "color: #c0392b; font-weight: 600;"
+            return ""
+
+        st.markdown("**Tarih Aralığına Göre Özet**")
+        dr1, dr2 = st.columns(2)
+        import datetime as _dt_pl
+        with dr1:
+            _pl_bas = st.date_input("Başlangıç", key="pl_bas_tarih",
+                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30),
+                                     format="DD.MM.YYYY")
+        with dr2:
+            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
+                                     format="DD.MM.YYYY")
+        # v2.0.7.62 - PERFORMANS: asagidaki 3 cagri artik AYRI sorgu
+        # yapmiyor, yukarida zaten cekilmis "_pl_tum" DataFrame'ini
+        # tekrar kullaniyor - Portfoyum sayfasi basina 4 yerine 1
+        # veritabani sorgusu (Bahri'nin "sistem agirlasti" bulgusu).
+        _ozet = get_realized_summary(_cur_user["id"],
+                                      _pl_bas.strftime("%Y-%m-%d"),
+                                      _pl_bit.strftime("%Y-%m-%d"),
+                                      df=_pl_tum)
+        o1, o2, o3, o4, o5 = st.columns(5)
+        o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
+        o2.metric("Brüt K/Z", f"{fmt_tr(_ozet['brut_kz'])} ₺")
+        o3.metric("Komisyon", f"-{fmt_tr(_ozet['komisyon'])} ₺")
+        o4.metric("Vergi", f"-{fmt_tr(_ozet['vergi'])} ₺")
+        o5.metric("Net K/Z", f"{fmt_tr(_ozet['net_kz'])} ₺")
+
+        # v2.0.7.58 - Aylik/Yillik ozet tablolarina Turkce sayi formati
+        # uygulandi (onceki halde "68.35" gibi ingilizce noktali gorunuyordu).
+        def _ozet_tablo_gostergisi(df_ozet):
+            df_g = df_ozet.copy()
+            for _c in ["Ödenmiş Komisyon (₺)", "Ödenmiş Vergi (₺)",
+                       "İşlem Tutarı (₺)", "Toplam Net K/Z"]:
+                if _c in df_g.columns:
+                    df_g[_c] = df_g[_c].apply(lambda v: fmt_tr(v))
+            if "Toplam Net K/Z" in df_g.columns:
+                return df_g.style.map(_pl_netkz_renk, subset=["Toplam Net K/Z"])
+            return df_g
+
+        st.markdown("**Aylık Özet**")
+        st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"], df=_pl_tum)),
+                     width='stretch', hide_index=True)
+
+        st.markdown("**Yıllık Özet**")
+        st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"], df=_pl_tum)),
+                     width='stretch', hide_index=True)
+
+        st.markdown("**Tüm İşlem Geçmişi**")
+        from portfolio_ledger import delete_sale_record, update_sale_record
+
+        # v2.0.7.55 - Bahri'nin bulguları: (1) tarihler Turkce (GG.AA.YYYY)
+        # olmali, (2) sayilar Turkce ondalik (virgul) formatinda olmali,
+        # (3) Net K/Z pozitif/negatife gore yesil/kirmizi renklensin ve
+        # genis rakamlar (100 bin+) icin sutun genisletilsin, (4) Miktar/
+        # Komisyon/Vergi sutunlari daraltilsin.
+        # v2.0.7.99 - Bahri'nin talebi (20 Temmuz 2026): Alış/Satış Tutarı
+        # eklenince tablo genisleyip yatay scroll olusmustu. "Kategori"
+        # sutunu (zaten Ticker'dan cikarilabilecek, az bilgi tasiyan bir
+        # sutun) tamamen kaldirildi - yer acmak icin.
+        _pl_gosterim = _pl_tum.drop(
+            columns=["id", "Kategori", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
+
+        # v2.0.7.98 - KRITIK EKSIKLIK DUZELTMESI (Bahri'nin bulgusu, 20
+        # Temmuz 2026: gerçek bir altın satışı sonrası - ING dekontunda
+        # "TL Karşılığı: 3.256,43 TL" yazarken, uygulamada sadece birim
+        # fiyat (Satış Fiyatı) ve Net K/Z görünüyordu, GERÇEK SATIŞ TUTARI
+        # (Miktar × Satış Fiyatı) hiçbir yerde gösterilmiyordu - banka
+        # dekontuyla doğrudan karşılaştırma/mutabakat yapılamıyordu). Aynı
+        # eksiklik Alış Tutarı için de geçerliydi. Artık ikisi de
+        # (Miktar × ilgili birim fiyat) hesaplanıp tabloya ekleniyor,
+        # ilgili fiyat sütununun hemen sağına yerleştiriliyor.
+        _pl_gosterim.insert(
+            _pl_gosterim.columns.get_loc("Alış Fiyatı") + 1, "Alış Tutarı",
+            (_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).round(2))
+        _pl_gosterim.insert(
+            _pl_gosterim.columns.get_loc("Satış Fiyatı") + 1, "Satış Tutarı",
+            (_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).round(2))
+
+        for _dcol in ["Alış Tarihi", "Satış Tarihi"]:
+            _pl_gosterim[_dcol] = pd.to_datetime(
+                _pl_gosterim[_dcol], errors="coerce").dt.strftime("%d.%m.%Y")
+        for _ncol in ["Miktar", "Alış Fiyatı", "Alış Tutarı", "Satış Fiyatı",
+                      "Satış Tutarı", "Komisyon (₺)", "Vergi (₺)"]:
+            _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
+        _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
+
+        # v2.0.7.60 - DUZELTME (Bahri'nin bulgusu: ayri tablo denemesi -
+        # kendi basligi ve satir araligiyla - "korkunc" gorundu, tabloyla
+        # devam ediyormus gibi algilanmiyordu). TOPLAM satiri tekrar AYNI
+        # tabloya donduruldu (v2.0.7.56'daki gibi) - tek baslik, sifir
+        # bosluk, mukemmel hizalama. Bedel: o satirda da bir isaret kutusu
+        # gorunur ama tiklaninca "bu bir kayit degil" diye uyarilip yok
+        # sayilir - bu, iki ayri tablonun yarattigi gorsel kopukluktan
+        # daha az rahatsiz edici.
+        _pl_satir_sayisi = len(_pl_gosterim)
+        _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
+        _pl_toplam_alis  = float((_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).sum())
+        _pl_toplam_satis = float((_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).sum())
+        _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
+        _pl_toplam_satir["Ticker"] = "TOPLAM"
+        _pl_toplam_satir["Alış Tutarı"] = _tr_sayi(_pl_toplam_alis)
+        _pl_toplam_satir["Satış Tutarı"] = _tr_sayi(_pl_toplam_satis)
+        _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
+        _pl_gosterim = pd.concat(
+            [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
+
+        def _pl_toplam_satir_kalin(row):
+            if row.name == _pl_satir_sayisi:
+                return ["font-weight: 700; border-top: 2px solid #1b2a4a;"] * len(row)
+            return [""] * len(row)
+
+        _pl_styled = (_pl_gosterim.style
+                      .map(_pl_netkz_renk, subset=["Net K/Z"])
+                      .apply(_pl_toplam_satir_kalin, axis=1))
+
+        # v2.0.7.56 - Bahri'nin talebi: Kategori/Ticker/fiyat/tarih
+        # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
+        # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
+        # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
+        # v2.0.7.99 - Bahri'nin talebi: Alış/Satış Tutarı eklenince yatay
+        # scroll olustu - "Kategori" kaldirildi (yukarida), "Ticker"
+        # Portfoy Varliklari Tablosu'yla AYNI piksel genisligine (79px)
+        # cekildi, "Komisyon (₺)" basligi "Kom. (₺)" olarak kisaltilip
+        # daha da daraltildi (sutun ADI degismedi - column_config'in ilk
+        # pozisyonel argumanindan SADECE goruntu etiketi degistirildi,
+        # tipki asagidaki Portfoy Varliklari Tablosu'ndaki "Skor" ->
+        # "Optima Skor" deseninin aynisi).
+        _pl_col_config = {
+            "Ticker":        st.column_config.Column(width=79),
+            "Miktar":        st.column_config.Column(width="small", alignment="right"),
+            "Alış Fiyatı":   st.column_config.Column(width="small", alignment="right"),
+            "Alış Tutarı":   st.column_config.Column(width="small", alignment="right"),
+            "Alış Tarihi":   st.column_config.Column(width="small"),
+            "Satış Fiyatı":  st.column_config.Column(width="small", alignment="right"),
+            "Satış Tutarı":  st.column_config.Column(width="small", alignment="right"),
+            "Satış Tarihi":  st.column_config.Column(width="small"),
+            "Komisyon (₺)":  st.column_config.Column("Kom. (₺)", width=60, alignment="right"),
+            "Vergi (₺)":     st.column_config.Column(width="small", alignment="right"),
+            "Net K/Z":       st.column_config.Column(width="small", alignment="right"),
+        }
+        _pl_event = st.dataframe(
+            _pl_styled, width='stretch', hide_index=True,
+            column_config=_pl_col_config,
+            on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
+        _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
+        if _pl_sel and _pl_sel[0] >= _pl_satir_sayisi:
+            st.caption("TOPLAM satırı bir işlem kaydı değildir, düzenlenemez/silinemez.")
+            _pl_sel = []
+        if _pl_sel:
+            _pl_si = _pl_sel[0]
+            _pl_row = _pl_tum.iloc[_pl_si]
+            _pl_sel_id = int(_pl_row["id"])
+            _pl_sel_tkr = _pl_row["Ticker"]
+
+            _pdz1, _pdz2 = st.columns([1, 1])
+            if _pdz1.button(f"Düzelt: {_pl_sel_tkr}", type="primary", key="pl_duzelt_ac"):
+                st.session_state["pl_duzelt_form_id"] = _pl_sel_id
+            with _pdz2:
+                st.caption(
+                    "Bu kaydı silebilirsiniz (örn. bir test satışını geri almak "
+                    "için). 'Pozisyonu geri aç' işaretlenirse satılan miktar "
+                    "açık pozisyona geri eklenir; işaretlenmezse sadece "
+                    "muhasebe kaydı silinir, pozisyon değişmez.")
+            _pl_geri_ac = st.checkbox("Pozisyonu geri aç (miktarı portföye geri ekle)",
+                                       key="pl_geri_ac")
+            if st.button(f"Kaydı Sil: {_pl_sel_tkr}", type="secondary", key="pl_kayit_sil"):
+                _pl_sonuc = delete_sale_record(_cur_user["id"], _pl_sel_id, _pl_geri_ac)
+                if _pl_sonuc["basari"]:
+                    st.success("Satış kaydı silindi.")
+                    st.rerun()
+                else:
+                    st.error(_pl_sonuc["hata"])
+
+            # v2.0.7.52 - Duzeltme formu (Bahri'nin talebi: silmek yetmez,
+            # yanlis girilen bir kaydin miktar/fiyat/tarih/oranlari
+            # duzeltilebilmeli).
+            if st.session_state.get("pl_duzelt_form_id") == _pl_sel_id:
+                with st.container(border=True):
+                    st.markdown(f"**{_pl_sel_tkr} — Kayıt Düzeltme**")
+                    dz1, dz2, dz3 = st.columns(3)
+                    with dz1:
+                        _dz_miktar = parse_tr(st.text_input(
+                            "Miktar", value=fmt_tr(float(_pl_row["Miktar"]), 4),
+                            key="dz_miktar"))
+                    with dz2:
+                        _dz_alis = parse_tr(st.text_input(
+                            "Alış Fiyatı", value=fmt_tr(float(_pl_row["Alış Fiyatı"]), 4),
+                            key="dz_alis"))
+                    with dz3:
+                        _dz_satis = parse_tr(st.text_input(
+                            "Satış Fiyatı", value=fmt_tr(float(_pl_row["Satış Fiyatı"]), 4),
+                            key="dz_satis"))
+                    dz4, dz5, dz6 = st.columns(3)
+                    import datetime as _dt_dz
+                    with dz4:
+                        try:
+                            _dz_alis_tarih_val = _dt_dz.datetime.strptime(
+                                str(_pl_row["Alış Tarihi"]), "%Y-%m-%d").date()
+                        except Exception:
+                            _dz_alis_tarih_val = _dt_dz.date.today()
+                        _dz_alis_tarih = st.date_input(
+                            "Alış Tarihi", value=_dz_alis_tarih_val,
+                            key="dz_alis_tarih", format="DD.MM.YYYY")
+                    with dz5:
+                        try:
+                            _dz_satis_tarih_val = _dt_dz.datetime.strptime(
+                                str(_pl_row["Satış Tarihi"]), "%Y-%m-%d").date()
+                        except Exception:
+                            _dz_satis_tarih_val = _dt_dz.date.today()
+                        _dz_satis_tarih = st.date_input(
+                            "Satış Tarihi", value=_dz_satis_tarih_val,
+                            key="dz_satis_tarih", format="DD.MM.YYYY")
+                    with dz6:
+                        st.caption("")
+                    dz7, dz8 = st.columns(2)
+                    with dz7:
+                        _dz_komisyon = parse_tr(st.text_input(
+                            "Komisyon (₺) — aracı kurumun kestiği gerçek tutar",
+                            value=fmt_tr(float(_pl_row["Komisyon (₺)"]), 2),
+                            key="dz_komisyon"))
+                    with dz8:
+                        _dz_vergi = parse_tr(st.text_input(
+                            "Vergi (₺) — aracı kurumun kestiği gerçek tutar",
+                            value=fmt_tr(float(_pl_row["Vergi (₺)"]), 2),
+                            key="dz_vergi"))
+
+                    dzb1, dzb2 = st.columns([1, 1])
+                    if dzb1.button("Düzeltmeyi Kaydet", type="primary", key="pl_duzelt_kaydet"):
+                        _dz_sonuc = update_sale_record(
+                            _cur_user["id"], _pl_sel_id, _dz_miktar, _dz_alis,
+                            _dz_alis_tarih.strftime("%Y-%m-%d"), _dz_satis,
+                            _dz_satis_tarih.strftime("%Y-%m-%d"),
+                            _dz_komisyon, _dz_vergi)
+                        if _dz_sonuc["basari"]:
+                            st.session_state.pop("pl_duzelt_form_id", None)
+                            if _dz_sonuc.get("uyari"):
+                                st.warning(_dz_sonuc["uyari"])
+                            st.success(f"Kayıt düzeltildi — Net K/Z: {fmt_tr(_dz_sonuc['net_kz'])} ₺")
+                            st.rerun()
+                        else:
+                            st.error(_dz_sonuc["hata"])
+                    if dzb2.button("Vazgeç", key="pl_duzelt_vazgec"):
+                        st.session_state.pop("pl_duzelt_form_id", None)
+                        st.rerun()
+
+
+def _render_sermaye_nakit_ozeti(_cur_user, portfolio, guncel_varlik_degeri):
+    """v2.0.7.112 (Bahri'nin talebi, 30 Temmuz 2026): "başlangıç sermaye
+    miktarının, ne kadar zamanda kaça geldiğinin, sattığımda ne kâr
+    ettiğimin ve elimde güncel olarak finansal varlık veya nakit olarak
+    ne miktarlar olduğunun" görülebilmesi. Bu fonksiyon, Gerçekleşmiş
+    Kâr/Zarar bölümüyle AYNI mantıkla (bkz. _render_gerceklesmis_kar_zarar),
+    hem portföy boşken hem doluyken çağrılır - sermaye/nakit takibi açık
+    pozisyonlara bağlı değil, sadece kullanıcının kendisine bağlı.
+
+    Tasarım (Bahri'nin onayıyla): sermaye tek seferlik sabit bir sayı
+    DEĞİL - zaman içinde mevduat/çekim eklenip çıkarılabilen bir hareket
+    defteri. Nakit bakiyesi negatife düşebilir (bilinçli - "sermaye
+    hayali değil, gerçek durumu göstersin")."""
+    from portfolio_ledger import (get_capital_tx_history, add_capital_tx,
+                                   delete_capital_tx, get_sales_history,
+                                   get_cash_balance)
+    import datetime as _dt_cap
+
+    st.divider()
+    st.subheader("Sermaye ve Nakit Durumu")
+
+    with st.expander("Sermaye Hareketi Ekle (Para Yatırma / Çekme)"):
+        sc1, sc2, sc3 = st.columns([1, 1, 1])
+        with sc1:
+            _tx_secim = st.selectbox(
+                "İşlem Tipi", ["Para Yatırma", "Para Çekme"], key="cap_tx_tip")
+        with sc2:
+            _tx_tutar_str = st.text_input(
+                "Tutar (TL)", key="cap_tx_tutar", placeholder="Örn: 50.000")
+        with sc3:
+            _tx_tarih = st.date_input(
+                "Tarih", key="cap_tx_tarih", format="DD.MM.YYYY")
+        _tx_not = st.text_input(
+            "Not (isteğe bağlı)", key="cap_tx_not",
+            placeholder="Örn: Maaştan aktarım, ilk sermaye")
+        if st.button("Kaydet", key="cap_tx_ekle_btn"):
+            try:
+                _tx_tutar = parse_tr(_tx_tutar_str) if _tx_tutar_str.strip() else 0.0
+            except Exception:
+                _tx_tutar = 0.0
+            _tip = "DEPOSIT" if _tx_secim == "Para Yatırma" else "WITHDRAWAL"
+            _sonuc = add_capital_tx(
+                _cur_user["id"], _tip, _tx_tutar,
+                _tx_tarih.strftime("%Y-%m-%d"), _tx_not)
+            if _sonuc["basari"]:
+                st.success("Sermaye hareketi kaydedildi.")
+                st.rerun()
+            else:
+                st.error(_sonuc["hata"])
+
+    _cap_df = get_capital_tx_history(_cur_user["id"])
+    _sales_df_ozet = get_sales_history(_cur_user["id"])
+    _hesap = get_cash_balance(
+        _cur_user["id"], portfolio_rows=portfolio,
+        sales_df=_sales_df_ozet, capital_df=_cap_df)
+
+    _toplam_servet = _hesap["nakit_bakiye"] + guncel_varlik_degeri
+    _toplam_getiri_tl = _toplam_servet - _hesap["net_sermaye"]
+    try:
+        _toplam_getiri_pct = ((_toplam_servet / _hesap["net_sermaye"] - 1) * 100
+                               if _hesap["net_sermaye"] else 0.0)
+    except Exception:
+        _toplam_getiri_pct = 0.0
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Net Yatırılan Sermaye", f"{fmt_tr(_hesap['net_sermaye'])} ₺")
+    m2.metric("Nakit Bakiye", f"{fmt_tr(_hesap['nakit_bakiye'])} ₺")
+    m3.metric("Güncel Varlık Değeri", f"{fmt_tr(guncel_varlik_degeri)} ₺")
+    m4.metric("Toplam Servet (Nakit+Varlık)", f"{fmt_tr(_toplam_servet)} ₺")
+    m5.metric("Toplam Getiri",
+              f"{'+' if _toplam_getiri_tl >= 0 else ''}{fmt_tr(_toplam_getiri_tl)} ₺",
+              delta=f"{'+' if _toplam_getiri_pct >= 0 else ''}{fmt_tr(_toplam_getiri_pct)}%")
+
+    if _hesap["nakit_bakiye"] < 0:
+        st.caption(
+            "Nakit bakiyeniz negatif — yatırdığınız sermayeden daha fazlasını "
+            "varlığa yatırmışsınız görünüyor (ör. kâr üstüne tekrar yatırım, "
+            "ya da henüz kaydedilmemiş bir mevduat olabilir). Bu bilinçli "
+            "olarak engellenmiyor, gerçek durumu yansıtması için.")
+
+    if _cap_df.empty:
+        st.caption("Henüz bir sermaye hareketi (mevduat/çekim) kaydı yok. "
+                   "Yukarıdaki bölümden ekleyebilirsin.")
+    else:
+        with st.expander("Sermaye Hareketi Geçmişi", expanded=False):
+            _cap_show = _cap_df.copy()
+            _cap_show["Tip"] = _cap_show["Tip"].map(
+                {"DEPOSIT": "Para Yatırma", "WITHDRAWAL": "Para Çekme"})
+            _cap_show["Tutar"] = _cap_show["Tutar"].apply(lambda v: fmt_tr(v, 2))
+            _cap_show["Tarih"] = _cap_show["Tarih"].apply(
+                lambda v: _dt_cap.datetime.strptime(v, "%Y-%m-%d").strftime("%d.%m.%Y")
+                if v and len(str(v)) == 10 else v)
+            st.dataframe(_cap_show.drop(columns=["id"]), width='stretch', hide_index=True)
+
+            _sil_id = st.selectbox(
+                "Silinecek işlem (id)", _cap_df["id"].tolist(), key="cap_tx_sil_id")
+            if st.button("Seçili İşlemi Sil", key="cap_tx_sil_btn"):
+                delete_capital_tx(_cur_user["id"], int(_sil_id))
+                st.success("Sermaye hareketi silindi.")
+                st.rerun()
+
+
 if page=="Ana Sayfa":
     st.title("Bütçe Optimizasyonu")
     if df_uni.empty:
@@ -3106,6 +3531,8 @@ elif page=="Portföyüm":
 
     if not portfolio:
         st.info("Henüz pozisyon yok. Yukarıdan ekleyebilirsin.")
+        _render_sermaye_nakit_ozeti(_cur_user, portfolio, 0.0)
+        _render_gerceklesmis_kar_zarar(_cur_user)
         st.stop()
 
     import datetime as _dt, pandas as _pd
@@ -3604,318 +4031,9 @@ elif page=="Portföyüm":
 
     st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
 
-    # ══════════════════════════════════════════════════════════
-    # v2.0.7.49 - GERÇEKLEŞMİŞ KÂR/ZARAR (Bahri'nin talebi): gerçek bir
-    # muhasebe katmanı - satış geçmişi, komisyon/vergi düşülmüş net K/Z,
-    # tarih aralığı + aylık/yıllık özet raporu.
-    # DUZELTME (v2.0.7.49): Bu blok yanlislikla "elif page in CAT:"
-    # (BIST/TEFAS/Doviz/Maden/Kripto ortak blogu) icine eklenmisti - bu
-    # yuzden TUM kategori sayfalarinda goruyordu. Dogru yere (yalnizca
-    # Portfoyum sayfasinin sonuna) tasindi. Ayrica emoji/widget KESINLIKLE
-    # kullanilmiyor - proje kuralinin ihlaliydi, duzeltildi.
-    # ══════════════════════════════════════════════════════════
-    st.divider()
-    st.subheader("Gerçekleşmiş Kâr/Zarar (Muhasebe)")
-    from portfolio_ledger import (get_fee_settings, save_fee_settings,
-                                   get_sales_history, get_monthly_summary,
-                                   get_yearly_summary, get_realized_summary)
+    _render_sermaye_nakit_ozeti(_cur_user, portfolio, float(df_pf["Toplam"].sum()))
+    _render_gerceklesmis_kar_zarar(_cur_user)
 
-    with st.expander("Komisyon / Vergi Ayarları (kategori bazlı)"):
-        st.caption(
-            "Aşağıdaki oranlar genel/yaklaşık başlangıç değerleridir, kesin "
-            "mali müşavirlik veya vergi danışmanlığı yerine geçmez. Kendi "
-            "aracı kurumunuzun/borsanızın komisyon oranına ve güncel "
-            "mevzuata göre düzenleyin.")
-        _fee_ayarlari = get_fee_settings(_cur_user["id"])
-        for _cat_key, _cat_lbl in [("BIST","BIST"),("TEFAS","TEFAS"),
-                                     ("KRIPTO","Kripto"),("DOVIZ","Döviz"),
-                                     ("MADEN","Değerli Maden")]:
-            _fc1, _fc2, _fc3 = st.columns([1, 1, 1])
-            _mevcut = _fee_ayarlari.get(_cat_key, {"fee_pct":0.0,"tax_pct":0.0})
-            with _fc1:
-                st.markdown(f"**{_cat_lbl}**")
-            with _fc2:
-                _yeni_fee = parse_tr(st.text_input(
-                    "Komisyon %", value=fmt_tr(float(_mevcut["fee_pct"]), 2),
-                    key=f"fee_ayar_{_cat_key}"))
-            with _fc3:
-                _yeni_tax = parse_tr(st.text_input(
-                    "Vergi %", value=fmt_tr(float(_mevcut["tax_pct"]), 2),
-                    key=f"tax_ayar_{_cat_key}"))
-            if _yeni_fee != _mevcut["fee_pct"] or _yeni_tax != _mevcut["tax_pct"]:
-                save_fee_settings(_cur_user["id"], _cat_key, _yeni_fee, _yeni_tax)
-
-    _pl_tum = get_sales_history(_cur_user["id"])
-    if _pl_tum.empty:
-        st.caption("Henüz gerçekleşmiş (satılmış) bir işlem yok. Bir varlığı "
-                   "yukarıdaki tablodan seçip Sat butonuyla satış kaydı "
-                   "oluşturduğunuzda burada raporlanır.")
-    else:
-        # v2.0.7.58 - Yardimci Turkce format fonksiyonlari erken tanimlandi
-        # (Aylik/Yillik ozet + Tum Islem Gecmisi, hepsi bunlari kullanir).
-        def _tr_sayi(x, ondalik=2):
-            try:
-                return (f"{float(x):,.{ondalik}f}"
-                        .replace(",", "X").replace(".", ",").replace("X", "."))
-            except (TypeError, ValueError):
-                return str(x)
-
-        def _pl_netkz_renk(v):
-            # v2.0.7.61 - CSS "text-align" hack'i kaldirildi - artik
-            # column_config'in GERCEK alignment="right" parametresi
-            # kullaniliyor, sadece renk burada kaliyor.
-            try:
-                sayi = float(str(v).replace(".", "").replace(",", "."))
-            except (TypeError, ValueError):
-                return ""
-            if sayi > 0:
-                return "color: #1b8a4a; font-weight: 600;"
-            elif sayi < 0:
-                return "color: #c0392b; font-weight: 600;"
-            return ""
-
-        st.markdown("**Tarih Aralığına Göre Özet**")
-        dr1, dr2 = st.columns(2)
-        import datetime as _dt_pl
-        with dr1:
-            _pl_bas = st.date_input("Başlangıç", key="pl_bas_tarih",
-                                     value=_dt_pl.date.today() - _dt_pl.timedelta(days=30),
-                                     format="DD.MM.YYYY")
-        with dr2:
-            _pl_bit = st.date_input("Bitiş", key="pl_bit_tarih", value=_dt_pl.date.today(),
-                                     format="DD.MM.YYYY")
-        # v2.0.7.62 - PERFORMANS: asagidaki 3 cagri artik AYRI sorgu
-        # yapmiyor, yukarida zaten cekilmis "_pl_tum" DataFrame'ini
-        # tekrar kullaniyor - Portfoyum sayfasi basina 4 yerine 1
-        # veritabani sorgusu (Bahri'nin "sistem agirlasti" bulgusu).
-        _ozet = get_realized_summary(_cur_user["id"],
-                                      _pl_bas.strftime("%Y-%m-%d"),
-                                      _pl_bit.strftime("%Y-%m-%d"),
-                                      df=_pl_tum)
-        o1, o2, o3, o4, o5 = st.columns(5)
-        o1.metric("İşlem Sayısı", _ozet["islem_sayisi"])
-        o2.metric("Brüt K/Z", f"{fmt_tr(_ozet['brut_kz'])} ₺")
-        o3.metric("Komisyon", f"-{fmt_tr(_ozet['komisyon'])} ₺")
-        o4.metric("Vergi", f"-{fmt_tr(_ozet['vergi'])} ₺")
-        o5.metric("Net K/Z", f"{fmt_tr(_ozet['net_kz'])} ₺")
-
-        # v2.0.7.58 - Aylik/Yillik ozet tablolarina Turkce sayi formati
-        # uygulandi (onceki halde "68.35" gibi ingilizce noktali gorunuyordu).
-        def _ozet_tablo_gostergisi(df_ozet):
-            df_g = df_ozet.copy()
-            for _c in ["Ödenmiş Komisyon (₺)", "Ödenmiş Vergi (₺)",
-                       "İşlem Tutarı (₺)", "Toplam Net K/Z"]:
-                if _c in df_g.columns:
-                    df_g[_c] = df_g[_c].apply(lambda v: fmt_tr(v))
-            if "Toplam Net K/Z" in df_g.columns:
-                return df_g.style.map(_pl_netkz_renk, subset=["Toplam Net K/Z"])
-            return df_g
-
-        st.markdown("**Aylık Özet**")
-        st.dataframe(_ozet_tablo_gostergisi(get_monthly_summary(_cur_user["id"], df=_pl_tum)),
-                     width='stretch', hide_index=True)
-
-        st.markdown("**Yıllık Özet**")
-        st.dataframe(_ozet_tablo_gostergisi(get_yearly_summary(_cur_user["id"], df=_pl_tum)),
-                     width='stretch', hide_index=True)
-
-        st.markdown("**Tüm İşlem Geçmişi**")
-        from portfolio_ledger import delete_sale_record, update_sale_record
-
-        # v2.0.7.55 - Bahri'nin bulguları: (1) tarihler Turkce (GG.AA.YYYY)
-        # olmali, (2) sayilar Turkce ondalik (virgul) formatinda olmali,
-        # (3) Net K/Z pozitif/negatife gore yesil/kirmizi renklensin ve
-        # genis rakamlar (100 bin+) icin sutun genisletilsin, (4) Miktar/
-        # Komisyon/Vergi sutunlari daraltilsin.
-        # v2.0.7.99 - Bahri'nin talebi (20 Temmuz 2026): Alış/Satış Tutarı
-        # eklenince tablo genisleyip yatay scroll olusmustu. "Kategori"
-        # sutunu (zaten Ticker'dan cikarilabilecek, az bilgi tasiyan bir
-        # sutun) tamamen kaldirildi - yer acmak icin.
-        _pl_gosterim = _pl_tum.drop(
-            columns=["id", "Kategori", "Birim", "Komisyon %", "Vergi %", "Brüt K/Z", "Not"]).copy()
-
-        # v2.0.7.98 - KRITIK EKSIKLIK DUZELTMESI (Bahri'nin bulgusu, 20
-        # Temmuz 2026: gerçek bir altın satışı sonrası - ING dekontunda
-        # "TL Karşılığı: 3.256,43 TL" yazarken, uygulamada sadece birim
-        # fiyat (Satış Fiyatı) ve Net K/Z görünüyordu, GERÇEK SATIŞ TUTARI
-        # (Miktar × Satış Fiyatı) hiçbir yerde gösterilmiyordu - banka
-        # dekontuyla doğrudan karşılaştırma/mutabakat yapılamıyordu). Aynı
-        # eksiklik Alış Tutarı için de geçerliydi. Artık ikisi de
-        # (Miktar × ilgili birim fiyat) hesaplanıp tabloya ekleniyor,
-        # ilgili fiyat sütununun hemen sağına yerleştiriliyor.
-        _pl_gosterim.insert(
-            _pl_gosterim.columns.get_loc("Alış Fiyatı") + 1, "Alış Tutarı",
-            (_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).round(2))
-        _pl_gosterim.insert(
-            _pl_gosterim.columns.get_loc("Satış Fiyatı") + 1, "Satış Tutarı",
-            (_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).round(2))
-
-        for _dcol in ["Alış Tarihi", "Satış Tarihi"]:
-            _pl_gosterim[_dcol] = pd.to_datetime(
-                _pl_gosterim[_dcol], errors="coerce").dt.strftime("%d.%m.%Y")
-        for _ncol in ["Miktar", "Alış Fiyatı", "Alış Tutarı", "Satış Fiyatı",
-                      "Satış Tutarı", "Komisyon (₺)", "Vergi (₺)"]:
-            _pl_gosterim[_ncol] = _pl_gosterim[_ncol].apply(_tr_sayi)
-        _pl_gosterim["Net K/Z"] = _pl_gosterim["Net K/Z"].apply(lambda v: _tr_sayi(v))
-
-        # v2.0.7.60 - DUZELTME (Bahri'nin bulgusu: ayri tablo denemesi -
-        # kendi basligi ve satir araligiyla - "korkunc" gorundu, tabloyla
-        # devam ediyormus gibi algilanmiyordu). TOPLAM satiri tekrar AYNI
-        # tabloya donduruldu (v2.0.7.56'daki gibi) - tek baslik, sifir
-        # bosluk, mukemmel hizalama. Bedel: o satirda da bir isaret kutusu
-        # gorunur ama tiklaninca "bu bir kayit degil" diye uyarilip yok
-        # sayilir - bu, iki ayri tablonun yarattigi gorsel kopukluktan
-        # daha az rahatsiz edici.
-        _pl_satir_sayisi = len(_pl_gosterim)
-        _pl_toplam_netkz = float(_pl_tum["Net K/Z"].sum())
-        _pl_toplam_alis  = float((_pl_tum["Miktar"] * _pl_tum["Alış Fiyatı"]).sum())
-        _pl_toplam_satis = float((_pl_tum["Miktar"] * _pl_tum["Satış Fiyatı"]).sum())
-        _pl_toplam_satir = {c: "" for c in _pl_gosterim.columns}
-        _pl_toplam_satir["Ticker"] = "TOPLAM"
-        _pl_toplam_satir["Alış Tutarı"] = _tr_sayi(_pl_toplam_alis)
-        _pl_toplam_satir["Satış Tutarı"] = _tr_sayi(_pl_toplam_satis)
-        _pl_toplam_satir["Net K/Z"] = _tr_sayi(_pl_toplam_netkz)
-        _pl_gosterim = pd.concat(
-            [_pl_gosterim, pd.DataFrame([_pl_toplam_satir])], ignore_index=True)
-
-        def _pl_toplam_satir_kalin(row):
-            if row.name == _pl_satir_sayisi:
-                return ["font-weight: 700; border-top: 2px solid #1b2a4a;"] * len(row)
-            return [""] * len(row)
-
-        _pl_styled = (_pl_gosterim.style
-                      .map(_pl_netkz_renk, subset=["Net K/Z"])
-                      .apply(_pl_toplam_satir_kalin, axis=1))
-
-        # v2.0.7.56 - Bahri'nin talebi: Kategori/Ticker/fiyat/tarih
-        # sutunlari da daraltildi (yanal scroll azaltmak icin) - Miktar/
-        # Komisyon/Vergi zaten kucuktu, digerleri de artik kucuk; Net K/Z
-        # tek genis sutun (buyuk rakamlar icin, orn. 100.000+).
-        # v2.0.7.99 - Bahri'nin talebi: Alış/Satış Tutarı eklenince yatay
-        # scroll olustu - "Kategori" kaldirildi (yukarida), "Ticker"
-        # Portfoy Varliklari Tablosu'yla AYNI piksel genisligine (79px)
-        # cekildi, "Komisyon (₺)" basligi "Kom. (₺)" olarak kisaltilip
-        # daha da daraltildi (sutun ADI degismedi - column_config'in ilk
-        # pozisyonel argumanindan SADECE goruntu etiketi degistirildi,
-        # tipki asagidaki Portfoy Varliklari Tablosu'ndaki "Skor" ->
-        # "Optima Skor" deseninin aynisi).
-        _pl_col_config = {
-            "Ticker":        st.column_config.Column(width=79),
-            "Miktar":        st.column_config.Column(width="small", alignment="right"),
-            "Alış Fiyatı":   st.column_config.Column(width="small", alignment="right"),
-            "Alış Tutarı":   st.column_config.Column(width="small", alignment="right"),
-            "Alış Tarihi":   st.column_config.Column(width="small"),
-            "Satış Fiyatı":  st.column_config.Column(width="small", alignment="right"),
-            "Satış Tutarı":  st.column_config.Column(width="small", alignment="right"),
-            "Satış Tarihi":  st.column_config.Column(width="small"),
-            "Komisyon (₺)":  st.column_config.Column("Kom. (₺)", width=60, alignment="right"),
-            "Vergi (₺)":     st.column_config.Column(width="small", alignment="right"),
-            "Net K/Z":       st.column_config.Column(width="small", alignment="right"),
-        }
-        _pl_event = st.dataframe(
-            _pl_styled, width='stretch', hide_index=True,
-            column_config=_pl_col_config,
-            on_select="rerun", selection_mode="single-row", key="pl_gecmis_tablo")
-        _pl_sel = _pl_event.selection.rows if hasattr(_pl_event, "selection") else []
-        if _pl_sel and _pl_sel[0] >= _pl_satir_sayisi:
-            st.caption("TOPLAM satırı bir işlem kaydı değildir, düzenlenemez/silinemez.")
-            _pl_sel = []
-        if _pl_sel:
-            _pl_si = _pl_sel[0]
-            _pl_row = _pl_tum.iloc[_pl_si]
-            _pl_sel_id = int(_pl_row["id"])
-            _pl_sel_tkr = _pl_row["Ticker"]
-
-            _pdz1, _pdz2 = st.columns([1, 1])
-            if _pdz1.button(f"Düzelt: {_pl_sel_tkr}", type="primary", key="pl_duzelt_ac"):
-                st.session_state["pl_duzelt_form_id"] = _pl_sel_id
-            with _pdz2:
-                st.caption(
-                    "Bu kaydı silebilirsiniz (örn. bir test satışını geri almak "
-                    "için). 'Pozisyonu geri aç' işaretlenirse satılan miktar "
-                    "açık pozisyona geri eklenir; işaretlenmezse sadece "
-                    "muhasebe kaydı silinir, pozisyon değişmez.")
-            _pl_geri_ac = st.checkbox("Pozisyonu geri aç (miktarı portföye geri ekle)",
-                                       key="pl_geri_ac")
-            if st.button(f"Kaydı Sil: {_pl_sel_tkr}", type="secondary", key="pl_kayit_sil"):
-                _pl_sonuc = delete_sale_record(_cur_user["id"], _pl_sel_id, _pl_geri_ac)
-                if _pl_sonuc["basari"]:
-                    st.success("Satış kaydı silindi.")
-                    st.rerun()
-                else:
-                    st.error(_pl_sonuc["hata"])
-
-            # v2.0.7.52 - Duzeltme formu (Bahri'nin talebi: silmek yetmez,
-            # yanlis girilen bir kaydin miktar/fiyat/tarih/oranlari
-            # duzeltilebilmeli).
-            if st.session_state.get("pl_duzelt_form_id") == _pl_sel_id:
-                with st.container(border=True):
-                    st.markdown(f"**{_pl_sel_tkr} — Kayıt Düzeltme**")
-                    dz1, dz2, dz3 = st.columns(3)
-                    with dz1:
-                        _dz_miktar = parse_tr(st.text_input(
-                            "Miktar", value=fmt_tr(float(_pl_row["Miktar"]), 4),
-                            key="dz_miktar"))
-                    with dz2:
-                        _dz_alis = parse_tr(st.text_input(
-                            "Alış Fiyatı", value=fmt_tr(float(_pl_row["Alış Fiyatı"]), 4),
-                            key="dz_alis"))
-                    with dz3:
-                        _dz_satis = parse_tr(st.text_input(
-                            "Satış Fiyatı", value=fmt_tr(float(_pl_row["Satış Fiyatı"]), 4),
-                            key="dz_satis"))
-                    dz4, dz5, dz6 = st.columns(3)
-                    import datetime as _dt_dz
-                    with dz4:
-                        try:
-                            _dz_alis_tarih_val = _dt_dz.datetime.strptime(
-                                str(_pl_row["Alış Tarihi"]), "%Y-%m-%d").date()
-                        except Exception:
-                            _dz_alis_tarih_val = _dt_dz.date.today()
-                        _dz_alis_tarih = st.date_input(
-                            "Alış Tarihi", value=_dz_alis_tarih_val,
-                            key="dz_alis_tarih", format="DD.MM.YYYY")
-                    with dz5:
-                        try:
-                            _dz_satis_tarih_val = _dt_dz.datetime.strptime(
-                                str(_pl_row["Satış Tarihi"]), "%Y-%m-%d").date()
-                        except Exception:
-                            _dz_satis_tarih_val = _dt_dz.date.today()
-                        _dz_satis_tarih = st.date_input(
-                            "Satış Tarihi", value=_dz_satis_tarih_val,
-                            key="dz_satis_tarih", format="DD.MM.YYYY")
-                    with dz6:
-                        st.caption("")
-                    dz7, dz8 = st.columns(2)
-                    with dz7:
-                        _dz_komisyon = parse_tr(st.text_input(
-                            "Komisyon (₺) — aracı kurumun kestiği gerçek tutar",
-                            value=fmt_tr(float(_pl_row["Komisyon (₺)"]), 2),
-                            key="dz_komisyon"))
-                    with dz8:
-                        _dz_vergi = parse_tr(st.text_input(
-                            "Vergi (₺) — aracı kurumun kestiği gerçek tutar",
-                            value=fmt_tr(float(_pl_row["Vergi (₺)"]), 2),
-                            key="dz_vergi"))
-
-                    dzb1, dzb2 = st.columns([1, 1])
-                    if dzb1.button("Düzeltmeyi Kaydet", type="primary", key="pl_duzelt_kaydet"):
-                        _dz_sonuc = update_sale_record(
-                            _cur_user["id"], _pl_sel_id, _dz_miktar, _dz_alis,
-                            _dz_alis_tarih.strftime("%Y-%m-%d"), _dz_satis,
-                            _dz_satis_tarih.strftime("%Y-%m-%d"),
-                            _dz_komisyon, _dz_vergi)
-                        if _dz_sonuc["basari"]:
-                            st.session_state.pop("pl_duzelt_form_id", None)
-                            if _dz_sonuc.get("uyari"):
-                                st.warning(_dz_sonuc["uyari"])
-                            st.success(f"Kayıt düzeltildi — Net K/Z: {fmt_tr(_dz_sonuc['net_kz'])} ₺")
-                            st.rerun()
-                        else:
-                            st.error(_dz_sonuc["hata"])
-                    if dzb2.button("Vazgeç", key="pl_duzelt_vazgec"):
-                        st.session_state.pop("pl_duzelt_form_id", None)
-                        st.rerun()
 
 
 
