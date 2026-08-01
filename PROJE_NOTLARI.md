@@ -389,6 +389,26 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.117 (31 Temmuz 2026, Bahri'nin bulgusu — HTS
+  örneği, v2.0.7.116'nın eklediği doğrulama sayesinde YAKALANDI):
+  KESİN KÖK NEDEN bulundu — `portfolio`/`portfolio_sales`/
+  `portfolio_fee_settings`/`portfolio_capital_tx` tablolarındaki tüm
+  parasal sütunlar `REAL` (Postgres tek hassasiyetli float4, ~6-7
+  anlamlı basamak) ile tanımlıydı.** 56,630841 gibi 8 anlamlı basamaklı
+  bir değer REAL'de TAM saklanamıyor, en yakın temsil edilebilir değere
+  yuvarlanıyor — v2.0.7.116'nın eklediği "yazdıktan sonra doğrula"
+  kontrolü tam bu yüzden hata verdi (kaydedilen değer istenenle
+  uyuşmuyordu). v2.0.7.115'te Alış/Güncel gösterimi 4→6 ondalığa
+  çıkarılınca bu sorun daha görünür hale geldi. **Düzeltme:** tüm bu
+  sütunlar `DOUBLE PRECISION`a (8 byte, Python'un native float'ıyla aynı,
+  ~15-17 anlamlı basamak) yükseltildi — hem yeni `CREATE TABLE`
+  tanımlarında hem de mevcut Supabase tablolarını yükselten `ALTER
+  COLUMN ... TYPE DOUBLE PRECISION` migration'larıyla (idempotent,
+  `_init_db_once()` sayesinde oturum başına 1 kez çalışır). **Bu, hem
+  Düzelt formunu hem de tüm portföy/satış/sermaye verilerinin hassasiyetini
+  kalıcı olarak düzeltir** — sadece HTS'in maliyetini değil, düşük
+  fiyatlı TEFAS payları/kripto gibi çok ondalıklı her değeri etkiliyordu.
+
 - **[TEŞHİS/SAĞLAMLAŞTIRMA, KESİN DOĞRULANMADI] v2.0.7.116 (31 Temmuz
   2026, Bahri'nin bulgusu — HTS örneği: Düzelt formuyla maliyeti
   56,630800'den 56,630841'e değiştirmeyi denedi, "Düzeltmeyi Kaydet"e

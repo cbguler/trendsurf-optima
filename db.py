@@ -280,8 +280,8 @@ def init_db():
         user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         asset_type    TEXT    NOT NULL,
         ticker        TEXT    NOT NULL,
-        quantity      REAL    NOT NULL DEFAULT 0,
-        avg_cost      REAL    NOT NULL DEFAULT 0,
+        quantity      DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        avg_cost      DOUBLE PRECISION    NOT NULL DEFAULT 0,
         note          TEXT,
         added_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         purchase_date TEXT    DEFAULT '',
@@ -317,17 +317,17 @@ def init_db():
         asset_type   TEXT    NOT NULL,
         ticker       TEXT    NOT NULL,
         unit_type    TEXT    DEFAULT 'Adet',
-        quantity     REAL    NOT NULL,
-        buy_price    REAL    NOT NULL,
+        quantity     DOUBLE PRECISION    NOT NULL,
+        buy_price    DOUBLE PRECISION    NOT NULL,
         buy_date     TEXT    DEFAULT '',
-        sell_price   REAL    NOT NULL,
+        sell_price   DOUBLE PRECISION    NOT NULL,
         sell_date    TEXT    NOT NULL,
-        fee_pct      REAL    NOT NULL DEFAULT 0,
-        tax_pct      REAL    NOT NULL DEFAULT 0,
-        fee_amount   REAL    NOT NULL DEFAULT 0,
-        tax_amount   REAL    NOT NULL DEFAULT 0,
-        gross_pl     REAL    NOT NULL DEFAULT 0,
-        net_pl       REAL    NOT NULL DEFAULT 0,
+        fee_pct      DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        tax_pct      DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        fee_amount   DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        tax_amount   DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        gross_pl     DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        net_pl       DOUBLE PRECISION    NOT NULL DEFAULT 0,
         note         TEXT    DEFAULT '',
         created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
@@ -338,8 +338,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS portfolio_fee_settings (
         user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         asset_type  TEXT    NOT NULL,
-        fee_pct     REAL    NOT NULL DEFAULT 0,
-        tax_pct     REAL    NOT NULL DEFAULT 0,
+        fee_pct     DOUBLE PRECISION    NOT NULL DEFAULT 0,
+        tax_pct     DOUBLE PRECISION    NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, asset_type)
     )""")
 
@@ -357,11 +357,42 @@ def init_db():
         id         SERIAL  PRIMARY KEY,
         user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         tx_type    TEXT    NOT NULL,
-        amount     REAL    NOT NULL,
+        amount     DOUBLE PRECISION    NOT NULL,
         tx_date    TEXT    NOT NULL,
         note       TEXT    DEFAULT '',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
+
+    # v2.0.7.117 - KRITIK VERI DUZELTMESI (Bahri'nin bulgusu, HTS ornegi,
+    # 31 Temmuz 2026: Duzelt formuyla maliyeti 56,630841 yapmaya calisti,
+    # UPDATE hatasiz calisti ama yazdiktan hemen sonra okundugunda deger
+    # UYUSMUYORDU). Kok neden: yukaridaki tablolar parasal alanlari
+    # `REAL` (Postgres tek hassasiyetli float4, ~6-7 anlamli basamak) ile
+    # tanimliyordu. 56,630841 gibi 8 anlamli basamakli bir deger REAL'de
+    # TAM olarak saklanamiyor - en yakin temsil edilebilir degere
+    # yuvarlaniyor (ornegin 56,63084 gibi). v2.0.7.115'te Alis/Guncel
+    # gosterimi 4 ondalitktan 6 ondaliga cikarilinca bu sorun daha da
+    # belirginlesti. CREATE TABLE'lar artik DOUBLE PRECISION (8 byte,
+    # Python'un native float'iyla ayni, ~15-17 anlamli basamak) kullaniyor
+    # - ama bu SADECE YENI kurulan tablolar icin gecerli. Bahri'nin
+    # Supabase'inde tablolar ZATEN REAL ile olusturulmus oldugundan,
+    # asagidaki ALTER COLUMN'lar mevcut tablolari da yukseltir (idempotent
+    # - DOUBLE PRECISION'a zaten yukseltilmisse hata vermez, sadece atlanir
+    # gibi davranir cunku ALTER COLUMN TYPE ayni tipe de guvenle uygulanir).
+    for _tablo, _kolon in (
+        ("portfolio", "quantity"), ("portfolio", "avg_cost"),
+        ("portfolio_sales", "quantity"), ("portfolio_sales", "buy_price"),
+        ("portfolio_sales", "sell_price"), ("portfolio_sales", "fee_pct"),
+        ("portfolio_sales", "tax_pct"), ("portfolio_sales", "fee_amount"),
+        ("portfolio_sales", "tax_amount"), ("portfolio_sales", "gross_pl"),
+        ("portfolio_sales", "net_pl"),
+        ("portfolio_fee_settings", "fee_pct"), ("portfolio_fee_settings", "tax_pct"),
+        ("portfolio_capital_tx", "amount"),
+    ):
+        try:
+            c.execute(f"ALTER TABLE {_tablo} ALTER COLUMN {_kolon} TYPE DOUBLE PRECISION")
+        except Exception as _e:
+            print(f"[db] REAL->DOUBLE PRECISION yukseltme atlandi ({_tablo}.{_kolon}): {_e}")
 
     # Idempotent index'ler
     c.execute("CREATE INDEX IF NOT EXISTS idx_users_email      ON users(LOWER(email))")
