@@ -3804,28 +3804,40 @@ elif page=="Portföyüm":
     # Birim, Alis, Guncel, Toplam, KZ) hizalamasi/agirligi DEGISMEDI.
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = round((df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum(), 2)
-    _total_kz_pct = round((_total_kz / (_total_val - _total_kz) * 100), 2) \
-                    if (_total_val - _total_kz) != 0 else 0.0
-
-    # v2.0.7.120 - KOKTEN DUZELTME (Bahri'nin bulgusu: v2.0.7.118/119'daki
-    # iki ayri hizalama denemesi de tutmadi - once oransal flex agirligi,
-    # sonra sabit piksel genislik, ikisi de kaydi, ikincisi ustune "TL"
-    # yazisini "T"ye kirpti). Kok sorun: Streamlit'in native st.dataframe
-    # bilesenin ic piksel/dolgu degerlerini disariya hic acmiyor - ayri
-    # bir HTML satirini buna gorsel olarak hizalamaya calismak yapisal
-    # olarak kirilgan (tahmine dayali, dogrulanamaz). Bu yuzden hizalama
-    # ILLUZYONUNDAN TAMAMEN VAZGECILDI - toplamlar artik sutunlara
-    # hizalanmaya CALISMIYOR, bunun yerine Streamlit'in kendi native
-    # st.metric kutulariyla (uygulamanin baska yerlerinde zaten kullanilan
-    # ayni desen, bkz. Ana Sayfa "Toplam Deger" metrigi) ayri, net bir ozet
-    # olarak gosteriliyor - bu YAPISAL OLARAK dogru render olmayi garanti
-    # eder (Streamlit'in kendi bileseni, tahmine dayali degil).
-    st.divider()
-    _tm1, _tm2, _tm3 = st.columns(3)
-    _tm1.metric("Toplam Portföy Değeri", f"{fmt_tr(_total_val)} TL")
-    _tm2.metric("Toplam K/Z", f"{fmt_tr(_total_kz)} TL",
-                delta=f"{fmt_tr(_total_kz_pct)}%" if _total_kz != 0 else "0,00%")
-    _tm3.metric("Varlık Sayısı", f"{len(df_pf)}")
+    # v2.0.7.121 - GERI ALMA (Bahri'nin talebi, 31 Temmuz 2026): v2.0.7.118-
+    # 120 arasinda 3 farkli hizalama denemesi yapildi (oransal flex, sabit
+    # piksel, native st.metric) - hicbiri Bahri'yi tatmin etmedi, sonuncusu
+    # "kayik olandan daha kotu" bulundu. ORIJINAL (v2.0.7.117 ve oncesi)
+    # satir bicimine AYNEN geri donuldu - SADECE gercekten hatali olan
+    # isaret kontrolu (`>=0` sifiri de pozitif sayiyordu) kalici olarak
+    # duzeltildi kaldi, hizalamaya BASKA DOKUNULMADI.
+    _tcc = "#27ae60" if _total_kz >= 0 else "#e74c3c"
+    _tcs = "+" if _total_kz > 0 else ""
+    _footer_kolonlar = [
+        ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
+        ("Miktar", 1), ("Birim", 1),
+        ("Alış", 1), ("Güncel", 1),
+        ("TOPLAM", 1), ("KZ", 1),
+        ("", 1), ("", 1.2), ("", 1.9),
+    ]
+    _footer_html = ""
+    for _etiket, _w in _footer_kolonlar:
+        if _etiket == "ETIKET":
+            _icerik = "<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        elif _etiket == "TOPLAM":
+            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
+        elif _etiket == "KZ":
+            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
+        else:
+            _icerik = ""
+        _hiza = "left" if _etiket == "ETIKET" else "right"
+        _footer_html += f"<div style='flex:{_w};text-align:{_hiza};padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
+    st.markdown(
+        f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:6px;'></div>"
+        f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"
+        f"{_footer_html}</div>",
+        unsafe_allow_html=True
+    )
 
     # Seçili satır(lar) — Coklu ise toplu Sil, tekli ise Sil + Analiz
     _sel = _event.selection.rows if hasattr(_event,"selection") else []

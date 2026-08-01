@@ -389,6 +389,21 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[GERİ ALINDI] v2.0.7.121 (31 Temmuz 2026, Bahri'nin talebi):
+  hizalama denemeleri durduruldu.** v2.0.7.118, 119 ve 120'de sırayla
+  3 farklı yaklaşım denendi (oransal flex ağırlığı, sabit piksel
+  genişlik, native `st.metric` kutuları) — hiçbiri Bahri'yi tatmin
+  etmedi, sonuncusu (metric kutuları) "kayık olandan daha kötü"
+  bulundu. **Orijinal (v2.0.7.117 ve öncesi) satır biçimine AYNEN geri
+  dönüldü** — sadece gerçekten hatalı olan işaret kontrolü (`>=0`
+  sıfırı da pozitif sayıyordu, artık `>0`) kalıcı olarak düzeltilmiş
+  halde kaldı, hizalamaya BAŞKA DOKUNULMADI. **Ders/not:** Streamlit'in
+  native `st.dataframe` bileşeninin iç piksel/dolgu değerleri dışarı
+  açılmıyor — ayrı bir HTML satırını buna hizalamaya çalışmak yapısal
+  olarak kırılgan ve bu ortamdan doğrulanamaz; bu konu bir daha
+  gündeme gelirse doğrudan sütun hizalamasına dokunmadan önce Bahri'ye
+  bu kısıtı hatırlat.
+
 - **[UYGULANDI, MİMARİ DEĞİŞİKLİK] v2.0.7.120 (31 Temmuz 2026, Bahri'nin
   bulgusu — v2.0.7.118/119'daki İKİ hizalama denemesi de başarısız oldu,
   ikincisinde "TL" yazısı "T"ye kırpıldı).** Kök sorun: Streamlit'in
