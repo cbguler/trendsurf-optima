@@ -3665,7 +3665,7 @@ elif page=="Portföyüm":
         else:
             _skor = 0.0
         _toplam = _adet * _guncel
-        _kz_pct = ((_guncel/_alis-1)*100) if _alis>0 else 0.0
+        _kz_pct = round(((_guncel/_alis-1)*100) if _alis>0 else 0.0, 2)
 
         # v2.0.3: Sinyal etiketi (hizli yontem - CSV verisi, yfinance cagrisi yok)
         # Trend tahmini: Ret1M >= 0 ise YUKSELIS, degilse DUSUS
@@ -3806,9 +3806,15 @@ elif page=="Portföyüm":
     _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
     _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
     _tcs = "+" if _total_kz>=0 else ""
+    # v2.0.7.118 - DUZELTME (Bahri'nin bulgusu): v2.0.7.115'te Miktar
+    # (82->64px) ve Birim (68->54px) sutunlari daraltilinca, asagidaki
+    # footer_kolonlar agirliklari (o zaman GERCEK piksel genislikleriyle
+    # orantili ayarlanmisti) guncellenmeden kaldi - toplam satiri artik
+    # gercek sutunlarin biraz solunda kaliyordu. Agirliklar ayni oranla
+    # (64/82=0.78, 54/68=0.79) kuculdu.
     _footer_kolonlar = [
         ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
-        ("Miktar", 1), ("Birim", 1),
+        ("Miktar", 0.78), ("Birim", 0.79),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
         ("", 1), ("", 1.2), ("", 1.9),

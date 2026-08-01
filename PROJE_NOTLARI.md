@@ -389,6 +389,20 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.118 (31 Temmuz 2026, Bahri'nin bulgusu — MTG
+  örneği): iki küçük görsel/mantık düzeltmesi, Portföy Varlıkları
+  Tablosu.** (1) K/Z % sütununda MTG gibi K/Z (TL) tam 0,00 görünen
+  ama K/Z %'de "+0,00%" gösterilen satırlar vardı — kök neden: K/Z (TL)
+  önceden 2 ondalığa yuvarlanıp saklanıyordu ama K/Z % HİÇ yuvarlanmadan
+  (tam kayan nokta hassasiyetiyle) saklanıyordu; işaret kontrolü (`xf>0`)
+  yuvarlanmamış mikroskobik bir kalıntıyı (ör. 0,00004) yakalayıp "+"
+  basıyordu, ekranda "0,00" görünse de. Artık K/Z % de K/Z gibi 2
+  ondalığa önceden yuvarlanıyor. (2) Alt "TOPLAM PORTFÖY DEĞERİ" satırının
+  hizalaması v2.0.7.115'teki Miktar/Birim sütun daraltmasından sonra
+  güncellenmemişti (footer'ın flex ağırlıkları eski piksel genişlikleriyle
+  ayarlanmıştı) — Miktar/Birim ağırlıkları aynı oranla (64/82, 54/68)
+  küçültülerek yeniden hizalandı.
+
 - **[UYGULANDI] v2.0.7.117 (31 Temmuz 2026, Bahri'nin bulgusu — HTS
   örneği, v2.0.7.116'nın eklediği doğrulama sayesinde YAKALANDI):
   KESİN KÖK NEDEN bulundu — `portfolio`/`portfolio_sales`/
