@@ -3463,7 +3463,12 @@ elif page=="Portföyüm":
                 return "Gram"
             # Sikkeler ve diger madenler (Bakir vb.) -> Adet
             return "Adet"
-        # TEFAS, KRIPTO, DOVIZ ve digerleri -> Adet
+        # v2.0.7.113 (Bahri'nin bulgusu, ILU fon ornegi, 31 Temmuz 2026):
+        # TEFAS fonlari "Adet" degil "Pay" birimiyle islem gorur (TEFAS'ta
+        # katilma payi denir). Onceden "Adet" varsayilandi - yanlisti.
+        if k == "TEFAS":
+            return "Pay"
+        # KRIPTO, DOVIZ ve digerleri -> Adet
         return "Adet"
 
     # ── Yeni Pozisyon Ekle ──────────────────────────────────────
@@ -3502,7 +3507,7 @@ elif page=="Portföyüm":
                     # Default kategoriye gore (BIST->Lot, MADEN gram->Gram, vs).
                     # Key ticker'a baglandigi icin yeni varlik secildikce dropdown
                     # uygun default'a doner. Kullanici manuel de degistirebilir.
-                    _unit_opts = ["Adet","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
+                    _unit_opts = ["Adet","Pay","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
                     _def_unit  = _default_unit_for(pt, pt_cat)
                     _def_idx   = _unit_opts.index(_def_unit) if _def_unit in _unit_opts else 0
                     unit_type = st.selectbox("Birim Türü", _unit_opts,

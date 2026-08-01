@@ -389,6 +389,18 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.113 (31 Temmuz 2026, Bahri'nin bulgusu — ILU fon
+  örneği: TEFAS fonları "pay" birimiyle işlem görür, sistemde bu isimde
+  bir birim seçeneği yoktu).** `_unit_opts` listesine "Pay" eklendi, ve
+  `_default_unit_for()`'da TEFAS kategorisinin varsayılan birimi
+  "Adet"ten "Pay"a çevrildi (BIST->Lot, MADEN gram bazlı->Gram ile aynı
+  desende). Bahri'nin ayrıca belirttiği "ILU'da 1 milyon adetten az
+  alınamıyor" bilgisi — bu TEFAS/aracı kurum tarafındaki bir alım-satım
+  kısıtı, uygulama gerçek emir vermediği (sadece pozisyon kaydı tuttuğu)
+  için bir minimum-miktar doğrulaması EKLENMEDİ; sadece bağlam olarak not
+  edildi. İstenirse ileride "bu fon için minimum X pay" gibi bilgilendirici
+  bir uyarı eklenebilir.
+
 - **[UYGULANDI] v2.0.7.112 (30 Temmuz 2026, Bahri'nin talebi — büyük
   özellik): "Başlangıç sermaye miktarının, ne kadar zamanda kaça
   geldiğinin, sattığımda ne kâr ettiğimin ve elimde güncel olarak
