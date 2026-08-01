@@ -3803,21 +3803,28 @@ elif page=="Portföyüm":
     # kutusuna birlestirerek cozuldu - geri kalan sutunlarin (Miktar,
     # Birim, Alis, Guncel, Toplam, KZ) hizalamasi/agirligi DEGISMEDI.
     _total_val = df_pf["Toplam"].sum()
-    _total_kz  = (df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum()
-    _tcc = "#27ae60" if _total_kz>=0 else "#e74c3c"
-    _tcs = "+" if _total_kz>=0 else ""
-    # v2.0.7.118 - DUZELTME (Bahri'nin bulgusu): v2.0.7.115'te Miktar
-    # (82->64px) ve Birim (68->54px) sutunlari daraltilinca, asagidaki
-    # footer_kolonlar agirliklari (o zaman GERCEK piksel genislikleriyle
-    # orantili ayarlanmisti) guncellenmeden kaldi - toplam satiri artik
-    # gercek sutunlarin biraz solunda kaliyordu. Agirliklar ayni oranla
-    # (64/82=0.78, 54/68=0.79) kuculdu.
+    _total_kz  = round((df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum(), 2)
+    # v2.0.7.119 (Bahri'nin bulgusu): "+0,00 TL" sorunu K/Z% satirlarindaki
+    # ayni sorunun BASKA bir yerdeki (bu footer'a ozel, _fmt_tr_isaretli'yi
+    # KULLANMAYAN ayri bir isaret hesabi) kopyasiydi - `_total_kz>=0` sifiri
+    # da "pozitif" sayiyordu. Once yuvarlanip sonra >0/<0/== ile ayriliyor.
+    _tcc = "#27ae60" if _total_kz >= 0 else "#e74c3c"
+    _tcs = "+" if _total_kz > 0 else ""  # fmt_tr negatif isareti zaten kendi ekliyor
+    # v2.0.7.119 - DUZELTME 2 (Bahri'nin bulgusu: onceki oransal flex
+    # tahmini yeterli hassasiyette degildi, hizalama hala kaymisti).
+    # Artik ORANSAL degil, sutunlarin column_config'teki GERCEK piksel
+    # genislikleriyle BIREBIR ayni sabit piksel genislikleri kullaniliyor
+    # (flex:0 0 Wpx - buyumez/kucalmez, tam W piksel). "small" = 75px
+    # (yukaridaki column_config yorumundaki donusum ile ayni). Checkbox
+    # secim sutunu icin Streamlit'in kendi varsayilanina en yakin tahmin
+    # (~40px) kullanildi - bu tek kesin bilinmeyen, cunku column_config'te
+    # tanimli degil (Streamlit'in dahili/otomatik sutunu).
     _footer_kolonlar = [
-        ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
-        ("Miktar", 0.78), ("Birim", 0.79),
-        ("Alış", 1), ("Güncel", 1),
-        ("TOPLAM", 1), ("KZ", 1),
-        ("", 1), ("", 1.2), ("", 1.9),
+        ("ETIKET", 40 + 79 + 75),  # checkbox(~40) + Ticker(79) + Tarih(75)
+        ("Miktar", 64), ("Birim", 54),
+        ("Alış", 75), ("Güncel", 75),
+        ("TOPLAM", 75), ("KZ", 75),
+        ("", 75), ("", 75), ("", 120),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
@@ -3830,7 +3837,7 @@ elif page=="Portföyüm":
         else:
             _icerik = ""
         _hiza = "left" if _etiket == "ETIKET" else "right"
-        _footer_html += f"<div style='flex:{_w};text-align:{_hiza};padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
+        _footer_html += f"<div style='flex:0 0 {_w}px;width:{_w}px;text-align:{_hiza};padding:0 4px;white-space:nowrap;overflow:hidden;'>{_icerik}</div>"
     st.markdown(
         f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:6px;'></div>"
         f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"

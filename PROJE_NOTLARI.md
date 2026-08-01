@@ -389,6 +389,29 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, GÖRSEL DOĞRULAMA GEREKİYOR] v2.0.7.119 (31 Temmuz 2026,
+  Bahri'nin bulgusu — v2.0.7.118'in iki düzeltmesi de yeterli değildi).**
+  (1) "TOPLAM K/Z +0,00 TL" sorunu — v2.0.7.118 sadece tablo SATIRLARINDAKİ
+  işaret mantığını (`_fmt_tr_isaretli`) düzeltmişti; alttaki TOPLAM
+  satırının KENDİ AYRI işaret hesabı (`_tcs = "+" if _total_kz>=0 else ""`)
+  farklı bir kod parçasıydı ve gözden kaçmıştı — `>=0` sıfırı da pozitif
+  sayıyordu. `>0` yapıldı (ve `_total_kz` önce yuvarlandı). **DİKKAT:**
+  `fmt_tr()` negatif sayılar için KENDİ "-" işaretini zaten ekliyor - bu
+  yüzden `_tcs` SADECE "+" için kullanılmalı, negatif için boş bırakılmalı
+  (aksi halde "--123,45 TL" gibi çift eksi çıkar) - bu tuzağa düşülmedi
+  ama ileride bu satır tekrar düzenlenirse dikkat edilmeli.
+  (2) Hizalama — v2.0.7.118'deki ORANSAL flex ağırlığı tahmini (64/82,
+  54/68 oranları) yeterli hassasiyette değildi. Artık footer, sütunların
+  `column_config`'teki GERÇEK piksel genişlikleriyle BİREBİR aynı SABİT
+  piksel genişlikleri kullanıyor (`flex:0 0 Wpx`, oransal değil). **Tek
+  kesin bilinmeyen:** Streamlit'in otomatik seçim checkbox sütununun tam
+  piksel genişliği `column_config`'te tanımlı değil, ~40px olarak
+  TAHMİN edildi — gerçek değer farklıysa hizalama yine küçük bir kayma
+  gösterebilir. **Bu oturumda görsel olarak doğrulanamadı** (canlı
+  render'a erişim yok) — push sonrası Bahri'nin gözle kontrol etmesi
+  gerekiyor; checkbox genişliği tahmini yanlışsa bana kaç piksel kaydığını
+  söylemesi yeterli olur, kesin değeri buluruz.
+
 - **[UYGULANDI] v2.0.7.118 (31 Temmuz 2026, Bahri'nin bulgusu — MTG
   örneği): iki küçük görsel/mantık düzeltmesi, Portföy Varlıkları
   Tablosu.** (1) K/Z % sütununda MTG gibi K/Z (TL) tam 0,00 görünen
