@@ -389,6 +389,16 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.115 (31 Temmuz 2026, Bahri'nin talebi): Portföy
+  Varlıkları Tablosu görsel ince ayarları.** (1) Miktar sütunu artık 2
+  ondalık basamak (önceden 4). (2) Alış ve Güncel sütunları artık 6
+  ondalık basamak (önceden 4) — küçük birim fiyatlı varlıklarda (ör.
+  kripto/TEFAS payları) hassasiyet artsın diye. (3) Miktar sütunu 82px'ten
+  64px'e, Birim sütunu 68px'ten 54px'e daraltıldı. Not: bu değişiklik
+  sadece salt-okunur TABLOYA uygulandı — Sat/Düzelt formlarındaki giriş
+  alanlarının varsayılan ondalık hassasiyeti (4) değiştirilmedi, istenirse
+  ayrıca güncellenebilir.
+
 - **[UYGULANDI] v2.0.7.114 (31 Temmuz 2026, Bahri'nin talebi): Portföy
   Varlıkları Tablosu'nda bir satır seçilince "Sil"/"Sat"ın yanına
   üçüncü bir **"Düzelt"** seçeneği eklendi.** Yanlış girilmiş bir

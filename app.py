@@ -3684,9 +3684,9 @@ elif page=="Portföyüm":
         isaret = "+" if xf > 0 else ("-" if xf < 0 else "")
         return f"{isaret}{taban}{'%' if yuzde else ''}"
 
-    df_show["Miktar"] = df_show["Miktar"].apply(lambda v: fmt_tr(v, 4))
-    df_show["Alış"]   = df_show["Alış"].apply(lambda v: fmt_tr(v, 4))
-    df_show["Güncel"] = df_show["Güncel"].apply(lambda v: fmt_tr(v, 4))
+    df_show["Miktar"] = df_show["Miktar"].apply(lambda v: fmt_tr(v, 2))
+    df_show["Alış"]   = df_show["Alış"].apply(lambda v: fmt_tr(v, 6))
+    df_show["Güncel"] = df_show["Güncel"].apply(lambda v: fmt_tr(v, 6))
     df_show["Toplam"] = df_show["Toplam"].apply(lambda v: fmt_tr(v, 2))
     df_show["K/Z"]    = df_show["K/Z"].apply(lambda v: _fmt_tr_isaretli(v, 2))
     df_show["K/Z %"]  = df_show["K/Z %"].apply(lambda v: _fmt_tr_isaretli(v, 2, yuzde=True))
@@ -3741,8 +3741,8 @@ elif page=="Portföyüm":
             # (daha guvenilir, Styler CSS destegine bagimli degil).
             "Ticker": st.column_config.TextColumn(width=79),
             "Tarih":  st.column_config.TextColumn(width="small"),
-            "Miktar": st.column_config.TextColumn(width=82, alignment="right"),
-            "Birim":  st.column_config.TextColumn(width=68),
+            "Miktar": st.column_config.TextColumn(width=64, alignment="right"),
+            "Birim":  st.column_config.TextColumn(width=54),
             "Alış":   st.column_config.TextColumn(width="small", alignment="right", help="Alış fiyatı (TL)"),
             "Güncel": st.column_config.TextColumn(width="small", alignment="right", help="Güncel piyasa fiyatı (TL)"),
             "Toplam": st.column_config.TextColumn(width="small", alignment="right", help="Pozisyon toplam değeri (TL)"),
