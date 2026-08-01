@@ -389,6 +389,24 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, MİMARİ DEĞİŞİKLİK] v2.0.7.120 (31 Temmuz 2026, Bahri'nin
+  bulgusu — v2.0.7.118/119'daki İKİ hizalama denemesi de başarısız oldu,
+  ikincisinde "TL" yazısı "T"ye kırpıldı).** Kök sorun: Streamlit'in
+  native `st.dataframe` bileşeni iç piksel/dolgu değerlerini dışarı hiç
+  açmıyor — ayrı bir HTML satırını buna görsel olarak hizalamaya çalışmak
+  (önce oransal flex ağırlığı, sonra sabit piksel genişlik) yapısal olarak
+  kırılgan ve tahmine dayalıydı, doğrulanamıyordu (bu ortamdan canlı
+  render'a erişim yok). **Hizalama illüzyonundan TAMAMEN vazgeçildi** —
+  "TOPLAM PORTFÖY DEĞERİ" satırı artık tablo sütunlarına hizalanmaya
+  çalışmıyor; bunun yerine Streamlit'in kendi native `st.metric`
+  kutularıyla (3 kutu: Toplam Portföy Değeri, Toplam K/Z, Varlık Sayısı)
+  ayrı, net bir özet olarak gösteriliyor — uygulamanın başka yerinde
+  (Ana Sayfa) zaten kullanılan aynı desen. Bu, YAPISAL olarak doğru
+  render'ı garanti eder (tahmine dayalı değil, Streamlit'in kendi
+  bileşeni). "+0,00 TL" işaret sorunu da bu arada kalıcı olarak çözüldü
+  (yeni `_total_kz_pct` hesabıyla birlikte, `_total_kz` önce yuvarlanıp
+  sonra kontrol ediliyor).
+
 - **[UYGULANDI, GÖRSEL DOĞRULAMA GEREKİYOR] v2.0.7.119 (31 Temmuz 2026,
   Bahri'nin bulgusu — v2.0.7.118'in iki düzeltmesi de yeterli değildi).**
   (1) "TOPLAM K/Z +0,00 TL" sorunu — v2.0.7.118 sadece tablo SATIRLARINDAKİ

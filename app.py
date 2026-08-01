@@ -3804,46 +3804,28 @@ elif page=="Portföyüm":
     # Birim, Alis, Guncel, Toplam, KZ) hizalamasi/agirligi DEGISMEDI.
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = round((df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum(), 2)
-    # v2.0.7.119 (Bahri'nin bulgusu): "+0,00 TL" sorunu K/Z% satirlarindaki
-    # ayni sorunun BASKA bir yerdeki (bu footer'a ozel, _fmt_tr_isaretli'yi
-    # KULLANMAYAN ayri bir isaret hesabi) kopyasiydi - `_total_kz>=0` sifiri
-    # da "pozitif" sayiyordu. Once yuvarlanip sonra >0/<0/== ile ayriliyor.
-    _tcc = "#27ae60" if _total_kz >= 0 else "#e74c3c"
-    _tcs = "+" if _total_kz > 0 else ""  # fmt_tr negatif isareti zaten kendi ekliyor
-    # v2.0.7.119 - DUZELTME 2 (Bahri'nin bulgusu: onceki oransal flex
-    # tahmini yeterli hassasiyette degildi, hizalama hala kaymisti).
-    # Artik ORANSAL degil, sutunlarin column_config'teki GERCEK piksel
-    # genislikleriyle BIREBIR ayni sabit piksel genislikleri kullaniliyor
-    # (flex:0 0 Wpx - buyumez/kucalmez, tam W piksel). "small" = 75px
-    # (yukaridaki column_config yorumundaki donusum ile ayni). Checkbox
-    # secim sutunu icin Streamlit'in kendi varsayilanina en yakin tahmin
-    # (~40px) kullanildi - bu tek kesin bilinmeyen, cunku column_config'te
-    # tanimli degil (Streamlit'in dahili/otomatik sutunu).
-    _footer_kolonlar = [
-        ("ETIKET", 40 + 79 + 75),  # checkbox(~40) + Ticker(79) + Tarih(75)
-        ("Miktar", 64), ("Birim", 54),
-        ("Alış", 75), ("Güncel", 75),
-        ("TOPLAM", 75), ("KZ", 75),
-        ("", 75), ("", 75), ("", 120),
-    ]
-    _footer_html = ""
-    for _etiket, _w in _footer_kolonlar:
-        if _etiket == "ETIKET":
-            _icerik = "<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        elif _etiket == "TOPLAM":
-            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
-        elif _etiket == "KZ":
-            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
-        else:
-            _icerik = ""
-        _hiza = "left" if _etiket == "ETIKET" else "right"
-        _footer_html += f"<div style='flex:0 0 {_w}px;width:{_w}px;text-align:{_hiza};padding:0 4px;white-space:nowrap;overflow:hidden;'>{_icerik}</div>"
-    st.markdown(
-        f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:6px;'></div>"
-        f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"
-        f"{_footer_html}</div>",
-        unsafe_allow_html=True
-    )
+    _total_kz_pct = round((_total_kz / (_total_val - _total_kz) * 100), 2) \
+                    if (_total_val - _total_kz) != 0 else 0.0
+
+    # v2.0.7.120 - KOKTEN DUZELTME (Bahri'nin bulgusu: v2.0.7.118/119'daki
+    # iki ayri hizalama denemesi de tutmadi - once oransal flex agirligi,
+    # sonra sabit piksel genislik, ikisi de kaydi, ikincisi ustune "TL"
+    # yazisini "T"ye kirpti). Kok sorun: Streamlit'in native st.dataframe
+    # bilesenin ic piksel/dolgu degerlerini disariya hic acmiyor - ayri
+    # bir HTML satirini buna gorsel olarak hizalamaya calismak yapisal
+    # olarak kirilgan (tahmine dayali, dogrulanamaz). Bu yuzden hizalama
+    # ILLUZYONUNDAN TAMAMEN VAZGECILDI - toplamlar artik sutunlara
+    # hizalanmaya CALISMIYOR, bunun yerine Streamlit'in kendi native
+    # st.metric kutulariyla (uygulamanin baska yerlerinde zaten kullanilan
+    # ayni desen, bkz. Ana Sayfa "Toplam Deger" metrigi) ayri, net bir ozet
+    # olarak gosteriliyor - bu YAPISAL OLARAK dogru render olmayi garanti
+    # eder (Streamlit'in kendi bileseni, tahmine dayali degil).
+    st.divider()
+    _tm1, _tm2, _tm3 = st.columns(3)
+    _tm1.metric("Toplam Portföy Değeri", f"{fmt_tr(_total_val)} TL")
+    _tm2.metric("Toplam K/Z", f"{fmt_tr(_total_kz)} TL",
+                delta=f"{fmt_tr(_total_kz_pct)}%" if _total_kz != 0 else "0,00%")
+    _tm3.metric("Varlık Sayısı", f"{len(df_pf)}")
 
     # Seçili satır(lar) — Coklu ise toplu Sil, tekli ise Sil + Analiz
     _sel = _event.selection.rows if hasattr(_event,"selection") else []
