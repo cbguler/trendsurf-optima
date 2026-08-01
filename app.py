@@ -1712,6 +1712,44 @@ def delete_portfolio_item(item_id: int) -> bool:
     return True
 
 
+def update_portfolio_item(item_id: int, adet: float, maliyet: float,
+                           purchase_date: str = "", unit_type: str = "Adet",
+                           note: str = None) -> dict:
+    """v2.0.7.114 (Bahri'nin talebi): açık bir pozisyonun giriş bilgilerini
+    (miktar, maliyet, alış tarihi, birim türü, not) sonradan düzeltebilmek
+    için - ör. yanlış girilmiş bir maliyeti ya da tarihi elden düzeltmek.
+    Ticker/asset_type KASITLI OLARAK degistirilemez (varlığın kendisini
+    değiştirmek "düzeltme" değil, sil+yeniden-ekle olmalı - farklı bir
+    işlem)."""
+    from db import get_conn
+    user_id = (_cur_user or {}).get("id")
+    if not user_id:
+        return {"basari": False, "hata": "Oturum bulunamadı."}
+    try:
+        adet = float(adet); maliyet = float(maliyet)
+    except (TypeError, ValueError):
+        return {"basari": False, "hata": "Geçersiz miktar/maliyet."}
+    if adet <= 0:
+        return {"basari": False, "hata": "Miktar 0'dan büyük olmalı."}
+    if maliyet <= 0:
+        return {"basari": False, "hata": "Maliyet 0'dan büyük olmalı."}
+    conn = get_conn()
+    if note is None:
+        conn.execute(
+            "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=? "
+            "WHERE id=? AND user_id=?",
+            (adet, maliyet, purchase_date, unit_type, item_id, user_id)
+        )
+    else:
+        conn.execute(
+            "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=?, note=? "
+            "WHERE id=? AND user_id=?",
+            (adet, maliyet, purchase_date, unit_type, note, item_id, user_id)
+        )
+    conn.commit(); conn.close()
+    return {"basari": True}
+
+
 def clear_portfolio() -> bool:
     from db import get_conn
     user_id = (_cur_user or {}).get("id")
@@ -3624,11 +3662,12 @@ elif page=="Portföyüm":
             "Sinyal":       _sig_lbl,
             "_id":          pos["id"],
             "_asset_type":  pos.get("asset_type","BIST") or "BIST",
+            "_purchase_date_raw": _traw,
         })
 
     import pandas as _pd2
     df_pf = _pd2.DataFrame(_pf_rows)
-    df_show = df_pf.drop(columns=["_id", "_asset_type"])
+    df_show = df_pf.drop(columns=["_id", "_asset_type", "_purchase_date_raw"])
 
     # v2.0.7.58 - KRITIK DUZELTME (Bahri'nin bulgusu): bu tablo NumberColumn
     # format="%.4f" gibi INGILIZCE (nokta ondalik) format string'leri
@@ -3777,12 +3816,69 @@ elif page=="Portföyüm":
         _row_data = _pf_rows[_si]
         _sel_tkr  = _row_data["Ticker"]
         _sel_id   = _row_data["_id"]
-        _ca, _cb, _cc  = st.columns([1, 1, 4])
+        _ca, _cb, _cd, _cc  = st.columns([1, 1, 1, 3])
         if _ca.button(f"Sil: {_sel_tkr}", type="secondary", key="pf_sil"):
             delete_portfolio_item(_sel_id)
             st.rerun()
         if _cb.button(f"Sat: {_sel_tkr}", type="primary", key="pf_sat_ac"):
             st.session_state["pf_satis_form_id"] = _sel_id
+        if _cd.button(f"Düzelt: {_sel_tkr}", type="secondary", key="pf_duzelt_ac"):
+            st.session_state["pf_giris_duzelt_id"] = _sel_id
+
+        # v2.0.7.114 (Bahri'nin talebi): açık pozisyonun giriş bilgilerini
+        # (miktar, maliyet, alış tarihi, birim türü) düzeltme formu.
+        # Ticker/kategori KASITLI değiştirilemez - farklı bir varlığa
+        # dönüştürmek "düzeltme" değil, ayrı bir işlemdir (sil+ekle).
+        if st.session_state.get("pf_giris_duzelt_id") == _sel_id:
+            with st.container(border=True):
+                st.markdown(f"**{_sel_tkr} — Giriş Bilgilerini Düzelt**")
+                import datetime as _dt_duz
+                _raw_tarih = _row_data.get("_purchase_date_raw", "")
+                try:
+                    _duz_tarih_def = (_dt_duz.datetime.strptime(_raw_tarih, "%Y-%m-%d").date()
+                                       if _raw_tarih and len(_raw_tarih) == 10
+                                       else _dt_duz.date.today())
+                except Exception:
+                    _duz_tarih_def = _dt_duz.date.today()
+
+                dz1, dz2, dz3, dz4 = st.columns(4)
+                with dz1:
+                    _duz_miktar_str = st.text_input(
+                        "Miktar", value=fmt_tr(_row_data["Miktar"], 4),
+                        key="pf_duzelt_miktar")
+                with dz2:
+                    _duz_maliyet_str = st.text_input(
+                        "Maliyet (birim, TL)", value=fmt_tr(_row_data["Alış"], 4),
+                        key="pf_duzelt_maliyet")
+                with dz3:
+                    _duz_tarih = st.date_input(
+                        "Alış Tarihi", value=_duz_tarih_def,
+                        key="pf_duzelt_tarih", format="DD.MM.YYYY")
+                with dz4:
+                    _duz_unit_opts = ["Adet","Pay","Gram","Lot","Ons","Varil","Ton","kg","m²","Diğer"]
+                    _duz_unit_def = _row_data.get("Birim", "Adet") or "Adet"
+                    _duz_unit_idx = (_duz_unit_opts.index(_duz_unit_def)
+                                     if _duz_unit_def in _duz_unit_opts else 0)
+                    _duz_unit = st.selectbox(
+                        "Birim Türü", _duz_unit_opts, index=_duz_unit_idx,
+                        key="pf_duzelt_birim")
+
+                dzb1, dzb2 = st.columns([1, 1])
+                if dzb1.button("Düzeltmeyi Kaydet", type="primary", key="pf_duzelt_kaydet"):
+                    _duz_miktar = parse_tr(_duz_miktar_str)
+                    _duz_maliyet = parse_tr(_duz_maliyet_str)
+                    _sonuc = update_portfolio_item(
+                        _sel_id, _duz_miktar, _duz_maliyet,
+                        _duz_tarih.strftime("%Y-%m-%d"), _duz_unit)
+                    if _sonuc["basari"]:
+                        st.session_state.pop("pf_giris_duzelt_id", None)
+                        st.success(f"{_sel_tkr} giriş bilgileri güncellendi.")
+                        st.rerun()
+                    else:
+                        st.error(_sonuc["hata"])
+                if dzb2.button("Vazgeç", key="pf_duzelt_vazgec2"):
+                    st.session_state.pop("pf_giris_duzelt_id", None)
+                    st.rerun()
 
         # v2.0.7.47 - Satış formu (Bahri'nin talebi: gerçek muhasebe -
         # satış kalıcı bir kayıt olarak tutulur, komisyon+vergi düşülmüş

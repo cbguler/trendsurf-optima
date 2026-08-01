@@ -389,6 +389,18 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.114 (31 Temmuz 2026, Bahri'nin talebi): Portföy
+  Varlıkları Tablosu'nda bir satır seçilince "Sil"/"Sat"ın yanına
+  üçüncü bir **"Düzelt"** seçeneği eklendi.** Yanlış girilmiş bir
+  miktar/maliyet/tarih/birim türünü satmadan veya silmeden düzeltebilme
+  ihtiyacı. Yeni `update_portfolio_item()` fonksiyonu (app.py, `add_/
+  delete_portfolio_item`'ın hemen yanında) — Miktar, Maliyet, Alış
+  Tarihi, Birim Türü güncellenebiliyor. **Ticker/kategori BİLİNÇLİ
+  OLARAK değiştirilemez** — farklı bir varlığa dönüştürmek "düzeltme"
+  değil ayrı bir işlemdir (gerekirse sil+yeniden ekle). Form, satış
+  formuyla aynı görsel desende (`st.container(border=True)`, aynı buton
+  yerleşimi).
+
 - **[UYGULANDI] v2.0.7.113 (31 Temmuz 2026, Bahri'nin bulgusu — ILU fon
   örneği: TEFAS fonları "pay" birimiyle işlem görür, sistemde bu isimde
   bir birim seçeneği yoktu).** `_unit_opts` listesine "Pay" eklendi, ve
