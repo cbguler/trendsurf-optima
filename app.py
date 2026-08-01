@@ -1734,20 +1734,52 @@ def update_portfolio_item(item_id: int, adet: float, maliyet: float,
     if maliyet <= 0:
         return {"basari": False, "hata": "Maliyet 0'dan büyük olmalı."}
     conn = get_conn()
-    if note is None:
-        conn.execute(
-            "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=? "
-            "WHERE id=? AND user_id=?",
-            (adet, maliyet, purchase_date, unit_type, item_id, user_id)
-        )
-    else:
-        conn.execute(
-            "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=?, note=? "
-            "WHERE id=? AND user_id=?",
-            (adet, maliyet, purchase_date, unit_type, note, item_id, user_id)
-        )
-    conn.commit(); conn.close()
-    return {"basari": True}
+    try:
+        if note is None:
+            _cur = conn.execute(
+                "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=? "
+                "WHERE id=? AND user_id=?",
+                (adet, maliyet, purchase_date, unit_type, item_id, user_id)
+            )
+        else:
+            _cur = conn.execute(
+                "UPDATE portfolio SET quantity=?, avg_cost=?, purchase_date=?, unit_type=?, note=? "
+                "WHERE id=? AND user_id=?",
+                (adet, maliyet, purchase_date, unit_type, note, item_id, user_id)
+            )
+        # v2.0.7.116 - KRITIK DUZELTME (Bahri'nin bulgusu, HTS ornegi, 31
+        # Temmuz 2026: Duzelt formuyla maliyeti degistirdi, kaydet dedi,
+        # tabloda hic degismedi - hicbir hata da gorunmedi). Eskiden bu
+        # fonksiyon UPDATE'i hicbir try/except OLMADAN calistiriyordu -
+        # bir hata olsaydi Streamlit'in kirmizi traceback kutusu cikardi,
+        # AMA rowcount==0 (yani "WHERE id=? AND user_id=?" hicbir satirla
+        # eslesmedi - ornegin item_id/user_id uyumsuzlugu) durumunda
+        # HATASIZ ama ETKISIZ bir UPDATE calisiyordu - hic satir
+        # degismedi, hic hata da firlamadi, "basari: True" donuyordu.
+        # Artik rowcount kontrol ediliyor + yazdiktan hemen sonra satir
+        # tekrar okunup GERCEKTEN degisip degismedigi dogrulaniyor.
+        if _cur.rowcount == 0:
+            conn.rollback(); conn.close()
+            return {"basari": False,
+                    "hata": "Güncelleme hiçbir satırı etkilemedi (kayıt bulunamadı ya da "
+                            "size ait değil) - hiçbir değer değiştirilmedi."}
+        conn.commit()
+        _dogrula = conn.execute(
+            "SELECT quantity, avg_cost FROM portfolio WHERE id=? AND user_id=?",
+            (item_id, user_id)
+        ).fetchone()
+        conn.close()
+        if _dogrula is None or round(float(_dogrula["avg_cost"]), 6) != round(maliyet, 6):
+            return {"basari": False,
+                    "hata": "Kayıt güncellendi ama doğrulama okuması beklenen değeri "
+                            "göstermiyor - lütfen sayfayı yenileyip tekrar kontrol edin."}
+        return {"basari": True}
+    except Exception as e:
+        try:
+            conn.rollback(); conn.close()
+        except Exception:
+            pass
+        return {"basari": False, "hata": f"Veritabanı hatası: {type(e).__name__}: {e}"}
 
 
 def clear_portfolio() -> bool:

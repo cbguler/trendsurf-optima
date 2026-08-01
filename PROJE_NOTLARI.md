@@ -389,6 +389,25 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TEŞHİS/SAĞLAMLAŞTIRMA, KESİN DOĞRULANMADI] v2.0.7.116 (31 Temmuz
+  2026, Bahri'nin bulgusu — HTS örneği: Düzelt formuyla maliyeti
+  56,630800'den 56,630841'e değiştirmeyi denedi, "Düzeltmeyi Kaydet"e
+  bastı, tabloda hiçbir şey değişmedi, hiçbir hata da görünmedi).**
+  Kodu inceledim, `parse_tr`/SQL parametre sırası doğru görünüyor -
+  ama `update_portfolio_item()` (v2.0.7.114'te eklendi) UPDATE'i HİÇ
+  try/except'siz çalıştırıyordu VE `rowcount` (kaç satırın etkilendiği)
+  hiç kontrol edilmiyordu. Yani `WHERE id=? AND user_id=?` hiçbir
+  satırla eşleşmese bile (rowcount=0) fonksiyon sessizce "başarılı"
+  dönüyordu - hata da yok, değişiklik de yok. **Kesin kök neden bu
+  oturumda doğrulanamadı** (canlı ortama erişim yok). **Uygulanan
+  sağlamlaştırma:** artık (1) UPDATE try/except içinde - gerçek bir DB
+  hatası artık ekranda görünür, (2) `rowcount==0` ise artık açık bir
+  hata mesajı dönüyor ("hiçbir satırı etkilemedi"), (3) yazdıktan hemen
+  sonra satır tekrar okunup `avg_cost`'un GERÇEKTEN değişip değişmediği
+  doğrulanıyor, uyuşmazsa yine açık hata. **Sıradaki adım:** Bahri aynı
+  düzeltmeyi tekrar denesin - bu sefer ya başarılı olacak ya da tam
+  olarak NEDEN başarısız olduğunu söyleyen bir hata mesajı görecek.
+
 - **[UYGULANDI] v2.0.7.115 (31 Temmuz 2026, Bahri'nin talebi): Portföy
   Varlıkları Tablosu görsel ince ayarları.** (1) Miktar sütunu artık 2
   ondalık basamak (önceden 4). (2) Alış ve Güncel sütunları artık 6
