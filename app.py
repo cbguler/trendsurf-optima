@@ -3804,21 +3804,24 @@ elif page=="Portföyüm":
     # Birim, Alis, Guncel, Toplam, KZ) hizalamasi/agirligi DEGISMEDI.
     _total_val = df_pf["Toplam"].sum()
     _total_kz  = round((df_pf["Toplam"] - df_pf["Miktar"]*df_pf["Alış"]).sum(), 2)
-    # v2.0.7.121 - GERI ALMA (Bahri'nin talebi, 31 Temmuz 2026): v2.0.7.118-
-    # 120 arasinda 3 farkli hizalama denemesi yapildi (oransal flex, sabit
-    # piksel, native st.metric) - hicbiri Bahri'yi tatmin etmedi, sonuncusu
-    # "kayik olandan daha kotu" bulundu. ORIJINAL (v2.0.7.117 ve oncesi)
-    # satir bicimine AYNEN geri donuldu - SADECE gercekten hatali olan
-    # isaret kontrolu (`>=0` sifiri de pozitif sayiyordu) kalici olarak
-    # duzeltildi kaldi, hizalamaya BASKA DOKUNULMADI.
+    # v2.0.7.122 (Bahri'nin talebi, 31 Temmuz 2026): Toplam K/Z %'yi de
+    # footer'a ekliyoruz. DIKKAT: bu, satirlardaki K/Z %'lerin BASIT
+    # ORTALAMASI ya da TOPLAMI DEGIL - o yanlis olurdu (kucuk bir pozisyonun
+    # %50 degisimi ile buyuk bir pozisyonun %1 degisimi esit agirlikta
+    # sayilmis olur, portfoyun gercek getirisini carpitir). Dogrusu:
+    # Toplam K/Z (TL) / Toplam MALIYET (TL) - yani AGIRLIKLI/gercek
+    # portfoy getirisi.
+    _total_maliyet = (df_pf["Miktar"] * df_pf["Alış"]).sum()
+    _total_kz_pct = round((_total_kz / _total_maliyet * 100), 2) if _total_maliyet else 0.0
     _tcc = "#27ae60" if _total_kz >= 0 else "#e74c3c"
     _tcs = "+" if _total_kz > 0 else ""
+    _tcs_pct = "+" if _total_kz_pct > 0 else ""
     _footer_kolonlar = [
         ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
         ("Miktar", 1), ("Birim", 1),
         ("Alış", 1), ("Güncel", 1),
         ("TOPLAM", 1), ("KZ", 1),
-        ("", 1), ("", 1.2), ("", 1.9),
+        ("KZPCT", 1), ("", 1.2), ("", 1.9),
     ]
     _footer_html = ""
     for _etiket, _w in _footer_kolonlar:
@@ -3828,6 +3831,8 @@ elif page=="Portföyüm":
             _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
         elif _etiket == "KZ":
             _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
+        elif _etiket == "KZPCT":
+            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs_pct}{fmt_tr(_total_kz_pct)}%</b>"
         else:
             _icerik = ""
         _hiza = "left" if _etiket == "ETIKET" else "right"

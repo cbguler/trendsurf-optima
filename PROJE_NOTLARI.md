@@ -389,6 +389,15 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.122 (31 Temmuz 2026, Bahri'nin talebi): Portföy
+  Varlıkları Tablosu'nun alt toplamına Toplam K/Z % eklendi.** Önemli
+  tasarım notu: bu, satırlardaki K/Z %'lerin basit toplamı/ortalaması
+  DEĞİL — o yanlış olurdu (küçük bir pozisyonun %50 değişimiyle büyük
+  bir pozisyonun %1 değişimi eşit ağırlıkta sayılır, gerçek portföy
+  getirisini çarpıtır). Doğrusu ve uygulanan: **Toplam K/Z (TL) / Toplam
+  Maliyet (TL)** — yani ağırlıklı/gerçek portföy getirisi. Toplam K/Z %
+  önceki K/Z% sütunuyla aynı boş slota (weight=1, "KZPCT") yerleştirildi.
+
 - **[GERİ ALINDI] v2.0.7.121 (31 Temmuz 2026, Bahri'nin talebi):
   hizalama denemeleri durduruldu.** v2.0.7.118, 119 ve 120'de sırayla
   3 farklı yaklaşım denendi (oransal flex ağırlığı, sabit piksel
