@@ -82,33 +82,5 @@
     "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
-  },
-  {
-    "Tarih": "03.07.2026 20:07:05",
-    "Kod": "TERA, TRA",
-    "Sirket": "ŞA-RA Enerji İnşaat Ticaret ve Sanayi A.Ş",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "ŞA-RA Enerji İnşaat Ticaret ve Sanayi A.Ş. İzahname - Düzeltme",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1624219",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1624187",
-    "Arz_Fiyati": 70.0,
-    "Iskonto_Orani": 20.0,
-    "Graham_Degeri": 26.393558652655315,
-    "Carpan_Bazli_Deger": 91.2742831775
-  },
-  {
-    "Tarih": "02.07.2026 23:26:34",
-    "Kod": "GRM, GRYAT",
-    "Sirket": "Saat ve Saat Sanayi ve Ticaret Anonim Şirketi",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "Saat ve Saat Sanayi ve Ticaret Anonim Şirketi Paylarının Halka Arzına İlişkin Borsa İstanbul A.Ş. Katılım Finans İlkeleri Bilgi Formu",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1623464",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1636712",
-    "Arz_Fiyati": null,
-    "Iskonto_Orani": null,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
   }
 ]
