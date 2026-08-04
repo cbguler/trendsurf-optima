@@ -389,6 +389,24 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, İZLEMEDE] v2.0.7.123 (4 Ağustos 2026 — "All jobs have
+  failed", 3dk7sn, 14:34 TRT/BIST seansı açıkken).** E-postadaki commit
+  (`d6eb5e6`) benim aynı gün attığım v2.0.7.122 idi ama o SADECE
+  `app.py`'yi (Portföyüm) değiştiriyordu — `firsat_radari.py`'ye hiç
+  dokunmamıştı, yani alakasız bir çakışma, asıl arıza başka yerde.
+  **Bulunan gerçek boşluk:** v2.0.7.103/104'te DOVİZ/MADEN/KRİPTO, BIST,
+  TEFAS taramaları kategori bazlı try/except'e alınmıştı — ama
+  `main()`'in SONUNDAKİ 5 adım (`_onceki_skorlari_al`,
+  `_radar_tetikleyicileri`, `_upsert`, `_dedupe_ve_kaydet`,
+  `_radar_maili_gonder`) HİÇ korunmamıştı. Bunlardan biri (en olası
+  aday: e-posta gönderimi/SMTP) patlarsa, veri toplama tamamen başarılı
+  olsa bile TÜM iş çöküyordu. **Düzeltme:** bu 5 adımın her biri artık
+  kendi try/except'i içinde — özellikle Supabase `_upsert` (en önemli
+  adım, canlı uygulamanın veriyi görmesini sağlar) artık e-posta
+  gönderimi patlasa bile tamamlanmış olacak. **Sıradaki adım:** bu tür
+  bir arıza tekrarlanırsa artık log'da HANGİ adımın patladığı (tür +
+  mesaj) görünecek — kesin teşhis o zaman netleşir.
+
 - **[UYGULANDI] v2.0.7.122 (31 Temmuz 2026, Bahri'nin talebi): Portföy
   Varlıkları Tablosu'nun alt toplamına Toplam K/Z % eklendi.** Önemli
   tasarım notu: bu, satırlardaki K/Z %'lerin basit toplamı/ortalaması

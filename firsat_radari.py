@@ -699,11 +699,42 @@ def main():
         print(f"[radar] KRITIK: Supabase baglantisi kurulamadi: {e}")
         sys.exit(1)
 
-    onceki = _onceki_skorlari_al(conn)
-    tetik  = _radar_tetikleyicileri(sonuc, onceki, ad_map)
-    _upsert(conn, sonuc)
-    yeni   = _dedupe_ve_kaydet(conn, tetik)
-    _radar_maili_gonder(yeni, ad_map)
+    onceki = {}
+    tetik = []
+    yeni = []
+
+    # v2.0.7.123 - SAVUNMA KATMANI 2 (Bahri'nin bulgusu, 4 Agustos 2026:
+    # "All jobs have failed", 3dk7sn - veri toplama taraflari zaten
+    # kategori-bazli korunuyordu ama BU asagidaki 5 adim hic
+    # korunmamisti). Ayni felsefe: bir adim patlarsa sadece o adim
+    # atlanir, digerleri (ozellikle Supabase'e yazma - en onemlisi,
+    # canli uygulamanin veriyi gormesini saglayan adim) calismaya devam
+    # eder. Ozellikle e-posta gonderimi (SMTP) en kirilgan adim - o
+    # patlasa bile Supabase yazimi ZATEN tamamlanmis olacak.
+    try:
+        onceki = _onceki_skorlari_al(conn)
+    except Exception as e:
+        print(f"[radar] KRITIK: onceki skorlar alinamadi: {type(e).__name__}: {str(e)[:200]}")
+
+    try:
+        tetik = _radar_tetikleyicileri(sonuc, onceki, ad_map)
+    except Exception as e:
+        print(f"[radar] KRITIK: radar tetikleyicileri hesaplanamadi: {type(e).__name__}: {str(e)[:200]}")
+
+    try:
+        _upsert(conn, sonuc)
+    except Exception as e:
+        print(f"[radar] KRITIK: Supabase upsert basarisiz: {type(e).__name__}: {str(e)[:200]}")
+
+    try:
+        yeni = _dedupe_ve_kaydet(conn, tetik)
+    except Exception as e:
+        print(f"[radar] KRITIK: alarm kaydi/dedupe basarisiz: {type(e).__name__}: {str(e)[:200]}")
+
+    try:
+        _radar_maili_gonder(yeni, ad_map)
+    except Exception as e:
+        print(f"[radar] KRITIK: radar maili gonderilemedi: {type(e).__name__}: {str(e)[:200]}")
 
     print(f"[radar] Bitti: {len(sonuc)} varlik tarandi, "
           f"{len(tetik)} tetik, {len(yeni)} yeni alarm.")
