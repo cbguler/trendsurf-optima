@@ -389,6 +389,20 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[KARAR - TEKRAR SORULMASIN] Değerli Madenler'de 9 sikke/gram altın
+  türünün (Gram Has Altın, 14/18 Ayar, Bilezik22, İkibuçuk, Beşli,
+  Gremse, Reşat, Hamit Altın) RSI/1A Getiri/Optima Skor boş/0 kalması
+  (5 Ağustos 2026'da Bahri'ye tekrar teyit edildi).** Bu bir bug DEĞİL —
+  v2.0.7.43'te zaten bilinçli alınmış bir karar: bu 9 ürünün hiçbirinin
+  yfinance karşılığı yok (Türkiye'ye özgü fiziki ürünler), Bigpara/
+  Truncgil'den sadece ANLIK fiyat geliyor, hiçbir kaynakta geçmiş fiyat
+  serisi yok. RSI/Ret1M hesaplamak için geçmiş veri şart. Bahri'ye
+  "Gram Altın'ın (ALTIN_TRY) RSI/Getiri'sini yaklaşık bir vekil olarak
+  kullanabiliriz" önerisi sunuldu, **açıkça reddetti**: "sahte veri
+  istemiyorum, boş kalsın." Bu tercih kalıcıdır — ileride bu konu tekrar
+  gündeme gelirse (yeni bir oturumda fark edilip "bug" sanılabilir)
+  kod DEĞİŞTİRİLMEDEN önce bu maddeye bakılsın.
+
 - **[UYGULANDI] v2.0.7.124 (5 Ağustos 2026, gece 03:01 TRT çalışması —
   gerçek loglar görülebildi, iki ayrı iyileştirme).** (1) **MADEN kök
   neden bulundu ve düzeltildi:** `"TESHIS (MADEN:GUMUS_TRY):
