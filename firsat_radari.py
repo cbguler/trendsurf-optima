@@ -320,8 +320,19 @@ def tara_fx_maden_kripto(df_uni):
                 _HAM_HATA_SAYAC["n"] += 1
             return None
 
-    _MADEN_BP = {"ALTIN_TRY": "gram-altin", "GUMUS_TRY": "gumus",
-                 "PLATIN_TRY": "platin"}
+    # v2.0.7.124 - KRITIK DUZELTME (4-5 Agustos 2026 gece calismasi loglarinda
+    # yakalandi: "TESHIS (MADEN:GUMUS_TRY): DataNotAvailableError: Unsupported
+    # asset: gumus"). borsapy'nin resmi API'sinde (bkz. github.com/saidsurucu/
+    # borsapy) degerli maden kodlari "gram-gumus"/"gram-platin" seklinde -
+    # "gram-altin" ile AYNI desende. Bu dosyadaki _MADEN_BP'de sadece ALTIN
+    # dogru yazilmisti ("gram-altin"), GUMUS/PLATIN'de "gram-" oneki hep
+    # eksikti (kopyala-yapistir hatasi olmali - live_data.py'deki
+    # _MADEN_TO_BP'de ayni 3 kod zaten dogruydu, sadece bu dosyanin kendi
+    # kopyasi hataliydi). Simdiye kadar bu try/except tarafindan
+    # yakalanip sessizce atlandigi icin (MADEN 1/3 basarili gorunuyordu)
+    # fark edilmemisti.
+    _MADEN_BP = {"ALTIN_TRY": "gram-altin", "GUMUS_TRY": "gram-gumus",
+                 "PLATIN_TRY": "gram-platin"}
     _DOVIZ_BP = {"USDTRY": "USD", "EURTRY": "EUR", "GBPTRY": "GBP",
                  "JPYTRY": "JPY", "CHFTRY": "CHF", "AUDTRY": "AUD",
                  "CADTRY": "CAD", "NZDTRY": "NZD", "NOKTRY": "NOK",
@@ -692,11 +703,26 @@ def main():
         return
 
     # 4) Supabase'e yaz + radar
-    try:
-        from db import get_conn
-        conn = get_conn()
-    except Exception as e:
-        print(f"[radar] KRITIK: Supabase baglantisi kurulamadi: {e}")
+    # v2.0.7.124 (Bahri'nin talebi, 4-5 Agustos 2026 gecesi tek seferlik bir
+    # Supabase baglanti zaman asimi TUM calismayi basarisiz gostermisti -
+    # sonraki calismalar hemen duzelmisti, yani gecici bir altyapi
+    # kesintisiydi). Artik anlik/gecici kesintilerde butun 20 dakikalik
+    # dongu atlanmasin diye baglanti 3 kez, aralarda kisa bekleyerek
+    # deneniyor - sadece UCUNCU deneme de basarisiz olursa is basarisiz
+    # sayilir.
+    conn = None
+    import time as _time
+    for _deneme in range(1, 4):
+        try:
+            from db import get_conn
+            conn = get_conn()
+            break
+        except Exception as e:
+            print(f"[radar] Supabase baglanti denemesi {_deneme}/3 basarisiz: {type(e).__name__}: {str(e)[:200]}")
+            if _deneme < 3:
+                _time.sleep(5 * _deneme)  # 5sn, sonra 10sn
+    if conn is None:
+        print("[radar] KRITIK: Supabase baglantisi 3 denemede de kurulamadi, is basarisiz.")
         sys.exit(1)
 
     onceki = {}

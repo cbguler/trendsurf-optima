@@ -389,6 +389,23 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.124 (5 Ağustos 2026, gece 03:01 TRT çalışması —
+  gerçek loglar görülebildi, iki ayrı iyileştirme).** (1) **MADEN kök
+  neden bulundu ve düzeltildi:** `"TESHIS (MADEN:GUMUS_TRY):
+  DataNotAvailableError: Unsupported asset: gumus"` — borsapy'nin resmi
+  API'sinde değerli maden kodları `"gram-gumus"`/`"gram-platin"`
+  (`"gram-altin"` ile aynı desende), ama `firsat_radari.py`'nin kendi
+  `_MADEN_BP` haritasında sadece ALTIN doğru yazılmıştı, GÜMÜŞ/PLATİN'de
+  "gram-" öneki hep eksikti (muhtemelen kopyala-yapıştır hatası —
+  `live_data.py`'deki `_MADEN_TO_BP`'de bu 3 kod zaten doğruydu). Bu,
+  MADEN kapsamının hep 1/3'te kalmasının nedeniydi; artık düzeltildi.
+  (2) **Supabase bağlantı retry:** aynı gece bir çalışmada geçici bir
+  Supabase bağlantı zaman aşımı TÜM işi başarısız göstermişti (sonraki
+  çalışmalar hemen düzelmişti — tek seferlik bir altyapı kesintisiydi).
+  Artık bağlantı 3 kez (aralarda 5sn, 10sn bekleyerek) deneniyor, sadece
+  3. deneme de başarısız olursa iş başarısız sayılıyor — anlık kesintiler
+  artık bütün 20 dakikalık döngüyü atlatmayacak.
+
 - **[UYGULANDI, İZLEMEDE] v2.0.7.123 (4 Ağustos 2026 — "All jobs have
   failed", 3dk7sn, 14:34 TRT/BIST seansı açıkken).** E-postadaki commit
   (`d6eb5e6`) benim aynı gün attığım v2.0.7.122 idi ama o SADECE
