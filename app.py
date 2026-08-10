@@ -2851,7 +2851,6 @@ def _karsilastirma_altin_try(tarih_str: str):
     return _usd * _kur / 31.1035
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
 def _evds_mevduat_faizi_cek():
     """v2.0.7.126 (Bahri'nin talebi, 10 Ağustos 2026): TCMB EVDS'den "1 Aya
     Kadar Vadeli TL Mevduat (Stok, %)" serisinin (TP.MT210AGS.TRY.MT01) en
@@ -2863,8 +2862,12 @@ def _evds_mevduat_faizi_cek():
     GÜVENLİK: API anahtarı ASLA kod içine yazılmaz (bu repo public) - önce
     EVDS_API_KEY ortam değişkeninden, sonra Streamlit secrets'tan okunur -
     Supabase bağlantı bilgisiyle AYNI desen (bkz. db.py get_conn()).
-    Anahtar tanımlı değilse veya çekme başarısız olursa None döner -
-    çağıran taraf kullanıcıya elle girmesini söyler, hata göstermez."""
+
+    v2.0.7.127 (Bahri'nin bulgusu: ilk denemede "çekilemedi" - ama
+    GERÇEK sebep görünmüyordu). Artık (değer, hata_detayı) tuple'ı
+    dönüyor - değer None ise hata_detayı NEDEN başarısız olduğunu
+    (anahtar tanımsız / import hatası / API hatası + mesajı) açıkça
+    söylüyor, bir sonraki denemede kesin teşhis mümkün olsun diye."""
     try:
         _key = os.environ.get("EVDS_API_KEY", "")
         if not _key:
@@ -2873,8 +2876,11 @@ def _evds_mevduat_faizi_cek():
             except Exception:
                 _key = ""
         if not _key:
-            return None
-        from evds import evdsAPI
+            return None, "EVDS_API_KEY tanımlı değil (ne ortam değişkeninde ne Streamlit secrets'ta bulundu)"
+        try:
+            from evds import evdsAPI
+        except Exception as e:
+            return None, f"'evds' paketi import edilemedi: {type(e).__name__}: {e}"
         import datetime as _dt_evds
         e = evdsAPI(_key)
         bugun = _dt_evds.date.today()
@@ -2883,11 +2889,11 @@ def _evds_mevduat_faizi_cek():
                          startdate=onceki.strftime("%d-%m-%Y"),
                          enddate=bugun.strftime("%d-%m-%Y"))
         if df is None or df.empty:
-            return None
+            return None, "EVDS'ten boş sonuç döndü (anahtar geçersiz olabilir, ya da seri/tarih aralığı sorunu)"
         _son = df.iloc[-1]["TP_MT210AGS_TRY_MT01"]
-        return round(float(_son), 2)
-    except Exception:
-        return None
+        return round(float(_son), 2), None
+    except Exception as _dis_hata:
+        return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
 
 
 def _render_karsilastirma(_cur_user, df_pf):
@@ -2913,16 +2919,14 @@ def _render_karsilastirma(_cur_user, df_pf):
         _guncelleme = _oranlar.get("_updated_at", {})
 
         if st.button("Mevduatı TCMB EVDS'ten Çek", key="bm_evds_cek"):
-            _evds_deger = _evds_mevduat_faizi_cek()
+            _evds_deger, _evds_hata = _evds_mevduat_faizi_cek()
             if _evds_deger is not None:
                 st.session_state["bm_mevduat"] = _evds_deger
                 st.success(f"TCMB EVDS'den çekildi: %{fmt_tr(_evds_deger, 2)} "
                           f"(1 aya kadar vadeli TL mevduat, stok, ağırlıklı ortalama)")
                 st.rerun()
             else:
-                st.warning(
-                    "EVDS'ten çekilemedi - EVDS_API_KEY tanımlı değil ya da "
-                    "bağlantı hatası oldu. Aşağıya elle girebilirsin.")
+                st.warning(f"EVDS'ten çekilemedi — {_evds_hata}. Aşağıya elle girebilirsin.")
 
         rc1, rc2, rc3 = st.columns(3)
         with rc1:

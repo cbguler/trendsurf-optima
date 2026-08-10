@@ -389,6 +389,24 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEKRAR DENEME BEKLİYOR] v2.0.7.127 (10 Ağustos 2026,
+  Bahri'nin bulgusu — "Mevduatı TCMB EVDS'ten Çek" ilk denemede genel
+  bir "çekilemedi" mesajı verdi, gerçek sebep görünmüyordu).** İki
+  düzeltme: (1) `_evds_mevduat_faizi_cek()` artık `(değer, hata_detayı)`
+  tuple'ı dönüyor — başarısız olursa hangi aşamada (anahtar tanımsız /
+  paket import hatası / API boş sonuç / başka bir istisna + tam mesajı)
+  başarısız olduğu ekranda görünüyor, bir daha "genel" mesajla
+  karşılaşılmayacak. (2) **Daha kritik bir hata bulundu:** fonksiyon
+  `@st.cache_data(ttl=86400)` ile işaretliydi — yani bir kere
+  "başarısız" sonucu önbelleğe düşünce, `EVDS_API_KEY` sonradan doğru
+  eklense bile aynı gün tekrar "Çek" butonuna basmak hâlâ o ESKİ
+  başarısız sonucu gösterip duracaktı (cache, fonksiyonun hiç argümanı
+  olmadığı için tüm çağrılarda aynı anahtarı kullanıyordu). Cache
+  kaldırıldı — buton zaten sadece tıklanınca çalışıyor, otomatik/sık
+  çağrılmıyor, önbelleğe gerek yoktu. **Sıradaki adım:** Bahri'nin
+  Streamlit Cloud secrets'a `EVDS_API_KEY`'i eklediğini doğrulaması ve
+  butona tekrar basması — bu sefer gerçek hata (varsa) görünecek.
+
 - **[UYGULANDI] v2.0.7.126 (10 Ağustos 2026, Bahri'nin talebi): Getiri
   Kıyaslaması'ndaki Mevduat referans oranı artık TCMB EVDS'den TEK
   TUŞLA otomatik çekilebiliyor.** Önceki oturumda hesap.com'un mevduat
