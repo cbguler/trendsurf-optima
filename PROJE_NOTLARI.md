@@ -389,6 +389,34 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, DENEME] v2.0.7.131 (10 Ağustos 2026, Bahri'nin talebi —
+  iki ayrı iyileştirme).**
+  (1) **Vadeli Mevduat artık gerçekten "en yüksek banka oranı".** Önceki
+  TCMB EVDS serisi (`TP.MT210AGS.TRY.MT01`) bir AĞIRLIKLI ORTALAMA'ydı,
+  Bahri'nin istediği "en yüksek" değildi. hesap.com'un "en çok
+  kazandıran mevduat" bölümü denendi ama **Cloudflare bot korumasıyla
+  engellendi** (doğrudan test edildi: 403 + "Just a moment" sayfası,
+  Streamlit Cloud'da da aynı engel beklenir). Alternatif arandı:
+  **hesapkurdu.com/mevduat** engelsiz ve sunucu tarafında render ediliyor
+  (Next.js SSR) - oranlar `<td class="Table_td__xlSfc">% 46,00</td>`
+  biçiminde doğrudan HTML'de, JS çalıştırmaya gerek yok. Yeni
+  `_en_yuksek_vadeli_mevduat_cek()` bu sayfadaki TÜM oranları regex'le
+  çekip EN YÜKSEĞİNİ döndürüyor (test: %46). "Banka Mevduatı" adı
+  "Vadeli Mevduat" olarak değiştirildi (grafik, lejant, özet metni,
+  açıklama notu - hepsi). Tahvil/Repo hâlâ TCMB EVDS'ten (değişmedi).
+  (2) **Pozisyon Bazlı Getiri Karşılaştırması** - yeni, TAMAMEN BAĞIMSIZ
+  ikinci bir grafik (`_render_pozisyon_karsilastirma()`), Getiri
+  Kıyaslaması'nın hemen altında. Portföydeki HER POZİSYONUN (dış
+  kıyaslama araçları olmadan, sadece kendi varlıklar) kendi alış
+  tarihinden bugüne kümülatif getirisi ayrı çizgi. Aynı ticker birden
+  fazla kez alınmışsa ("MTG", "MTG #2" gibi) ayrı pozisyon olarak
+  gösteriliyor. **Bahri "beğenmezsem kaldırırız" dedi** - bu özellik tek
+  bir fonksiyon + tek bir çağrı satırı, kolayca geri alınabilir. Onay
+  bekleniyor.
+  **DOĞRULANMADI** (canlı test gerekiyor): hesapkurdu.com'un HTML yapısı
+  değişirse regex bulamayabilir (hata mesajı gösterir, çökmez) - ilk
+  kullanımda Vadeli Mevduat değerinin göründüğü doğrulanmalı.
+
 - **[UYGULANDI] v2.0.7.130 (10 Ağustos 2026, Bahri'nin bulgusu): Getiri
   Kıyaslaması grafiğindeki "Portföyünüz: +1,95%" ile Portföy Varlıkları
   Tablosu'ndaki "+1,67%" arasındaki tutarsızlık düzeltildi.** Kök neden

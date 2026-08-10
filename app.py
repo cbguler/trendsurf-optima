@@ -2974,7 +2974,7 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
     # dogrusal birikim.
     _evds_oranlar = _evds_referans_oranlari_cek()
     _gun_sayilari = np.array([(d.date() - _baslangic).days for d in _gun_araligi], dtype=float)
-    for _ad, _key in (("Banka Mevduatı", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
+    for _ad, _key in (("Vadeli Mevduat", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
         _oran, _hata = _evds_oranlar.get(_key, (None, "bilinmeyen seri"))
         if _oran and _oran > 0:
             _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
@@ -3035,14 +3035,51 @@ def _evds_seri_cek(seri_kodu, gun_geriye=120):
         return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
 
 
+def _en_yuksek_vadeli_mevduat_cek():
+    """v2.0.7.131 (Bahri'nin talebi, 10 Ağustos 2026): "Banka mevduatı,
+    bankaların vadeli mevduata verdikleri EN YÜKSEK faiz gözetilerek
+    hesaplanmalı" - TCMB EVDS'deki TP.MT210AGS.TRY.MT01 bir AĞIRLIKLI
+    ORTALAMA, en yüksek değil, o yüzden bu amaca uymuyordu.
+
+    Araştırma: hesap.com'un "en çok kazandıran mevduat" bölümü Cloudflare
+    bot korumasıyla engelleniyordu (doğrudan test edildi - 403 + "Just a
+    moment" sayfası). hesapkurdu.com/mevduat ise ENGELSİZ ve sunucu
+    tarafında render ediliyor (Next.js SSR) - oranlar
+    '<td class="Table_td__xlSfc">% 46,00</td>' bicimindeki HTML'de
+    doğrudan mevcut, JS calistirmaya gerek yok.
+
+    Sayfadaki TÜM bankaların oranlarını çeker, EN YÜKSEĞİNİ döner -
+    (değer, hata_detayı) tuple'ı."""
+    try:
+        import requests, re as _re_evm
+        _headers = {
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/124.0.0.0 Safari/537.36"),
+            "Accept": "text/html,application/xhtml+xml,*/*",
+        }
+        _r = requests.get("https://www.hesapkurdu.com/mevduat",
+                          headers=_headers, timeout=15)
+        if _r.status_code != 200:
+            return None, f"hesapkurdu.com HTTP {_r.status_code}"
+        _oranlar = _re_evm.findall(
+            r'Table_td__xlSfc">%\s*<!-- -->\s*([\d]+,[\d]+)</td>', _r.text)
+        if not _oranlar:
+            return None, "hesapkurdu.com sayfa yapısı değişmiş olabilir (oran bulunamadı)"
+        _en_yuksek = max(float(o.replace(",", ".")) for o in _oranlar)
+        return round(_en_yuksek, 2), None
+    except Exception as _e:
+        return None, f"{type(_e).__name__}: {_e}"
+
+
 @st.cache_data(ttl=21600, show_spinner=False)
 def _evds_referans_oranlari_cek():
-    """v2.0.7.129 - Mevduat/Tahvil/Repo'yu TEK seferde çeker (6 saat
-    cache - bu 3 seri günde en fazla 1 kez güncelleniyor, sık sorgulamaya
-    gerek yok). {"mevduat": (deger,hata), "tahvil": (...), "repo": (...)}
-    döner."""
+    """v2.0.7.131 - Mevduat (en yüksek, hesapkurdu.com) + Tahvil/Repo
+    (TCMB EVDS) TEK seferde çekilir (6 saat cache - bu oranlar günde en
+    fazla 1 kez güncelleniyor, sık sorgulamaya gerek yok).
+    {"mevduat": (deger,hata), "tahvil": (...), "repo": (...)} döner."""
     return {
-        "mevduat": _evds_seri_cek("TP.MT210AGS.TRY.MT01", gun_geriye=120),
+        "mevduat": _en_yuksek_vadeli_mevduat_cek(),
         "tahvil": _evds_seri_cek("TP.BISTTLREF.ORAN", gun_geriye=10),
         "repo": _evds_seri_cek("TP.AOFOBAP", gun_geriye=10),
     }
@@ -3079,7 +3116,7 @@ def _render_karsilastirma(_cur_user, portfolio):
     # daha canli/doygun tonlar + kalinlastirilmis cizgiler.
     _renkler = {
         "Portföyünüz": "#1a56db", "BIST 100": "#4b5563", "Altın": "#d97706",
-        "Dolar/TL": "#059669", "Banka Mevduatı": "#db2777",
+        "Dolar/TL": "#059669", "Vadeli Mevduat": "#db2777",
         "Devlet Tahvili": "#7c3aed", "Repo": "#dc2626",
     }
     fig = go.Figure()
@@ -3110,14 +3147,162 @@ def _render_karsilastirma(_cur_user, portfolio):
     )
     st.caption(f"Bugün itibarıyla — {_ozet}")
     st.caption(
-        "Mevduat/Tahvil/Repo, TCMB EVDS'ten (sırasıyla: 1 aya kadar vadeli TL "
-        "mevduat ağırlıklı ortalama faizi, BIST TLREF gecelik referans faiz "
-        "oranı, BIST gecelik repo ağırlıklı ortalama faiz oranı) çekilen güncel "
-        "oranlarla basit faizle (oran × gün/365) hesaplanır - gerçek bir "
-        "işlemin (stopaj, minimum vade vb.) tam yerine geçmez. Kısa dönemli "
-        "getiriler piyasa koşullarına bağlıdır, tek bir dönemden genel bir "
-        "sonuç çıkarmak yanıltıcı olabilir."
+        "Vadeli Mevduat, hesapkurdu.com'daki bankaların 32 gün vadeli "
+        "tekliflerinden EN YÜKSEK orana göre; Tahvil/Repo, TCMB EVDS'ten "
+        "(sırasıyla BIST TLREF gecelik referans faiz oranı, BIST gecelik "
+        "repo ağırlıklı ortalama faiz oranı) çekilen güncel oranlarla basit "
+        "faizle (oran × gün/365) hesaplanır - gerçek bir işlemin (stopaj, "
+        "minimum vade vb.) tam yerine geçmez. Kısa dönemli getiriler "
+        "piyasa koşullarına bağlıdır, tek bir dönemden genel bir sonuç "
+        "çıkarmak yanıltıcı olabilir."
     )
+
+
+def _render_pozisyon_karsilastirma(_cur_user, portfolio):
+    """v2.0.7.131 (Bahri'nin talebi, 10 Ağustos 2026): "Portföyümdeki
+    varlıkların getirilerini kıyaslayan ikinci bir grafik oluşturalım,
+    eğer beğenmezsem kaldırırız" - DENEME özellik. Ana Getiri
+    Kıyaslaması'ndan TAMAMEN BAĞIMSIZ, kendi kendine yeten - beğenilmezse
+    bu tek fonksiyonu ve çağrı satırını silmek yeterli, başka hiçbir
+    yere dokunmaya gerek yok.
+
+    Portföydeki HER POZİSYONUN (dış kıyaslama araçları OLMADAN, sadece
+    kendi varlıklar birbirine göre) kendi alış tarihinden bugüne kümülatif
+    getirisini ayrı bir çizgi olarak gösterir. Aynı ticker farklı
+    tarihlerde birden fazla kez alınmışsa (ör. MTG iki kez), her pozisyon
+    kendi çizgisini alır ("MTG", "MTG #2" gibi etiketlenir) - tek bir
+    tarihe zorlamak yanıltıcı olurdu."""
+    if not portfolio:
+        return
+
+    import datetime as _dt_pk
+    _tarihler_pk = []
+    for _p in portfolio:
+        _t = _p.get("purchase_date", "")
+        if _t and len(str(_t)) == 10:
+            try:
+                _tarihler_pk.append(_dt_pk.date.fromisoformat(_t))
+            except Exception:
+                pass
+    if not _tarihler_pk:
+        return
+    _baslangic_pk = min(_tarihler_pk)
+    _bugun_pk = _dt_pk.date.today()
+    if _baslangic_pk >= _bugun_pk:
+        return
+
+    _gun_farki_pk = (_bugun_pk - _baslangic_pk).days
+    if _gun_farki_pk <= 35: _period_pk = "1mo"
+    elif _gun_farki_pk <= 95: _period_pk = "3mo"
+    elif _gun_farki_pk <= 190: _period_pk = "6mo"
+    elif _gun_farki_pk <= 370: _period_pk = "1y"
+    elif _gun_farki_pk <= 1100: _period_pk = "3y"
+    else: _period_pk = "5y"
+
+    _gun_araligi_pk = pd.date_range(_baslangic_pk, _bugun_pk, freq="D")
+
+    def _seri_hazirla_pk(_close_serisi):
+        _s = _close_serisi.astype(float).copy()
+        _idx = pd.to_datetime(_s.index)
+        if getattr(_idx, "tz", None) is not None:
+            _idx = _idx.tz_localize(None)
+        _s.index = _idx
+        _s = _s[~_s.index.duplicated(keep="last")].sort_index()
+        _s = _s.reindex(_gun_araligi_pk, method="ffill")
+        return _s.bfill()
+
+    st.divider()
+    st.subheader("Pozisyon Bazlı Getiri Karşılaştırması")
+    st.caption(
+        "Deneme — portföyünüzdeki her varlığın kendi alış tarihinden "
+        "bugüne ayrı getirisi (dış araçlar olmadan, sadece kendi "
+        "varlıklarınız birbirine göre)."
+    )
+
+    with st.spinner("Pozisyon bazlı geçmiş veriler hesaplanıyor..."):
+        _ticker_seri_pk = {}
+        _benzersiz_pk = []
+        for _p in portfolio:
+            _tkr = _p.get("ticker")
+            _kat = _p.get("asset_type") or "BIST"
+            if not _tkr or _tkr in _ticker_seri_pk:
+                continue
+            _benzersiz_pk.append(_tkr)
+            try:
+                _h = get_hist(_tkr, "", _kat, _period_pk)
+            except Exception:
+                _h = None
+            if _h is not None and not _h.empty and "Close" in _h.columns:
+                _ticker_seri_pk[_tkr] = _seri_hazirla_pk(_h["Close"])
+
+        try:
+            _canli_pk = _ld_portfolio_prices(df_uni, _benzersiz_pk)
+        except Exception:
+            _canli_pk = {}
+        for _tkr in _benzersiz_pk:
+            if _tkr not in _ticker_seri_pk:
+                continue
+            _c = _canli_pk.get(_tkr, 0.0)
+            if not _c or _c <= 0:
+                _m = df_uni[df_uni["Ticker"] == _tkr]
+                if not _m.empty:
+                    try:
+                        _c = float(_m["Son_Fiyat"].iloc[0])
+                    except Exception:
+                        _c = 0.0
+            if _c and _c > 0:
+                _ticker_seri_pk[_tkr].iloc[-1] = _c
+
+        _pozisyon_serileri = {}
+        _etiket_sayaci = {}
+        for _p in portfolio:
+            _tkr = _p.get("ticker")
+            _t = _p.get("purchase_date", "")
+            if not _t or _tkr not in _ticker_seri_pk:
+                continue
+            try:
+                _alis_tarihi_pk = pd.Timestamp(_dt_pk.date.fromisoformat(_t))
+            except Exception:
+                continue
+            _s = _ticker_seri_pk[_tkr]
+            _aktif_pk = _gun_araligi_pk >= _alis_tarihi_pk
+            if not _aktif_pk.any():
+                continue
+            _s_aktif = _s.loc[_aktif_pk]
+            if _s_aktif.empty or float(_s_aktif.iloc[0]) <= 0:
+                continue
+            _getiri_pk = (_s_aktif / float(_s_aktif.iloc[0]) - 1) * 100
+            _etiket_sayaci[_tkr] = _etiket_sayaci.get(_tkr, 0) + 1
+            _etiket = _tkr if _etiket_sayaci[_tkr] == 1 else f"{_tkr} #{_etiket_sayaci[_tkr]}"
+            _pozisyon_serileri[_etiket] = _getiri_pk
+
+    if not _pozisyon_serileri:
+        st.info("Pozisyon bazlı karşılaştırma için geçerli veri bulunamadı.")
+        return
+
+    import plotly.graph_objects as go
+    import plotly.colors as _pc_pk
+    _renk_paleti_pk = _pc_pk.qualitative.Bold + _pc_pk.qualitative.Set2
+    fig2 = go.Figure()
+    for _i, (_etiket, _seri) in enumerate(_pozisyon_serileri.items()):
+        fig2.add_trace(go.Scatter(
+            x=_seri.index, y=_seri.values, mode="lines", name=_etiket,
+            line=dict(width=2.75, color=_renk_paleti_pk[_i % len(_renk_paleti_pk)]),
+            hovertemplate="%{y:.2f}%<extra>" + _etiket + "</extra>",
+        ))
+    fig2.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
+    fig2.update_layout(
+        template="plotly_white", height=420,
+        margin=dict(l=10, r=10, t=10, b=10),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        yaxis=dict(title="Kümülatif Getiri", ticksuffix="%",
+                   gridcolor="rgba(120,120,120,0.15)", zeroline=False),
+        xaxis=dict(gridcolor="rgba(120,120,120,0.08)"),
+        plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(size=13),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
 
 if page=="Ana Sayfa":
@@ -4495,6 +4680,7 @@ elif page=="Portföyüm":
 
     st.divider()
     _render_karsilastirma(_cur_user, portfolio)
+    _render_pozisyon_karsilastirma(_cur_user, portfolio)
     _render_sermaye_nakit_ozeti(_cur_user, portfolio, float(df_pf["Toplam"].sum()))
     _render_gerceklesmis_kar_zarar(_cur_user)
 
