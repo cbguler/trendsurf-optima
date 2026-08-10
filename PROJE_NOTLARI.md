@@ -389,6 +389,28 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.129 (10 Ağustos 2026, Bahri'nin talebi — "elle veri
+  girişi asla kabul edilemez" itirazı üzerine ikinci revizyon).**
+  (1) **Mevduat/Tahvil/Repo artık ÜÇÜ DE TCMB EVDS'ten tam otomatik**
+  — araştırma sonucu bulunan seriler: `TP.MT210AGS.TRY.MT01` (mevduat,
+  aylık), `TP.AOFOBAP` (BIST gecelik repo ağırlıklı ort. faizi, günlük),
+  `TP.BISTTLREF.ORAN` (BIST TLREF gecelik referans faizi, günlük - EVDS'de
+  tek bir "gösterge tahvil getirisi" serisi yok, DİBS verisi 2500+ tekil
+  ISIN bazlı, TLREF piyasada yaygın kullanılan gerçek bir referans oranı
+  olduğu için en yakın anlamlı otomatik alternatif olarak seçildi).
+  `_evds_mevduat_faizi_cek()` → genel `_evds_seri_cek(seri_kodu)` +
+  `_evds_referans_oranlari_cek()` (6 saat cache, 3'ü birden). **"Referans
+  Oranları" manuel giriş expander'ı TAMAMEN kaldırıldı** —
+  `portfolio_benchmark_rates` tablosu/`get_benchmark_rates`/
+  `set_benchmark_rate` artık bu özellik tarafından kullanılmıyor (DB'de
+  kalabilir, ileride başka bir amaçla kullanılabilir, silinmedi).
+  (2) Grafik çizgi renkleri daha canlı/doygun (soft tonlar değil) +
+  kalınlaştırıldı (Portföy 4px, diğerleri 2.75px — önceki 3px/1.75px'ten
+  artırıldı). (3) **Açık soru (henüz uygulanmadı):** Bahri'ye pozisyon
+  bazlı (her ticker ayrı çizgi) ikinci bir grafik eklenip eklenmeyeceği
+  soruldu — 6 pozisyon + 6 karşılaştırma aracı birleşince 13 çizgi çok
+  karışık olur, ayrı bir grafik önerildi, cevap bekleniyor.
+
 - **[UYGULANDI, GÖRSEL TEST GEREKİYOR] v2.0.7.128 (10 Ağustos 2026,
   Bahri'nin talebi — Getiri Kıyaslaması'nın köklü yeniden tasarımı, 5
   madde).** (1) Bölüm artık Portföy Varlıkları Tablosu'nun HEMEN

@@ -2939,35 +2939,40 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
             if float(_s.iloc[0]) > 0:
                 _sonuc[_ad] = (_s / float(_s.iloc[0]) - 1) * 100
 
-    # 4) Mevduat / Tahvil / Repo - referans oranlardan basit faizle, dogrusal
-    from portfolio_ledger import get_benchmark_rates
-    _oranlar = get_benchmark_rates(_cur_user["id"])
+    # 4) Mevduat / Tahvil / Repo - v2.0.7.129: ARTIK UCU DE TCMB EVDS'ten
+    # tam otomatik cekiliyor (elle giris tamamen kaldirildi, bkz.
+    # _evds_referans_oranlari_cek). Basit faizle (oran x gun/365)
+    # dogrusal birikim.
+    _evds_oranlar = _evds_referans_oranlari_cek()
     _gun_sayilari = np.array([(d.date() - _baslangic).days for d in _gun_araligi], dtype=float)
     for _ad, _key in (("Banka Mevduatı", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
-        _oran = _oranlar.get(_key)
+        _oran, _hata = _evds_oranlar.get(_key, (None, "bilinmeyen seri"))
         if _oran and _oran > 0:
             _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
 
     return _sonuc
 
 
-def _evds_mevduat_faizi_cek():
-    """v2.0.7.126 (Bahri'nin talebi, 10 Ağustos 2026): TCMB EVDS'den "1 Aya
-    Kadar Vadeli TL Mevduat (Stok, %)" serisinin (TP.MT210AGS.TRY.MT01) en
-    son değerini çeker - hesap.com'un gösterdiği ile AYNI seri, ama
-    doğrudan resmi kaynaktan (hesap.com'un grafiği JS ile sonradan
-    yükleniyordu, güvenilir şekilde otomatik çekilemiyordu - bkz. önceki
-    araştırma). Aylık güncellenen resmi bir seri.
+def _evds_seri_cek(seri_kodu, gun_geriye=120):
+    """v2.0.7.129 (Bahri'nin talebi, 10 Ağustos 2026): "elle veri girişi
+    asla kabul edilemez" - v2.0.7.126'daki mevduat-özel fonksiyon
+    genelleştirildi, artık TCMB EVDS'deki HERHANGİ bir seriyi çekebiliyor.
+    Araştırma sonucu bulunan 3 seri:
+      - Mevduat: TP.MT210AGS.TRY.MT01 ("1 Aya Kadar Vadeli TL Mevduat,
+        Stok, %", aylık)
+      - Repo:    TP.AOFOBAP ("Borsa İstanbul Gecelik Repo Ağırlıklı
+        Ortalama Faiz Oranı", günlük)
+      - Tahvil:  TP.BISTTLREF.ORAN ("BIST TLREF - TL Gecelik Referans
+        Faiz Oranı", günlük) - EVDS'de tek bir "gösterge tahvil getirisi"
+        serisi yok (DİBS verisi 2500+ tekil ISIN bazlı, tek bir gösterge
+        değil), TLREF piyasada yaygın kullanılan gerçek bir referans oranı
+        olduğu için en yakın anlamlı otomatik alternatif.
 
     GÜVENLİK: API anahtarı ASLA kod içine yazılmaz (bu repo public) - önce
-    EVDS_API_KEY ortam değişkeninden, sonra Streamlit secrets'tan okunur -
-    Supabase bağlantı bilgisiyle AYNI desen (bkz. db.py get_conn()).
+    EVDS_API_KEY ortam değişkeninden, sonra Streamlit secrets'tan okunur.
 
-    v2.0.7.127 (Bahri'nin bulgusu: ilk denemede "çekilemedi" - ama
-    GERÇEK sebep görünmüyordu). Artık (değer, hata_detayı) tuple'ı
-    dönüyor - değer None ise hata_detayı NEDEN başarısız olduğunu
-    (anahtar tanımsız / import hatası / API hatası + mesajı) açıkça
-    söylüyor, bir sonraki denemede kesin teşhis mümkün olsun diye."""
+    (değer, hata_detayı) tuple'ı döner - değer None ise hata_detayı NEDEN
+    başarısız olduğunu açıkça söyler."""
     try:
         _key = os.environ.get("EVDS_API_KEY", "")
         if not _key:
@@ -2984,80 +2989,56 @@ def _evds_mevduat_faizi_cek():
         import datetime as _dt_evds
         e = evdsAPI(_key)
         bugun = _dt_evds.date.today()
-        onceki = bugun - _dt_evds.timedelta(days=120)
-        df = e.get_data(["TP.MT210AGS.TRY.MT01"],
+        onceki = bugun - _dt_evds.timedelta(days=gun_geriye)
+        df = e.get_data([seri_kodu],
                          startdate=onceki.strftime("%d-%m-%Y"),
                          enddate=bugun.strftime("%d-%m-%Y"))
         if df is None or df.empty:
-            return None, "EVDS'ten boş sonuç döndü (anahtar geçersiz olabilir, ya da seri/tarih aralığı sorunu)"
-        _son = df.iloc[-1]["TP_MT210AGS_TRY_MT01"]
-        return round(float(_son), 2), None
+            return None, f"EVDS'ten boş sonuç döndü ({seri_kodu})"
+        _kolon = seri_kodu.replace(".", "_")
+        if _kolon not in df.columns:
+            _kolon = df.columns[-1]
+        _son = df[_kolon].dropna()
+        if _son.empty:
+            return None, f"EVDS serisinde geçerli veri yok ({seri_kodu})"
+        return round(float(_son.iloc[-1]), 2), None
     except Exception as _dis_hata:
         return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
 
 
-def _render_karsilastirma(_cur_user, portfolio):
-    """v2.0.7.128 (Bahri'nin talebi, 10 Ağustos 2026 — köklü yeniden
-    tasarım, 5 madde): (1) Portföy Varlıkları Tablosu'nun hemen altına
-    taşındı (çağıran yerde). (2) EVDS'ten mevduat oranı artık OTOMATİK
-    çekiliyor, buton yok. (3) Artık TEK bir grafik - yatay eksen zaman
-    (portföydeki ilk alışın tarihinden bugüne). (4) Portföy + her
-    kıyaslama aracı için ayrı renkli, günlük kümülatif getiri çizgisi
-    (Plotly, TSO'nun zaten sahip olduğu `get_hist()` altyapısıyla gerçek
-    geçmiş veri). (5) Profesyonel görünüm için Plotly + düz/temiz tema."""
-    from portfolio_ledger import get_benchmark_rates, set_benchmark_rate
+@st.cache_data(ttl=21600, show_spinner=False)
+def _evds_referans_oranlari_cek():
+    """v2.0.7.129 - Mevduat/Tahvil/Repo'yu TEK seferde çeker (6 saat
+    cache - bu 3 seri günde en fazla 1 kez güncelleniyor, sık sorgulamaya
+    gerek yok). {"mevduat": (deger,hata), "tahvil": (...), "repo": (...)}
+    döner."""
+    return {
+        "mevduat": _evds_seri_cek("TP.MT210AGS.TRY.MT01", gun_geriye=120),
+        "tahvil": _evds_seri_cek("TP.BISTTLREF.ORAN", gun_geriye=10),
+        "repo": _evds_seri_cek("TP.AOFOBAP", gun_geriye=10),
+    }
 
+
+def _render_karsilastirma(_cur_user, portfolio):
+    """v2.0.7.129 (Bahri'nin talebi, 10 Ağustos 2026 — ikinci köklü
+    revizyon): (1) Mevduat/Tahvil/Repo artık ÜÇÜ DE TCMB EVDS'ten tam
+    otomatik çekiliyor (araştırma: TP.MT210AGS.TRY.MT01, TP.AOFOBAP,
+    TP.BISTTLREF.ORAN) - "elle veri girişi asla kabul edilemez" talebi
+    üzerine manuel giriş bölümü TAMAMEN kaldırıldı. (2) Grafik çizgi
+    renkleri daha belirgin/canlı (soft tonlar değil) ve kalınlaştırıldı.
+    (3) Portföyünüzdeki ilk alışın tarihinden bugüne, günlük kümülatif
+    getiri - her araç ayrı renkli çizgi (Plotly)."""
     st.subheader("Getiri Kıyaslaması")
     st.caption(
         "Portföyünüzdeki ilk alışın tarihinden bugüne, günlük kümülatif "
         "getiri - TSO'da olan/olmayan diğer araçlarla karşılaştırmalı."
     )
 
-    with st.expander("Referans Oranları (Mevduat / Tahvil / Repo)"):
-        _oranlar = get_benchmark_rates(_cur_user["id"])
-
-        # v2.0.7.128 (madde 2): EVDS artik buton olmadan, sayfa acilinca
-        # OTOMATIK cekiliyor. Basarili olursa kaydedilmis oranla farkliysa
-        # veritabanini gunceller; basarisiz olursa sessizce en son
-        # kaydedilmis/elle girilmis degeri kullanir (hata asagida caption
-        # olarak gosterilir, akisi kesmez).
-        _evds_deger, _evds_hata = _evds_mevduat_faizi_cek()
-        if _evds_deger is not None and abs(_evds_deger - float(_oranlar.get("mevduat", 0) or 0)) > 0.005:
-            set_benchmark_rate(_cur_user["id"], "mevduat", _evds_deger)
-            _oranlar["mevduat"] = _evds_deger
-            st.session_state["bm_mevduat"] = _evds_deger
-
-        rc1, rc2, rc3 = st.columns(3)
-        with rc1:
-            _mevduat_kaynak = "TCMB EVDS, otomatik" if _evds_deger is not None else "elle girildi"
-            _yeni_mevduat = st.number_input(
-                f"Mevduat (yıllık net %) — {_mevduat_kaynak}",
-                value=float(_oranlar["mevduat"]), step=0.1, key="bm_mevduat")
-        with rc2:
-            _yeni_tahvil = st.number_input(
-                "Tahvil (2 yıllık gösterge, %)", value=float(_oranlar["tahvil"]),
-                step=0.1, key="bm_tahvil")
-        with rc3:
-            _yeni_repo = st.number_input(
-                "Repo (TCMB politika/O-N, %)", value=float(_oranlar["repo"]),
-                step=0.1, key="bm_repo")
-        if st.button("Oranları Kaydet", key="bm_kaydet"):
-            set_benchmark_rate(_cur_user["id"], "mevduat", _yeni_mevduat)
-            set_benchmark_rate(_cur_user["id"], "tahvil", _yeni_tahvil)
-            set_benchmark_rate(_cur_user["id"], "repo", _yeni_repo)
-            st.success("Referans oranları güncellendi.")
-            st.rerun()
-        if _evds_deger is None:
-            st.caption(f"TCMB EVDS'ten otomatik çekilemedi ({_evds_hata}) - "
-                       "mevduat oranını yukarıdan elle güncelleyebilirsin.")
-        st.caption("Tahvil/Repo için güvenilir, ücretsiz bir canlı kaynak yok - "
-                   "elle güncel bir değerden girmen gerekiyor.")
-
     if not portfolio:
         st.info("Karşılaştırma için açık pozisyon yok.")
         return
 
-    with st.spinner("Geçmiş piyasa verileri hesaplanıyor (BIST100/Altın/Dolar/portföy varlıkları)..."):
+    with st.spinner("Geçmiş piyasa verileri hesaplanıyor (BIST100/Altın/Dolar/Mevduat/Tahvil/Repo/portföy varlıkları)..."):
         _seriler = _kiyaslama_gunluk_serileri(_cur_user, portfolio)
 
     if not _seriler:
@@ -3065,17 +3046,19 @@ def _render_karsilastirma(_cur_user, portfolio):
         return
 
     import plotly.graph_objects as go
+    # v2.0.7.129 (Bahri'nin bulgusu: onceki renkler "soft"/az belirgindi) -
+    # daha canli/doygun tonlar + kalinlastirilmis cizgiler.
     _renkler = {
-        "Portföyünüz": "#2a78d6", "BIST 100": "#898781", "Altın": "#c98500",
-        "Dolar/TL": "#199e70", "Banka Mevduatı": "#d55181",
-        "Devlet Tahvili": "#7f77dd", "Repo": "#d95926",
+        "Portföyünüz": "#1a56db", "BIST 100": "#4b5563", "Altın": "#d97706",
+        "Dolar/TL": "#059669", "Banka Mevduatı": "#db2777",
+        "Devlet Tahvili": "#7c3aed", "Repo": "#dc2626",
     }
     fig = go.Figure()
     for _ad, _seri in _seriler.items():
         fig.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_ad,
-            line=dict(width=3 if _ad == "Portföyünüz" else 1.75,
-                      color=_renkler.get(_ad, "#666666")),
+            line=dict(width=4 if _ad == "Portföyünüz" else 2.75,
+                      color=_renkler.get(_ad, "#374151")),
             hovertemplate="%{y:.2f}%<extra>" + _ad + "</extra>",
         ))
     fig.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
@@ -3098,10 +3081,13 @@ def _render_karsilastirma(_cur_user, portfolio):
     )
     st.caption(f"Bugün itibarıyla — {_ozet}")
     st.caption(
-        "Mevduat/Tahvil/Repo, referans oranlardan basit faizle (oran × gün/365) "
-        "hesaplanır - gerçek bir işlemin (stopaj, minimum vade vb.) tam yerine "
-        "geçmez. Kısa dönemli getiriler piyasa koşullarına bağlıdır, tek bir "
-        "dönemden genel bir sonuç çıkarmak yanıltıcı olabilir."
+        "Mevduat/Tahvil/Repo, TCMB EVDS'ten (sırasıyla: 1 aya kadar vadeli TL "
+        "mevduat ağırlıklı ortalama faizi, BIST TLREF gecelik referans faiz "
+        "oranı, BIST gecelik repo ağırlıklı ortalama faiz oranı) çekilen güncel "
+        "oranlarla basit faizle (oran × gün/365) hesaplanır - gerçek bir "
+        "işlemin (stopaj, minimum vade vb.) tam yerine geçmez. Kısa dönemli "
+        "getiriler piyasa koşullarına bağlıdır, tek bir dönemden genel bir "
+        "sonuç çıkarmak yanıltıcı olabilir."
     )
 
 
