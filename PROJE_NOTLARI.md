@@ -389,6 +389,31 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, GÖRSEL TEST GEREKİYOR] v2.0.7.128 (10 Ağustos 2026,
+  Bahri'nin talebi — Getiri Kıyaslaması'nın köklü yeniden tasarımı, 5
+  madde).** (1) Bölüm artık Portföy Varlıkları Tablosu'nun HEMEN
+  ALTINDA (Sermaye/Nakit ve Gerçekleşmiş K/Z'den ÖNCE). (2) EVDS mevduat
+  oranı artık buton olmadan, sayfa açılınca OTOMATİK çekiliyor (başarısız
+  olursa sessizce son kaydedilen/elle girilen değere düşer, hata caption
+  olarak gösterilir). (3)(4) Eski nokta-karşılaştırma tablosu (sadece
+  alış günü vs bugün) tamamen kaldırıldı — yerine tek bir **Plotly çizgi
+  grafiği**: yatay eksen zaman (portföydeki EN ERKEN alışın tarihinden
+  bugüne), her araç (Portföyünüz + BIST100 + Altın + Dolar/TL + Mevduat +
+  Tahvil + Repo) için ayrı renkli GÜNLÜK kümülatif getiri çizgisi. (5)
+  `template="plotly_white"`, temiz gridline'lar, üstte yatay lejant,
+  hover'da birleşik tooltip — profesyonel görünüm hedeflendi.
+  **Mimari:** yeni `_kiyaslama_gunluk_serileri()` fonksiyonu, portföyün
+  KENDİ günlük değer/maliyet serisini oluştururken TSO'nun ZATEN sahip
+  olduğu birleşik `get_hist()` altyapısını (TEFAS/BIST/DÖVİZ/MADEN/
+  KRİPTO hepsini kapsar, detay sayfalarındaki AYNI fonksiyon) kullanıyor
+  — ayrı bir veri yolu icat edilmedi. Altın karşılaştırması da bu arada
+  düzeldi: eski kod sentetik `GC=F×USDTRY` çeviriyordu (MADEN için
+  "hiçbir sentetik USD->TL çevrimi denenmez" kuralına aykırıydı) — artık
+  `get_hist(..., "MADEN", ...)` ile gerçek TL verisi kullanılıyor.
+  **DOĞRULANMADI:** çoklu pozisyon + çoklu ticker'lı gerçek bir portföyde
+  grafiğin doğru render olduğu görsel olarak bu oturumda test edilemedi
+  (canlıya erişim yok) — ilk kullanımda kontrol edilmesi gerekir.
+
 - **[UYGULANDI, TEKRAR DENEME BEKLİYOR] v2.0.7.127 (10 Ağustos 2026,
   Bahri'nin bulgusu — "Mevduatı TCMB EVDS'ten Çek" ilk denemede genel
   bir "çekilemedi" mesajı verdi, gerçek sebep görünmüyordu).** İki

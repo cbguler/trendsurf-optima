@@ -2804,51 +2804,151 @@ def _render_sermaye_nakit_ozeti(_cur_user, portfolio, guncel_varlik_degeri):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _karsilastirma_gecmis_fiyat(ticker: str, tarih_str: str):
-    """v2.0.7.125 (Bahri'nin talebi): tarih_str (YYYY-MM-DD) tarihine
-    kadar olan (<=) en yakin yfinance kapanis fiyatini doner - hafta
-    sonu/tatil gibi durumlarda geriye dogru en son islem gunune duser.
-    8sn zaman asimi korumali (bkz. ayni desen worker.py/live_data.py)."""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
-    import datetime as _dt_kf
-
-    def _cek():
-        import yfinance as yf
-        hedef = _dt_kf.datetime.strptime(tarih_str, "%Y-%m-%d")
-        baslangic = (hedef - _dt_kf.timedelta(days=10)).strftime("%Y-%m-%d")
-        bitis = (hedef + _dt_kf.timedelta(days=1)).strftime("%Y-%m-%d")
-        hist = yf.Ticker(ticker).history(start=baslangic, end=bitis)
-        if hist.empty:
-            return None
-        try:
-            hist.index = hist.index.tz_localize(None)
-        except Exception:
-            pass
-        uygun = hist[hist.index <= hedef]
-        if uygun.empty:
-            uygun = hist
-        return float(uygun["Close"].iloc[-1]) if not uygun.empty else None
-
+def _benchmark_close_series(df):
+    """v2.0.7.128 - yfinance'in degisen kolon bicimlerinden (MultiIndex ya
+    da tekli) tek boyutlu bir Close Serisi cikarir. None donerse cagiran
+    taraf o kiyaslamayi atlar."""
+    if df is None or len(df) == 0:
+        return None
     try:
-        with ThreadPoolExecutor(max_workers=1) as _ex:
-            _fut = _ex.submit(_cek)
-            try:
-                return _fut.result(timeout=8)
-            except _FutTimeout:
-                return None
+        if isinstance(df.columns, pd.MultiIndex):
+            for col in df.columns:
+                if str(col[0]).lower() == "close":
+                    return df[col]
+            return None
+        if "Close" in df.columns:
+            return df["Close"]
+        if "close" in df.columns:
+            return df["close"]
+        return df.iloc[:, 0]
     except Exception:
         return None
 
 
-def _karsilastirma_altin_try(tarih_str: str):
-    """Gram altın TRY fiyatı = (GC=F USD/ons × USD/TRY kuru) / 31,1035
-    (ons->gram) - worker.py'deki AYNI dönüşüm formülü (bkz. worker.py
-    ONS_TO_GRAM notu), tutarlılık için."""
-    _usd = _karsilastirma_gecmis_fiyat("GC=F", tarih_str)
-    _kur = _karsilastirma_gecmis_fiyat("TRY=X", tarih_str)
-    if _usd is None or _kur is None:
+def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
+    """v2.0.7.128 (Bahri'nin talebi, 10 Ağustos 2026 — köklü yeniden
+    tasarım): Portföyün VE her kıyaslama aracının GÜNLÜK kümülatif getiri
+    serisini hesaplar (başlangıç = portföydeki EN ERKEN alış tarihi,
+    bitiş = bugün). Grafik çizimi için {seri_adı: pd.Series} döner - önceki
+    tek-noktalı (alış günü vs bugün) karşılaştırmanın yerine geçti.
+
+    Portföy serisi için TSO'nun ZATEN sahip olduğu birleşik `get_hist()`
+    (TEFAS/BIST/DÖVİZ/MADEN/KRİPTO hepsini kapsayan, worker.py/app.py'nin
+    tüm detay sayfalarında kullandığı AYNI fonksiyon) kullanılıyor - ayrı
+    bir veri yolu icat edilmedi. Altın için de artık (eski sentetik
+    GC=F×USDTRY yerine) `get_hist(..., "MADEN", ...)` kullanılıyor - bu,
+    MADEN kategorisi için projenin kendi kuralıyla (hiçbir sentetik
+    USD->TL çevrimi denenmez, bkz. worker.py) tutarlı hale getirdi."""
+    import datetime as _dt_ks
+
+    _tarihler = []
+    for _p in portfolio:
+        _t = _p.get("purchase_date", "")
+        if _t and len(str(_t)) == 10:
+            try:
+                _tarihler.append(_dt_ks.date.fromisoformat(_t))
+            except Exception:
+                pass
+    if not _tarihler:
         return None
-    return _usd * _kur / 31.1035
+    _baslangic = min(_tarihler)
+    _bugun = _dt_ks.date.today()
+    if _baslangic >= _bugun:
+        return None
+
+    _gun_farki = (_bugun - _baslangic).days
+    if _gun_farki <= 35: _period = "1mo"
+    elif _gun_farki <= 95: _period = "3mo"
+    elif _gun_farki <= 190: _period = "6mo"
+    elif _gun_farki <= 370: _period = "1y"
+    elif _gun_farki <= 1100: _period = "3y"
+    else: _period = "5y"
+
+    _gun_araligi = pd.date_range(_baslangic, _bugun, freq="D")
+
+    def _seri_hazirla(_close_serisi):
+        """Ham Close serisini gun_araligi'na (gunluk, ileri-doldurma) hizalar."""
+        _s = _close_serisi.astype(float).copy()
+        _idx = pd.to_datetime(_s.index)
+        if getattr(_idx, "tz", None) is not None:
+            _idx = _idx.tz_localize(None)
+        _s.index = _idx
+        _s = _s[~_s.index.duplicated(keep="last")].sort_index()
+        _s = _s.reindex(_gun_araligi, method="ffill")
+        return _s.bfill()
+
+    # 1) Portföy - her benzersiz ticker icin bir kez gecmis cek
+    _ticker_seri = {}
+    for _p in portfolio:
+        _tkr = _p.get("ticker")
+        _kat = _p.get("asset_type") or "BIST"
+        if not _tkr or _tkr in _ticker_seri:
+            continue
+        try:
+            _h = get_hist(_tkr, "", _kat, _period)
+        except Exception:
+            _h = None
+        if _h is not None and not _h.empty and "Close" in _h.columns:
+            _ticker_seri[_tkr] = _seri_hazirla(_h["Close"])
+
+    _portfoy_deger = pd.Series(0.0, index=_gun_araligi)
+    _portfoy_maliyet = pd.Series(0.0, index=_gun_araligi)
+    for _p in portfolio:
+        _tkr = _p.get("ticker")
+        _t = _p.get("purchase_date", "")
+        if not _t or _tkr not in _ticker_seri:
+            continue
+        try:
+            _alis_tarihi = pd.Timestamp(_dt_ks.date.fromisoformat(_t))
+        except Exception:
+            continue
+        _adet = float(_p.get("quantity", 0) or 0)
+        _maliyet_birim = float(_p.get("avg_cost", 0) or 0)
+        if _adet <= 0 or _maliyet_birim <= 0:
+            continue
+        _s = _ticker_seri[_tkr]
+        _aktif = _gun_araligi >= _alis_tarihi
+        _portfoy_deger.loc[_aktif] += _adet * _s.loc[_aktif]
+        _portfoy_maliyet.loc[_aktif] += _adet * _maliyet_birim
+
+    _gecerli_maliyet = _portfoy_maliyet.replace(0, np.nan)
+    _portfoy_getiri = ((_portfoy_deger / _gecerli_maliyet) - 1) * 100
+    _portfoy_getiri = _portfoy_getiri.fillna(0.0)
+    _sonuc = {"Portföyünüz": _portfoy_getiri}
+
+    # 2) BIST 100 endeksi (yfinance, TSO evreninde olmayan tek dış varlık)
+    try:
+        import yfinance as yf
+        _bb = yf.download("XU100.IS", start=_baslangic.isoformat(), progress=False)
+        _bs = _benchmark_close_series(_bb)
+        if _bs is not None and len(_bs) > 1:
+            _bs = _seri_hazirla(_bs)
+            if float(_bs.iloc[0]) > 0:
+                _sonuc["BIST 100"] = (_bs / float(_bs.iloc[0]) - 1) * 100
+    except Exception:
+        pass
+
+    # 3) Altın ve Dolar/TL - TSO'nun kendi kategori verisiyle (sentetik yok)
+    for _ad, _tkr, _kat in (("Altın", "ALTIN_TRY", "MADEN"), ("Dolar/TL", "USDTRY", "DOVIZ")):
+        try:
+            _h = get_hist(_tkr, "", _kat, _period)
+        except Exception:
+            _h = None
+        if _h is not None and not _h.empty and "Close" in _h.columns:
+            _s = _seri_hazirla(_h["Close"])
+            if float(_s.iloc[0]) > 0:
+                _sonuc[_ad] = (_s / float(_s.iloc[0]) - 1) * 100
+
+    # 4) Mevduat / Tahvil / Repo - referans oranlardan basit faizle, dogrusal
+    from portfolio_ledger import get_benchmark_rates
+    _oranlar = get_benchmark_rates(_cur_user["id"])
+    _gun_sayilari = np.array([(d.date() - _baslangic).days for d in _gun_araligi], dtype=float)
+    for _ad, _key in (("Banka Mevduatı", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
+        _oran = _oranlar.get(_key)
+        if _oran and _oran > 0:
+            _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
+
+    return _sonuc
 
 
 def _evds_mevduat_faizi_cek():
@@ -2896,43 +2996,43 @@ def _evds_mevduat_faizi_cek():
         return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
 
 
-def _render_karsilastirma(_cur_user, df_pf):
-    """v2.0.7.125 (Bahri'nin talebi): "portföyümün yatırım yaptığım
-    tarihten itibaren getirisi, TSO'da olan/olmayan başka yatırım
-    araçlarıyla kıyaslandığında nasıl?" sorusuna, her pozisyonun KENDİ
-    alış tarihinden bugüne AĞIRLIKLI (maliyetiyle ağırlıklı) bir
-    karşılaştırma tablosu üretir. BIST100/Altın/Dolar için GERÇEK
-    geçmiş piyasa verisi (yfinance) kullanılır; Mevduat/Tahvil/Repo
-    için Bahri'nin girdiği/güncellediği referans oranlar (canlı API
-    yok) basit faizle (oran × gün/365) hesaplanır."""
+def _render_karsilastirma(_cur_user, portfolio):
+    """v2.0.7.128 (Bahri'nin talebi, 10 Ağustos 2026 — köklü yeniden
+    tasarım, 5 madde): (1) Portföy Varlıkları Tablosu'nun hemen altına
+    taşındı (çağıran yerde). (2) EVDS'ten mevduat oranı artık OTOMATİK
+    çekiliyor, buton yok. (3) Artık TEK bir grafik - yatay eksen zaman
+    (portföydeki ilk alışın tarihinden bugüne). (4) Portföy + her
+    kıyaslama aracı için ayrı renkli, günlük kümülatif getiri çizgisi
+    (Plotly, TSO'nun zaten sahip olduğu `get_hist()` altyapısıyla gerçek
+    geçmiş veri). (5) Profesyonel görünüm için Plotly + düz/temiz tema."""
     from portfolio_ledger import get_benchmark_rates, set_benchmark_rate
 
-    st.divider()
     st.subheader("Getiri Kıyaslaması")
     st.caption(
-        "Her pozisyonun kendi alış tarihinden bugüne, aynı tutar başka "
-        "araçlara yatırılsaydı ne olurdu - ağırlıklı karşılaştırma."
+        "Portföyünüzdeki ilk alışın tarihinden bugüne, günlük kümülatif "
+        "getiri - TSO'da olan/olmayan diğer araçlarla karşılaştırmalı."
     )
 
     with st.expander("Referans Oranları (Mevduat / Tahvil / Repo)"):
         _oranlar = get_benchmark_rates(_cur_user["id"])
-        _guncelleme = _oranlar.get("_updated_at", {})
 
-        if st.button("Mevduatı TCMB EVDS'ten Çek", key="bm_evds_cek"):
-            _evds_deger, _evds_hata = _evds_mevduat_faizi_cek()
-            if _evds_deger is not None:
-                st.session_state["bm_mevduat"] = _evds_deger
-                st.success(f"TCMB EVDS'den çekildi: %{fmt_tr(_evds_deger, 2)} "
-                          f"(1 aya kadar vadeli TL mevduat, stok, ağırlıklı ortalama)")
-                st.rerun()
-            else:
-                st.warning(f"EVDS'ten çekilemedi — {_evds_hata}. Aşağıya elle girebilirsin.")
+        # v2.0.7.128 (madde 2): EVDS artik buton olmadan, sayfa acilinca
+        # OTOMATIK cekiliyor. Basarili olursa kaydedilmis oranla farkliysa
+        # veritabanini gunceller; basarisiz olursa sessizce en son
+        # kaydedilmis/elle girilmis degeri kullanir (hata asagida caption
+        # olarak gosterilir, akisi kesmez).
+        _evds_deger, _evds_hata = _evds_mevduat_faizi_cek()
+        if _evds_deger is not None and abs(_evds_deger - float(_oranlar.get("mevduat", 0) or 0)) > 0.005:
+            set_benchmark_rate(_cur_user["id"], "mevduat", _evds_deger)
+            _oranlar["mevduat"] = _evds_deger
+            st.session_state["bm_mevduat"] = _evds_deger
 
         rc1, rc2, rc3 = st.columns(3)
         with rc1:
+            _mevduat_kaynak = "TCMB EVDS, otomatik" if _evds_deger is not None else "elle girildi"
             _yeni_mevduat = st.number_input(
-                "Mevduat (yıllık net %)", value=float(_oranlar["mevduat"]),
-                step=0.1, key="bm_mevduat")
+                f"Mevduat (yıllık net %) — {_mevduat_kaynak}",
+                value=float(_oranlar["mevduat"]), step=0.1, key="bm_mevduat")
         with rc2:
             _yeni_tahvil = st.number_input(
                 "Tahvil (2 yıllık gösterge, %)", value=float(_oranlar["tahvil"]),
@@ -2947,107 +3047,62 @@ def _render_karsilastirma(_cur_user, df_pf):
             set_benchmark_rate(_cur_user["id"], "repo", _yeni_repo)
             st.success("Referans oranları güncellendi.")
             st.rerun()
-        if _guncelleme:
-            st.caption("Not: bu oranları düzenli güncellemen gerekir, uygulama "
-                       "canlı mevduat/tahvil/repo verisi çekmiyor. Mevduat için "
-                       "yukarıdaki 'TCMB EVDS'ten Çek' butonunu kullanabilirsin "
-                       "(TCMB'nin resmi, aylık güncellenen serisi) - Tahvil/Repo "
-                       "için hâlâ elle güncel bir kaynaktan bakıp girmen gerekiyor.")
+        if _evds_deger is None:
+            st.caption(f"TCMB EVDS'ten otomatik çekilemedi ({_evds_hata}) - "
+                       "mevduat oranını yukarıdan elle güncelleyebilirsin.")
+        st.caption("Tahvil/Repo için güvenilir, ücretsiz bir canlı kaynak yok - "
+                   "elle güncel bir değerden girmen gerekiyor.")
 
-    if df_pf is None or df_pf.empty:
+    if not portfolio:
         st.info("Karşılaştırma için açık pozisyon yok.")
         return
 
-    if not st.button("Karşılaştır: Bu Getiri Ne Kadar İyi?", key="pf_karsilastir_btn"):
+    with st.spinner("Geçmiş piyasa verileri hesaplanıyor (BIST100/Altın/Dolar/portföy varlıkları)..."):
+        _seriler = _kiyaslama_gunluk_serileri(_cur_user, portfolio)
+
+    if not _seriler:
+        st.info("Karşılaştırma için geçerli alış tarihi olan pozisyon bulunamadı.")
         return
 
-    import datetime as _dt_kr
-    _oranlar = get_benchmark_rates(_cur_user["id"])
-    _bugun = _dt_kr.date.today()
-    _bugun_str = _bugun.strftime("%Y-%m-%d")
+    import plotly.graph_objects as go
+    _renkler = {
+        "Portföyünüz": "#2a78d6", "BIST 100": "#898781", "Altın": "#c98500",
+        "Dolar/TL": "#199e70", "Banka Mevduatı": "#d55181",
+        "Devlet Tahvili": "#7f77dd", "Repo": "#d95926",
+    }
+    fig = go.Figure()
+    for _ad, _seri in _seriler.items():
+        fig.add_trace(go.Scatter(
+            x=_seri.index, y=_seri.values, mode="lines", name=_ad,
+            line=dict(width=3 if _ad == "Portföyünüz" else 1.75,
+                      color=_renkler.get(_ad, "#666666")),
+            hovertemplate="%{y:.2f}%<extra>" + _ad + "</extra>",
+        ))
+    fig.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
+    fig.update_layout(
+        template="plotly_white", height=440,
+        margin=dict(l=10, r=10, t=10, b=10),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        yaxis=dict(title="Kümülatif Getiri", ticksuffix="%",
+                   gridcolor="rgba(120,120,120,0.15)", zeroline=False),
+        xaxis=dict(gridcolor="rgba(120,120,120,0.08)"),
+        plot_bgcolor="white", paper_bgcolor="white",
+        font=dict(size=13),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    _toplam_maliyet = 0.0
-    _toplam_guncel = 0.0
-    _alt_toplam = {"BIST100": 0.0, "Altın": 0.0, "Dolar": 0.0,
-                   "Mevduat": 0.0, "Tahvil": 0.0, "Repo": 0.0}
-    _atlanan = 0
-    _veri_hatasi = 0
-
-    with st.spinner("Geçmiş piyasa verileri karşılaştırılıyor (BIST100/Altın/Dolar için yfinance)..."):
-        for _, _r in df_pf.iterrows():
-            _tarih_raw = _r.get("_purchase_date_raw", "")
-            if not _tarih_raw or len(str(_tarih_raw)) != 10:
-                _atlanan += 1
-                continue
-            try:
-                _tarih_dt = _dt_kr.datetime.strptime(_tarih_raw, "%Y-%m-%d").date()
-            except Exception:
-                _atlanan += 1
-                continue
-
-            _gun_sayisi = max((_bugun - _tarih_dt).days, 0)
-            _maliyet = float(_r["Miktar"]) * float(_r["Alış"])
-            _guncel = float(_r["Toplam"])
-            _toplam_maliyet += _maliyet
-            _toplam_guncel += _guncel
-
-            _b0 = _karsilastirma_gecmis_fiyat("XU100.IS", _tarih_raw)
-            _b1 = _karsilastirma_gecmis_fiyat("XU100.IS", _bugun_str)
-            if _b0 and _b1:
-                _alt_toplam["BIST100"] += _maliyet * (_b1 / _b0)
-            else:
-                _alt_toplam["BIST100"] += _maliyet
-                _veri_hatasi += 1
-
-            _a0 = _karsilastirma_altin_try(_tarih_raw)
-            _a1 = _karsilastirma_altin_try(_bugun_str)
-            if _a0 and _a1:
-                _alt_toplam["Altın"] += _maliyet * (_a1 / _a0)
-            else:
-                _alt_toplam["Altın"] += _maliyet
-                _veri_hatasi += 1
-
-            _d0 = _karsilastirma_gecmis_fiyat("TRY=X", _tarih_raw)
-            _d1 = _karsilastirma_gecmis_fiyat("TRY=X", _bugun_str)
-            if _d0 and _d1:
-                _alt_toplam["Dolar"] += _maliyet * (_d1 / _d0)
-            else:
-                _alt_toplam["Dolar"] += _maliyet
-                _veri_hatasi += 1
-
-            for _ad, _key in (("Mevduat", "mevduat"), ("Tahvil", "tahvil"), ("Repo", "repo")):
-                _oran = _oranlar.get(_key)
-                if _oran:
-                    _alt_toplam[_ad] += _maliyet * (1 + (_oran / 100) * _gun_sayisi / 365)
-                else:
-                    _alt_toplam[_ad] += _maliyet
-
-    if _toplam_maliyet <= 0:
-        st.info("Karşılaştırma için geçerli alış tarihi/maliyet bilgisi bulunamadı.")
-        return
-
-    _senin_pct = (_toplam_guncel / _toplam_maliyet - 1) * 100
-    _satirlar = [("Senin Portföyün", _toplam_guncel, _senin_pct)]
-    for _ad in ["BIST100", "Altın", "Dolar", "Mevduat", "Tahvil", "Repo"]:
-        _deger = _alt_toplam[_ad]
-        _pct = (_deger / _toplam_maliyet - 1) * 100
-        _satirlar.append((_ad, _deger, _pct))
-
-    import pandas as _pd_kr
-    _tablo = _pd_kr.DataFrame(_satirlar, columns=["Yatırım Aracı", "Bugünkü Karşılık (TL)", "Getiri %"])
-    _tablo["Bugünkü Karşılık (TL)"] = _tablo["Bugünkü Karşılık (TL)"].apply(lambda v: fmt_tr(v, 2))
-    _tablo["Getiri %"] = _tablo["Getiri %"].apply(lambda v: fmt_tr_isaretli(v, 2, yuzde=True))
-    st.dataframe(_tablo, hide_index=True, width='stretch')
-
-    _notlar = []
-    if _veri_hatasi > 0:
-        _notlar.append(f"{_veri_hatasi} veri noktası çekilemedi - o pozisyon için maliyet değişmemiş sayıldı (yaklaşık).")
-    if _atlanan > 0:
-        _notlar.append(f"{_atlanan} pozisyon geçerli alış tarihi olmadığı için hesaba katılmadı.")
-    _notlar.append("Mevduat/Tahvil/Repo, yukarıdaki referans oranlarından basit faizle (oran × gün/365) hesaplanır - "
-                   "gerçek bir mevduat/tahvil işleminin (stopaj, minimum vade vb.) tam yerine geçmez.")
-    _notlar.append("Kısa dönemli bir anlık görüntüdür - uzun vadeli performans göstergesi olarak yorumlanmamalıdır.")
-    st.caption(" ".join(_notlar))
+    _ozet = " · ".join(
+        f"{_ad}: {fmt_tr_isaretli(float(_seri.iloc[-1]), 2, yuzde=True)}"
+        for _ad, _seri in _seriler.items()
+    )
+    st.caption(f"Bugün itibarıyla — {_ozet}")
+    st.caption(
+        "Mevduat/Tahvil/Repo, referans oranlardan basit faizle (oran × gün/365) "
+        "hesaplanır - gerçek bir işlemin (stopaj, minimum vade vb.) tam yerine "
+        "geçmez. Kısa dönemli getiriler piyasa koşullarına bağlıdır, tek bir "
+        "dönemden genel bir sonuç çıkarmak yanıltıcı olabilir."
+    )
 
 
 if page=="Ana Sayfa":
@@ -4423,8 +4478,9 @@ elif page=="Portföyüm":
 
     st.caption("Analiz için tablodaki varlığın solundaki kutucuğu işaretleyin.")
 
+    st.divider()
+    _render_karsilastirma(_cur_user, portfolio)
     _render_sermaye_nakit_ozeti(_cur_user, portfolio, float(df_pf["Toplam"].sum()))
-    _render_karsilastirma(_cur_user, df_pf)
     _render_gerceklesmis_kar_zarar(_cur_user)
 
 
