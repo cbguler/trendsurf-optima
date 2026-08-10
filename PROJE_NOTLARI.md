@@ -389,6 +389,23 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.130 (10 Ağustos 2026, Bahri'nin bulgusu): Getiri
+  Kıyaslaması grafiğindeki "Portföyünüz: +1,95%" ile Portföy Varlıkları
+  Tablosu'ndaki "+1,67%" arasındaki tutarsızlık düzeltildi.** Kök neden
+  (Ana Sayfa'daki v2.0.7.105 "canlı vs dondurulmuş skor" sorunuyla AYNI
+  sınıf): ana tablodaki "Güncel" fiyat `_ld_portfolio_prices()` ile CANLI
+  çekiliyor, ama grafikteki "bugün" noktası `get_hist()`'in son
+  değerinden geliyordu - TEFAS için bu pytefas/önbellekli GEÇMİŞ NAV'a
+  dayanıyor (TEFAS NAV'ları günde bir kez, genelde gün sonunda
+  yayınlanır, bir gün gecikebilir). İki ayrı veri hattı, aynı gün için
+  farklı sayı veriyordu. **Düzeltme:** `_kiyaslama_gunluk_serileri()`'nde
+  her ticker'ın günlük serisinin SON günü artık ana tabloyla BİREBİR AYNI
+  canlı fiyat kaynağıyla (`_ld_portfolio_prices`, Son_Fiyat yedekli)
+  eziliyor - geçmiş günler `get_hist()`'ten kalıyor (zaten doğru), sadece
+  "bugün" artık iki gösterge arasında tutarlı. **DOĞRULANMADI** (canlı
+  test gerekiyor) - push sonrası iki sayının artık eşleştiğinin kontrol
+  edilmesi gerekir.
+
 - **[UYGULANDI] v2.0.7.129 (10 Ağustos 2026, Bahri'nin talebi — "elle veri
   girişi asla kabul edilemez" itirazı üzerine ikinci revizyon).**
   (1) **Mevduat/Tahvil/Repo artık ÜÇÜ DE TCMB EVDS'ten tam otomatik**

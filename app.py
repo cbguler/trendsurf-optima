@@ -2879,17 +2879,46 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
 
     # 1) Portföy - her benzersiz ticker icin bir kez gecmis cek
     _ticker_seri = {}
+    _benzersiz_tickerlar = []
     for _p in portfolio:
         _tkr = _p.get("ticker")
         _kat = _p.get("asset_type") or "BIST"
         if not _tkr or _tkr in _ticker_seri:
             continue
+        _benzersiz_tickerlar.append(_tkr)
         try:
             _h = get_hist(_tkr, "", _kat, _period)
         except Exception:
             _h = None
         if _h is not None and not _h.empty and "Close" in _h.columns:
             _ticker_seri[_tkr] = _seri_hazirla(_h["Close"])
+
+    # v2.0.7.130 (Bahri'nin bulgusu, 10 Ağustos 2026): grafikteki "bugün"
+    # değeri, Portföy Varlıkları Tablosu'ndaki "Güncel" ile FARKLI
+    # çıkıyordu (+1,95% vs +1,67%) - kök neden: get_hist()'in son noktası
+    # TEFAS için pytefas/önbellekli GEÇMİŞ NAV'a dayanıyor (TEFAS NAV'ları
+    # günde bir kez, genelde gün sonunda yayınlanır - bir gün gecikebilir),
+    # ana tablo ise `_ld_portfolio_prices()` ile CANLI fiyat kullanıyor -
+    # iki ayrı veri hattı. Düzeltme: her serinin SON gününü, ana tabloyla
+    # BİREBİR AYNI canlı fiyat kaynağıyla eziyoruz - geçmiş günler
+    # get_hist()'ten kalıyor (zaten doğru), sadece "bugün" artık tutarlı.
+    try:
+        _canli_fiyatlar = _ld_portfolio_prices(df_uni, _benzersiz_tickerlar)
+    except Exception:
+        _canli_fiyatlar = {}
+    for _tkr in _benzersiz_tickerlar:
+        if _tkr not in _ticker_seri:
+            continue
+        _canli = _canli_fiyatlar.get(_tkr, 0.0)
+        if not _canli or _canli <= 0:
+            _match_u = df_uni[df_uni["Ticker"] == _tkr]
+            if not _match_u.empty:
+                try:
+                    _canli = float(_match_u["Son_Fiyat"].iloc[0])
+                except Exception:
+                    _canli = 0.0
+        if _canli and _canli > 0:
+            _ticker_seri[_tkr].iloc[-1] = _canli
 
     _portfoy_deger = pd.Series(0.0, index=_gun_araligi)
     _portfoy_maliyet = pd.Series(0.0, index=_gun_araligi)
