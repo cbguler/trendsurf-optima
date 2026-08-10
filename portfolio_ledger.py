@@ -604,3 +604,54 @@ def get_cash_balance(user_id: int, portfolio_rows: list = None,
         "net_satis_geliri": round(net_satis_geliri, 2),
         "nakit_bakiye": round(nakit, 2),
     }
+
+
+# ══════════════════════════════════════════════════════════════════
+# v2.0.7.125 - KIYASLAMA REFERANS ORANLARI (Bahri'nin talebi)
+# ══════════════════════════════════════════════════════════════════
+# Mevduat/tahvil/repo için canlı, güvenilir bir API yok (TCMB "ortalama
+# mevduat faizi" diye bir şey yayınlamıyor) - bu yüzden bu 3 oran Bahri
+# tarafından manuel girilip zaman zaman güncellenir. Varsayılan (ilk
+# kurulum) değerleri 7 Ağustos 2026 itibarıyla araştırılmış gerçek
+# piyasa verileridir - bkz. PROJE_NOTLARI.
+
+_VARSAYILAN_BENCHMARK_ORANLARI = {
+    "mevduat": 38.0,  # en yuksek TL mevduatlarin (46-47% brut) stopaj sonrasi net ort.
+    "tahvil":  37.97,  # 2 yillik gosterge tahvil faizi (investing.com, 06.08.2026)
+    "repo":    37.0,   # TCMB politika faizi / bir haftalik repo (23 Temmuz 2026 karari)
+}
+
+def get_benchmark_rates(user_id: int) -> dict:
+    """Kullanıcının mevduat/tahvil/repo referans oranlarını döner
+    (yıllık %). Hiç kayıt yoksa varsayılan değerleri döner (DB'ye
+    yazmadan - sadece ilk gösterimde kullanılır)."""
+    from db import get_conn
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT rate_name, annual_rate, updated_at FROM benchmark_rates WHERE user_id=?",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+    sonuc = dict(_VARSAYILAN_BENCHMARK_ORANLARI)
+    guncelleme = {}
+    for r in rows:
+        sonuc[r[0]] = float(r[1])
+        guncelleme[r[0]] = r[2]
+    sonuc["_updated_at"] = guncelleme
+    return sonuc
+
+
+def set_benchmark_rate(user_id: int, rate_name: str, annual_rate: float) -> bool:
+    if rate_name not in ("mevduat", "tahvil", "repo"):
+        return False
+    from db import get_conn
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO benchmark_rates (user_id, rate_name, annual_rate, updated_at) "
+        "VALUES (?,?,?,CURRENT_TIMESTAMP) "
+        "ON CONFLICT (user_id, rate_name) DO UPDATE SET "
+        "annual_rate=EXCLUDED.annual_rate, updated_at=CURRENT_TIMESTAMP",
+        (user_id, rate_name, annual_rate)
+    )
+    conn.commit(); conn.close()
+    return True

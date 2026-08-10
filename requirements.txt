@@ -35,3 +35,9 @@ lxml
 # kullanarak GERCEK bir tarayici cerezi okur/yazar - sandboxed iframe
 # navigasyon kisitina hic takilmaz.
 extra-streamlit-components>=0.1.80
+# v2.0.7.126 (10 Agustos 2026, Bahri'nin talebi): TCMB EVDS'den mevduat
+# faizi referans oranini otomatik cekmek icin - fatihmete/evds paketi,
+# EVDS3 API'sinin gercek (belgesiz) taban adresini
+# (evds3.tcmb.gov.tr/igmevdsms-dis/) ve auth header'ini dogru sekilde
+# yonetiyor - kendi HTTP istemcimizi yazmaktan daha guvenilir.
+evds>=0.4.0

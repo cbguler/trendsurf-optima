@@ -389,6 +389,59 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.126 (10 Ağustos 2026, Bahri'nin talebi): Getiri
+  Kıyaslaması'ndaki Mevduat referans oranı artık TCMB EVDS'den TEK
+  TUŞLA otomatik çekilebiliyor.** Önceki oturumda hesap.com'un mevduat
+  faizi grafiğinin JS ile sonradan yüklendiği (güvenilir şekilde
+  scrape edilemediği) tespit edilmişti; kaynağının zaten TCMB olduğu da
+  görülmüştü. Bahri kendi EVDS API anahtarını verince doğru seri
+  bulundu: **`TP.MT210AGS.TRY.MT01`** ("1 Aya Kadar Vadeli TL Mevduat,
+  Stok, %" — hesap.com'un gösterdiğiyle AYNI seri, resmi kaynaktan,
+  aylık güncelleniyor). `fatihmete/evds` pip paketi kullanıldı (EVDS3'ün
+  belgesiz gerçek taban adresini - `evds3.tcmb.gov.tr/igmevdsms-dis/` -
+  ve auth header'ını doğru yönetiyor, kendi HTTP istemcimizi
+  yazmaktan daha güvenilir).
+  **GÜVENLİK (KRİTİK):** API anahtarı KODA YAZILMADI — bu repo public,
+  commit edilen bir anahtar herkese açık olurdu (GitGuardian/SMTP
+  sızıntısı hâlâ hatırlanıyor). Anahtar `EVDS_API_KEY` ortam
+  değişkeninden (yoksa Streamlit secrets'tan) okunuyor — Supabase
+  bağlantısıyla AYNI desen. **Bahri'nin yapması gereken:** gerçek anahtar
+  değerini Streamlit Cloud'un "Secrets" ayarına `EVDS_API_KEY = "..."`
+  olarak eklemesi (worker.py/GitHub Actions bu özelliği kullanmıyor,
+  sadece canlı app.py'de "Mevduatı TCMB EVDS'ten Çek" butonuna basılınca
+  çalışıyor — o yüzden GitHub Secrets'a değil, Streamlit Cloud
+  secrets'ına eklenmeli). Tahvil/Repo için hâlâ güvenilir/ücretsiz bir
+  API yok, elle girilmeye devam ediyor.
+
+- **[UYGULANDI, GERÇEK VERİYLE TEST EDİLMEDİ] v2.0.7.125 (8 Ağustos
+  2026, Bahri'nin talebi — büyük özellik): "Getiri Kıyaslaması" —
+  Portföyüm sayfasına, portföyün gerçek getirisini (her pozisyonun
+  KENDİ alış tarihinden bugüne, ağırlıklı) BIST100/Altın/Dolar/Mevduat/
+  Tahvil/Repo ile kıyaslayan bir "Karşılaştır" butonu + sonuç tablosu
+  eklendi.**
+  - **BIST100/Altın/Dolar:** GERÇEK geçmiş piyasa verisi — yfinance
+    üzerinden (`XU100.IS`, `GC=F`+`TRY=X` ons→gram dönüşümüyle altın,
+    `TRY=X` dolar). Her pozisyonun kendi alış tarihi için ayrı ayrı
+    çekiliyor, `st.cache_data(ttl=3600)` ile önbellekli, 8sn zaman
+    aşımı korumalı (aynı desen worker.py/live_data.py).
+  - **Mevduat/Tahvil/Repo:** canlı/güvenilir bir API YOK (TCMB "ortalama
+    mevduat faizi" diye bir şey yayınlamıyor) — bu 3 oran yeni
+    `benchmark_rates` tablosunda MANUEL saklanıyor, Bahri "Referans
+    Oranları" bölümünden düzenleyip güncelleyebiliyor. **İlk kurulum
+    varsayılan değerleri (7-8 Ağustos 2026'da araştırıldı, gerçek
+    kaynaklardan):** Mevduat %38 (en yüksek TL mevduatların ~%46-47
+    brüt oranının stopaj sonrası net ortalaması), Tahvil %37,97 (2
+    yıllık gösterge tahvil, investing.com), Repo %37 (TCMB politika
+    faizi, 23 Temmuz 2026 kararı). Bahri bu oranları zaman zaman
+    güncellemezse zamanla eskir — arayüzde bu uyarı gösteriliyor.
+  - Hesap basit faizle: `oran × gün_sayısı / 365`, her pozisyonun
+    maliyetiyle ağırlıklı toplanıyor.
+  - **Bu oturumda gerçek veriyle (canlıda buton tıklanarak) test
+    EDİLMEDİ** — sadece kod yazıldı ve derleme/sözdizimi doğrulandı.
+    İlk kullanımda: yfinance çağrılarının (özellikle `XU100.IS` ve
+    `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
+    ve tabloların doğru göründüğünü kontrol et.
+
 - **[KARAR - TEKRAR SORULMASIN] Değerli Madenler'de 9 sikke/gram altın
   türünün (Gram Has Altın, 14/18 Ayar, Bilezik22, İkibuçuk, Beşli,
   Gremse, Reşat, Hamit Altın) RSI/1A Getiri/Optima Skor boş/0 kalması

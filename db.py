@@ -363,6 +363,22 @@ def init_db():
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
 
+    # v2.0.7.125 - Kiyaslama ozelligi (Bahri'nin talebi): "portfoyumun
+    # getirisini TSO'da olan/olmayan baska yatirim araclariyla kiyasla"
+    # butonu icin - mevduat/tahvil/repo gibi araclarin canli/guvenilir
+    # bir API'si olmadigindan (TCMB "ortalama mevduat faizi" diye bir
+    # sey yayinlamiyor), bu 3 oran Bahri tarafindan MANUEL girilip
+    # guncellenir. BIST100/Altin/Dolar icin ise yfinance'ten GERCEK
+    # gecmis veri cekiliyor (bkz. app.py _karsilastirma_gecmis_fiyat).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS benchmark_rates (
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        rate_name   TEXT    NOT NULL,
+        annual_rate DOUBLE PRECISION NOT NULL,
+        updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, rate_name)
+    )""")
+
     # v2.0.7.117 - KRITIK VERI DUZELTMESI (Bahri'nin bulgusu, HTS ornegi,
     # 31 Temmuz 2026: Duzelt formuyla maliyeti 56,630841 yapmaya calisti,
     # UPDATE hatasiz calisti ama yazdiktan hemen sonra okundugunda deger
@@ -400,6 +416,7 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_user   ON portfolio(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_sales_user ON portfolio_sales(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_capital_tx_user ON portfolio_capital_tx(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_benchmark_rates_user ON benchmark_rates(user_id)")
 
     # v2.0.7.100 - KRITIK GUVENLIK DUZELTMESI (Bahri'nin bulgusu, 22 Temmuz
     # 2026: Supabase "CRITICAL: Table publicly accessible - Row-Level
@@ -425,7 +442,7 @@ def init_db():
     # kalici kural, bkz. Bolum 0).
     for _rls_tablo in ("users", "portfolio", "sessions", "password_resets",
                        "portfolio_sales", "portfolio_fee_settings",
-                       "portfolio_capital_tx"):
+                       "portfolio_capital_tx", "benchmark_rates"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
