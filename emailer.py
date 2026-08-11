@@ -27,6 +27,7 @@ def _tr_now():
 
 
 import pandas as pd
+from scoring import optima_score as _scoring_optima_score
 
 CFG_FILE = "email_config.json"
 CSV_PATH = "optimized_universe.csv"
@@ -114,6 +115,9 @@ def _logo_b64():
 
 
 def _optima_score(row) -> float:
+    """v2.0.7.138 (Bahri'nin bulgusu — "başka hisseler de var mı?" taraması):
+    fallback formül artık scoring.py'nin AYNI tek kaynağını kullanıyor
+    (önceden 6. bir elle-tutulan kopyaydı)."""
     for col in ["Optima_Skor", "optima_skor", "OptimaSkoru"]:
         if col in row.index and pd.notna(row[col]):
             v = float(row[col])
@@ -122,22 +126,7 @@ def _optima_score(row) -> float:
     rsi   = float(row.get("RSI",   50) or 50)
     ret1m = float(row.get("Ret1M",  0) or  0)
     vol   = float(row.get("Vol",   30) or 30)
-    if   40 <= rsi <= 60: rs = 25
-    elif 35 <= rsi <= 65: rs = 18
-    elif 30 <= rsi < 35 or 65 < rsi <= 70: rs = 10
-    else: rs = 0
-    if   ret1m >= 30: ms = 35
-    elif ret1m >= 20: ms = 30
-    elif ret1m >= 10: ms = 24
-    elif ret1m >=  5: ms = 18
-    elif ret1m >=  0: ms = 10
-    elif ret1m >= -5: ms =  4
-    else:             ms =  0
-    if   vol < 20: vs = 15
-    elif vol < 35: vs = 10
-    elif vol < 55: vs =  5
-    else:          vs =  0
-    return min(100, round((rs + ms + vs) * (100.0 / 75.0), 1))
+    return _scoring_optima_score(rsi, ret1m, vol=vol, has_fundamental=False)
 
 
 def _sig_color(score: float) -> str:
@@ -651,6 +640,27 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
 
     if df_uni is None:
         df_uni = pd.read_csv(CSV_PATH) if os.path.exists(CSV_PATH) else pd.DataFrame()
+        # v2.0.7.138 - bu dal muhtemelen hic tetiklenmiyor (app.py'deki her
+        # iki cagiran da kendi df_uni'sini veriyor) ama savunmaci tamlik
+        # icin buraya da Firsat Radari overlay'i eklendi.
+        if not df_uni.empty and "Ticker" in df_uni.columns:
+            try:
+                from db import get_intraday_overlay
+                _rd_map = get_intraday_overlay(45)
+                if _rd_map:
+                    _mask_rd = df_uni["Ticker"].astype(str).isin(_rd_map.keys())
+                    if _mask_rd.any():
+                        if "Optima_Skor" not in df_uni.columns:
+                            df_uni["Optima_Skor"] = pd.NA
+                        df_uni.loc[_mask_rd, "Optima_Skor"] = df_uni.loc[_mask_rd, "Ticker"].astype(str).map(
+                            lambda t: _rd_map[t]["skor"])
+                        _mask_bist_e = _mask_rd & (df_uni.get("Kategori") == "BIST")
+                        if _mask_bist_e.any():
+                            for _col, _key in (("Son_Fiyat","fiyat"),("RSI","rsi"),("Ret1M","ret1m")):
+                                df_uni.loc[_mask_bist_e, _col] = df_uni.loc[_mask_bist_e, "Ticker"].astype(str).map(
+                                    lambda t, _k=_key: _rd_map[t][_k])
+            except Exception:
+                pass
 
     if portfolio is None:
         # Sadece user_email verildiyse o kullanicinin portfoyunu cek.

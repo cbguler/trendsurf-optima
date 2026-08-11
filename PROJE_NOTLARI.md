@@ -389,6 +389,35 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.138 (11 Ağustos 2026, Bahri'nin sorusu — "Ben bir
+  tek TUPRAS'a baktım, başka hisseler de var mıdır? Düzeltmeler bunları
+  da kapsıyor mu?"): TAM KODBAZI TARAMASI yapıldı, AYNI hata sınıfının
+  (frozen CSV, Fırsat Radarı overlay'i eksik) DÖRT AYRI yerde daha
+  bulunduğu tespit edildi ve hepsi düzeltildi.**
+  Netlik için: **scoring.py birleştirmesi (v2.0.7.132) zaten TÜM
+  varlıkları/sayfaları kapsıyordu** (TUPRS'a özel değildi) - formül
+  hesaplaması evrenseldi. Ama Fırsat Radarı overlay eksikliği TUPRS'a
+  ÖZEL değildi, DAHA GENİŞ bir mimari boşluktu; tarama sonucu bulunanlar:
+  1. **`halka_arz_client.py`** (Halka Arz sayfası) - Temettü'nün
+     düzeltmeden ÖNCEKİ haliyle BİREBİR AYNI iki hataya sahipti: Optima_Skor
+     hiç yeniden hesaplanmadan CSV'den kopyalanıyordu, overlay yoktu.
+     `_enrich_from_csv()` artık `df_uni_hazir` parametresi alıyor (Temettü
+     ile AYNI desen) - hem yeniden hesaplama hem overlay eklendi.
+  2. **`emailer.py`** (Zamanlanmış/tetiklenen e-posta raporları) - HEM
+     `_optima_score()` fallback formülü (scoring.py'ye bağlandı, ALTINCI
+     elle-tutulan kopyaydı) HEM de kendi CSV yükleme dalı (overlay eksikti,
+     artık ekli) düzeltildi.
+  3. **app.py'deki e-posta TETİKLEME uç noktası** (webhook token ile
+     tetiklenen zamanlanmış rapor) - kendi AYRI CSV yükünü yapıyordu,
+     `load_universe()`'in overlay'ini hiç uygulamıyordu - artık uyguluyor.
+  **Doğrulanıp AYRI olduğu görülen (bu hata sınıfına dahil DEĞİL):**
+  `emailer_standalone.py`, `peak_check_standalone.py` - ikisi de
+  Optima_Skor hiç kullanmıyor/göstermiyor, ilgisiz.
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası Halka Arz
+  sayfasındaki skorların Ana Sayfa/BIST ile eşleştiği kontrol edilmeli.
+  E-posta raporlarının doğruluğu ancak bir sonraki zamanlanmış
+  gönderimde görülebilir.
+
 - **[KRİTİK, PUSH EDİLMEMİŞ] v2.0.7.134+135 hiç push edilmedi!** Git
   geçmişi doğrudan v2.0.7.133'ten v2.0.7.136'ya atlıyor. Bu, TUPRS kök
   neden düzeltmesini (Fırsat Radarı overlay'inin `db.get_intraday_overlay()`

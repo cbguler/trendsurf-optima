@@ -9,6 +9,7 @@ Cache: 4 saat
 import os, json, time, re, io
 from typing import Optional
 import pandas as pd
+from scoring import optima_score
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR  = os.path.join(BASE_DIR, "halka_arz_cache")
@@ -252,7 +253,35 @@ def _parse_xharz_from_excel(excel_bytes: bytes) -> list:
 
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
 
-def _enrich_from_csv(rows: list) -> list:
+def _enrich_from_csv(rows: list, df_uni_hazir=None) -> list:
+    """v2.0.7.138 (Bahri'nin bulgusu, 11 Ağustos 2026 — "TUPRS'a baktım,
+    başka hisseler de var mıdır, düzeltmeler bunları da kapsıyor mu?"
+    sorusu üzerine tarama): Halka Arz sayfası, Temettü sayfasının
+    düzeltmeden ÖNCEKİ haliyle BİREBİR AYNI iki hataya sahipti - (1)
+    Optima_Skor CSV'den hiç yeniden hesaplanmadan DOĞRUDAN kopyalanıyordu,
+    (2) Fırsat Radarı overlay'i (Supabase intraday_scores, 20 dk taze)
+    hiç uygulanmıyordu. Artık scoring.py ile YENİDEN HESAPLANIYOR + eğer
+    çağıran taraf (app.py) zaten yüklenmiş df_uni'yi (overlay dahil)
+    verirse doğrudan ondan okunuyor (hızlı, ekstra sorgu yok, Temettü'nün
+    aldığı AYNI düzeltme deseni - bkz. temettu_client.py._enrich())."""
+    if df_uni_hazir is not None and not df_uni_hazir.empty:
+        try:
+            _du = df_uni_hazir.set_index("Ticker")
+            for r in rows:
+                t = r["Ticker"]
+                if t in _du.index:
+                    row = _du.loc[t]
+                    r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
+                    r["RSI"]         = float(row.get("RSI", 0) or 0)
+                    r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
+                    _skor = row.get("Optima_Skor")
+                    r["Optima_Skor"] = float(_skor) if (_skor is not None and _skor == _skor) else 0.0
+                else:
+                    r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
+        except Exception:
+            pass
+        return rows
+
     csv_path = os.path.join(BASE_DIR, "optimized_universe.csv")
     if not os.path.exists(csv_path):
         return rows
@@ -262,12 +291,39 @@ def _enrich_from_csv(rows: list) -> list:
             t = r["Ticker"]
             if t in df_uni.index:
                 row = df_uni.loc[t]
+                rsi   = float(row.get("RSI", 0) or 0)
+                ret1m = float(row.get("Ret1M", 0) or 0)
+                vol   = float(row.get("Vol", 30) or 30)
+                pb = row.get("PB"); pe = row.get("PE"); dy = row.get("DY")
+                has_fund = any(v is not None and str(v) != "nan" and float(v or 0) > 0
+                              for v in (pb, pe, dy))
                 r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
-                r["RSI"]         = float(row.get("RSI", 0) or 0)
-                r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
-                r["Optima_Skor"] = float(row.get("Optima_Skor", 0) or 0)
+                r["RSI"]         = rsi
+                r["Ret1M"]       = ret1m
+                r["Optima_Skor"] = optima_score(
+                    rsi, ret1m, vol=vol, has_fundamental=has_fund,
+                    pb=pb, pe=pe, dy=dy)
             else:
                 r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
+    except Exception:
+        pass
+
+    try:
+        from db import get_intraday_overlay
+        _rd_map = get_intraday_overlay(45)
+        if _rd_map:
+            for r in rows:
+                _ov = _rd_map.get(r.get("Ticker"))
+                if not _ov:
+                    continue
+                if _ov.get("fiyat") is not None:
+                    r["Son_Fiyat"] = float(_ov["fiyat"])
+                if _ov.get("rsi") is not None:
+                    r["RSI"] = float(_ov["rsi"])
+                if _ov.get("ret1m") is not None:
+                    r["Ret1M"] = float(_ov["ret1m"])
+                if _ov.get("skor") is not None:
+                    r["Optima_Skor"] = float(_ov["skor"])
     except Exception:
         pass
     return rows
@@ -275,10 +331,14 @@ def _enrich_from_csv(rows: list) -> list:
 
 # ── Ana fonksiyon ─────────────────────────────────────────────────────────────
 
-def fetch_ipo_list(force_refresh: bool = False) -> pd.DataFrame:
+def fetch_ipo_list(force_refresh: bool = False, df_uni_hazir=None) -> pd.DataFrame:
+    """v2.0.7.138: df_uni_hazir - app.py'nin zaten yüklediği (Fırsat Radarı
+    overlay'i dahil) df_uni verilirse, önbellekten dönerken bile
+    Optima_Skor/RSI/Ret1M taze hesaplanır (bkz. _enrich_from_csv notu)."""
     if not force_refresh:
         cached = _read_cache()
         if cached:
+            cached = _enrich_from_csv(cached, df_uni_hazir)
             return pd.DataFrame(cached)
 
     # Kademe 1: KAP RSC (canlı, otomatik)
@@ -298,7 +358,7 @@ def fetch_ipo_list(force_refresh: bool = False) -> pd.DataFrame:
             "Son_Fiyat", "RSI", "Ret1M", "Optima_Skor"
         ])
 
-    rows = _enrich_from_csv(rows)
+    rows = _enrich_from_csv(rows, df_uni_hazir)
     df = pd.DataFrame(rows).reset_index(drop=True)
     _write_cache(df.to_dict("records"))
     return df

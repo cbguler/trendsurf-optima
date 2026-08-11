@@ -254,6 +254,30 @@ if _qp.get("trigger") == "email":
                             "optimized_universe.csv")
         _df_uni = pd.read_csv(_csv)
 
+        # v2.0.7.138 (Bahri'nin bulgusu, 11 Ağustos 2026 — "TUPRS'a baktım,
+        # başka hisseler de var mıdır?" sorusu üzerine tarama): bu uç nokta
+        # da (e-posta tetikleyicisi) kendi ayrı CSV yükünü yapıyordu ve
+        # load_universe()'in Fırsat Radarı overlay'ini (Supabase
+        # intraday_scores, 20 dk taze) HİÇ uygulamıyordu - Temettü/Halka
+        # Arz'da bulunanla AYNI hata. Artık burada da uygulanıyor.
+        try:
+            from db import get_intraday_overlay
+            _rd_map = get_intraday_overlay(45)
+            if _rd_map:
+                _mask_rd = _df_uni["Ticker"].astype(str).isin(_rd_map.keys())
+                if _mask_rd.any():
+                    if "Optima_Skor" not in _df_uni.columns:
+                        _df_uni["Optima_Skor"] = pd.NA
+                    _df_uni.loc[_mask_rd, "Optima_Skor"] = _df_uni.loc[_mask_rd, "Ticker"].astype(str).map(
+                        lambda t: _rd_map[t]["skor"])
+                    _mask_bist_rd = _mask_rd & (_df_uni["Kategori"] == "BIST")
+                    if _mask_bist_rd.any():
+                        for _col, _key in (("Son_Fiyat","fiyat"),("RSI","rsi"),("Ret1M","ret1m")):
+                            _df_uni.loc[_mask_bist_rd, _col] = _df_uni.loc[_mask_bist_rd, "Ticker"].astype(str).map(
+                                lambda t, _k=_key: _rd_map[t][_k])
+        except Exception as _rd_err_trig:
+            print(f"[radar-overlay][trigger] atlandi: {_rd_err_trig}")
+
         # Live data pipeline (mevcut Streamlit ile ayni - tutarli sonuc)
         _df_uni = filter_universe(_df_uni)
         _df_uni = rename_existing_maden(_df_uni)
@@ -5195,7 +5219,7 @@ elif page=="Halka Arz":
     try:
         from halka_arz_client import fetch_ipo_list, get_ipo_summary
         with st.spinner("XHARZ üye listesi yükleniyor..."):
-            df_ipo = fetch_ipo_list(force_refresh=ha_refresh)
+            df_ipo = fetch_ipo_list(force_refresh=ha_refresh, df_uni_hazir=df_uni)
         ha_error = None
     except Exception as _ha_ex:
         df_ipo = pd.DataFrame()
