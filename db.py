@@ -270,7 +270,15 @@ def _get_pool():
             "Veya GitHub Actions icin env: SUPABASE_DB_URL"
         )
     try:
-        _CONN_POOL = psycopg2.pool.ThreadedConnectionPool(1, 10, url, connect_timeout=10)
+        _CONN_POOL = psycopg2.pool.ThreadedConnectionPool(1, 20, url, connect_timeout=10)
+        # v2.0.7.139 (Bahri'nin bulgusu, 11 Agustos 2026 - havuz deploy
+        # edildikten SONRA bile _get_db_url tekrarlanmaya devam etti):
+        # bu satir SADECE havuz GERCEKTEN ilk kez olusturulurken basmali -
+        # eger loglarda BUNU her rerun'da tekrar tekrar gorursek, sorun
+        # havuzun kendisinin her seferinde YENIDEN olusturuldugu (global
+        # degiskenin kalicı olmadigi) demektir.
+        print("[db][pool] YENI HAVUZ OLUSTURULDU (bu sadece process "
+              "basina BIR KEZ gorunmeli)", file=sys.stderr)
     except psycopg2.OperationalError as e:
         err_msg = str(e)[:300] if e else "bilinmeyen hata"
         print(f"[db] havuz olusturma OperationalError: {err_msg}", file=sys.stderr)
@@ -285,44 +293,75 @@ def _get_pool():
 
 
 def get_conn() -> _CompatConn:
-    """Supabase PostgreSQL baglantisi dondurur - artik gercek bir havuzdan
-    (bkz. _get_pool ve _CompatConn.close() notlari) - eskiden her cagrida
-    sifirdan yeni baglanti aciyordu (yavaslik kaynagiydi)."""
+    """Supabase PostgreSQL baglantisi dondurur.
+
+    v2.0.7.140 (KRITIK, Bahri'nin bulgusu, 11 Agustos 2026 - v2.0.7.137'nin
+    baglanti havuzu az once TUM UYGULAMAYI COKERTTI, "RuntimeError...
+    get_conn" hatasiyla, reboot bile duzeltmiyordu): havuz muhtemelen
+    TUKENDI (psycopg2.pool.PoolError) - bircok yerde get_conn() cagiran
+    kod bir istisna (exception) durumunda .close()'a hic ulasmiyor, o
+    baglanti havuza hic geri donmuyor ("sizinti"). Havuz 10 baglantiya
+    kadar buyuyebiliyordu ama yogun kullanimda bu bile yetmedi.
+
+    Bu artik GUVENLIK AGLI: havuz HERHANGI BIR SEBEPLE basarisiz olursa
+    (tukenme dahil, herhangi bir hata), sessizce ESKI, HER ZAMAN CALISAN
+    yonteme (dogrudan, havuzsuz psycopg2.connect()) GERI DUSER - uygulama
+    ARTIK ASLA sadece havuz yuzunden cokmez. En kotu senaryoda performans
+    havuz-oncesi seviyeye doner (yavas ama GUVENILIR), COKME olmaz."""
     if not PSYCOPG2_OK:
         raise RuntimeError(
             "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
         )
+
+    def _dogrudan_baglan():
+        """Havuz olmadan, dogrudan yeni bir baglanti - eski (v2.0.7.136 ve
+        oncesi) HER ZAMAN CALISAN yontem. _pool=None ile donen _CompatConn
+        close()'da GERCEKTEN kapatir (havuza iade YOK, cunku havuzdan
+        gelmedi)."""
+        url = _get_db_url()
+        if not url:
+            raise RuntimeError(
+                "Supabase db_url ayarlanmamis. Streamlit Cloud Secrets'ta tanimlayin:\n"
+                "  [supabase]\n"
+                "  db_url = \"postgresql://...\"\n"
+                "Veya GitHub Actions icin env: SUPABASE_DB_URL"
+            )
+        try:
+            pg_conn = psycopg2.connect(url, connect_timeout=10)
+        except psycopg2.OperationalError as e:
+            err_msg = str(e)[:300] if e else "bilinmeyen hata"
+            print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)
+            raise RuntimeError(
+                f"Supabase baglantisi acilamadi (OperationalError): {err_msg}\n"
+                f"Cozumler:\n"
+                f"  1) Supabase Dashboard'ta projenin aktif oldugunu dogrulayin\n"
+                f"  2) Connection string'in dogru oldugunu kontrol edin (Settings > Database)\n"
+                f"  3) URL'de password'unun URL-encoded oldugundan emin olun (?, @, $, !)"
+            ) from e
+        return _CompatConn(pg_conn, None)
+
     try:
         pool = _get_pool()
         pg_conn = pool.getconn()
-        # v2.0.7.137: havuzdan gelen baglanti onceki bir kullanimdan
-        # kapanmis olabilir - pg_conn.closed (0=acik) ile basit bir
-        # kontrol, kapaliysa havuzdan atilip taze bir tane acilir.
         if pg_conn.closed:
+            print("[db][pool] Havuzdaki baglanti KAPALI bulundu, "
+                  "YENIDEN aciliyor.", file=sys.stderr)
             try:
                 pool.putconn(pg_conn, close=True)
             except Exception:
                 pass
-            pg_conn = psycopg2.connect(_get_db_url(), connect_timeout=10)
+            return _dogrudan_baglan()
         return _CompatConn(pg_conn, pool)
     except RuntimeError:
         raise
-    except psycopg2.OperationalError as e:
-        err_msg = str(e)[:300] if e else "bilinmeyen hata"
-        print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)
-        raise RuntimeError(
-            f"Supabase baglantisi acilamadi (OperationalError): {err_msg}\n"
-            f"Cozumler:\n"
-            f"  1) Supabase Dashboard'ta projenin aktif oldugunu dogrulayin\n"
-            f"  2) Connection string'in dogru oldugunu kontrol edin (Settings > Database)\n"
-            f"  3) URL'de password'unun URL-encoded oldugundan emin olun (?, @, $, !)"
-        ) from e
     except Exception as e:
-        err_msg = str(e)[:300] if e else "bilinmeyen"
-        print(f"[db] get_conn hatasi: {type(e).__name__}: {err_msg}", file=sys.stderr)
-        raise RuntimeError(
-            f"Supabase baglantisi acilamadi ({type(e).__name__}): {err_msg}"
-        ) from e
+        # v2.0.7.140 GUVENLIK AGI: havuz (tukenme dahil HERHANGI bir
+        # sebeple) basarisiz oldu - sessizce dogrudan baglantiya duson,
+        # uygulamayi COKERTME.
+        print(f"[db][pool] HAVUZ BASARISIZ ({type(e).__name__}: {str(e)[:200]}) "
+              f"- dogrudan (havuzsuz) baglantiya guvenli sekilde dusuluyor",
+              file=sys.stderr)
+        return _dogrudan_baglan()
 
 
 # ============================================================================
@@ -577,6 +616,40 @@ def _ensure_admin_from_secrets():
         conn.close()
     except Exception as e:
         print(f"[db] _ensure_admin_from_secrets hata (sessiz devam): {type(e).__name__}: {e}", file=sys.stderr)
+
+
+def get_intraday_overlay(freshness_minutes: int = 45) -> dict:
+    """v2.0.7.134 (Bahri'nin bulgusu, 11 Agustos 2026 - TUPRS 63,0 vs
+    76,0): app.py'nin load_universe()'i, CSV'nin (worker.py, gunde 1-2
+    kez) USTUNE Firsat Radari'nin (firsat_radari.py, 20 dakikada bir)
+    Supabase intraday_scores tablosuna yazdigi TAZE veriyi bindiriyordu
+    ("Firsat Radari overlay") - bu overlay mantigi SADECE app.py icinde
+    inline yaziliydi. Bu fonksiyon o overlay mantiginin TEK, PAYLASILAN
+    kaynagi - hem app.py hem temettu_client.py/halka_arz_client.py/
+    emailer.py buradan cagirir. {ticker: {"kategori":, "skor":, "fiyat":,
+    "rsi":, "ret1m":}} doner. Tablo yoksa/baglanti sorunu varsa sessizce
+    bos dict doner (cagiran taraf CSV'yle devam eder, hata firlatmaz)."""
+    try:
+        rows = get_conn().execute(
+            "SELECT ticker, kategori, skor, fiyat, rsi, ret1m FROM intraday_scores "
+            f"WHERE updated_at > now() - interval '{int(freshness_minutes)} minutes'"
+        ).fetchall()
+    except Exception:
+        return {}
+    if not rows:
+        return {}
+
+    def _rv(r, k, i):
+        return r[k] if isinstance(r, dict) else r[i]
+
+    sonuc = {}
+    for r in rows:
+        sonuc[str(_rv(r, "ticker", 0))] = {
+            "kategori": _rv(r, "kategori", 1), "skor": _rv(r, "skor", 2),
+            "fiyat": _rv(r, "fiyat", 3), "rsi": _rv(r, "rsi", 4),
+            "ret1m": _rv(r, "ret1m", 5),
+        }
+    return sonuc
 
 
 if __name__ == "__main__":
