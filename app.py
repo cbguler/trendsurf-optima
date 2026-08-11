@@ -1013,50 +1013,13 @@ def calc_macd(s):
     m=s.ewm(span=12).mean()-s.ewm(span=26).mean()
     return round(float(m.iloc[-1]),4),round(float(m.ewm(span=9).mean().iloc[-1]),4)
 
-def _teknik_alt_skor(rsi, ret1m, vol=30.0):
-    """RSI Zonu (0-25) + Momentum (0-35) + Volatilite (0-15) = maks 75.
-    v2.0.7.79'da optima_score()'dan ayrildi (Bahri'nin talebi, YAYLA
-    ornegi) - "Skor Bilesimi" paneli artik BUNU dogrudan cagirir, boylece
-    ekranda gorunen "Teknik Skor" gercekten bu fonksiyonun urettigi HAM
-    (normalize edilmemis) degerdir, /70 gibi yanlis bir etiketle 0-100
-    olcekli baska bir sayi gosterilmez."""
-    if 40<=rsi<=60: rsi_s=25
-    elif 35<=rsi<=65: rsi_s=18
-    elif 30<=rsi<35 or 65<rsi<=70: rsi_s=10
-    else: rsi_s=0
-
-    if ret1m>=30: mom=35
-    elif ret1m>=20: mom=30
-    elif ret1m>=10: mom=24
-    elif ret1m>=5: mom=18
-    elif ret1m>=0: mom=10
-    elif ret1m>=-5: mom=4
-    else: mom=0
-
-    if vol<20: vol_s=15
-    elif vol<35: vol_s=10
-    elif vol<55: vol_s=5
-    else: vol_s=0
-
-    return rsi_s+mom+vol_s   # maks 75
-
-def _temel_alt_skor(pb=None, pe=None, dy=None):
-    """F/K + PD/DD + Temettu = maks 25.
-    v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi): eskiden ekranda gosterilen
-    "Temel Skor" burada degil, kap_client.py'deki AYRI ve FARKLI esik
-    degerlerine (F/K<8 vb.) sahip score_from_fundamentals() ile
-    hesaplaniyordu - ekranda gorunen sayi Master Skor'u hic etkilemiyordu.
-    Artik TEK kaynak burasi: hem "Skor Bilesimi" paneli hem Master Skor'un
-    kendisi (optima_score() araciligiyla) AYNI bu fonksiyonu kullanir.
-    kap_client.score_from_fundamentals() artik hicbir yerde cagrilmiyor."""
-    fund_s=0
-    if pe and 0<float(pe)<12: fund_s+=10
-    elif pe and 0<float(pe)<25: fund_s+=5
-    if pb and 0<float(pb)<1.5: fund_s+=8
-    elif pb and 0<float(pb)<3: fund_s+=4
-    if dy and float(dy)>0.08: fund_s+=7
-    elif dy and float(dy)>0.04: fund_s+=3
-    return min(25, fund_s)   # maks 25
+# v2.0.7.132 (Bahri'nin bulgusu, TUPRS 83,0 vs 68,0 celiskisi): skor
+# hesaplama mantigi (_teknik_alt_skor, _temel_alt_skor, optima_score,
+# get_signal) paylasilan scoring.py modulune tasindi - artik hem app.py
+# hem temettu_client.py AYNI, TEK kaynagi kullaniyor (temettu_client.py
+# app.py'yi guvenle import edemezdi, bu yuzden CSV'den donmus deger
+# kopyaliyordu - bkz. scoring.py'nin modul docstring'i).
+from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal
 
 def _csv_alan(row, kolon):
     """CSV satirindan (worker.py'nin dondurulmus/toplu snapshot'i) bir
@@ -1070,40 +1033,6 @@ def _csv_alan(row, kolon):
         return None if v != v else v  # NaN kontrolu
     except Exception:
         return None
-
-def optima_score(rsi,ret1m,vol=30.0,has_fundamental=False,pb=None,pe=None,dy=None):
-    """
-    Optima Skoru (0-100): teknik + temel faktörler.
-    Ağırlıklar: RSI Zonu 25%, Momentum 35%, Volatilite 15% (teknik toplam
-    75), Temel analiz 25%. v2.0.7.79'da _teknik_alt_skor()/_temel_alt_skor()
-    yardımcılarına bölündü - dış davranış (dönen sayı) DEĞİŞMEDİ, sadece
-    tek kaynak haline getirildi.
-    """
-    teknik = _teknik_alt_skor(rsi, ret1m, vol)   # 0-75
-
-    if has_fundamental:
-        temel = _temel_alt_skor(pb, pe, dy)      # 0-25
-        return min(100, round(teknik+temel, 1))
-
-    # Temel analiz verisi YOKSA: 75 üzerinden hesaplanan skoru 100'e normalize et
-    # Böylece TEFAS/Kripto/Döviz/Maden varlıkları BIST ile adil karşılaştırılır
-    return min(100, round(teknik * (100.0 / 75.0), 1))
-
-def get_signal(score,rsi,trend):
-    # v2.0.7.68 - KRITIK DUZELTME (Bahri'nin bulgusu, CNYTRY ornegi):
-    # onceki halde skor<40 oldugunda trend/RSI NE OLURSA OLSUN kosulsuz
-    # "NET SAT" veriliyordu - diger tum esikler (40/60/80) trend/RSI
-    # kontrolu yaparken bu en alttaki esik hicbir kontrol yapmiyordu.
-    # Sonuc: RSI=87.5 (asiri alim) + trend=YUKSELIS olan CNYTRY gibi bir
-    # varlik, sirf RSI-zonu dusuk puan verdigi icin toplam skoru 40'in
-    # altina dusunce trend hala yukselisteyken "NET SAT" damgasi yiyordu.
-    # Artik bu esik de digerleriyle TUTARLI: trend hala YUKSELIS ise
-    # "TUT IZLE" (temkinli), sadece trend de DUSUS/zayifsa "NET SAT".
-    if score>=80: lbl,cls=("GÜÇLÜ AL","sig-g") if trend=="YUKSELIS" and 35<=rsi<=65 else ("KADEMELİ AL","sig-k")
-    elif score>=60: lbl,cls=("KADEMELİ AL","sig-k") if (trend=="YUKSELIS" or 35<=rsi<=65) else ("TUT İZLE","sig-t")
-    elif score>=40: lbl,cls=("KADEMELİ SAT","sig-s") if trend=="DUSUS" and rsi>70 else ("TUT İZLE","sig-t")
-    else: lbl,cls=("TUT İZLE","sig-t") if trend=="YUKSELIS" else ("NET SAT","sig-n")
-    return lbl,cls
 
 def enrich(row,period="1y"):
     """
@@ -2825,20 +2754,24 @@ def _benchmark_close_series(df):
         return None
 
 
-def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
-    """v2.0.7.128 (Bahri'nin talebi, 10 Ağustos 2026 — köklü yeniden
-    tasarım): Portföyün VE her kıyaslama aracının GÜNLÜK kümülatif getiri
-    serisini hesaplar (başlangıç = portföydeki EN ERKEN alış tarihi,
-    bitiş = bugün). Grafik çizimi için {seri_adı: pd.Series} döner - önceki
-    tek-noktalı (alış günü vs bugün) karşılaştırmanın yerine geçti.
+@st.cache_data(ttl=300, show_spinner=False)
+def _kiyaslama_ticker_serileri_cek(portfolio):
+    """v2.0.7.132 (Bahri'nin bulgusu, 10 Ağustos 2026 — "sistem çok
+    ağırlaşmış" şikayeti üzerine performans düzeltmesi): Bu, portföydeki
+    her benzersiz ticker için geçmiş fiyat serisini (+ son güne canlı
+    fiyat eziyor) çeken PAHALI kısımdı - hem `_kiyaslama_gunluk_serileri`
+    (ana grafik) hem `_render_pozisyon_karsilastirma` (pozisyon grafiği)
+    bunu AYRI AYRI, ÖNBELLEKSİZ yapıyordu - yani Portföyüm sayfası her
+    açıldığında AYNI geçmiş veri 2 KEZ çekiliyordu, hiçbiri
+    önbelleklenmiyordu (her widget etkileşiminde - Streamlit'in tam
+    script yeniden çalıştırma modeli yüzünden - ikisi de baştan
+    çalışıyordu). Artık TEK, PAYLAŞILAN, 5 DAKİKA önbellekli bu
+    fonksiyon - iki grafik de aynı sonucu (aynı Streamlit oturumunda)
+    tekrar tekrar çekmeden kullanıyor.
 
-    Portföy serisi için TSO'nun ZATEN sahip olduğu birleşik `get_hist()`
-    (TEFAS/BIST/DÖVİZ/MADEN/KRİPTO hepsini kapsayan, worker.py/app.py'nin
-    tüm detay sayfalarında kullandığı AYNI fonksiyon) kullanılıyor - ayrı
-    bir veri yolu icat edilmedi. Altın için de artık (eski sentetik
-    GC=F×USDTRY yerine) `get_hist(..., "MADEN", ...)` kullanılıyor - bu,
-    MADEN kategorisi için projenin kendi kuralıyla (hiçbir sentetik
-    USD->TL çevrimi denenmez, bkz. worker.py) tutarlı hale getirdi."""
+    Döner: (_ticker_seri: {ticker: pd.Series}, _gun_araligi: DatetimeIndex,
+    _baslangic: date) - ya da hiçbir geçerli alış tarihi yoksa
+    (None, None, None)."""
     import datetime as _dt_ks
 
     _tarihler = []
@@ -2850,11 +2783,11 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
             except Exception:
                 pass
     if not _tarihler:
-        return None
+        return None, None, None
     _baslangic = min(_tarihler)
     _bugun = _dt_ks.date.today()
     if _baslangic >= _bugun:
-        return None
+        return None, None, None
 
     _gun_farki = (_bugun - _baslangic).days
     if _gun_farki <= 35: _period = "1mo"
@@ -2867,7 +2800,6 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
     _gun_araligi = pd.date_range(_baslangic, _bugun, freq="D")
 
     def _seri_hazirla(_close_serisi):
-        """Ham Close serisini gun_araligi'na (gunluk, ileri-doldurma) hizalar."""
         _s = _close_serisi.astype(float).copy()
         _idx = pd.to_datetime(_s.index)
         if getattr(_idx, "tz", None) is not None:
@@ -2877,7 +2809,6 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
         _s = _s.reindex(_gun_araligi, method="ffill")
         return _s.bfill()
 
-    # 1) Portföy - her benzersiz ticker icin bir kez gecmis cek
     _ticker_seri = {}
     _benzersiz_tickerlar = []
     for _p in portfolio:
@@ -2893,15 +2824,6 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
         if _h is not None and not _h.empty and "Close" in _h.columns:
             _ticker_seri[_tkr] = _seri_hazirla(_h["Close"])
 
-    # v2.0.7.130 (Bahri'nin bulgusu, 10 Ağustos 2026): grafikteki "bugün"
-    # değeri, Portföy Varlıkları Tablosu'ndaki "Güncel" ile FARKLI
-    # çıkıyordu (+1,95% vs +1,67%) - kök neden: get_hist()'in son noktası
-    # TEFAS için pytefas/önbellekli GEÇMİŞ NAV'a dayanıyor (TEFAS NAV'ları
-    # günde bir kez, genelde gün sonunda yayınlanır - bir gün gecikebilir),
-    # ana tablo ise `_ld_portfolio_prices()` ile CANLI fiyat kullanıyor -
-    # iki ayrı veri hattı. Düzeltme: her serinin SON gününü, ana tabloyla
-    # BİREBİR AYNI canlı fiyat kaynağıyla eziyoruz - geçmiş günler
-    # get_hist()'ten kalıyor (zaten doğru), sadece "bugün" artık tutarlı.
     try:
         _canli_fiyatlar = _ld_portfolio_prices(df_uni, _benzersiz_tickerlar)
     except Exception:
@@ -2919,6 +2841,51 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
                     _canli = 0.0
         if _canli and _canli > 0:
             _ticker_seri[_tkr].iloc[-1] = _canli
+
+    return _ticker_seri, _gun_araligi, _baslangic
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _kiyaslama_gunluk_serileri(portfolio):
+    """v2.0.7.128 (Bahri'nin talebi, 10 Ağustos 2026 — köklü yeniden
+    tasarım): Portföyün VE her kıyaslama aracının GÜNLÜK kümülatif getiri
+    serisini hesaplar (başlangıç = portföydeki EN ERKEN alış tarihi,
+    bitiş = bugün). Grafik çizimi için {seri_adı: pd.Series} döner.
+
+    Portföy serisi için TSO'nun ZATEN sahip olduğu birleşik `get_hist()`
+    kullanılıyor. Altın için de (eski sentetik GC=F×USDTRY yerine)
+    `get_hist(..., "MADEN", ...)` kullanılıyor - MADEN için "hiçbir
+    sentetik USD->TL çevrimi denenmez" kuralıyla tutarlı.
+
+    v2.0.7.132 - PERFORMANS: ticker-seri çekme kısmı artık paylaşılan,
+    önbellekli `_kiyaslama_ticker_serileri_cek()`'ten geliyor (bkz. o
+    fonksiyonun notu) - hem bu fonksiyon hem `_render_pozisyon_karsilastirma`
+    tekrar tekrar aynı veriyi çekmiyor. Ayrıca BU fonksiyonun kendisi de
+    5 dakika önbellekli - Portföyüm sayfası her rerun olduğunda (herhangi
+    bir widget etkileşiminde) baştan hesaplanmıyor."""
+    import datetime as _dt_ks
+
+    _ticker_seri, _gun_araligi, _baslangic = _kiyaslama_ticker_serileri_cek(portfolio)
+    if _ticker_seri is None:
+        return None
+
+    def _seri_hazirla(_close_serisi):
+        _s = _close_serisi.astype(float).copy()
+        _idx = pd.to_datetime(_s.index)
+        if getattr(_idx, "tz", None) is not None:
+            _idx = _idx.tz_localize(None)
+        _s.index = _idx
+        _s = _s[~_s.index.duplicated(keep="last")].sort_index()
+        _s = _s.reindex(_gun_araligi, method="ffill")
+        return _s.bfill()
+
+    _gun_farki = (_dt_ks.date.today() - _baslangic).days
+    if _gun_farki <= 35: _period = "1mo"
+    elif _gun_farki <= 95: _period = "3mo"
+    elif _gun_farki <= 190: _period = "6mo"
+    elif _gun_farki <= 370: _period = "1y"
+    elif _gun_farki <= 1100: _period = "3y"
+    else: _period = "5y"
 
     _portfoy_deger = pd.Series(0.0, index=_gun_araligi)
     _portfoy_maliyet = pd.Series(0.0, index=_gun_araligi)
@@ -2968,10 +2935,8 @@ def _kiyaslama_gunluk_serileri(_cur_user, portfolio):
             if float(_s.iloc[0]) > 0:
                 _sonuc[_ad] = (_s / float(_s.iloc[0]) - 1) * 100
 
-    # 4) Mevduat / Tahvil / Repo - v2.0.7.129: ARTIK UCU DE TCMB EVDS'ten
-    # tam otomatik cekiliyor (elle giris tamamen kaldirildi, bkz.
-    # _evds_referans_oranlari_cek). Basit faizle (oran x gun/365)
-    # dogrusal birikim.
+    # 4) Mevduat / Tahvil / Repo - TCMB EVDS'ten tam otomatik, basit
+    # faizle (oran x gun/365) dogrusal birikim.
     _evds_oranlar = _evds_referans_oranlari_cek()
     _gun_sayilari = np.array([(d.date() - _baslangic).days for d in _gun_araligi], dtype=float)
     for _ad, _key in (("Vadeli Mevduat", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
@@ -3105,7 +3070,7 @@ def _render_karsilastirma(_cur_user, portfolio):
         return
 
     with st.spinner("Geçmiş piyasa verileri hesaplanıyor (BIST100/Altın/Dolar/Mevduat/Tahvil/Repo/portföy varlıkları)..."):
-        _seriler = _kiyaslama_gunluk_serileri(_cur_user, portfolio)
+        _seriler = _kiyaslama_gunluk_serileri(portfolio)
 
     if not _seriler:
         st.info("Karşılaştırma için geçerli alış tarihi olan pozisyon bulunamadı.")
@@ -3171,45 +3136,22 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
     getirisini ayrı bir çizgi olarak gösterir. Aynı ticker farklı
     tarihlerde birden fazla kez alınmışsa (ör. MTG iki kez), her pozisyon
     kendi çizgisini alır ("MTG", "MTG #2" gibi etiketlenir) - tek bir
-    tarihe zorlamak yanıltıcı olurdu."""
+    tarihe zorlamak yanıltıcı olurdu.
+
+    v2.0.7.132 - PERFORMANS (Bahri'nin bulgusu, "sistem çok ağırlaşmış"):
+    ticker geçmiş verisi artık `_kiyaslama_gunluk_serileri`nin de
+    kullandığı PAYLAŞILAN, 5 dakika önbellekli
+    `_kiyaslama_ticker_serileri_cek()`'ten geliyor - eskiden bu fonksiyon
+    KENDİ ayrı, önbelleksiz kopyasını çekiyordu (Portföyüm sayfasında iki
+    grafik = aynı veri 2 kez, hiç önbelleksiz, her widget etkileşiminde
+    tekrar tekrar)."""
     if not portfolio:
         return
 
     import datetime as _dt_pk
-    _tarihler_pk = []
-    for _p in portfolio:
-        _t = _p.get("purchase_date", "")
-        if _t and len(str(_t)) == 10:
-            try:
-                _tarihler_pk.append(_dt_pk.date.fromisoformat(_t))
-            except Exception:
-                pass
-    if not _tarihler_pk:
+    _ticker_seri_pk, _gun_araligi_pk, _baslangic_pk = _kiyaslama_ticker_serileri_cek(portfolio)
+    if _ticker_seri_pk is None:
         return
-    _baslangic_pk = min(_tarihler_pk)
-    _bugun_pk = _dt_pk.date.today()
-    if _baslangic_pk >= _bugun_pk:
-        return
-
-    _gun_farki_pk = (_bugun_pk - _baslangic_pk).days
-    if _gun_farki_pk <= 35: _period_pk = "1mo"
-    elif _gun_farki_pk <= 95: _period_pk = "3mo"
-    elif _gun_farki_pk <= 190: _period_pk = "6mo"
-    elif _gun_farki_pk <= 370: _period_pk = "1y"
-    elif _gun_farki_pk <= 1100: _period_pk = "3y"
-    else: _period_pk = "5y"
-
-    _gun_araligi_pk = pd.date_range(_baslangic_pk, _bugun_pk, freq="D")
-
-    def _seri_hazirla_pk(_close_serisi):
-        _s = _close_serisi.astype(float).copy()
-        _idx = pd.to_datetime(_s.index)
-        if getattr(_idx, "tz", None) is not None:
-            _idx = _idx.tz_localize(None)
-        _s.index = _idx
-        _s = _s[~_s.index.duplicated(keep="last")].sort_index()
-        _s = _s.reindex(_gun_araligi_pk, method="ffill")
-        return _s.bfill()
 
     st.divider()
     st.subheader("Pozisyon Bazlı Getiri Karşılaştırması")
@@ -3219,62 +3161,28 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
         "varlıklarınız birbirine göre)."
     )
 
-    with st.spinner("Pozisyon bazlı geçmiş veriler hesaplanıyor..."):
-        _ticker_seri_pk = {}
-        _benzersiz_pk = []
-        for _p in portfolio:
-            _tkr = _p.get("ticker")
-            _kat = _p.get("asset_type") or "BIST"
-            if not _tkr or _tkr in _ticker_seri_pk:
-                continue
-            _benzersiz_pk.append(_tkr)
-            try:
-                _h = get_hist(_tkr, "", _kat, _period_pk)
-            except Exception:
-                _h = None
-            if _h is not None and not _h.empty and "Close" in _h.columns:
-                _ticker_seri_pk[_tkr] = _seri_hazirla_pk(_h["Close"])
-
+    _pozisyon_serileri = {}
+    _etiket_sayaci = {}
+    for _p in portfolio:
+        _tkr = _p.get("ticker")
+        _t = _p.get("purchase_date", "")
+        if not _t or _tkr not in _ticker_seri_pk:
+            continue
         try:
-            _canli_pk = _ld_portfolio_prices(df_uni, _benzersiz_pk)
+            _alis_tarihi_pk = pd.Timestamp(_dt_pk.date.fromisoformat(_t))
         except Exception:
-            _canli_pk = {}
-        for _tkr in _benzersiz_pk:
-            if _tkr not in _ticker_seri_pk:
-                continue
-            _c = _canli_pk.get(_tkr, 0.0)
-            if not _c or _c <= 0:
-                _m = df_uni[df_uni["Ticker"] == _tkr]
-                if not _m.empty:
-                    try:
-                        _c = float(_m["Son_Fiyat"].iloc[0])
-                    except Exception:
-                        _c = 0.0
-            if _c and _c > 0:
-                _ticker_seri_pk[_tkr].iloc[-1] = _c
-
-        _pozisyon_serileri = {}
-        _etiket_sayaci = {}
-        for _p in portfolio:
-            _tkr = _p.get("ticker")
-            _t = _p.get("purchase_date", "")
-            if not _t or _tkr not in _ticker_seri_pk:
-                continue
-            try:
-                _alis_tarihi_pk = pd.Timestamp(_dt_pk.date.fromisoformat(_t))
-            except Exception:
-                continue
-            _s = _ticker_seri_pk[_tkr]
-            _aktif_pk = _gun_araligi_pk >= _alis_tarihi_pk
-            if not _aktif_pk.any():
-                continue
-            _s_aktif = _s.loc[_aktif_pk]
-            if _s_aktif.empty or float(_s_aktif.iloc[0]) <= 0:
-                continue
-            _getiri_pk = (_s_aktif / float(_s_aktif.iloc[0]) - 1) * 100
-            _etiket_sayaci[_tkr] = _etiket_sayaci.get(_tkr, 0) + 1
-            _etiket = _tkr if _etiket_sayaci[_tkr] == 1 else f"{_tkr} #{_etiket_sayaci[_tkr]}"
-            _pozisyon_serileri[_etiket] = _getiri_pk
+            continue
+        _s = _ticker_seri_pk[_tkr]
+        _aktif_pk = _gun_araligi_pk >= _alis_tarihi_pk
+        if not _aktif_pk.any():
+            continue
+        _s_aktif = _s.loc[_aktif_pk]
+        if _s_aktif.empty or float(_s_aktif.iloc[0]) <= 0:
+            continue
+        _getiri_pk = (_s_aktif / float(_s_aktif.iloc[0]) - 1) * 100
+        _etiket_sayaci[_tkr] = _etiket_sayaci.get(_tkr, 0) + 1
+        _etiket = _tkr if _etiket_sayaci[_tkr] == 1 else f"{_tkr} #{_etiket_sayaci[_tkr]}"
+        _pozisyon_serileri[_etiket] = _getiri_pk
 
     if not _pozisyon_serileri:
         st.info("Pozisyon bazlı karşılaştırma için geçerli veri bulunamadı.")

@@ -7,6 +7,7 @@ Cache: 4 saat
 import os, json, time, re
 from typing import Optional
 import pandas as pd
+from scoring import optima_score
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR  = os.path.join(BASE_DIR, "halka_arz_cache")
@@ -210,6 +211,18 @@ def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
 
 def _enrich(rows: list) -> list:
+    """v2.0.7.132 (Bahri'nin bulgusu, 10 Ağustos 2026 — TUPRS'ın Ana
+    Sayfa'da 83,0, burada 68,0 görünmesi): eskiden Optima_Skor CSV'den
+    (worker.py'nin son çalışmasındaki DONMUŞ değer) DOĞRUDAN kopyalanıyordu
+    - Ana Sayfa ise BIST için seans içi canlı fiyat yenilemesinden sonra
+    optima_score()'u YENİDEN HESAPLIYOR, bu yüzden iki sayı farklı
+    çıkabiliyordu. Artık burada da RSI/Ret1M/Vol (+ PB/PE/DY varsa) CSV'den
+    okunup scoring.py'deki AYNI optima_score() ile YENİDEN HESAPLANIYOR -
+    en azından FORMÜL tutarlılığı garanti (ikisi de aynı girdilerden aynı
+    sonucu üretir). NOT: bu hâlâ CSV'deki RSI/Ret1M'i kullanıyor (Ana
+    Sayfa'nın yaptığı gibi TEMETTÜ sayfasına özel bir canlı fiyat yenilemesi
+    EKLENMEDİ - "sistem çok ağırlaşmış" şikayeti nedeniyle ekstra bir ağ
+    çağrısı eklemek yerine formül tutarlılığı önceliklendirildi)."""
     csv_path = os.path.join(BASE_DIR, "optimized_universe.csv")
     if not os.path.exists(csv_path):
         return rows
@@ -219,10 +232,18 @@ def _enrich(rows: list) -> list:
             t = r["Ticker"]
             if t in df_uni.index:
                 row = df_uni.loc[t]
+                rsi   = float(row.get("RSI", 0) or 0)
+                ret1m = float(row.get("Ret1M", 0) or 0)
+                vol   = float(row.get("Vol", 30) or 30)
+                pb = row.get("PB"); pe = row.get("PE"); dy = row.get("DY")
+                has_fund = any(v is not None and str(v) != "nan" and float(v or 0) > 0
+                              for v in (pb, pe, dy))
                 r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
-                r["RSI"]         = float(row.get("RSI", 0) or 0)
-                r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
-                r["Optima_Skor"] = float(row.get("Optima_Skor", 0) or 0)
+                r["RSI"]         = rsi
+                r["Ret1M"]       = ret1m
+                r["Optima_Skor"] = optima_score(
+                    rsi, ret1m, vol=vol, has_fundamental=has_fund,
+                    pb=pb, pe=pe, dy=dy)
             else:
                 r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
     except Exception:

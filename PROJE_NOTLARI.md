@@ -389,6 +389,55 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[İNCELENDİ, BUG DEĞİL] Değerli Madenler'in Bütçe Optimizasyonu'nda
+  çıkmaması (10 Ağustos 2026, Bahri'nin sorusu).** Bahri "Değerli
+  Madenler sayfasında Skor 81,8/78,0/75,5 görünüyor, neden AL sinyalli
+  değiller" diye sordu — ama bu değerler **RSI** sütunuydu, **Optima
+  Skor DEĞİL** (sütun sırası: Ticker/Ad/Son Fiyat/RSI/1A Getiri%/Optima
+  Skor — gerçek Optima Skor değerleri 45,3/38,7/37,3 idi, 60 eşiğinin
+  altında). RSI>70 "aşırı alım" bölgesi olduğu için `_teknik_alt_skor()`
+  bu aralıkta 0 puan veriyor (bkz. scoring.py) — momentum iyi olsa bile
+  skoru düşürüyor. Matematiksel olarak doğrulandı: `optima_score(81.8,
+  12.02, vol=15)` → 52,0. Bu bilinçli bir tasarım (aşırı ısınmış bir
+  varlığı "AL" diye önermemek) - bug değil.
+
+- **[UYGULANDI] v2.0.7.132 (10 Ağustos 2026, Bahri'nin bulgusu — üç ayrı
+  konu, tek oturumda).**
+  (1) **TUPRS 83,0 (Ana Sayfa) vs 68,0 (Temettü) çelişkisi kök nedeniyle
+  düzeltildi.** Kök neden: `optima_score()`/`_teknik_alt_skor()`/
+  `_temel_alt_skor()`/`get_signal()` mantığının **worker.py,
+  firsat_radari.py VE (eskiden) app.py'de ÜÇ AYRI, elle senkronize
+  edilen kopyası** vardı (worker.py'nin kendi yorumu: "Bu iki fonksiyon
+  senkronize tutulmalı" — yani zaten bilinen bir risk). `temettu_client.py`
+  app.py'yi güvenle import edemediği için (Streamlit UI kodu çalıştırırdı)
+  Optima_Skor'u CSV'den DONMUŞ haliyle kopyalıyordu, Ana Sayfa ise BIST
+  için seans içi canlı fiyat sonrası YENİDEN HESAPLIYORDU. **Çözüm:**
+  yeni `scoring.py` modülü — bu 4 fonksiyonun TEK kaynağı. app.py,
+  worker.py, firsat_radari.py, temettu_client.py hepsi buradan import
+  ediyor (worker.py/firsat_radari.py'de eski isimle - `_bist_optima_score`
+  - geriye dönük uyumlu alias). `temettu_client.py._enrich()` artık
+  Optima_Skor'u CSV'deki RSI/Ret1M/Vol/PB/PE/DY'den scoring.py ile YENİDEN
+  HESAPLIYOR (CSV'den kopyalamak yerine) - en azından formül tutarlılığı
+  garanti. **Not:** Temettü sayfasına Ana Sayfa'daki gibi ekstra bir
+  canlı fiyat yenilemesi EKLENMEDİ (performans şikayeti nedeniyle bilinçli
+  tercih) - yani hâlâ CSV'nin RSI/Ret1M değerlerini kullanıyor, sadece
+  FORMÜL artık aynı. Tam anlık eşitlik için CSV taze olmalı.
+  (2) **Performans - "sistem çok ağırlaşmış" şikayeti.** Kök neden:
+  bugünkü oturumda eklenen 2 yeni grafik (Getiri Kıyaslaması + Pozisyon
+  Bazlı Getiri) AYNI portföy ticker'larının geçmiş verisini AYRI AYRI,
+  ÖNBELLEKSİZ çekiyordu - Portföyüm sayfası her açıldığında/her widget
+  etkileşiminde (Streamlit'in tam script yeniden çalıştırma modeli
+  yüzünden) ikisi de baştan çalışıyordu. **Çözüm:** yeni paylaşılan,
+  5 dakika önbellekli `_kiyaslama_ticker_serileri_cek()` - iki grafik de
+  artık AYNI önbellekten okuyor, veri sadece 1 kez çekiliyor ve 5 dakika
+  boyunca tekrar çekilmiyor. `_kiyaslama_gunluk_serileri()`'nin kendisi
+  de ayrıca önbellekli.
+  **DOĞRULANMADI** (canlı test gerekiyor): hem scoring.py konsolidasyonu
+  hem performans düzeltmesi bu ortamda syntax/mantık olarak doğrulandı
+  ama push sonrası (a) TUPRS'ın artık iki sayfada da aynı sayıyı
+  gösterdiği (b) Portföyüm sayfasının gözle görülür şekilde hızlandığı
+  kontrol edilmeli.
+
 - **[UYGULANDI, DENEME] v2.0.7.131 (10 Ağustos 2026, Bahri'nin talebi —
   iki ayrı iyileştirme).**
   (1) **Vadeli Mevduat artık gerçekten "en yüksek banka oranı".** Önceki

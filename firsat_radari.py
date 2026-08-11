@@ -124,37 +124,12 @@ def calc_rsi(s: pd.Series, p: int = 14) -> float:
 
 def _bist_optima_score(rsi, ret1m, vol=30.0, has_fundamental=False,
                        pb=None, pe=None, dy=None):
-    """worker.py._bist_optima_score kopyasi (v2.0.4.57)."""
-    if 40 <= rsi <= 60: rsi_s = 25
-    elif 35 <= rsi <= 65: rsi_s = 18
-    elif 30 <= rsi < 35 or 65 < rsi <= 70: rsi_s = 10
-    else: rsi_s = 0
-
-    if ret1m >= 30: mom = 35
-    elif ret1m >= 20: mom = 30
-    elif ret1m >= 10: mom = 24
-    elif ret1m >= 5: mom = 18
-    elif ret1m >= 0: mom = 10
-    elif ret1m >= -5: mom = 4
-    else: mom = 0
-
-    if vol < 20: vol_s = 15
-    elif vol < 35: vol_s = 10
-    elif vol < 55: vol_s = 5
-    else: vol_s = 0
-
-    fund_s = 0
-    if has_fundamental:
-        if pe and 0 < float(pe) < 12: fund_s += 10
-        elif pe and 0 < float(pe) < 25: fund_s += 5
-        if pb and 0 < float(pb) < 1.5: fund_s += 8
-        elif pb and 0 < float(pb) < 3: fund_s += 4
-        if dy and float(dy) > 0.08: fund_s += 7
-        elif dy and float(dy) > 0.04: fund_s += 3
-        return min(100, round(rsi_s + mom + vol_s + fund_s, 1))
-
-    raw = rsi_s + mom + vol_s
-    return min(100, round(raw * (100.0 / 75.0), 1))
+    """v2.0.7.132 (Bahri'nin bulgusu, TUPRS celiskisi): bu artik ayri bir
+    kopya DEGIL - scoring.py'deki TEK kaynagi cagirir (worker.py'de de
+    ayni sekilde alias yapildi)."""
+    from scoring import optima_score
+    return optima_score(rsi, ret1m, vol=vol, has_fundamental=has_fundamental,
+                        pb=pb, pe=pe, dy=dy)
 
 
 # ─── BIST tam-evren taramasi ─────────────────────────────────
