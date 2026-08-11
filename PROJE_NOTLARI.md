@@ -389,6 +389,52 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[KRİTİK, PUSH EDİLMEMİŞ] v2.0.7.134+135 hiç push edilmedi!** Git
+  geçmişi doğrudan v2.0.7.133'ten v2.0.7.136'ya atlıyor. Bu, TUPRS kök
+  neden düzeltmesini (Fırsat Radarı overlay'inin `db.get_intraday_overlay()`
+  olarak tek kaynağa taşınması + `temettu_client.py`'nin performans
+  optimizasyonu) İÇERİYOR - yani bu düzeltme hâlâ canlıda YOK. Dosyalar
+  (`db.py`, `app.py`, `temettu_client.py`) zaten hazır, sadece push
+  edilmesi gerekiyor. **Bir sonraki oturumda önce bunun push edilip
+  edilmediği kontrol edilmeli.**
+
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.137 (11 Ağustos 2026, Bahri'nin
+  bulgusu — "sistem çıldırtıcı derecede yavaş" şikayeti için Streamlit
+  Cloud loglarından GERÇEK kanıt bulundu): `get_conn()` gerçek bir
+  bağlantı havuzuna geçirildi.** Loglar incelendiğinde `[db]
+  _get_db_url: secrets[supabase][db_url] OK` mesajının TEK BİR sayfa
+  render'ında 3-4 KEZ tekrarlandığı görüldü - `get_conn()` her çağrıda
+  SIFIRDAN yeni bir psycopg2 bağlantısı (TCP+TLS+Postgres kimlik
+  doğrulama, Supabase uzak sunucu olduğu için 100-500ms+ sürebilir)
+  açıyordu, hiç havuzlama/yeniden kullanım yoktu. Tek bir sayfa
+  render'ında birden fazla fonksiyon (Sermaye/Nakit, Gerçekleşmiş K/Z,
+  Fırsat Radarı overlay, vb.) kendi ayrı `get_conn()` çağrısını yapıyor,
+  her biri sırayla yeni bir ağ turu maliyeti biriktiriyordu.
+  **Çözüm:** `psycopg2.pool.ThreadedConnectionPool` (1-10 bağlantı,
+  modül seviyesinde tembel/lazy oluşturulur) eklendi. `get_conn()` artık
+  havuzdan bağlantı ALIYOR (`pool.getconn()`), `_CompatConn.close()`
+  artık bağlantıyı GERÇEKTEN KAPATMIYOR - önce rollback yapıp havuza
+  GERİ VERİYOR (`pool.putconn()`). Mevcut TÜM `.close()` çağıran kod
+  DEĞİŞMEDEN çalışmaya devam eder - davranış dışarıdan aynı görünür,
+  sadece art arda gelen çağrılar artık yeni ağ turu gerektirmiyor, hazır
+  bir bağlantıyı anında alıyor. Basit bir canlılık kontrolü de eklendi
+  (`pg_conn.closed` — havuzdan gelen bağlantı önceki bir kullanımdan
+  kapanmışsa taze bir tane açılır).
+  **BİLİNEN SINIRLAMA (gelecekte sağlamlaştırılabilir):** eğer bir
+  çağıran fonksiyon istisna (exception) fırlatıp `.close()`'a hiç
+  ulaşmazsa, o bağlantı havuza geri dönmez ("sızar") - havuz 10
+  bağlantıya kadar büyüyebildiği için kısa vadede sorun yaratmaz, ama
+  uzun vadede (çok sayıda hata yolu tetiklenirse) havuz tükenebilir. Tam
+  çözüm tüm `get_conn()` kullanımlarını `with` (context manager)
+  desenine çevirmek olur - bu oturumda kapsam dışı bırakıldı.
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası (1) Streamlit
+  Cloud loglarında `_get_db_url` mesajının artık HER seferinde değil,
+  SADECE havuz ilk oluşturulurken (bir kez) göründüğü, (2) sayfa
+  geçişlerinin gözle görülür şekilde hızlandığı kontrol edilmeli. Ayrıca
+  v2.0.7.136'daki `[timing][AnaSayfa]` logları da bu push ile birlikte
+  gelecek zamanlama verisini üretmeye devam edecek - ikisi birlikte
+  değerlendirilmeli.
+
 - **[TEŞHİS AŞAMASINDA] v2.0.7.136 (11 Ağustos 2026): Ana Sayfa'nın ilk
   açılış/yenileme yavaşlığı için zamanlama ölçümü eklendi.** Bahri
   yavaşlığın en çok Ana Sayfa'da (Bütçe Optimizasyonu), sayfa ilk

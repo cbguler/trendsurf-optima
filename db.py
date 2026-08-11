@@ -25,6 +25,7 @@ from typing import Any, Optional
 # ============================================================================
 try:
     import psycopg2
+    import psycopg2.pool
     from psycopg2.extras import RealDictCursor
     from psycopg2 import IntegrityError as _PgIntegrityError
     PSYCOPG2_OK = True
@@ -175,10 +176,28 @@ class _CompatCursor:
 # Compat Connection
 # ============================================================================
 class _CompatConn:
-    """sqlite3.Connection arayuzu, PostgreSQL backend."""
-    def __init__(self, pg_conn):
+    """sqlite3.Connection arayuzu, PostgreSQL backend.
+
+    v2.0.7.137 (Bahri'nin bulgusu, 11 Agustos 2026 - "sistem cildirtici
+    derecede yavas", Streamlit Cloud loglarinda tek bir sayfa
+    yuklemesinde "_get_db_url" mesaji 3-4 KEZ tekrarlandigi goruldu):
+    get_conn() her cagrildiginda SIFIRDAN yeni bir psycopg2 baglantisi
+    (TCP+TLS+Postgres kimlik dogrulama) aciyordu - hicbir havuzlama/
+    yeniden kullanim yoktu. Tek bir sayfa render'inda birden fazla
+    fonksiyon (Sermaye/Nakit, Gerceklesmis K/Z, Referans Oranlar, Firsat
+    Radari overlay, vs.) kendi ayri get_conn() cagrisini yapiyordu - her
+    biri SIRAYLA yeni bir aga baglanti kuruyordu, bu da (Supabase uzak
+    bir sunucu oldugu icin) her seferinde 100-500ms+ suren bir maliyeti
+    BIRIKTIRIYORDU. Artik get_conn() gercek bir baglanti HAVUZUNDAN
+    (psycopg2.pool) aliyor - close() cagrisi baglantiyi GERCEKTEN
+    KAPATMIYOR, sadece havuza GERI VERIYOR (bir sonraki cagri o hazir
+    baglantiyi ANINDA alir, yeniden ag turu gerekmez). Mevcut TUM
+    ".close()" cagiran kod DEGISMEDEN calismaya devam eder - davranis
+    disaridan ayni gorunur, sadece cok daha hizli."""
+    def __init__(self, pg_conn, _pool=None):
         self._conn = pg_conn
         self._conn.autocommit = False
+        self._pool = _pool
 
     def execute(self, sql: str, params=None) -> _CompatCursor:
         sql_pg = _translate_sql(sql)
@@ -203,6 +222,24 @@ class _CompatConn:
         self._conn.rollback()
 
     def close(self):
+        """v2.0.7.137: havuzdan gelen bir baglantiysa GERCEKTEN KAPATMAZ -
+        once (bir onceki kullanicidan kalmis olabilecek islenmemis
+        islemleri temizlemek icin) rollback yapip havuza GERI VERIR.
+        Havuz yoksa (ornegin havuz olusturulamadiginda dusulen eski yol)
+        eskisi gibi gercekten kapatir."""
+        if self._pool is not None:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+            try:
+                self._pool.putconn(self._conn)
+            except Exception:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+            return
         try:
             self._conn.close()
         except Exception:
@@ -210,14 +247,20 @@ class _CompatConn:
 
 
 # ============================================================================
-# Public API: get_conn  -  v1.9.9.3 VERBOSE
+# Public API: get_conn  -  v2.0.7.137: gercek baglanti havuzu
 # ============================================================================
-def get_conn() -> _CompatConn:
-    """Supabase PostgreSQL baglantisi don."""
-    if not PSYCOPG2_OK:
-        raise RuntimeError(
-            "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
-        )
+_CONN_POOL = None
+
+def _get_pool():
+    """v2.0.7.137 - Baglanti havuzunu tembel (lazy) olusturur, TEK seferlik
+    (modul global'inde saklanir - Streamlit'in ayni process icindeki tum
+    session'lari arasinda paylasilir, tipik kucuk-kullanicili bir uygulama
+    icin sorun degil; ThreadedConnectionPool zaten thread-safe). 1-10
+    baglantilik makul bir aralik - coğu zaman 1 yeter, ani yogunlukta
+    10'a kadar buyuyebilir."""
+    global _CONN_POOL
+    if _CONN_POOL is not None:
+        return _CONN_POOL
     url = _get_db_url()
     if not url:
         raise RuntimeError(
@@ -226,11 +269,45 @@ def get_conn() -> _CompatConn:
             "  db_url = \"postgresql://...\"\n"
             "Veya GitHub Actions icin env: SUPABASE_DB_URL"
         )
-    # v1.9.9.3 - connect_timeout + verbose error handling
     try:
-        pg_conn = psycopg2.connect(url, connect_timeout=10)
+        _CONN_POOL = psycopg2.pool.ThreadedConnectionPool(1, 10, url, connect_timeout=10)
     except psycopg2.OperationalError as e:
-        # Host/port/credentials/SSL hatalari
+        err_msg = str(e)[:300] if e else "bilinmeyen hata"
+        print(f"[db] havuz olusturma OperationalError: {err_msg}", file=sys.stderr)
+        raise RuntimeError(
+            f"Supabase baglantisi acilamadi (OperationalError): {err_msg}\n"
+            f"Cozumler:\n"
+            f"  1) Supabase Dashboard'ta projenin aktif oldugunu dogrulayin\n"
+            f"  2) Connection string'in dogru oldugunu kontrol edin (Settings > Database)\n"
+            f"  3) URL'de password'unun URL-encoded oldugundan emin olun (?, @, $, !)"
+        ) from e
+    return _CONN_POOL
+
+
+def get_conn() -> _CompatConn:
+    """Supabase PostgreSQL baglantisi dondurur - artik gercek bir havuzdan
+    (bkz. _get_pool ve _CompatConn.close() notlari) - eskiden her cagrida
+    sifirdan yeni baglanti aciyordu (yavaslik kaynagiydi)."""
+    if not PSYCOPG2_OK:
+        raise RuntimeError(
+            "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
+        )
+    try:
+        pool = _get_pool()
+        pg_conn = pool.getconn()
+        # v2.0.7.137: havuzdan gelen baglanti onceki bir kullanimdan
+        # kapanmis olabilir - pg_conn.closed (0=acik) ile basit bir
+        # kontrol, kapaliysa havuzdan atilip taze bir tane acilir.
+        if pg_conn.closed:
+            try:
+                pool.putconn(pg_conn, close=True)
+            except Exception:
+                pass
+            pg_conn = psycopg2.connect(_get_db_url(), connect_timeout=10)
+        return _CompatConn(pg_conn, pool)
+    except RuntimeError:
+        raise
+    except psycopg2.OperationalError as e:
         err_msg = str(e)[:300] if e else "bilinmeyen hata"
         print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)
         raise RuntimeError(
@@ -242,11 +319,10 @@ def get_conn() -> _CompatConn:
         ) from e
     except Exception as e:
         err_msg = str(e)[:300] if e else "bilinmeyen"
-        print(f"[db] psycopg2.connect hatasi: {type(e).__name__}: {err_msg}", file=sys.stderr)
+        print(f"[db] get_conn hatasi: {type(e).__name__}: {err_msg}", file=sys.stderr)
         raise RuntimeError(
             f"Supabase baglantisi acilamadi ({type(e).__name__}): {err_msg}"
         ) from e
-    return _CompatConn(pg_conn)
 
 
 # ============================================================================
