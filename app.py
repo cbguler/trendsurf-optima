@@ -3214,6 +3214,8 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
 
 
 if page=="Ana Sayfa":
+    import time as _t_ana
+    _t_ana_basla = _t_ana.perf_counter()
     st.title("Bütçe Optimizasyonu")
     if df_uni.empty:
         st.error("`python worker.py` ile veriyi oluşturun."); st.stop()
@@ -3258,9 +3260,13 @@ if page=="Ana Sayfa":
         _bist_aday = (df_uni[(df_uni["Kategori"] == "BIST") & (df_uni["Son_Fiyat"] > 0)]
                       .sort_values("Ret1M", ascending=False).head(40))
         if not _bist_aday.empty:
+            _t_bist0 = _t_ana.perf_counter()
             df_uni = _ld_refresh_bist_sel(df_uni, _bist_aday["Ticker"].tolist())
+            print(f"[timing][AnaSayfa] BIST canli yenileme (40 ticker): "
+                  f"{_t_ana.perf_counter() - _t_bist0:.3f}s")
 
     cat_pools = {}
+    _t_pool0 = _t_ana.perf_counter()
     for cat, weight in w.items():
         if weight <= 0:
             continue
@@ -3294,6 +3300,8 @@ if page=="Ana Sayfa":
         df_c = df_c[df_c["Optima_Skor"] >= MIN_SKOR].sort_values("Optima_Skor", ascending=False)
         if not df_c.empty:
             cat_pools[cat] = df_c
+    print(f"[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler): "
+          f"{_t_ana.perf_counter() - _t_pool0:.3f}s")
 
     # 2. Adım: Slot dağıtımı — TÜM havuzdan en yüksek skorlu max_assets varlık
     #
@@ -3416,6 +3424,8 @@ if page=="Ana Sayfa":
                 f"birim fiyatını karşılamadığı için o kategoriye hiç alım "
                 f"önerilemedi: {', '.join(karsilanamayan_kategoriler)}. "
                 f"Bütçeyi artırmak veya Max Varlık Sayısı'nı azaltmak bu durumu çözebilir.")
+    print(f"[timing][AnaSayfa] Sayfa basindan oneri listesi hazir olana kadar TOPLAM: "
+          f"{_t_ana.perf_counter() - _t_ana_basla:.3f}s")
 
     # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
     # sayiya yuvarlandigi icin her varlikta Tutar'dan az kalan bir

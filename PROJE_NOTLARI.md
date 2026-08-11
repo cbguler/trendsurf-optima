@@ -389,6 +389,28 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[TEŞHİS AŞAMASINDA] v2.0.7.136 (11 Ağustos 2026): Ana Sayfa'nın ilk
+  açılış/yenileme yavaşlığı için zamanlama ölçümü eklendi.** Bahri
+  yavaşlığın en çok Ana Sayfa'da (Bütçe Optimizasyonu), sayfa ilk
+  açılırken/hesaplama sürerken hissedildiğini belirtti. Tahminle devam
+  etmek yerine 3 noktaya `print()` zamanlaması eklendi (Streamlit Cloud
+  loglarında görünür):
+  1. `[timing][AnaSayfa] BIST canli yenileme (40 ticker)` - en güçlü aday,
+     kendi belgesine göre 3-5sn sürebilir, SADECE BIST seansı açıkken
+     çalışır (bu yüzden akşam testlerinde görünmeyebilir).
+  2. `[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler)` -
+     TEFAS'ın ~1340 satırı için eksik Optima_Skor'ların `.apply()` ile
+     satır-satır yeniden hesaplanması potansiyel maliyet.
+  3. `[timing][AnaSayfa] Sayfa basindan oneri listesi hazir olana kadar
+     TOPLAM` - sayfa başlangıcından öneri listesi hazır olana kadar geçen
+     toplam süre.
+  Ayrıca `load_universe()`'in KENDİ `[timing] load_universe (cache MISS...)`
+  logu zaten mevcuttu (v1.9.3) - bu üçü birlikte tam resmi verir.
+  **Sıradaki adım:** Bahri push sonrası Ana Sayfa'yı açıp Streamlit
+  Cloud'un "Manage app" → loglarından bu 3-4 satırı okuyup paylaşmalı -
+  gerçek sayılara göre en pahalı adım kesin olarak belirlenip
+  hedeflenerek optimize edilecek (tahminle değil).
+
 - **[UYGULANDI] v2.0.7.133 (10 Ağustos 2026, Bahri'nin bulgusu — TUPRS
   hâlâ 63,0 (Temettü) vs 83,0 (Ana Sayfa/BIST) gösteriyordu, v2.0.7.132'nin
   scoring.py birleştirmesinden SONRA bile).** Kök neden bu sefer FORMÜL
