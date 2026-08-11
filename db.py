@@ -25,7 +25,6 @@ from typing import Any, Optional
 # ============================================================================
 try:
     import psycopg2
-    import psycopg2.pool
     from psycopg2.extras import RealDictCursor
     from psycopg2 import IntegrityError as _PgIntegrityError
     PSYCOPG2_OK = True
@@ -178,26 +177,28 @@ class _CompatCursor:
 class _CompatConn:
     """sqlite3.Connection arayuzu, PostgreSQL backend.
 
-    v2.0.7.137 (Bahri'nin bulgusu, 11 Agustos 2026 - "sistem cildirtici
-    derecede yavas", Streamlit Cloud loglarinda tek bir sayfa
-    yuklemesinde "_get_db_url" mesaji 3-4 KEZ tekrarlandigi goruldu):
-    get_conn() her cagrildiginda SIFIRDAN yeni bir psycopg2 baglantisi
-    (TCP+TLS+Postgres kimlik dogrulama) aciyordu - hicbir havuzlama/
-    yeniden kullanim yoktu. Tek bir sayfa render'inda birden fazla
-    fonksiyon (Sermaye/Nakit, Gerceklesmis K/Z, Referans Oranlar, Firsat
-    Radari overlay, vs.) kendi ayri get_conn() cagrisini yapiyordu - her
-    biri SIRAYLA yeni bir aga baglanti kuruyordu, bu da (Supabase uzak
-    bir sunucu oldugu icin) her seferinde 100-500ms+ suren bir maliyeti
-    BIRIKTIRIYORDU. Artik get_conn() gercek bir baglanti HAVUZUNDAN
-    (psycopg2.pool) aliyor - close() cagrisi baglantiyi GERCEKTEN
-    KAPATMIYOR, sadece havuza GERI VERIYOR (bir sonraki cagri o hazir
-    baglantiyi ANINDA alir, yeniden ag turu gerekmez). Mevcut TUM
-    ".close()" cagiran kod DEGISMEDEN calismaya devam eder - davranis
-    disaridan ayni gorunur, sadece cok daha hizli."""
-    def __init__(self, pg_conn, _pool=None):
+    v2.0.7.142 (Bahri'nin bulgusu, 11 Agustos 2026 - KRITIK GERI ALMA):
+    v2.0.7.137'de eklenen baglanti havuzu (psycopg2.pool) art arda IKI
+    FARKLI cokme turune yol acti: (1) havuz tukenmesi (bazi cagiran
+    kodlar istisna durumunda .close()'a ulasmayip baglantiyi sizdiriyordu)
+    - v2.0.7.140'ta guvenlik agiyla kismen ele alindi, sonra (2) havuzdan
+    gelen bir baglanti "acik" gorunse bile (pg_conn.closed==0) Supabase
+    pooler'i sunucu tarafinda sessizce dusurmus olabiliyordu - bu da
+    GERCEK SORGU calistirilirken (baglanti alinirken degil) cokmeye yol
+    aciyordu, guvenlik agi bunu YAKALAYAMIYORDU.
+
+    Iki farkli cokme turu art arda gelince, havuzlamanin getirdigi
+    performans kazanci GUVENILIRLIK riskine deymiyordu. Havuzlama
+    TAMAMEN KALDIRILDI - proje tarihinin tamaminda (bugune kadar)
+    KANITLANMIS sekilde calisan basit yonteme (her cagrida sifirdan yeni
+    baglanti) GERI DONULDU. Performans "3-4 kez _get_db_url" bulgusu
+    gercekti ama cozumu bu degildi - ileride (istenirse) cok daha
+    dikkatli test edilerek, ozellikle "sunucu tarafinda dusurulmus
+    baglanti" senaryosuna karsi saglam (pre-ping / retry-on-execute)
+    bir tasarimla yeniden ele alinabilir."""
+    def __init__(self, pg_conn):
         self._conn = pg_conn
         self._conn.autocommit = False
-        self._pool = _pool
 
     def execute(self, sql: str, params=None) -> _CompatCursor:
         sql_pg = _translate_sql(sql)
@@ -222,24 +223,6 @@ class _CompatConn:
         self._conn.rollback()
 
     def close(self):
-        """v2.0.7.137: havuzdan gelen bir baglantiysa GERCEKTEN KAPATMAZ -
-        once (bir onceki kullanicidan kalmis olabilecek islenmemis
-        islemleri temizlemek icin) rollback yapip havuza GERI VERIR.
-        Havuz yoksa (ornegin havuz olusturulamadiginda dusulen eski yol)
-        eskisi gibi gercekten kapatir."""
-        if self._pool is not None:
-            try:
-                self._conn.rollback()
-            except Exception:
-                pass
-            try:
-                self._pool.putconn(self._conn)
-            except Exception:
-                try:
-                    self._conn.close()
-                except Exception:
-                    pass
-            return
         try:
             self._conn.close()
         except Exception:
@@ -247,20 +230,16 @@ class _CompatConn:
 
 
 # ============================================================================
-# Public API: get_conn  -  v2.0.7.137: gercek baglanti havuzu
+# Public API: get_conn  -  v2.0.7.142: basit, guvenilir (havuz KALDIRILDI)
 # ============================================================================
-_CONN_POOL = None
-
-def _get_pool():
-    """v2.0.7.137 - Baglanti havuzunu tembel (lazy) olusturur, TEK seferlik
-    (modul global'inde saklanir - Streamlit'in ayni process icindeki tum
-    session'lari arasinda paylasilir, tipik kucuk-kullanicili bir uygulama
-    icin sorun degil; ThreadedConnectionPool zaten thread-safe). 1-10
-    baglantilik makul bir aralik - coğu zaman 1 yeter, ani yogunlukta
-    10'a kadar buyuyebilir."""
-    global _CONN_POOL
-    if _CONN_POOL is not None:
-        return _CONN_POOL
+def get_conn() -> _CompatConn:
+    """Supabase PostgreSQL baglantisi dondurur - basit, kanitlanmis
+    guvenilir yontem (havuzlama v2.0.7.142'de KALDIRILDI, bkz.
+    _CompatConn'un modul ustu notu - iki ayri cokme turune yol acmisti)."""
+    if not PSYCOPG2_OK:
+        raise RuntimeError(
+            "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
+        )
     url = _get_db_url()
     if not url:
         raise RuntimeError(
@@ -270,18 +249,10 @@ def _get_pool():
             "Veya GitHub Actions icin env: SUPABASE_DB_URL"
         )
     try:
-        _CONN_POOL = psycopg2.pool.ThreadedConnectionPool(1, 20, url, connect_timeout=10)
-        # v2.0.7.139 (Bahri'nin bulgusu, 11 Agustos 2026 - havuz deploy
-        # edildikten SONRA bile _get_db_url tekrarlanmaya devam etti):
-        # bu satir SADECE havuz GERCEKTEN ilk kez olusturulurken basmali -
-        # eger loglarda BUNU her rerun'da tekrar tekrar gorursek, sorun
-        # havuzun kendisinin her seferinde YENIDEN olusturuldugu (global
-        # degiskenin kalicı olmadigi) demektir.
-        print("[db][pool] YENI HAVUZ OLUSTURULDU (bu sadece process "
-              "basina BIR KEZ gorunmeli)", file=sys.stderr)
+        pg_conn = psycopg2.connect(url, connect_timeout=10)
     except psycopg2.OperationalError as e:
         err_msg = str(e)[:300] if e else "bilinmeyen hata"
-        print(f"[db] havuz olusturma OperationalError: {err_msg}", file=sys.stderr)
+        print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)
         raise RuntimeError(
             f"Supabase baglantisi acilamadi (OperationalError): {err_msg}\n"
             f"Cozumler:\n"
@@ -289,79 +260,14 @@ def _get_pool():
             f"  2) Connection string'in dogru oldugunu kontrol edin (Settings > Database)\n"
             f"  3) URL'de password'unun URL-encoded oldugundan emin olun (?, @, $, !)"
         ) from e
-    return _CONN_POOL
-
-
-def get_conn() -> _CompatConn:
-    """Supabase PostgreSQL baglantisi dondurur.
-
-    v2.0.7.140 (KRITIK, Bahri'nin bulgusu, 11 Agustos 2026 - v2.0.7.137'nin
-    baglanti havuzu az once TUM UYGULAMAYI COKERTTI, "RuntimeError...
-    get_conn" hatasiyla, reboot bile duzeltmiyordu): havuz muhtemelen
-    TUKENDI (psycopg2.pool.PoolError) - bircok yerde get_conn() cagiran
-    kod bir istisna (exception) durumunda .close()'a hic ulasmiyor, o
-    baglanti havuza hic geri donmuyor ("sizinti"). Havuz 10 baglantiya
-    kadar buyuyebiliyordu ama yogun kullanimda bu bile yetmedi.
-
-    Bu artik GUVENLIK AGLI: havuz HERHANGI BIR SEBEPLE basarisiz olursa
-    (tukenme dahil, herhangi bir hata), sessizce ESKI, HER ZAMAN CALISAN
-    yonteme (dogrudan, havuzsuz psycopg2.connect()) GERI DUSER - uygulama
-    ARTIK ASLA sadece havuz yuzunden cokmez. En kotu senaryoda performans
-    havuz-oncesi seviyeye doner (yavas ama GUVENILIR), COKME olmaz."""
-    if not PSYCOPG2_OK:
-        raise RuntimeError(
-            "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
-        )
-
-    def _dogrudan_baglan():
-        """Havuz olmadan, dogrudan yeni bir baglanti - eski (v2.0.7.136 ve
-        oncesi) HER ZAMAN CALISAN yontem. _pool=None ile donen _CompatConn
-        close()'da GERCEKTEN kapatir (havuza iade YOK, cunku havuzdan
-        gelmedi)."""
-        url = _get_db_url()
-        if not url:
-            raise RuntimeError(
-                "Supabase db_url ayarlanmamis. Streamlit Cloud Secrets'ta tanimlayin:\n"
-                "  [supabase]\n"
-                "  db_url = \"postgresql://...\"\n"
-                "Veya GitHub Actions icin env: SUPABASE_DB_URL"
-            )
-        try:
-            pg_conn = psycopg2.connect(url, connect_timeout=10)
-        except psycopg2.OperationalError as e:
-            err_msg = str(e)[:300] if e else "bilinmeyen hata"
-            print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)
-            raise RuntimeError(
-                f"Supabase baglantisi acilamadi (OperationalError): {err_msg}\n"
-                f"Cozumler:\n"
-                f"  1) Supabase Dashboard'ta projenin aktif oldugunu dogrulayin\n"
-                f"  2) Connection string'in dogru oldugunu kontrol edin (Settings > Database)\n"
-                f"  3) URL'de password'unun URL-encoded oldugundan emin olun (?, @, $, !)"
-            ) from e
-        return _CompatConn(pg_conn, None)
-
-    try:
-        pool = _get_pool()
-        pg_conn = pool.getconn()
-        if pg_conn.closed:
-            print("[db][pool] Havuzdaki baglanti KAPALI bulundu, "
-                  "YENIDEN aciliyor.", file=sys.stderr)
-            try:
-                pool.putconn(pg_conn, close=True)
-            except Exception:
-                pass
-            return _dogrudan_baglan()
-        return _CompatConn(pg_conn, pool)
-    except RuntimeError:
-        raise
     except Exception as e:
-        # v2.0.7.140 GUVENLIK AGI: havuz (tukenme dahil HERHANGI bir
-        # sebeple) basarisiz oldu - sessizce dogrudan baglantiya duson,
-        # uygulamayi COKERTME.
-        print(f"[db][pool] HAVUZ BASARISIZ ({type(e).__name__}: {str(e)[:200]}) "
-              f"- dogrudan (havuzsuz) baglantiya guvenli sekilde dusuluyor",
-              file=sys.stderr)
-        return _dogrudan_baglan()
+        err_msg = str(e)[:300] if e else "bilinmeyen"
+        print(f"[db] psycopg2.connect hatasi: {type(e).__name__}: {err_msg}", file=sys.stderr)
+        raise RuntimeError(
+            f"Supabase baglantisi acilamadi ({type(e).__name__}): {err_msg}"
+        ) from e
+    return _CompatConn(pg_conn)
+
 
 
 # ============================================================================
