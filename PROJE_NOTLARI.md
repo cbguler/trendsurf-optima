@@ -389,6 +389,35 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.141 (11 Ağustos 2026, Bahri'nin bulgusu — "BIST'te
+  68'e düştü ama Temettü'de hâlâ 63, inanamıyorum!!!"): İKİ AYRI sorun
+  bulundu ve düzeltildi.**
+  (1) **Gerçek kök neden nihayet bulundu:** v2.0.7.132'nin "CSV'den RSI/
+  Ret1M okuyup scoring.py ile YENİDEN HESAPLA" yaklaşımı BAŞTAN BERİ
+  YANLIŞTI. worker.py, CSV'ye Optima_Skor yazarken scoring.py'nin temel
+  formülüne EK olarak bir **"Hacim/Düşüş Düzeltmesi"** (`_score_adj +
+  _dd_adj`) uyguluyor - bu düzeltme scoring.py'de HİÇ YOK. Kanıt: TUPRS
+  için CSV'nin RSI=67,3/Ret1M=25,39/Vol=40,3/PB/PE değerleriyle
+  `scoring.optima_score()` çalıştırıldığında 63,0 çıkıyor (has_fundamental
+  ile) ama CSV'nin kendi Optima_Skor'u 68,0 - fark tam +5,0, yani
+  worker.py'nin düzeltmesinin büyüklüğü. **Doğru çözüm: CSV'deki
+  Optima_Skor'u DOĞRUDAN KOPYALAMAK, asla yeniden hesaplamamak** -
+  worker.py zaten TAM ve DOĞRU hesabı yapıyor. `temettu_client.py` ve
+  `halka_arz_client.py`'nin HEM birincil (df_uni_hazir) HEM fallback
+  (kendi CSV okuması) yolları artık ikisi de SADECE kopyalıyor.
+  (2) **Ayrı, ikincil bir dağıtım hatası da bulundu:** v2.0.7.138 push
+  edilirken `temettu_client.py` dosyası ve app.py'deki
+  `fetch_temettu_list()` çağrısının `df_uni_hazir=df_uni` parametresi
+  YANLIŞLIKLA commit'e dahil edilmemiş (halka_arz_client.py doğru
+  push edilmişti, temettu_client.py unutulmuştu) - Temettü sayfası bu
+  yüzden hâlâ df_uni_hazir'siz, eski (ve şimdi anlaşıldığı üzere YANLIŞ
+  formüllü) yolu kullanıyordu. İkisi de düzeltildi.
+  **DOĞRULANDI (mock veriyle, bu ortamda):** `_enrich()` artık CSV'nin
+  68,0'ini AYNEN döndürüyor, 63,0 değil.
+  **DOĞRULANMAMIŞ (canlı test gerekiyor):** push sonrası Temettü
+  sayfasının TUPRS için gerçekten BIST/Ana Sayfa ile aynı sayıyı
+  gösterdiği kontrol edilmeli.
+
 - **[UYGULANDI] v2.0.7.138 (11 Ağustos 2026, Bahri'nin sorusu — "Ben bir
   tek TUPRAS'a baktım, başka hisseler de var mıdır? Düzeltmeler bunları
   da kapsıyor mu?"): TAM KODBAZI TARAMASI yapıldı, AYNI hata sınıfının

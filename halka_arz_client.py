@@ -254,16 +254,18 @@ def _parse_xharz_from_excel(excel_bytes: bytes) -> list:
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
 
 def _enrich_from_csv(rows: list, df_uni_hazir=None) -> list:
-    """v2.0.7.138 (Bahri'nin bulgusu, 11 Ağustos 2026 — "TUPRS'a baktım,
-    başka hisseler de var mıdır, düzeltmeler bunları da kapsıyor mu?"
-    sorusu üzerine tarama): Halka Arz sayfası, Temettü sayfasının
-    düzeltmeden ÖNCEKİ haliyle BİREBİR AYNI iki hataya sahipti - (1)
-    Optima_Skor CSV'den hiç yeniden hesaplanmadan DOĞRUDAN kopyalanıyordu,
-    (2) Fırsat Radarı overlay'i (Supabase intraday_scores, 20 dk taze)
-    hiç uygulanmıyordu. Artık scoring.py ile YENİDEN HESAPLANIYOR + eğer
-    çağıran taraf (app.py) zaten yüklenmiş df_uni'yi (overlay dahil)
-    verirse doğrudan ondan okunuyor (hızlı, ekstra sorgu yok, Temettü'nün
-    aldığı AYNI düzeltme deseni - bkz. temettu_client.py._enrich())."""
+    """v2.0.7.138 (Bahri'nin bulgusu, 11 Ağustos 2026): Fırsat Radarı
+    overlay eksikliği bulunup düzeltildi.
+
+    v2.0.7.141 (Bahri'nin bulgusu — TUPRS BIST'te 68,0'a düşmüşken
+    Temettü'de hâlâ 63,0 kalması): fallback yoldaki "CSV'den RSI/Ret1M
+    okuyup scoring.py ile YENİDEN HESAPLA" yaklaşımı YANLIŞTI - worker.py
+    CSV'ye yazarken scoring.py'nin temel formülüne EK bir "Hacim/Düşüş
+    Düzeltmesi" uyguluyor, bu düzeltme scoring.py'de yok, yeniden
+    hesaplamak HER ZAMAN worker.py'nin gerçek skorundan sapıyordu. Artık
+    fallback yolu da (birincil df_uni_hazir yolu gibi) DOĞRUDAN
+    KOPYALIYOR, yeniden hesaplamıyor - worker.py zaten TAM ve DOĞRU
+    hesabı yapıyor."""
     if df_uni_hazir is not None and not df_uni_hazir.empty:
         try:
             _du = df_uni_hazir.set_index("Ticker")
@@ -291,18 +293,11 @@ def _enrich_from_csv(rows: list, df_uni_hazir=None) -> list:
             t = r["Ticker"]
             if t in df_uni.index:
                 row = df_uni.loc[t]
-                rsi   = float(row.get("RSI", 0) or 0)
-                ret1m = float(row.get("Ret1M", 0) or 0)
-                vol   = float(row.get("Vol", 30) or 30)
-                pb = row.get("PB"); pe = row.get("PE"); dy = row.get("DY")
-                has_fund = any(v is not None and str(v) != "nan" and float(v or 0) > 0
-                              for v in (pb, pe, dy))
                 r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
-                r["RSI"]         = rsi
-                r["Ret1M"]       = ret1m
-                r["Optima_Skor"] = optima_score(
-                    rsi, ret1m, vol=vol, has_fundamental=has_fund,
-                    pb=pb, pe=pe, dy=dy)
+                r["RSI"]         = float(row.get("RSI", 0) or 0)
+                r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
+                _skor = row.get("Optima_Skor")
+                r["Optima_Skor"] = float(_skor) if (_skor is not None and _skor == _skor) else 0.0
             else:
                 r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
     except Exception:

@@ -5343,7 +5343,7 @@ elif page=="Temettü":
     try:
         from temettu_client import fetch_temettu_list
         with st.spinner("XTMTU verileri yükleniyor..."):
-            df_tm = fetch_temettu_list(force_refresh=tm_refresh)
+            df_tm = fetch_temettu_list(force_refresh=tm_refresh, df_uni_hazir=df_uni)
         tm_error = None
     except Exception as _tm_ex:
         df_tm = pd.DataFrame()

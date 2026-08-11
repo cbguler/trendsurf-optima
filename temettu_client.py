@@ -210,19 +210,42 @@ def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
 
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
 
-def _enrich(rows: list) -> list:
-    """v2.0.7.132 (Bahri'nin bulgusu, 10 Ağustos 2026 — TUPRS'ın Ana
-    Sayfa'da 83,0, burada 68,0 görünmesi): eskiden Optima_Skor CSV'den
-    (worker.py'nin son çalışmasındaki DONMUŞ değer) DOĞRUDAN kopyalanıyordu
-    - Ana Sayfa ise BIST için seans içi canlı fiyat yenilemesinden sonra
-    optima_score()'u YENİDEN HESAPLIYOR, bu yüzden iki sayı farklı
-    çıkabiliyordu. Artık burada da RSI/Ret1M/Vol (+ PB/PE/DY varsa) CSV'den
-    okunup scoring.py'deki AYNI optima_score() ile YENİDEN HESAPLANIYOR -
-    en azından FORMÜL tutarlılığı garanti (ikisi de aynı girdilerden aynı
-    sonucu üretir). NOT: bu hâlâ CSV'deki RSI/Ret1M'i kullanıyor (Ana
-    Sayfa'nın yaptığı gibi TEMETTÜ sayfasına özel bir canlı fiyat yenilemesi
-    EKLENMEDİ - "sistem çok ağırlaşmış" şikayeti nedeniyle ekstra bir ağ
-    çağrısı eklemek yerine formül tutarlılığı önceliklendirildi)."""
+def _enrich(rows: list, df_uni_hazir=None) -> list:
+    """v2.0.7.141 (Bahri'nin bulgusu, 11 Ağustos 2026 — TUPRS BIST'te
+    68,0'a düşmüşken burada hâlâ 63,0 kalması): v2.0.7.132'nin "CSV'den
+    RSI/Ret1M okuyup scoring.py ile YENİDEN HESAPLA" yaklaşımı YANLIŞTI -
+    worker.py'nin CSV'ye yazdığı Optima_Skor, scoring.py'nin temel
+    formülüne EK olarak bir "Hacim/Düşüş Düzeltmesi" (_score_adj + _dd_adj)
+    içeriyor - bu düzeltme scoring.py'de YOK, bu yüzden yeniden hesaplamak
+    HER ZAMAN worker.py'nin gerçek skorundan farklı (TUPRS örneğinde tam
+    +5,0 fark) bir sayı üretiyordu. **Doğru çözüm CSV'deki Optima_Skor'u
+    DOĞRUDAN KOPYALAMAK, yeniden hesaplamak DEĞİL** - worker.py zaten TAM
+    ve DOĞRU hesabı yapıyor.
+
+    v2.0.7.134/135'in ASIL bulduğu gerçek sorun (Fırsat Radarı overlay
+    eksikliği) hâlâ geçerli ve burada düzeltiliyor: eğer çağıran taraf
+    (app.py) zaten yüklenmiş, overlay'i İÇEREN df_uni'yi verirse
+    (df_uni_hazir), doğrudan ondan okunur (hızlı, ekstra sorgu yok, TAM
+    parite). Verilmezse kendi CSV okuması + kendi overlay sorgusu yapılır
+    - AMA HİÇBİR DURUMDA yeniden hesaplama YAPILMAZ, sadece kopyalanır."""
+    if df_uni_hazir is not None and not df_uni_hazir.empty:
+        try:
+            _du = df_uni_hazir.set_index("Ticker")
+            for r in rows:
+                t = r["Ticker"]
+                if t in _du.index:
+                    row = _du.loc[t]
+                    r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
+                    r["RSI"]         = float(row.get("RSI", 0) or 0)
+                    r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
+                    _skor = row.get("Optima_Skor")
+                    r["Optima_Skor"] = float(_skor) if (_skor is not None and _skor == _skor) else 0.0
+                else:
+                    r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
+        except Exception:
+            pass
+        return rows
+
     csv_path = os.path.join(BASE_DIR, "optimized_universe.csv")
     if not os.path.exists(csv_path):
         return rows
@@ -232,48 +255,60 @@ def _enrich(rows: list) -> list:
             t = r["Ticker"]
             if t in df_uni.index:
                 row = df_uni.loc[t]
-                rsi   = float(row.get("RSI", 0) or 0)
-                ret1m = float(row.get("Ret1M", 0) or 0)
-                vol   = float(row.get("Vol", 30) or 30)
-                pb = row.get("PB"); pe = row.get("PE"); dy = row.get("DY")
-                has_fund = any(v is not None and str(v) != "nan" and float(v or 0) > 0
-                              for v in (pb, pe, dy))
                 r["Son_Fiyat"]   = float(row.get("Son_Fiyat", 0) or 0)
-                r["RSI"]         = rsi
-                r["Ret1M"]       = ret1m
-                r["Optima_Skor"] = optima_score(
-                    rsi, ret1m, vol=vol, has_fundamental=has_fund,
-                    pb=pb, pe=pe, dy=dy)
+                r["RSI"]         = float(row.get("RSI", 0) or 0)
+                r["Ret1M"]       = float(row.get("Ret1M", 0) or 0)
+                _skor = row.get("Optima_Skor")
+                r["Optima_Skor"] = float(_skor) if (_skor is not None and _skor == _skor) else 0.0
             else:
                 r.update({"Son_Fiyat": 0.0, "RSI": 0.0, "Ret1M": 0.0, "Optima_Skor": 0.0})
+    except Exception:
+        pass
+
+    try:
+        from db import get_intraday_overlay
+        _rd_map = get_intraday_overlay(45)
+        if _rd_map:
+            for r in rows:
+                _ov = _rd_map.get(r.get("Ticker"))
+                if not _ov:
+                    continue
+                if _ov.get("fiyat") is not None:
+                    r["Son_Fiyat"] = float(_ov["fiyat"])
+                if _ov.get("rsi") is not None:
+                    r["RSI"] = float(_ov["rsi"])
+                if _ov.get("ret1m") is not None:
+                    r["Ret1M"] = float(_ov["ret1m"])
+                if _ov.get("skor") is not None:
+                    r["Optima_Skor"] = float(_ov["skor"])
     except Exception:
         pass
     return rows
 
 # ── Ana fonksiyon ─────────────────────────────────────────────────────────────
 
-def fetch_temettu_list(force_refresh: bool = False) -> pd.DataFrame:
+def fetch_temettu_list(force_refresh: bool = False, df_uni_hazir=None) -> pd.DataFrame:
     """
     XTMTU üyelerini temettü verileriyle döner.
     Sütunlar: Ticker, Şirket, Son_Fiyat, RSI, Ret1M, Optima_Skor,
               div_per_share, div_yield, ex_date, frequency,
               Toplam_Getiri
+
+    v2.0.7.141: df_uni_hazir - app.py'nin zaten yüklediği (Fırsat Radarı
+    overlay'i dahil) df_uni verilirse, _enrich() kendi CSV okumasını/
+    Supabase sorgusunu YAPMAZ, doğrudan bundan okur (hızlı + tam parite).
     """
     if not force_refresh:
         cached = _read_cache()
         if cached:
-            # v2.0.7.133 (Bahri'nin bulgusu, 10 Ağustos 2026 — TUPRS 63,0
-            # vs 83,0, scoring.py birleştirmesinden SONRA bile devam etti):
-            # kök neden formül değil, ÖNBELLEK TAZELİĞİ farkıydı - bu 4
-            # saatlik önbellek Optima_Skor'u da (pahalı XTMTU/temettü
-            # verisiyle birlikte) donduruyordu, Ana Sayfa/BIST ise
-            # load_universe()'in 10 dakikalık önbelleğini kullanıyordu.
-            # Çözüm: önbellekten dönerken bile Optima_Skor/RSI/Ret1M/
-            # Son_Fiyat CSV'den YENİDEN okunup taze hesaplanıyor - bu ucuz
-            # bir yerel disk okuması (ağ çağrısı DEĞİL), performansı
-            # etkilemez. Sadece pahalı kısımlar (XTMTU üye listesi, yfinance
-            # temettü verisi) 4 saat önbellekli kalıyor.
-            cached = _enrich(cached)
+            # v2.0.7.133/141: önbellekten dönerken bile Optima_Skor/RSI/
+            # Ret1M/Son_Fiyat her seferinde TAZE alınıyor (kopyalanıyor,
+            # YENİDEN HESAPLANMIYOR - bkz. _enrich() notu) - ya doğrudan
+            # hazır df_uni'den (hızlı, ekstra sorgu yok) ya da
+            # (verilmemişse) kendi CSV+overlay sorgusundan. Sadece pahalı
+            # kısımlar (XTMTU üye listesi, yfinance temettü verisi) 4 saat
+            # önbellekli kalıyor.
+            cached = _enrich(cached, df_uni_hazir)
             return pd.DataFrame(cached)
 
     # XTMTU üyelerini çek
@@ -281,8 +316,8 @@ def fetch_temettu_list(force_refresh: bool = False) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    # CSV'den fiyat/skor ekle
-    rows = _enrich(rows)
+    # CSV'den (veya hazır df_uni'den) fiyat/skor ekle
+    rows = _enrich(rows, df_uni_hazir)
 
     # Temettü verisi — yfinance (paralel)
     print(f"  Temettü verisi çekiliyor ({len(rows)} hisse)...")
