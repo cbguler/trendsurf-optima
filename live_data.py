@@ -316,30 +316,13 @@ def _compute_ret_1m(closes: pd.Series) -> float:
 
 @st.cache_data(ttl=900, show_spinner=False)
 def _teknik_skor_100(rsi, ret1m, vol=30.0):
-    """v2.0.7.86 (Bahri'nin talebi, CSKY ornegi) - worker.py'deki
-    _bist_optima_score(...,has_fundamental=False) ile BIREBIR AYNI mantik
-    (0-100'e normalize edilmis teknik-sadece skor). worker.py'yi buraya
-    import etmek riskli (modul yuklenirken _kripto_evrenini_olustur() gibi
-    yan etkili kod calisir) - bu yuzden kucuk/saf kisim burada AYRICA
-    tanimlanir. Biri degisirse OBUR IKISI de (worker.py + app.py'deki
-    optima_score/_teknik_alt_skor) guncellenmeli."""
-    if 40 <= rsi <= 60: rsi_s = 25
-    elif 35 <= rsi <= 65: rsi_s = 18
-    elif 30 <= rsi < 35 or 65 < rsi <= 70: rsi_s = 10
-    else: rsi_s = 0
-    if ret1m >= 30: mom = 35
-    elif ret1m >= 20: mom = 30
-    elif ret1m >= 10: mom = 24
-    elif ret1m >= 5: mom = 18
-    elif ret1m >= 0: mom = 10
-    elif ret1m >= -5: mom = 4
-    else: mom = 0
-    if vol < 20: vol_s = 15
-    elif vol < 35: vol_s = 10
-    elif vol < 55: vol_s = 5
-    else: vol_s = 0
-    raw = rsi_s + mom + vol_s
-    return min(100.0, round(raw * (100.0 / 75.0), 1))
+    """v2.0.7.132 (Bahri'nin bulgusu, TUPRS/scoring celiskileri): bu artik
+    ayri bir kopya DEGIL - scoring.py'deki TEK kaynagi cagirir. Onceki not
+    (v2.0.7.86, artik gecersiz): "worker.py'yi buraya import etmek riskli"
+    - dogruydu, ama scoring.py YAN ETKISIZ (sadece saf fonksiyonlar), bu
+    yuzden guvenle import edilebiliyor."""
+    from scoring import optima_score
+    return optima_score(rsi, ret1m, vol=vol, has_fundamental=False)
 
 
 def _hacim_dd_duzeltmesi_maden(close_series, volume_series, ret1m):

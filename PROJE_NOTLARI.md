@@ -389,6 +389,33 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.133 (10 Ağustos 2026, Bahri'nin bulgusu — TUPRS
+  hâlâ 63,0 (Temettü) vs 83,0 (Ana Sayfa/BIST) gösteriyordu, v2.0.7.132'nin
+  scoring.py birleştirmesinden SONRA bile).** Kök neden bu sefer FORMÜL
+  değildi (o zaten düzeltilmişti) - **ÖNBELLEK TAZELİĞİ** farkıydı:
+  Ana Sayfa/BIST sayfası `load_universe()`'in **10 dakikalık** önbelleğini
+  kullanıyor, Temettü sayfası ise `fetch_temettu_list()`'in **4 saatlik**
+  önbelleğini - bu önbellek Optima_Skor'u da (pahalı XTMTU üye
+  listesi/yfinance temettü verisiyle BİRLİKTE) donduruyordu. İkisi de artık
+  aynı hesaplıyor ama farklı zaman noktalarındaki CSV anlık görüntülerine
+  bakıyorlardı. **Çözüm:** `fetch_temettu_list()`'in önbellek-isabet
+  yolunda bile artık `_enrich()` HER SEFERİNDE yeniden çağrılıyor -
+  Optima_Skor/RSI/Ret1M/Son_Fiyat her zaman CSV'den TAZE okunuyor (ucuz
+  bir yerel disk okuması, ağ çağrısı DEĞİL - performansı etkilemez).
+  Sadece gerçekten pahalı kısımlar (XTMTU üye listesi, yfinance temettü
+  verisi) hâlâ 4 saat önbellekli.
+  **Ayrıca bulundu ve düzeltildi:** `live_data.py`'de `_teknik_skor_100()`
+  diye BEŞİNCİ bir kopya daha vardı (MADEN'in canlı Detay sayfası
+  yenilemesinde kullanılıyor, kendi docstring'i "worker.py'yi import etmek
+  riskli" diye AÇIKÇA bu tekrarı gerekçelendiriyordu) - artık o da
+  scoring.py'ye bağlandı (scoring.py yan etkisiz olduğu için güvenle
+  import edilebiliyor, worker.py'nin aksine).
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası TUPRS'ın üç
+  sayfada da (Ana Sayfa, BIST, Temettü) aynı sayıyı gösterdiği kontrol
+  edilmeli. Ayrıca Temettü sayfasının hâlâ hızlı açıldığından emin
+  olunmalı (yeni `_enrich()` çağrısı ucuz olmalı ama gerçek ortamda
+  doğrulanmadı).
+
 - **[İNCELENDİ, BUG DEĞİL] Değerli Madenler'in Bütçe Optimizasyonu'nda
   çıkmaması (10 Ağustos 2026, Bahri'nin sorusu).** Bahri "Değerli
   Madenler sayfasında Skor 81,8/78,0/75,5 görünüyor, neden AL sinyalli

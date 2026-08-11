@@ -262,6 +262,18 @@ def fetch_temettu_list(force_refresh: bool = False) -> pd.DataFrame:
     if not force_refresh:
         cached = _read_cache()
         if cached:
+            # v2.0.7.133 (Bahri'nin bulgusu, 10 Ağustos 2026 — TUPRS 63,0
+            # vs 83,0, scoring.py birleştirmesinden SONRA bile devam etti):
+            # kök neden formül değil, ÖNBELLEK TAZELİĞİ farkıydı - bu 4
+            # saatlik önbellek Optima_Skor'u da (pahalı XTMTU/temettü
+            # verisiyle birlikte) donduruyordu, Ana Sayfa/BIST ise
+            # load_universe()'in 10 dakikalık önbelleğini kullanıyordu.
+            # Çözüm: önbellekten dönerken bile Optima_Skor/RSI/Ret1M/
+            # Son_Fiyat CSV'den YENİDEN okunup taze hesaplanıyor - bu ucuz
+            # bir yerel disk okuması (ağ çağrısı DEĞİL), performansı
+            # etkilemez. Sadece pahalı kısımlar (XTMTU üye listesi, yfinance
+            # temettü verisi) 4 saat önbellekli kalıyor.
+            cached = _enrich(cached)
             return pd.DataFrame(cached)
 
     # XTMTU üyelerini çek
