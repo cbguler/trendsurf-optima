@@ -3101,12 +3101,13 @@ def _render_karsilastirma(_cur_user, portfolio):
         return
 
     import plotly.graph_objects as go
-    # v2.0.7.129 (Bahri'nin bulgusu: onceki renkler "soft"/az belirgindi) -
-    # daha canli/doygun tonlar + kalinlastirilmis cizgiler.
+    # v2.0.7.143 (Bahri'nin bulgusu: renkler hala birbirine cok yakindi,
+    # asla pastel kullanilmamali) - elle secilmis, renk carkinda maksimum
+    # ayrilmis, koyu/doygun (pastel DEGIL) tonlar.
     _renkler = {
-        "Portföyünüz": "#1a56db", "BIST 100": "#4b5563", "Altın": "#d97706",
-        "Dolar/TL": "#059669", "Vadeli Mevduat": "#db2777",
-        "Devlet Tahvili": "#7c3aed", "Repo": "#dc2626",
+        "Portföyünüz": "#1d4ed8", "BIST 100": "#111827", "Altın": "#b45309",
+        "Dolar/TL": "#15803d", "Vadeli Mevduat": "#a21caf",
+        "Devlet Tahvili": "#4338ca", "Repo": "#b91c1c",
     }
     fig = go.Figure()
     for _ad, _seri in _seriler.items():
@@ -3114,13 +3115,17 @@ def _render_karsilastirma(_cur_user, portfolio):
             x=_seri.index, y=_seri.values, mode="lines", name=_ad,
             line=dict(width=4 if _ad == "Portföyünüz" else 2.75,
                       color=_renkler.get(_ad, "#374151")),
-            hovertemplate="%{y:.2f}%<extra>" + _ad + "</extra>",
+            hovertemplate="<b>" + _ad + "</b>: %{y:.2f}%<extra></extra>",
         ))
     fig.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
     fig.update_layout(
         template="plotly_white", height=440,
         margin=dict(l=10, r=10, t=10, b=10),
-        hovermode="x unified",
+        # v2.0.7.143 (Bahri'nin talebi): imleci bir CIZGININ uzerine
+        # goturunce SADECE o serinin adi/degeri gorunsun - "x unified"
+        # (butun serileri tek kutuda listeler) yerine "closest" (imlecin
+        # en yakin oldugu TEK cizgiyi gosterir).
+        hovermode="closest",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         yaxis=dict(title="Kümülatif Getiri", ticksuffix="%",
                    gridcolor="rgba(120,120,120,0.15)", zeroline=False),
@@ -3213,20 +3218,37 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
         return
 
     import plotly.graph_objects as go
-    import plotly.colors as _pc_pk
-    _renk_paleti_pk = _pc_pk.qualitative.Bold + _pc_pk.qualitative.Set2
+    # v2.0.7.143 (Bahri'nin bulgusu: renkler cok yakindi, asla pastel
+    # kullanilmamali) - eski "Bold + Set2" karisimi Set2'nin PASTEL
+    # tonlari yuzunden sorunluydu, tamamen kaldirildi. Elle secilmis,
+    # renk carkinda maksimum ayrilmis, koyu/doygun (pastel DEGIL) bir
+    # liste - kac pozisyon olursa olsun donguyle kullanilir.
+    _renk_paleti_pk = [
+        "#1d4ed8",  # mavi
+        "#b91c1c",  # kirmizi
+        "#15803d",  # yesil
+        "#b45309",  # amber/turuncu
+        "#7e22ce",  # mor
+        "#0e7490",  # koyu camgobegi
+        "#a21caf",  # macenta
+        "#4d7c0f",  # zeytin/koyu sari-yesil
+        "#be123c",  # gul/koyu kirmizi
+        "#111827",  # neredeyse siyah
+    ]
     fig2 = go.Figure()
     for _i, (_etiket, _seri) in enumerate(_pozisyon_serileri.items()):
         fig2.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_etiket,
             line=dict(width=2.75, color=_renk_paleti_pk[_i % len(_renk_paleti_pk)]),
-            hovertemplate="%{y:.2f}%<extra>" + _etiket + "</extra>",
+            hovertemplate="<b>" + _etiket + "</b>: %{y:.2f}%<extra></extra>",
         ))
     fig2.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
     fig2.update_layout(
         template="plotly_white", height=420,
         margin=dict(l=10, r=10, t=10, b=10),
-        hovermode="x unified",
+        # v2.0.7.143 (Bahri'nin talebi): imleci bir CIZGININ uzerine
+        # goturunce SADECE o serinin adi/degeri gorunsun.
+        hovermode="closest",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         yaxis=dict(title="Kümülatif Getiri", ticksuffix="%",
                    gridcolor="rgba(120,120,120,0.15)", zeroline=False),

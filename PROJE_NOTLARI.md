@@ -389,6 +389,22 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.143 (11 Ağustos 2026, Bahri'nin talebi — TUPRS
+  artık üç sayfada da 68,0 ile TUTARLI, sorun kapandı ✓): Getiri
+  Kıyaslaması grafiklerinde iki iyileştirme.**
+  (1) **Renkler kesin olarak ayrıştırıldı:** Pozisyon Bazlı grafikteki
+  eski "Bold + Set2" karışımı, Set2'nin PASTEL tonları yüzünden hâlâ
+  birbirine yakın görünüyordu - tamamen kaldırıldı. Her iki grafik de
+  artık elle seçilmiş, renk çarkında maksimum ayrılmış, koyu/doygun
+  (asla pastel değil) sabit bir renk listesi kullanıyor.
+  (2) **Hover artık tek seri gösteriyor:** `hovermode="x unified"`
+  (imlecin bulunduğu TARİHTEKİ tüm serileri tek kutuda listeliyordu,
+  hangi rengin hangisi olduğunu ayırt etmeyi zorlaştırıyordu) →
+  `hovermode="closest"` (imlecin en yakın olduğu TEK çizginin adı/değeri
+  gösteriliyor - "bir çizginin üzerinde tuttuğumda hangi seriye ait
+  olduğunu göstersin" talebiyle birebir örtüşüyor).
+  **DOĞRULANMADI** (canlı test gerekiyor).
+
 - **[GERİ ALINDI - KRİTİK KARAR] v2.0.7.142 (11 Ağustos 2026, Bahri'nin
   bulgusu): Bağlantı havuzlama (v2.0.7.137) TAMAMEN KALDIRILDI.**
   Art arda İKİ FARKLI çöküş türüne yol açtı: (1) havuz tükenmesi
