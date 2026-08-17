@@ -110,33 +110,5 @@
     "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
-  },
-  {
-    "Tarih": "17.07.2026 19:56:45",
-    "Kod": "INFO, IYF",
-    "Sirket": "Metgün Enerji Yatırımları A.Ş",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "Metgün Enerji Yatırımları A.Ş. İzahname Ekleri 4. Bölüm",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1634679",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1634681",
-    "Arz_Fiyati": null,
-    "Iskonto_Orani": 20.0,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
-  },
-  {
-    "Tarih": "17.07.2026 18:18:16",
-    "Kod": "A1CAP, ACP",
-    "Sirket": "Kardemir Çelik Sanayi AŞ",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "Kardemir Çelik Sanayi AŞ Halka Arzına İlişkin Onaylı İzahname Ek-6.2",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1634612",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1634617",
-    "Arz_Fiyati": 35.0,
-    "Iskonto_Orani": null,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
   }
 ]

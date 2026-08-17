@@ -41,6 +41,20 @@
     "graham_degeri": null,
     "carpan_bazli_deger": null
   },
+  "1634681": {
+    "arz_fiyati": null,
+    "iskonto_orani": 20.0,
+    "tip": null,
+    "graham_degeri": null,
+    "carpan_bazli_deger": null
+  },
+  "1634617": {
+    "arz_fiyati": 35.0,
+    "iskonto_orani": null,
+    "tip": "C",
+    "graham_degeri": null,
+    "carpan_bazli_deger": null
+  },
   "1645144": {
     "arz_fiyati": 85.4,
     "iskonto_orani": 20.03,
@@ -80,20 +94,6 @@
     "arz_fiyati": null,
     "iskonto_orani": null,
     "tip": null,
-    "graham_degeri": null,
-    "carpan_bazli_deger": null
-  },
-  "1634681": {
-    "arz_fiyati": null,
-    "iskonto_orani": 20.0,
-    "tip": null,
-    "graham_degeri": null,
-    "carpan_bazli_deger": null
-  },
-  "1634617": {
-    "arz_fiyati": 35.0,
-    "iskonto_orani": null,
-    "tip": "C",
     "graham_degeri": null,
     "carpan_bazli_deger": null
   }
