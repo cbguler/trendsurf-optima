@@ -99,3 +99,83 @@ def get_signal(score, rsi, trend):
     elif score >= 40: lbl, cls = ("KADEMELİ SAT", "sig-s") if trend == "DUSUS" and rsi > 70 else ("TUT İZLE", "sig-t")
     else: lbl, cls = ("TUT İZLE", "sig-t") if trend == "YUKSELIS" else ("NET SAT", "sig-n")
     return lbl, cls
+
+
+def optima_score_breakdown(rsi, ret1m, vol=30.0, has_fundamental=False,
+                            pb=None, pe=None, dy=None):
+    """v2.0.7.144 (Bahri'nin talebi, 18 Ağustos 2026): "Optima Skor'u
+    oluşturan unsurları pasta grafik olarak görebilmek istiyorum" -
+    optima_score() ile TAMAMEN AYNI hesaplamayı yapar ama TEK bir sayı
+    yerine her bileşeni AYRI AYRI döndürür - pasta grafiği için.
+
+    optima_score()'un kendisi DEĞİŞMEDİ, bu SADECE onun iç adımlarını
+    dışarı açan bir "şeffaf" versiyon - tek kaynak (scoring.py) ilkesi
+    korunuyor, iki ayrı hesaplama yolu YOK.
+
+    100'e normalize edilmiş bileşenler döner (has_fundamental=False
+    olsa bile RSI/Momentum/Volatilite değerleri 100/75 ile ölçeklenir,
+    böylece pasta grafiğindeki dilimler TOPLAMDA gösterilen Optima
+    Skor'a eşit olur):
+        {"RSI Bölgesi": ..., "Momentum": ..., "Volatilite": ...,
+         "F/K": ..., "PD/DD": ..., "Temettü Verimi": ...}
+    (F/K, PD/DD, Temettü Verimi sadece has_fundamental=True ise dahil
+    edilir.)
+    """
+    rsi_s, mom_s, vol_s = _teknik_alt_skor_ayristirilmis(rsi, ret1m, vol)
+
+    if has_fundamental:
+        fk_s, pdd_s, temettu_s = _temel_alt_skor_ayristirilmis(pb, pe, dy)
+        return {
+            "RSI Bölgesi": rsi_s, "Momentum": mom_s, "Volatilite": vol_s,
+            "F/K": fk_s, "PD/DD": pdd_s, "Temettü Verimi": temettu_s,
+        }
+
+    # Temel analiz verisi yoksa: teknik bilesenler 100/75 ile normalize
+    _olcek = 100.0 / 75.0
+    return {
+        "RSI Bölgesi": round(rsi_s * _olcek, 1),
+        "Momentum": round(mom_s * _olcek, 1),
+        "Volatilite": round(vol_s * _olcek, 1),
+    }
+
+
+def _teknik_alt_skor_ayristirilmis(rsi, ret1m, vol=30.0):
+    """_teknik_alt_skor()'un AYNI eşik değerleriyle, ayrıştırılmış hali -
+    optima_score_breakdown() için. _teknik_alt_skor()'un kendisi
+    değiştirilmedi (dış davranış aynı kalsın diye)."""
+    if 40 <= rsi <= 60: rsi_s = 25
+    elif 35 <= rsi <= 65: rsi_s = 18
+    elif 30 <= rsi < 35 or 65 < rsi <= 70: rsi_s = 10
+    else: rsi_s = 0
+
+    if ret1m >= 30: mom = 35
+    elif ret1m >= 20: mom = 30
+    elif ret1m >= 10: mom = 24
+    elif ret1m >= 5: mom = 18
+    elif ret1m >= 0: mom = 10
+    elif ret1m >= -5: mom = 4
+    else: mom = 0
+
+    if vol < 20: vol_s = 15
+    elif vol < 35: vol_s = 10
+    elif vol < 55: vol_s = 5
+    else: vol_s = 0
+
+    return rsi_s, mom, vol_s
+
+
+def _temel_alt_skor_ayristirilmis(pb=None, pe=None, dy=None):
+    """_temel_alt_skor()'un AYNI eşik değerleriyle, ayrıştırılmış hali."""
+    fk_s = 0
+    if pe and 0 < float(pe) < 12: fk_s = 10
+    elif pe and 0 < float(pe) < 25: fk_s = 5
+
+    pdd_s = 0
+    if pb and 0 < float(pb) < 1.5: pdd_s = 8
+    elif pb and 0 < float(pb) < 3: pdd_s = 4
+
+    temettu_s = 0
+    if dy and float(dy) > 0.08: temettu_s = 7
+    elif dy and float(dy) > 0.04: temettu_s = 3
+
+    return fk_s, pdd_s, temettu_s

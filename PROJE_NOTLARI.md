@@ -389,6 +389,52 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.144 (18 Ağustos 2026, Bahri'nin
+  talebi): Optima Skor Bileşimi pasta grafiği — her varlığın Detay
+  sayfasının en başına eklendi.**
+  **Mimari:** `scoring.py`'ye `optima_score_breakdown()` eklendi -
+  `optima_score()` ile TAMAMEN AYNI hesaplamayı yapar (aynı eşik
+  değerleri, `_teknik_alt_skor_ayristirilmis`/`_temel_alt_skor_ayristirilmis`
+  üzerinden) ama tek bir sayı yerine her bileşeni (RSI Bölgesi, Momentum,
+  Volatilite + varsa F/K, PD/DD, Temettü Verimi) AYRI AYRI döndürür -
+  toplamı her zaman gösterilen Optima Skor'a eşittir (mock veriyle
+  doğrulandı: TUPRS örneğinde breakdown toplamı 63 = optima_score() 63).
+  `app.py`'de tek, paylaşılan `_render_skor_pasta_grafigi(d, row,
+  key_prefix)` fonksiyonu - Ana Sayfa, Portföyüm ve genel Kategori
+  sayfası Detay bloklarının ÜÇÜNDE de (tek kaynak, üç kopya yok) 5
+  metrik satırının hemen altına ekleniyor.
+  **Bilinçli tasarım kararı:** pasta grafiği, mevcut 5-metrik satırının
+  YANINA değil ALTINA, tam genişlikte eklendi (yan yana kolon
+  düzenlemesi Bahri'nin "devasa boşluk" tarifiyle daha iyi örtüşebilirdi
+  ama üç ayrı bloğu aynı anda kolon yapısına çevirmek riskliydi - önce
+  canlıda görüp Bahri'nin tam nasıl bir yerleşim istediğini görmek daha
+  güvenli).
+  **NOT — Hacim/Düşüş düzeltmesi pasta grafiğe DAHİL DEĞİL:** worker.py/
+  firsat_radari.py'nin BIST için uyguladığı `_score_adj + _dd_adj`
+  düzeltmesi (TUPRS 63→68 farkının kaynağı, bkz. v2.0.7.141) bu pasta
+  grafikte YOK - grafik SADECE temel scoring.py formülünün (RSI/Momentum/
+  Volatilite/Temel) bileşenlerini gösteriyor. Bu yüzden BIST varlıklarında
+  pasta diliminin toplamı, üstteki "Optima Skor" metriğinden biraz farklı
+  çıkabilir (Hacim/Düşüş düzeltmesi kadar). İstenirse ayrı bir dilim/not
+  olarak eklenebilir - şimdilik basit tutuldu.
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası herhangi bir
+  varlığın Detay sayfasında pasta grafiğin doğru render olduğu ve
+  toplamının üstteki Optima Skor'a (BIST'te düzeltme farkı hariç)
+  yaklaşık eşit olduğu kontrol edilmeli.
+
+- **[BEKLEMEDE] "Beklenti Modu" — küresel/Türkiye olaylarının Optima
+  Skor'a opsiyonel etkisi.** Bahri'nin onayladığı tasarım: (1) varsayılan
+  davranış hiç değişmez, piyasayı etkileyebilecek haberler ayrıca
+  gösterilir (skor etkilenmez); (2) kullanıcı "Beklenti Modu" anahtarını
+  açarsa, ELLE işaretlediği aktif kalıplara (jeopolitik gerilim, petrol
+  arz şoku, merkez bankası sürprizi gibi) göre Optima Skor'da ŞEFFAF bir
+  ayarlama gösterilir - hiçbir otomatik haber sınıflandırma/AI YOK, karar
+  kullanıcıda kalır. Akademik olarak desteklenen başlangıç kalıp seti
+  araştırıldı (Caldara-Iacoviello GPR Index literatürü): jeopolitik
+  gerilim → Altın↑/TL↓/BIST kısa vadeli↓; petrol arz şoku → Petrol↑/TL
+  enflasyon baskısı↓; merkez bankası şahin sürprizi → USD↑/Altın↓/GOP
+  para birimleri↓. Henüz KOD YAZILMADI - sıradaki oturumda ele alınacak.
+
 - **[UYGULANDI] v2.0.7.143 (11 Ağustos 2026, Bahri'nin talebi — TUPRS
   artık üç sayfada da 68,0 ile TUTARLI, sorun kapandı ✓): Getiri
   Kıyaslaması grafiklerinde iki iyileştirme.**

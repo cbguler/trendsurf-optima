@@ -1043,7 +1043,62 @@ def calc_macd(s):
 # hem temettu_client.py AYNI, TEK kaynagi kullaniyor (temettu_client.py
 # app.py'yi guvenle import edemezdi, bu yuzden CSV'den donmus deger
 # kopyaliyordu - bkz. scoring.py'nin modul docstring'i).
-from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal
+from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal, optima_score_breakdown
+
+
+def _render_skor_pasta_grafigi(d, row, key_prefix="det"):
+    """v2.0.7.144 (Bahri'nin talebi, 18 Ağustos 2026): "Optima Skor'u
+    oluşturan unsurları pasta grafik olarak görebilmek istiyorum, her
+    varlık sayfasının en başındaki devasa boşluğa oturtabiliriz" -
+    scoring.optima_score_breakdown() ile TUTARLI (aynı RSI/Ret1M/Vol/
+    PB/PE/DY girdilerinden, aynı bileşenler - toplamı gösterilen Optima
+    Skor'a eşittir, ayrı bir hesaplama yolu YOK).
+
+    Üç ayrı Detay bloğunda (Ana Sayfa, Portföyüm, Kategori sayfaları)
+    ORTAK kullanılıyor - tek kaynak, üç kopya yok.
+
+    d: enrich()'in döndürdüğü dict (rsi/ret1m/vol içerir)
+    row: PB/PE/DY (varsa) içeren pandas Series (df_uni satırı)."""
+    try:
+        _pb, _pe, _dy = row.get("PB"), row.get("PE"), row.get("DY")
+        _has_fund = any(
+            v is not None and str(v) != "nan" and float(v or 0) > 0
+            for v in (_pb, _pe, _dy)
+        )
+        _parcalar = optima_score_breakdown(
+            float(d.get("rsi", 50)), float(d.get("ret1m", 0)),
+            vol=float(d.get("vol", 30)), has_fundamental=_has_fund,
+            pb=_pb, pe=_pe, dy=_dy)
+        _parcalar = {k: v for k, v in _parcalar.items() if v > 0}
+        if not _parcalar:
+            st.caption("Skor bileşimi için yeterli veri yok.")
+            return
+        import plotly.graph_objects as go
+        _renkler_pasta = {
+            "RSI Bölgesi": "#1d4ed8", "Momentum": "#15803d", "Volatilite": "#b45309",
+            "F/K": "#7e22ce", "PD/DD": "#a21caf", "Temettü Verimi": "#0e7490",
+        }
+        fig = go.Figure(data=[go.Pie(
+            labels=list(_parcalar.keys()), values=list(_parcalar.values()),
+            marker=dict(colors=[_renkler_pasta.get(k, "#6b7280") for k in _parcalar.keys()],
+                       line=dict(color="white", width=2)),
+            hole=0.45, textinfo="label+percent", textposition="outside",
+            hovertemplate="<b>%{label}</b>: %{value:.1f} puan<extra></extra>",
+        )])
+        fig.update_layout(
+            height=300, margin=dict(l=10, r=10, t=35, b=10),
+            showlegend=False,
+            title=dict(text="Optima Skor Bileşimi", font=dict(size=13, color="#1b2a4a"), x=0.5),
+            paper_bgcolor="white",
+            annotations=[dict(text=f"<b>{fmt_tr(sum(_parcalar.values()),1)}</b>",
+                              x=0.5, y=0.5, font=dict(size=20, color="#1b2a4a"),
+                              showarrow=False)],
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"pasta_{key_prefix}_{row.get('Ticker','')}")
+    except Exception as _pasta_err:
+        st.caption(f"Skor bileşimi grafiği yüklenemedi: {_pasta_err}")
+
+
 
 def _csv_alan(row, kolon):
     """CSV satirindan (worker.py'nin dondurulmus/toplu snapshot'i) bir
@@ -3707,6 +3762,8 @@ if page=="Ana Sayfa":
                 r4.metric("1A Getiri %",  fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
                 r5.metric("Yillik Vol %", fmt_tr(d['vol'],1)+"%")
 
+                _render_skor_pasta_grafigi(d, sel_row_ana, key_prefix="ana")
+
                 sig_color = SIG_COLORS.get(sig_cls, "#666")
 
                 # v2.0.3: Hacim trendi bilgisi (varsa)
@@ -4506,6 +4563,9 @@ elif page=="Portföyüm":
             _m3.metric("RSI (14)",    fmt_tr(_d['rsi'],1))
             _m4.metric("1A Getiri %", fmt_tr_isaretli(_d['ret1m'],2,yuzde=True))
             _m5.metric("Yıllık Vol %",fmt_tr(_d['vol'],1)+"%")
+
+            _render_skor_pasta_grafigi(_d, _sr, key_prefix="pf")
+
             _sc = SIG_COLORS.get(_sig_cls,"#666")
 
             # v2.0.3: Hacim trendi bilgisi (varsa)
@@ -4862,6 +4922,8 @@ elif page in CAT:
     r3.metric("RSI (14)",fmt_tr(d['rsi'],1))
     r4.metric("1A Getiri %",fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
     r5.metric("Yıllık Vol %",fmt_tr(d['vol'],1)+"%")
+
+    _render_skor_pasta_grafigi(d, sel_row, key_prefix=f"cat_{page}")
 
     sig_color=SIG_COLORS.get(sig_cls,"#666")
 
