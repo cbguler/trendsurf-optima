@@ -389,6 +389,41 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.149 (18 Ağustos 2026, Bahri'nin
+  bulgusu — KRİTİK mimari düzeltme): Beklenti Modu artık gerçekten
+  GLOBAL.** Önceki hali SADECE Ana Sayfa'nın kendi bloğu içindeydi -
+  df_uni'yi sadece o an render edilen Ana Sayfa'nın yerel akışında
+  değiştiriyordu. Başka bir sayfaya (ör. Döviz) geçildiğinde YENİ bir
+  script çalışması başlıyor, df_uni tekrar (önbellekten) yükleniyor ve
+  Ana Sayfa'daki ayarlama hiç uygulanmıyordu - "Bütçe tablosunda DOVIZ
+  skorları artmış ama Döviz sayfasına gidince artmamış" tam olarak bu
+  yüzdendi. **Çözüm:** kontroller SIDEBAR'a taşındı (her sayfada
+  kalıcı, session_state ile), gerçek AYARLAMA ise `df_uni=load_universe()`
+  satırından HEMEN SONRA, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor -
+  artık Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm/Temettü/Halka
+  Arz HEPSİ aynı ayarlanmış Optima_Skor'u görüyor, tutarsızlık yapısal
+  olarak imkansız hale geldi. Ayrıca TÜM sayfalarda görünen bir üst
+  şerit eklendi (Beklenti Modu aktifken hangi kategori ne kadar
+  etkilendiğini gösteriyor, sadece Ana Sayfa'da değil).
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası bir kalıp
+  işaretleyip Ana Sayfa'dan Döviz/BIST gibi başka bir sayfaya geçince
+  skorların TUTARLI kaldığı kontrol edilmeli.
+
+- **[AÇIK, KAPSAM BÜYÜK] Bahri'nin "sistem otomatik belirlesin" talebi
+  (18 Ağustos 2026) — henüz uygulanmadı, dürüstçe ertelendi.** Bahri,
+  kullanıcının şiddet seviyesini elle seçmesi yerine, "hangi haber
+  hangi varlık çeşidini yüzde kaç etkiler"in SİSTEM tarafından,
+  GERÇEK istatistiksel değerlendirmeyle belirlenmesini istiyor - bu,
+  şu anki (benim elle seçtiğim sabit puan tablosu + kullanıcının elle
+  seçtiği şiddet) tasarımdan ÇOK daha büyük bir kapsam. Gerçek bir
+  çözüm ya (a) gerçek tarihsel haber-fiyat tepkisi veri setiyle
+  istatistiksel backtesting yapmayı, ya da (b) yayınlanmış akademik
+  makalelerin GERÇEK regresyon katsayılarını/elastikiyet tahminlerini
+  (kendi uydurduğum sayılar değil) kullanmayı gerektirir - ikisi de
+  ciddi, ayrı bir araştırma oturumu gerektiriyor. Bir sonraki oturumda
+  ele alınmalı - Bahri'ye bu net şekilde açıklandı, aceleye
+  getirilmedi.
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.147 (18 Ağustos 2026, Bahri'nin
   bulgusu): Optima Skor Bileşimi grafiğindeki etiket çakışması
   DEĞERLERDEN BAĞIMSIZ, kalıcı bir sistemle çözüldü.** 6 dilim olunca

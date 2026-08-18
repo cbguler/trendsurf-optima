@@ -55,6 +55,13 @@ st.markdown("""<style>
     border-radius:8px!important;
 }
 [data-testid="stSidebar"]{background:#d0e4ff!important;border-right:1px solid #e0eeff!important;}
+/* v2.0.7.149 (Bahri'nin talebi, 18 Ağustos 2026): "Sidebar'daki
+   aralıkları da azaltmamız gerekiyor" - Streamlit'in varsayılan
+   element-container üst/alt boşlukları sidebar'da (dar bir alanda çok
+   sayıda kontrol olduğu için) gereksiz büyük görünüyordu. */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.35rem!important;}
+[data-testid="stSidebar"] .element-container{margin-bottom:0!important;}
+[data-testid="stSidebar"] hr{margin:0.6rem 0!important;}
 [data-testid="stSidebar"] p,[data-testid="stSidebar"] span,
 [data-testid="stSidebar"] div,[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] small{color:#1b2a4a!important;}
@@ -1969,6 +1976,39 @@ with st.sidebar:
                            options=["Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"],value="Orta")
     max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,value=10,step=1,
                           help="Portföyde kaç farklı varlık olacağını belirler")
+
+    # v2.0.7.149 (Bahri'nin bulgusu, 18 Ağustos 2026 — KRİTİK mimari
+    # düzeltme): Beklenti Modu önceden SADECE Ana Sayfa'nın kendi bloğu
+    # içindeydi - df_uni'yi SADECE o an render edilen Ana Sayfa'nın
+    # yerel kopyasında değiştiriyordu. Başka bir sayfaya (ör. Döviz)
+    # geçildiğinde YENİ bir script çalışması başlıyor, df_uni() tekrar
+    # (önbellekten) yükleniyor ve Ana Sayfa'daki ayarlama hiç
+    # uygulanmıyordu - "Bütçe tablosunda skor artmış ama Döviz sayfasında
+    # artmamış" tam olarak bu yüzdendi. Kontroller artık SIDEBAR'da
+    # (her sayfada kalıcı) - gerçek AYARLAMA ise df_uni yüklendikten
+    # HEMEN SONRA, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor (bkz.
+    # aşağıda "df_uni=load_universe()" sonrası blok) - böylece Ana Sayfa/
+    # Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm HEPSİ AYNI ayarlanmış
+    # skoru görür.
+    with st.expander("Beklenti Modu"):
+        st.caption(
+            "Varsayılan KAPALI — hiçbir şey değişmez. Açarsanız, "
+            "işaretlediğiniz durumlara göre TÜM sayfalardaki Optima Skor "
+            "şeffaf şekilde ayarlanır. Otomatik haber sınıflandırma yok — "
+            "karar sizde."
+        )
+        st.toggle("Beklenti Modunu Aktif Et", value=False, key="beklenti_aktif")
+        if st.session_state.get("beklenti_aktif"):
+            for _bk_key, _bk_ad in (
+                ("jeopolitik", "Jeopolitik gerilim/çatışma"),
+                ("petrol", "Petrol arz şoku (Ortadoğu/OPEC)"),
+                ("fed", "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi"),
+            ):
+                st.checkbox(_bk_ad, key=f"bk_{_bk_key}")
+                if st.session_state.get(f"bk_{_bk_key}"):
+                    st.select_slider(
+                        "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
+                        key=f"bk_{_bk_key}_siddet", label_visibility="collapsed")
     st.divider()
 
     # E-posta ayarları
@@ -2357,6 +2397,85 @@ if st.session_state.get("page_override") == "admin":
 # VERİ YÜKLE
 # ══════════════════════════════════════════════════════════════
 df_uni=load_universe()
+
+# ══════════════════════════════════════════════════════════════
+# BEKLENTİ MODU — GLOBAL uygulama (v2.0.7.149, Bahri'nin bulgusu)
+# ══════════════════════════════════════════════════════════════
+# Kontroller sidebar'da (yukarıda) - burada SADECE session_state okunup
+# df_uni'ye TEK SEFERDE, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor.
+# Böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm/Temettü/
+# Halka Arz HEPSİ aynı ayarlanmış Optima_Skor'u görür - önceki (sadece
+# Ana Sayfa'ya özel) sürümdeki tutarsızlık artık yapısal olarak imkansız.
+#
+# Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik Risk
+# Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN ilişkileridir.
+# DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY FİYATI
+# YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL zayıflar"
+# bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
+_KALIP_TABLOSU = {
+    "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
+    "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
+    "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
+}
+_KALIP_ISIM = {
+    "jeopolitik": "Jeopolitik gerilim/çatışma",
+    "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
+    "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
+}
+_KALIP_ACIKLAMA = {
+    "jeopolitik": (
+        "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
+        "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
+        "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
+        "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
+    ),
+    "petrol": (
+        "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
+        "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
+        "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
+        "yol açabilir."
+    ),
+    "fed": (
+        "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
+        "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
+        "ve risk iştahının azalmasına yol açma eğilimindedir."
+    ),
+}
+_beklenti_ayarlar = {}
+if st.session_state.get("beklenti_aktif"):
+    for _bk_key in ("jeopolitik", "petrol", "fed"):
+        if st.session_state.get(f"bk_{_bk_key}"):
+            _beklenti_ayarlar[_bk_key] = st.session_state.get(f"bk_{_bk_key}_siddet", "Orta")
+
+_beklenti_log = []
+_beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0}
+if _beklenti_ayarlar:
+    _siddet_carpan = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}
+    _risk_carpan = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
+                    "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
+    for _kalip_key, _siddet in _beklenti_ayarlar.items():
+        _carpan = _siddet_carpan.get(_siddet, 1.0) * _risk_carpan
+        for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
+            _beklenti_kategori_ayar[_kat] += _puan * _carpan
+        _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet})")
+
+    for _kat, _ayar in _beklenti_kategori_ayar.items():
+        if _ayar != 0:
+            _mask_bk = df_uni["Kategori"] == _kat
+            df_uni.loc[_mask_bk, "Optima_Skor"] = (
+                df_uni.loc[_mask_bk, "Optima_Skor"] + _ayar).clip(0, 100)
+
+    # v2.0.7.149: TÜM sayfalarda görünen kısa bir üst şerit - kullanıcı
+    # hangi sayfada olursa olsun ayarlamanın aktif olduğunu ve HANGİ
+    # kategorilerin ne kadar etkilendiğini bilsin, sadece Ana Sayfa'da
+    # değil.
+    st.info(
+        f"**Beklenti Modu AKTİF** — {', '.join(_beklenti_log)} (Risk: {risk}). "
+        f"Değerli Maden **{_beklenti_kategori_ayar['MADEN']:+.1f}**, "
+        f"Döviz **{_beklenti_kategori_ayar['DOVIZ']:+.1f}**, "
+        f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}** puan ayarlandı — "
+        f"tahmin değildir, sizin varsayımınıza dayalıdır."
+    )
 
 # v1.9.7 - Otomatik veri yenileme (her 60 saniyede sessiz re-run)
 # Cache hit oldugunda kullanici fark etmez, cache miss oldugunda yeni veri gelir.
@@ -3377,106 +3496,6 @@ if page=="Ana Sayfa":
             df_uni = _ld_refresh_bist_sel(df_uni, _bist_aday["Ticker"].tolist())
             print(f"[timing][AnaSayfa] BIST canli yenileme (40 ticker): "
                   f"{_t_ana.perf_counter() - _t_bist0:.3f}s")
-
-    # ══════════════════════════════════════════════════════════════
-    # BEKLENTİ MODU (v2.0.7.148, Bahri'nin talebi, 18 Ağustos 2026)
-    # ══════════════════════════════════════════════════════════════
-    # Tasarım (Bahri'nin onayladığı): (1) varsayılan KAPALI, uygulama hiç
-    # değişmez; (2) kullanıcı elle hangi kalıpların şu an aktif olduğunu
-    # işaretler (hiçbir otomatik haber sınıflandırma/AI YOK - karar
-    # kullanıcıda kalır, ben (Claude) kendi hayali zincirimi bile yanlış
-    # kurmuştum, otomatik sınıflandırma çok daha riskli olurdu);
-    # (3) Optima Skor'daki ayarlama ŞEFFAF gösterilir, gizli değil;
-    # (4) ayarlama büyüklüğü kullanıcının Risk Toleransı ile orantılı.
-    #
-    # Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik
-    # Risk Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN
-    # ilişkilerdir - büyüklük/zamanlama literatürde net değildir, bu
-    # yüzden burada KÜÇÜK, temkinli puan ayarlamaları kullanılıyor.
-    # DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY
-    # FİYATI YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL
-    # zayıflar" bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
-    _KALIP_TABLOSU = {
-        "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
-        "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
-        "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
-    }
-    _KALIP_ISIM = {
-        "jeopolitik": "Jeopolitik gerilim/çatışma",
-        "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
-        "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
-    }
-    _KALIP_ACIKLAMA = {
-        "jeopolitik": (
-            "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
-            "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
-            "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
-            "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
-        ),
-        "petrol": (
-            "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
-            "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
-            "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
-            "yol açabilir."
-        ),
-        "fed": (
-            "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
-            "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
-            "ve risk iştahının azalmasına yol açma eğilimindedir."
-        ),
-    }
-
-    with st.expander("Beklenti Modu — küresel/Türkiye olaylarının Optima Skor'a etkisi"):
-        st.caption(
-            "Varsayılan olarak KAPALI — uygulama hiçbir şekilde değişmez. "
-            "Açtığınızda, aşağıda işaretlediğiniz durumlara göre Optima Skor'da "
-            "ŞEFFAF bir ayarlama uygulanır. **Hiçbir otomatik haber sınıflandırması "
-            "veya yapay zeka yorumu YOK** — karar tamamen sizde, sistem sadece "
-            "işaretlediğiniz varsayımın matematiksel sonucunu hesaplar. Bu bir "
-            "tahmin değildir, sizin varsayımınıza dayalı bir ayarlamadır."
-        )
-        _beklenti_aktif = st.toggle("Beklenti Modunu Aktif Et", value=False, key="beklenti_aktif")
-        _beklenti_ayarlar = {}
-        if _beklenti_aktif:
-            st.markdown("**Şu an aktif olduğunu düşündüğünüz durumları işaretleyin:**")
-            _bk_cols = st.columns(3)
-            for _bk_i, (_kalip_key, _kalip_ad) in enumerate(_KALIP_ISIM.items()):
-                with _bk_cols[_bk_i % 3]:
-                    _isaretli = st.checkbox(_kalip_ad, key=f"bk_{_kalip_key}")
-                    if _isaretli:
-                        _siddet = st.select_slider(
-                            "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
-                            key=f"bk_{_kalip_key}_siddet")
-                        _beklenti_ayarlar[_kalip_key] = _siddet
-                    st.caption(_KALIP_ACIKLAMA[_kalip_key])
-
-    _beklenti_log = []
-    _beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0}
-    if _beklenti_ayarlar:
-        _siddet_carpan = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}
-        _risk_carpan = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
-                        "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
-        for _kalip_key, _siddet in _beklenti_ayarlar.items():
-            _carpan = _siddet_carpan.get(_siddet, 1.0) * _risk_carpan
-            for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
-                _beklenti_kategori_ayar[_kat] += _puan * _carpan
-            _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet})")
-
-        for _kat, _ayar in _beklenti_kategori_ayar.items():
-            if _ayar != 0:
-                _mask_bk = df_uni["Kategori"] == _kat
-                df_uni.loc[_mask_bk, "Optima_Skor"] = (
-                    df_uni.loc[_mask_bk, "Optima_Skor"] + _ayar).clip(0, 100)
-
-        st.warning(
-            f"**Beklenti Modu AKTİF** — {', '.join(_beklenti_log)} işaretlendi "
-            f"(Risk Toleransı: {risk}). Aşağıdaki öneriler bu varsayımlara göre "
-            f"AYARLANMIŞ Optima Skor kullanıyor: Değerli Maden **{_beklenti_kategori_ayar['MADEN']:+.1f}**, "
-            f"Döviz **{_beklenti_kategori_ayar['DOVIZ']:+.1f}**, "
-            f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}** puan. "
-            f"Bu bir tahmin değildir — işaretlediğiniz varsayımın matematiksel "
-            f"sonucudur, gerçek piyasa tepkisi farklı olabilir."
-        )
 
     cat_pools = {}
     _t_pool0 = _t_ana.perf_counter()
