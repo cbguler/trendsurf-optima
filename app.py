@@ -1956,6 +1956,7 @@ _KALIP_TABLOSU = {
     "fed":         {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
     "kredi_notu":  {"DOVIZ": 5, "BIST": -7},
     "kripto_olay": {"KRIPTO": -8},
+    "tcmb_kredibilite": {"DOVIZ": 10, "MADEN": 4, "BIST": -3},
 }
 _KALIP_ISIM = {
     "jeopolitik": "Jeopolitik gerilim/çatışma",
@@ -1963,6 +1964,7 @@ _KALIP_ISIM = {
     "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
     "kredi_notu": "Kredi notu düşürülmesi (S&P/Moody's/Fitch)",
     "kripto_olay": "Kripto düzenleme/halving şoku",
+    "tcmb_kredibilite": "TCMB para politikası kredibilite kaybı (beklenmedik gevşeme)",
 }
 _KALIP_ACIKLAMA = {
     "jeopolitik": (
@@ -2010,6 +2012,19 @@ _KALIP_ACIKLAMA = {
         "güvenilirliği literatürde açıkça tartışmalıdır - bu yüzden burada "
         "sadece kısa vadeli, istatistiksel olarak daha sağlam bulgu "
         "kullanılmıştır."
+    ),
+    "tcmb_kredibilite": (
+        "İstatistiksel dayanak: TCMB'nin piyasa beklentisinin tersine "
+        "hareket ettiği (ör. enflasyon yükselirken faiz indirmesi gibi) "
+        "dönemlerde, Türkiye kendi para politikası kredibilitesini "
+        "kaybetme riskiyle karşı karşıya kalır - bu, global faiz/risk "
+        "ortamından BAĞIMSIZ, yerli bir mekanizmadır. Belgelenmiş örnek:  "
+        "2021 Eylül-Kasım döneminde TCMB, enflasyon %20'ye yaklaşırken "
+        "piyasa beklentisinin aksine toplam 400 baz puan faiz indirdi; "
+        "TL o yıl doları karşısında %44 değer kaybederek gelişen "
+        "piyasalar arasında en kötü performans gösteren para birimi oldu "
+        "(Arjantin pesosu %18,1, Şili pesosu %16,5 kayıpla onu takip etti "
+        "- TL'nin kaybı ikinciden yaklaşık 2,5 kat fazlaydı)."
     ),
 }
 
@@ -2484,10 +2499,39 @@ if st.session_state.get("page_override") == "admin":
 df_uni=load_universe()
 
 _beklenti_ayarlar = {}
+_beklenti_kaynak = {}  # v2.0.7.154: her kalibin "manuel" mi "otomatik" mi geldigini takip eder
+_aktif_otomatik_tespitler = []
 if st.session_state.get("beklenti_aktif"):
     for _bk_key in _KALIP_TABLOSU.keys():
         if st.session_state.get(f"bk_{_bk_key}"):
             _beklenti_ayarlar[_bk_key] = st.session_state.get(f"bk_{_bk_key}_siddet", "Orta")
+            _beklenti_kaynak[_bk_key] = "manuel"
+
+    # v2.0.7.154 (Bahri'nin talebi, 18 Ağustos 2026): OTOMATİK haber
+    # tespiti - haber_izleme.py'nin (GitHub Actions, 10 dk'da bir) AI ile
+    # doğruladığı tespitler burada okunup, MANUEL seçimlerle AYNI şekilde
+    # (Bahri'nin seçimi: "hemen otomatik uygula", onay beklemeden)
+    # uygulanıyor. Aynı kalıp için birden fazla aktif tespit varsa (ör.
+    # aynı olay hakkında birden fazla haber), EN YÜKSEK şiddetli olan
+    # kullanılır. Manuel seçim varsa VE otomatik tespit de varsa, ikisi
+    # arasında YÜKSEK olan şiddet kullanılır (ikisi çelişmez, sadece
+    # büyüklük güncellenir).
+    try:
+        from db import get_aktif_otomatik_tespitler
+        _aktif_otomatik_tespitler = get_aktif_otomatik_tespitler()
+    except Exception:
+        _aktif_otomatik_tespitler = []
+
+    _siddet_sira = {"Düşük": 0, "Orta": 1, "Yüksek": 2}
+    for _tespit in _aktif_otomatik_tespitler:
+        _tk = _tespit["kalip_key"]
+        _ts = _tespit.get("siddet", "Orta")
+        if _tk not in _KALIP_TABLOSU:
+            continue  # eski/tanimsiz bir kalip - guvenli sekilde atla
+        _mevcut = _beklenti_ayarlar.get(_tk)
+        if _mevcut is None or _siddet_sira.get(_ts, 1) > _siddet_sira.get(_mevcut, 1):
+            _beklenti_ayarlar[_tk] = _ts
+            _beklenti_kaynak[_tk] = "otomatik" if _mevcut is None else "manuel+otomatik"
 
 _beklenti_log = []
 _beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0, "KRIPTO": 0.0}
@@ -2499,7 +2543,8 @@ if _beklenti_ayarlar:
         _carpan = _siddet_carpan.get(_siddet, 1.0) * _risk_carpan
         for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
             _beklenti_kategori_ayar[_kat] += _puan * _carpan
-        _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet})")
+        _kaynak_etiket = _beklenti_kaynak.get(_kalip_key, "manuel")
+        _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet}, {_kaynak_etiket})")
 
     # v2.0.7.150 (Bahri'nin bulgusu, 18 Ağustos 2026 — "Ort. Optima Skor
     # yine de eskide kalmış"): KÖK NEDEN bulundu - birçok Döviz/Maden/
@@ -3962,7 +4007,10 @@ if page=="Ana Sayfa":
                 r4.metric("1A Getiri %",  fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
                 r5.metric("Yillik Vol %", fmt_tr(d['vol'],1)+"%")
 
-                _render_skor_pasta_grafigi(d, sel_row_ana, key_prefix="ana")
+                    # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
+                    # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
+                    # duruyor, farkli bir grafik sekliyle - 3D SVG - istenirse
+                    # kolayca geri eklenebilir).
 
                 sig_color = SIG_COLORS.get(sig_cls, "#666")
 
@@ -4196,7 +4244,7 @@ if page=="Ana Sayfa":
 
             parcalar = [f'<svg viewBox="0 0 {genislik} {yukseklik}" width="100%" '
                         f'xmlns="http://www.w3.org/2000/svg" style="font-family:Segoe UI,Arial,sans-serif;">']
-            parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">{_html_esc(baslik)}</text>')
+            parcalar.append(f'<text x="{genislik/2:.1f}" y="26" font-size="15" font-weight="700" fill="#1b2a4a" text-anchor="middle">{_html_esc(baslik)}</text>')
 
             for w in sirali:
                 a0, a1, renk = w["a0"], w["a1"], w["renk"]
@@ -4331,7 +4379,7 @@ if page=="Ana Sayfa":
                 }
                 _bilesim_renkler = [_bilesim_renk_harita.get(k, "#6b7280") for k in _bilesim_etiket]
                 st.markdown(_3d_pasta_svg(_bilesim_etiket, _bilesim_deger, _bilesim_renkler,
-                                            baslik="Optima Skor Bileşimi (Ağırlıklı Ort.)",
+                                            baslik="Bütçe Sepetinin Optima Skor Bileşimi",
                                             baslangic_aci=-180.0),
                            unsafe_allow_html=True)
             else:
@@ -4344,20 +4392,52 @@ if page=="Ana Sayfa":
         # "13 sene önceki bir olayı bugüne örnek göstermek anlamsız") -
         # _KALIP_ACIKLAMA zaten çok-olaylı akademik çalışmalara atıfta
         # bulunan istatistiksel ifadeyi içeriyor, ayrı bir satıra gerek yok.
+        # v2.0.7.154: otomatik tespit edilen kalıplar için haber kaynağı +
+        # "İptal Et" butonu eklendi - "hemen otomatik uygula" seçimiyle
+        # ÇELİŞMEZ (uygulama zaten olmuş), bu UYGULANDIKTAN SONRA yanlış
+        # bir tespiti düzeltme mekanizmasıdır.
         if _beklenti_ayarlar:
             st.divider()
             st.markdown("**Beklenti Modu — Aktif Varsayımlar ve Gerekçeleri**")
             for _kalip_key, _siddet in _beklenti_ayarlar.items():
+                _kaynak_etiket2 = _beklenti_kaynak.get(_kalip_key, "manuel")
+                _kaynak_gosterim = {
+                    "manuel": "👤 elle işaretlendi",
+                    "otomatik": "🤖 otomatik tespit edildi",
+                    "manuel+otomatik": "👤+🤖 elle işaretlendi + otomatik tespit doğruladı",
+                }.get(_kaynak_etiket2, _kaynak_etiket2)
                 st.markdown(
-                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
+                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet, {_kaynak_gosterim}): "
                     f"{_KALIP_ACIKLAMA[_kalip_key]}"
                 )
+                if "otomatik" in _kaynak_etiket2:
+                    for _tespit in _aktif_otomatik_tespitler:
+                        if _tespit["kalip_key"] != _kalip_key:
+                            continue
+                        _tc1, _tc2 = st.columns([5, 1])
+                        with _tc1:
+                            st.caption(
+                                f"📰 {_tespit.get('haber_kaynak','')}: "
+                                f"[{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')}) "
+                                f"— AI gerekçesi: {_tespit.get('ai_gerekce','')}")
+                        with _tc2:
+                            if st.button("İptal Et", key=f"tespit_iptal_{_tespit['id']}"):
+                                try:
+                                    from db import otomatik_tespit_iptal_et
+                                    otomatik_tespit_iptal_et(_tespit["id"])
+                                    st.success("Tespit iptal edildi.")
+                                    st.rerun()
+                                except Exception as _iptal_err:
+                                    st.error(f"İptal edilemedi: {_iptal_err}")
             st.caption(
                 "Yukarıdaki yön ve büyüklük ilişkileri, tek bir olaya değil, "
                 "onlarca yıl ve çok sayıda olayı kapsayan akademik panel/olay "
                 "çalışmalarına (event study) dayanır — ama gelecekteki her "
                 "olay öncekilerle birebir aynı büyüklükte gerçekleşmez, bu "
                 "istatistiksel bir eğilimdir, kesin bir tahmin değildir. "
+                "Otomatik tespitler, anahtar kelime ön-filtresi + yapay zeka "
+                "doğrulamasıyla ONAY BEKLENMEDEN uygulanır (yanlış bir tespit "
+                "fark edersen yukarıdaki 'İptal Et' ile geri alabilirsin). "
                 "Yatırım tavsiyesi değildir."
             )
 
@@ -4890,7 +4970,10 @@ elif page=="Portföyüm":
             _m4.metric("1A Getiri %", fmt_tr_isaretli(_d['ret1m'],2,yuzde=True))
             _m5.metric("Yıllık Vol %",fmt_tr(_d['vol'],1)+"%")
 
-            _render_skor_pasta_grafigi(_d, _sr, key_prefix="pf")
+                # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
+                # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
+                # duruyor, farkli bir grafik sekliyle - 3D SVG - istenirse
+                # kolayca geri eklenebilir).
 
             _sc = SIG_COLORS.get(_sig_cls,"#666")
 
@@ -5249,7 +5332,10 @@ elif page in CAT:
     r4.metric("1A Getiri %",fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
     r5.metric("Yıllık Vol %",fmt_tr(d['vol'],1)+"%")
 
-    _render_skor_pasta_grafigi(d, sel_row, key_prefix=f"cat_{page}")
+        # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
+        # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
+        # duruyor, farkli bir grafik sekliyle - 3D SVG - istenirse
+        # kolayca geri eklenebilir).
 
     sig_color=SIG_COLORS.get(sig_cls,"#666")
 

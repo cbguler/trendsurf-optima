@@ -309,6 +309,29 @@ def init_db():
         unit_type     TEXT    DEFAULT 'Adet'
     )""")
 
+    # v2.0.7.154 (Bahri'nin talebi, 18 Ağustos 2026): Beklenti Modu'nun
+    # otomatik haber izleme katmanı - haber_izleme.py (GitHub Actions,
+    # 10 dakikada bir) bu tabloya yazar, app.py okuyup Optima Skor'a
+    # OTOMATİK uygular (Bahri'nin seçimi: "hemen otomatik uygula").
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS beklenti_otomatik_tespit (
+        id                SERIAL PRIMARY KEY,
+        kalip_key         TEXT NOT NULL,
+        siddet            TEXT NOT NULL,
+        haber_basligi     TEXT,
+        haber_url         TEXT,
+        haber_kaynak      TEXT,
+        ai_gerekce        TEXT,
+        tespit_zamani     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        gecerlilik_bitis  TIMESTAMP NOT NULL,
+        kullanici_iptal   INTEGER NOT NULL DEFAULT 0
+    )""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS haber_islenmis (
+        haber_url    TEXT PRIMARY KEY,
+        islenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
     # sessions tablosu
     c.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
@@ -556,6 +579,101 @@ def get_intraday_overlay(freshness_minutes: int = 45) -> dict:
             "ret1m": _rv(r, "ret1m", 5),
         }
     return sonuc
+
+
+# ══════════════════════════════════════════════════════════════
+# Beklenti Modu — Otomatik Haber Tespiti (v2.0.7.154)
+# ══════════════════════════════════════════════════════════════
+
+def haber_islendi_mi(url: str) -> bool:
+    """haber_izleme.py'nin AYNI haberi tekrar tekrar islememesi icin -
+    her calismada once bu kontrol edilir."""
+    try:
+        row = get_conn().execute(
+            "SELECT 1 FROM haber_islenmis WHERE haber_url=?", (url,)
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
+def haber_islendi_isaretle(url: str):
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO haber_islenmis (haber_url) VALUES (?) "
+            "ON CONFLICT (haber_url) DO NOTHING", (url,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] haber_islendi_isaretle hata: {e}", file=sys.stderr)
+
+
+def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,
+                          haber_url: str, haber_kaynak: str, ai_gerekce: str,
+                          gecerlilik_saat: int = 48):
+    """haber_izleme.py, AI dogrulamasi basarili olunca bunu cagirir.
+    gecerlilik_saat: bu tespitin kac saat sonra otomatik "suresi dolmus"
+    sayilacagi - olay etkileri kalici degildir, zamanla sonmelidir."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO beklenti_otomatik_tespit "
+            "(kalip_key, siddet, haber_basligi, haber_url, haber_kaynak, "
+            "ai_gerekce, gecerlilik_bitis) "
+            "VALUES (?,?,?,?,?,?, now() + interval '%s hours')" % int(gecerlilik_saat),
+            (kalip_key, siddet, haber_basligi, haber_url, haber_kaynak, ai_gerekce))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] otomatik_tespit_ekle hata: {e}", file=sys.stderr)
+        return False
+
+
+def get_aktif_otomatik_tespitler() -> list:
+    """app.py bunu her sayfa yuklemesinde cagirir - suresi gecmemis VE
+    kullanici tarafindan iptal edilmemis tum otomatik tespitleri doner.
+    Ayni kalip icin BIRDEN FAZLA aktif tespit varsa (ayni olay turunden
+    birden fazla haber), EN YUKSEK siddetli olan kullanilir - cagiran
+    taraf bunu kendi yapar, burada ham liste donuyor."""
+    try:
+        rows = get_conn().execute(
+            "SELECT id, kalip_key, siddet, haber_basligi, haber_url, "
+            "haber_kaynak, ai_gerekce, tespit_zamani FROM beklenti_otomatik_tespit "
+            "WHERE gecerlilik_bitis > now() AND kullanici_iptal = 0 "
+            "ORDER BY tespit_zamani DESC"
+        ).fetchall()
+    except Exception:
+        return []
+    sonuc = []
+    for r in rows:
+        def _rv(k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+        sonuc.append({
+            "id": _rv("id", 0), "kalip_key": _rv("kalip_key", 1),
+            "siddet": _rv("siddet", 2), "haber_basligi": _rv("haber_basligi", 3),
+            "haber_url": _rv("haber_url", 4), "haber_kaynak": _rv("haber_kaynak", 5),
+            "ai_gerekce": _rv("ai_gerekce", 6), "tespit_zamani": _rv("tespit_zamani", 7),
+        })
+    return sonuc
+
+
+def otomatik_tespit_iptal_et(tespit_id: int):
+    """Kullanici (Ana Sayfa'daki "Iptal Et" butonu) bir otomatik tespiti
+    yanlis bulursa - bu, "hemen otomatik uygula" secimiyle celismez,
+    UYGULANDIKTAN SONRA duzeltme mekanizmasidir."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE beklenti_otomatik_tespit SET kullanici_iptal=1 WHERE id=?",
+            (tespit_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] otomatik_tespit_iptal_et hata: {e}", file=sys.stderr)
+        return False
 
 
 if __name__ == "__main__":

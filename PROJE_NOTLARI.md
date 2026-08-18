@@ -389,6 +389,59 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ, YENİ ALTYAPI GEREKTİRİYOR] v2.0.7.154
+  (18 Ağustos 2026, Bahri'nin talebi): Beklenti Modu'nun OTOMATİK haber
+  izleme katmanı ilk kez inşa edildi.** Bahri'nin seçimleri: (1) haber
+  sınıflandırması "anahtar kelime ön-filtre + AI doğrulama" karışımı,
+  (2) doğrulanan tespitler ONAY BEKLENMEDEN hemen otomatik uygulanır.
+  **Mimari:**
+  1. **`haber_izleme.py`** (yeni, standalone script) - 5 GERÇEK, TEST
+     EDİLMİŞ RSS kaynağını (AA Ekonomi, BBC World, Al Jazeera,
+     Investing.com TR, BloombergHT - hepsi doğrudan curl ile HTTP 200
+     doğrulandı) okur, 6 kalıp için anahtar kelime ön-filtresi uygular,
+     eşleşenleri Claude API (Sonnet) ile doğrular ("gerçekten önemli mi,
+     hangi şiddette - şüphede kal, false de"), doğrulananları
+     Supabase'e yazar. **Canlı test edildi:** gerçek RSS'lerden BBC'nin
+     "Russia's drone warning" haberini doğru şekilde jeopolitik olarak
+     yakaladı; Al Jazeera'nın "Brezilya'da petrol keşfi" haberi anahtar
+     kelime ile yanlışlıkla eşleşti (bu TAM OLARAK AI doğrulama adımının
+     var olma sebebi - yeni keşif, arz şoku DEĞİL, AI bunu reddetmeli).
+  2. **`db.py`** - iki yeni tablo: `beklenti_otomatik_tespit` (tespitler,
+     geçerlilik süresi 48 saat varsayılan, kullanıcı iptal bayrağı) ve
+     `haber_islenmis` (aynı haberi tekrar işlememe için dedup).
+  3. **`.github/workflows/haber_izleme.yml`** - 10 dk'da bir (GitHub'ın
+     kendi cron'u best-effort yedek - firsat_radari.yml/send_email.yml
+     ile AYNI kısıt, güvenilir zamanlama için cron-job.org harici
+     tetikleyicisi KURULMASI ÖNERİLİR ama bu oturumda kurulmadı).
+  4. **`app.py`** - manuel (sidebar) seçimler + otomatik tespitler
+     BİRLEŞTİRİLİYOR (aynı kalıp için ikisi de varsa YÜKSEK şiddet
+     kazanır, mock veriyle doğrulandı). Ana Sayfa'da her otomatik
+     tespit için haber linki + AI gerekçesi + **"İptal Et"** butonu -
+     "hemen otomatik uygula" ile ÇELİŞMEZ, bu UYGULANDIKTAN SONRA
+     düzeltme mekanizmasıdır.
+  **KRİTİK - Bahri'nin yapması gerekenler (push'tan SONRA):**
+  1. GitHub Secrets'a `ANTHROPIC_API_KEY` eklenmesi gerekiyor (Claude
+     API için - EVDS_API_KEY ile AYNI yerde, repo Settings > Secrets >
+     Actions). Bu OLMADAN AI doğrulama adımı çalışmaz (sessizce
+     `eslesme=False` döner, hiçbir tespit Supabase'e yazılmaz - güvenli
+     taraf, ama özellik de çalışmaz).
+  2. requirements.txt'ye `feedparser` ve `anthropic` eklendi - Streamlit
+     Cloud'un bunları kurması gerekiyor (otomatik olmalı, ama ilk
+     deploy'da biraz gecikme olabilir).
+  3. (Önerilir, opsiyonel) cron-job.org ile 10 dk'lık güvenilir dış
+     tetikleyici kurulması - firsat_radari için zaten yapılmış olan AYNI
+     yöntem.
+  **AÇIKÇA ERTELENEN (Bahri'nin verdiği örnekler, ayrı bir iş kalemi
+  olarak not edildi, henüz kod yazılmadı):**
+  - ENAG/TÜİK enflasyon verisi güvenilirlik farkı - bu bir "olay kalıbı"
+    değil, veri KALİTESİ meselesi, ayrı ele alınmalı.
+  - Sanayi göçü (tekstilin Mısır'a taşınması gibi) - yavaş, yapısal bir
+    trend, anlık haber tepkisiyle YAKALANAMAZ, temel analiz (F/K,PD/DD)
+    göstergeleriyle ilişkilendirilmeli.
+  **DOĞRULANMADI** (canlı test gerekiyor - özellikle ANTHROPIC_API_KEY
+  eklendikten sonra gerçek bir AI doğrulama döngüsünün çalıştığı
+  kontrol edilmeli).
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.152 (18 Ağustos 2026, Bahri'nin
   talebi — iki yönlü genişletme, derinlemesine araştırma sonrası).**
   (1) **Tekil tarihli referans olaylar KALDIRILDI.** Bahri haklı olarak

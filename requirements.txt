@@ -41,3 +41,10 @@ extra-streamlit-components>=0.1.80
 # (evds3.tcmb.gov.tr/igmevdsms-dis/) ve auth header'ini dogru sekilde
 # yonetiyor - kendi HTTP istemcimizi yazmaktan daha guvenilir.
 evds>=0.4.0
+# v2.0.7.154 (18 Agustos 2026, Bahri'nin talebi): Beklenti Modu'nun
+# otomatik haber izleme katmani icin - feedparser RSS haber
+# kaynaklarini (AA/BBC/Al Jazeera/Investing.com/BloombergHT) okur,
+# anthropic ise anahtar kelime on-filtresinden gecen haberleri
+# Claude API ile dogrulamak icin (haber_izleme.py, GitHub Actions).
+feedparser>=6.0.10
+anthropic>=0.34.0
