@@ -3378,6 +3378,106 @@ if page=="Ana Sayfa":
             print(f"[timing][AnaSayfa] BIST canli yenileme (40 ticker): "
                   f"{_t_ana.perf_counter() - _t_bist0:.3f}s")
 
+    # ══════════════════════════════════════════════════════════════
+    # BEKLENTİ MODU (v2.0.7.148, Bahri'nin talebi, 18 Ağustos 2026)
+    # ══════════════════════════════════════════════════════════════
+    # Tasarım (Bahri'nin onayladığı): (1) varsayılan KAPALI, uygulama hiç
+    # değişmez; (2) kullanıcı elle hangi kalıpların şu an aktif olduğunu
+    # işaretler (hiçbir otomatik haber sınıflandırma/AI YOK - karar
+    # kullanıcıda kalır, ben (Claude) kendi hayali zincirimi bile yanlış
+    # kurmuştum, otomatik sınıflandırma çok daha riskli olurdu);
+    # (3) Optima Skor'daki ayarlama ŞEFFAF gösterilir, gizli değil;
+    # (4) ayarlama büyüklüğü kullanıcının Risk Toleransı ile orantılı.
+    #
+    # Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik
+    # Risk Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN
+    # ilişkilerdir - büyüklük/zamanlama literatürde net değildir, bu
+    # yüzden burada KÜÇÜK, temkinli puan ayarlamaları kullanılıyor.
+    # DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY
+    # FİYATI YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL
+    # zayıflar" bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
+    _KALIP_TABLOSU = {
+        "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
+        "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
+        "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
+    }
+    _KALIP_ISIM = {
+        "jeopolitik": "Jeopolitik gerilim/çatışma",
+        "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
+        "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
+    }
+    _KALIP_ACIKLAMA = {
+        "jeopolitik": (
+            "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
+            "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
+            "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
+            "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
+        ),
+        "petrol": (
+            "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
+            "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
+            "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
+            "yol açabilir."
+        ),
+        "fed": (
+            "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
+            "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
+            "ve risk iştahının azalmasına yol açma eğilimindedir."
+        ),
+    }
+
+    with st.expander("Beklenti Modu — küresel/Türkiye olaylarının Optima Skor'a etkisi"):
+        st.caption(
+            "Varsayılan olarak KAPALI — uygulama hiçbir şekilde değişmez. "
+            "Açtığınızda, aşağıda işaretlediğiniz durumlara göre Optima Skor'da "
+            "ŞEFFAF bir ayarlama uygulanır. **Hiçbir otomatik haber sınıflandırması "
+            "veya yapay zeka yorumu YOK** — karar tamamen sizde, sistem sadece "
+            "işaretlediğiniz varsayımın matematiksel sonucunu hesaplar. Bu bir "
+            "tahmin değildir, sizin varsayımınıza dayalı bir ayarlamadır."
+        )
+        _beklenti_aktif = st.toggle("Beklenti Modunu Aktif Et", value=False, key="beklenti_aktif")
+        _beklenti_ayarlar = {}
+        if _beklenti_aktif:
+            st.markdown("**Şu an aktif olduğunu düşündüğünüz durumları işaretleyin:**")
+            _bk_cols = st.columns(3)
+            for _bk_i, (_kalip_key, _kalip_ad) in enumerate(_KALIP_ISIM.items()):
+                with _bk_cols[_bk_i % 3]:
+                    _isaretli = st.checkbox(_kalip_ad, key=f"bk_{_kalip_key}")
+                    if _isaretli:
+                        _siddet = st.select_slider(
+                            "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
+                            key=f"bk_{_kalip_key}_siddet")
+                        _beklenti_ayarlar[_kalip_key] = _siddet
+                    st.caption(_KALIP_ACIKLAMA[_kalip_key])
+
+    _beklenti_log = []
+    _beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0}
+    if _beklenti_ayarlar:
+        _siddet_carpan = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}
+        _risk_carpan = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
+                        "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
+        for _kalip_key, _siddet in _beklenti_ayarlar.items():
+            _carpan = _siddet_carpan.get(_siddet, 1.0) * _risk_carpan
+            for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
+                _beklenti_kategori_ayar[_kat] += _puan * _carpan
+            _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet})")
+
+        for _kat, _ayar in _beklenti_kategori_ayar.items():
+            if _ayar != 0:
+                _mask_bk = df_uni["Kategori"] == _kat
+                df_uni.loc[_mask_bk, "Optima_Skor"] = (
+                    df_uni.loc[_mask_bk, "Optima_Skor"] + _ayar).clip(0, 100)
+
+        st.warning(
+            f"**Beklenti Modu AKTİF** — {', '.join(_beklenti_log)} işaretlendi "
+            f"(Risk Toleransı: {risk}). Aşağıdaki öneriler bu varsayımlara göre "
+            f"AYARLANMIŞ Optima Skor kullanıyor: Değerli Maden **{_beklenti_kategori_ayar['MADEN']:+.1f}**, "
+            f"Döviz **{_beklenti_kategori_ayar['DOVIZ']:+.1f}**, "
+            f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}** puan. "
+            f"Bu bir tahmin değildir — işaretlediğiniz varsayımın matematiksel "
+            f"sonucudur, gerçek piyasa tepkisi farklı olabilir."
+        )
+
     cat_pools = {}
     _t_pool0 = _t_ana.perf_counter()
     for cat, weight in w.items():
@@ -3967,7 +4067,7 @@ if page=="Ana Sayfa":
             a = math.radians(aci_derece)
             return cx + rx*math.cos(a), cy + ry*math.sin(a)
 
-        def _3d_pasta_svg(etiketler, degerler, renkler, baslik="Kategori Dağılımı", genislik=700, yukseklik=410):
+        def _3d_pasta_svg(etiketler, degerler, renkler, baslik="Kategori Dağılımı", genislik=700, yukseklik=410, baslangic_aci=-90.0):
             toplam = sum(degerler)
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
@@ -3981,7 +4081,7 @@ if page=="Ana Sayfa":
             # ortaya cikamaz. Bu versiyon daha once kullanici tarafindan
             # onaylanmisti.
 
-            acilar, basla = [], -90.0
+            acilar, basla = [], baslangic_aci
             for v in degerler:
                 bit = basla + (v/toplam)*360.0
                 acilar.append((basla, bit))
@@ -4033,6 +4133,33 @@ if page=="Ana Sayfa":
                                  f'<title>{etiketler[w["i"]]}: %{fmt_tr(degerler[w["i"]]/toplam*100,1)}</title></path>')
 
 
+            # v2.0.7.147 (Bahri'nin bulgusu, 18 Ağustos 2026 — Optima Skor
+            # Bileşimi'nde 6 dilim olunca komşu küçük dilimlerin etiketleri
+            # üst üste biniyordu, ör. "Temettü Verimi %0,0" ile "PD/DD
+            # %6,0"): sabit yarıçaplı etiket yerleşimi, açısal olarak
+            # birbirine YAKIN dilimlerde (özellikle küçük/komşu dilimler)
+            # çakışmaya açıktı - Kategori Dağılımı'nda nadiren sorun
+            # olmuyordu çünkü orada genelde 2-3, az sayıda ve büyük dilim
+            # var. Bu artık DEĞERLERDEN BAĞIMSIZ, sağlam bir sistem: açıya
+            # göre sıralanmış etiketler arasında 28°'den DAR açısal boşluk
+            # varsa "sıkışık" sayılır ve bu etiket bir sonraki (daha uzak)
+            # yarıçap kademesine itilir - kademeler dönüşümlü olarak
+            # yakın/uzak arasında geçiş yapar, kaç dilim/hangi değerler
+            # olursa olsun otomatik uyum sağlar. Uzak kademedeki etiketler
+            # için dilime geri bağlayan ince bir çizgi eklendi, hangi
+            # dilime ait olduğu belirsiz kalmasın diye.
+            _sirali_acilar = sorted(dilimler, key=lambda w: w["orta"] % 360)
+            _esik_derece = 28.0
+            _kademe_haritasi, _son_aci_kademe, _kademe_simdi = {}, None, 0
+            for w in _sirali_acilar:
+                _bu_aci = w["orta"] % 360
+                if _son_aci_kademe is not None and (_bu_aci - _son_aci_kademe) % 360 < _esik_derece:
+                    _kademe_simdi = (_kademe_simdi + 1) % 2
+                else:
+                    _kademe_simdi = 0
+                _kademe_haritasi[w["i"]] = _kademe_simdi
+                _son_aci_kademe = _bu_aci
+
             for w in dilimler:
                 rad = math.radians(w["orta"])
                 # v2.0.4.31: On/alt (front-facing, sin(orta)>0) dilimlerin
@@ -4041,10 +4168,17 @@ if page=="Ana Sayfa":
                 # bolgede govde derinlik kadar daha asagiya taşiyor ama
                 # eski formul sabit bir miktar YUKARI cekiyordu (tam ters
                 # yönde). Şimdi on tarafa dogru orantili ek boşluk ekleniyor.
-                lx = cx0 + math.cos(rad)*(rx*1.30)
-                ly = cy0 + math.sin(rad)*(ry*1.30) + derinlik*max(0.0, math.sin(rad))*1.3
+                _kademe_bu = _kademe_haritasi.get(w["i"], 0)
+                _yaricap_carpani = 1.30 + _kademe_bu * 0.26
+                lx = cx0 + math.cos(rad)*(rx*_yaricap_carpani)
+                ly = cy0 + math.sin(rad)*(ry*_yaricap_carpani) + derinlik*max(0.0, math.sin(rad))*1.3
                 yuzde = degerler[w["i"]]/toplam*100
                 hiza = "start" if math.cos(rad) >= 0 else "end"
+                if _kademe_bu > 0:
+                    _bag_x0 = cx0 + math.cos(rad)*(rx*1.02)
+                    _bag_y0 = cy0 + math.sin(rad)*(ry*1.02) + derinlik*max(0.0, math.sin(rad))*1.3
+                    parcalar.append(f'<line x1="{_bag_x0:.1f}" y1="{_bag_y0:.1f}" x2="{lx:.1f}" y2="{ly-4:.1f}" '
+                                     f'stroke="#b7c3d9" stroke-width="1"/>')
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="12.5" fill="#1b2a4a" '
                                  f'text-anchor="{hiza}" font-weight="600">{_html_esc(etiketler[w["i"]])}</text>')
                 parcalar.append(f'<text x="{lx:.1f}" y="{ly+15:.1f}" font-size="11.5" fill="#5a6a8a" '
@@ -4092,19 +4226,47 @@ if page=="Ana Sayfa":
                                         cat_sum["Tutar (₺)"].tolist(),
                                         colors, baslik="Kategori Dağılımı"), unsafe_allow_html=True)
         with _sk_col:
-            if _toplam_agirlik_bilesim > 0:
-                _bilesim_etiket = list(_agirlikli_bilesim.keys())
-                _bilesim_deger = [round(v / _toplam_agirlik_bilesim, 1) for v in _agirlikli_bilesim.values()]
+            # v2.0.7.147 (Bahri'nin bulgusu): sıfıra yuvarlanan bileşenler
+            # (ör. "Temettü Verimi %0,0") sıfır genişlikte bir dilim
+            # yaratıp komşusuyla aynı noktada çakışıyordu (tek varlık
+            # pasta grafiğindeki %100 hatasıyla AYNI kök sınıf) - artık
+            # 0'a yuvarlanan bileşenler grafiğe hiç dahil edilmiyor.
+            _bilesim_ham = {k: v / _toplam_agirlik_bilesim for k, v in _agirlikli_bilesim.items()} \
+                if _toplam_agirlik_bilesim > 0 else {}
+            _bilesim_ham = {k: v for k, v in _bilesim_ham.items() if round(v, 1) > 0}
+            if _bilesim_ham:
+                _bilesim_etiket = list(_bilesim_ham.keys())
+                _bilesim_deger = [round(v, 1) for v in _bilesim_ham.values()]
                 _bilesim_renk_harita = {
                     "RSI Bölgesi": "#1d4ed8", "Momentum": "#15803d", "Volatilite": "#b45309",
                     "F/K": "#7e22ce", "PD/DD": "#a21caf", "Temettü Verimi": "#0e7490",
                 }
                 _bilesim_renkler = [_bilesim_renk_harita.get(k, "#6b7280") for k in _bilesim_etiket]
                 st.markdown(_3d_pasta_svg(_bilesim_etiket, _bilesim_deger, _bilesim_renkler,
-                                            baslik="Optima Skor Bileşimi (Ağırlıklı Ort.)"),
+                                            baslik="Optima Skor Bileşimi (Ağırlıklı Ort.)",
+                                            baslangic_aci=-180.0),
                            unsafe_allow_html=True)
             else:
                 st.caption("Skor bileşimi için yeterli veri yok.")
+
+        # v2.0.7.148 (Bahri'nin talebi): Beklenti Modu aktifse, pasta
+        # grafiklerinin ALTINDA hangi varsayımların işaretlendiğini ve
+        # neden bu yönde bir ayarlama yapıldığını açıklayan bir bölüm.
+        if _beklenti_ayarlar:
+            st.divider()
+            st.markdown("**Beklenti Modu — Aktif Varsayımlar ve Gerekçeleri**")
+            for _kalip_key, _siddet in _beklenti_ayarlar.items():
+                st.markdown(
+                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
+                    f"{_KALIP_ACIKLAMA[_kalip_key]}"
+                )
+            st.caption(
+                "Bu açıklamalar akademik literatürde desteklenen genel YÖN "
+                "ilişkileridir (kaynak: Caldara-Iacoviello Jeopolitik Risk "
+                "Endeksi ve ilişkili çalışmalar) — büyüklük ve zamanlama kesin "
+                "değildir, bu yüzden ayarlamalar bilinçli olarak küçük "
+                "tutulmuştur. Yatırım tavsiyesi değildir."
+            )
 
 # ══════════════════════════════════════════════════════════════
 # PORTFÖYÜM

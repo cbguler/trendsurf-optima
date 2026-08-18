@@ -389,6 +389,53 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.147 (18 Ağustos 2026, Bahri'nin
+  bulgusu): Optima Skor Bileşimi grafiğindeki etiket çakışması
+  DEĞERLERDEN BAĞIMSIZ, kalıcı bir sistemle çözüldü.** 6 dilim olunca
+  (RSI/Momentum/Volatilite/F/K/PD/DD/Temettü) komşu küçük dilimlerin
+  etiketleri üst üste biniyordu. İki ayrı düzeltme: (1) sıfıra
+  yuvarlanan bileşenler (ör. "Temettü Verimi %0,0") artık grafiğe hiç
+  dahil edilmiyor - sıfır genişlikte dilim, komşusuyla aynı noktada
+  çakışma yaratıyordu (%100 tek dilim hatasıyla AYNI kök sınıf).
+  (2) Açıya göre sıralanmış etiketler arasında 28°'den dar boşluk varsa
+  o etiket bir sonraki (daha uzak) yarıçap kademesine itiliyor - kaç
+  dilim/hangi değerler olursa olsun otomatik uyum sağlıyor (mock veriyle
+  doğrulandı: PD/DD ve F/K arasındaki 24° boşluk doğru tespit edilip
+  ayrıştırıldı). Uzak kademedeki etiketler için dilime geri bağlayan
+  ince bir çizgi eklendi. Ayrıca `_3d_pasta_svg()`'ye `baslangic_aci`
+  parametresi eklendi - Optima Skor Bileşimi grafiği artık 90° farklı
+  bir açıdan başlıyor (Bahri'nin "90° sola çevirelim" talebi).
+
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.148 (18 Ağustos 2026, Bahri'nin
+  talebi): "Beklenti Modu" ilk kez inşa edildi ve aktif hale getirildi.**
+  Ana Sayfa'da yeni bir expander: varsayılan KAPALI (uygulama hiç
+  değişmez). Açılınca kullanıcı 3 kalıptan (Jeopolitik gerilim/çatışma,
+  Petrol arz şoku, Merkez bankası şahin sürprizi) hangilerinin şu an
+  aktif olduğunu + şiddetini (Düşük/Orta/Yüksek) elle işaretler -
+  **hiçbir otomatik haber sınıflandırma/AI YOK**, karar tamamen
+  kullanıcıda. İşaretlenen kalıplara göre `df_uni`'nin Optima_Skor'u
+  (MADEN/DOVIZ/BIST kategorilerinde), kullanıcının Risk Toleransı
+  kaydırıcısıyla ORANTILI olarak ayarlanıyor - bu ayarlama `cat_pools`
+  oluşturulmadan ÖNCE uygulanıyor, böylece mevcut filtreleme/seçim
+  mantığına hiç dokunulmadan doğal olarak akıyor. Ayarlama HER ZAMAN
+  şeffaf gösteriliyor (st.warning ile tam puan dökümü) - hiçbir gizli
+  etki yok. Pasta grafiklerinin ALTINDA, aktif kalıpların akademik
+  kaynaklı gerekçe açıklamaları gösteriliyor (Bahri'nin "pie chart'ın
+  altında haber ve açıklamalar" talebi).
+  **DOVİZ yönü dikkatle düşünüldü:** TL zayıflarsa USDTRY/EURTRY FİYATI
+  YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL zayıflar"
+  senaryosunda DOVIZ skoru artırılıyor (azaltılmıyor) - ilk mesajdaki
+  hatalı yönlendirmenin (kendi hayali örneğimdeki gibi) tekrarlanmaması
+  için özellikle kontrol edildi.
+  **Kalıp puan tablosu (Orta şiddet, Risk=Orta taban değerler):**
+  Jeopolitik: MADEN+8/DOVIZ+6/BIST−6; Petrol: MADEN+3/DOVIZ+5/BIST−3;
+  Fed şahin: MADEN−5/DOVIZ+6/BIST−5. Mock veriyle doğrulandı (Yüksek
+  şiddet + Yüksek risk ≈ 1,95x taban değer).
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası Beklenti
+  Modu'nun açılıp kapanabildiği, işaretlenen kalıplara göre önerilerin
+  gerçekten değiştiği ve açıklamaların doğru göründüğü kontrol
+  edilmeli.
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.146 (18 Ağustos 2026, Bahri'nin
   ikinci bulgusu — "devasa boşluk" hâlâ duruyordu): kök neden nihayet
   bulundu.** Streamlit'in KENDİ varsayılan `.block-container` üst dolgusu
