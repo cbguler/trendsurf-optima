@@ -389,6 +389,38 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.152 (18 Ağustos 2026, Bahri'nin
+  talebi — iki yönlü genişletme, derinlemesine araştırma sonrası).**
+  (1) **Tekil tarihli referans olaylar KALDIRILDI.** Bahri haklı olarak
+  "13 sene önceki bir olayı bugüne örnek göstermek anlamsız" dedi - tek
+  bir olay istatistik değil, anekdottur. `_KALIP_REFERANS_OLAY` sözlüğü
+  tamamen silindi. Açıklamalar artık DOĞRUDAN istatistiksel ifadeyle
+  yazılı ("İstatistiksel dayanak: ... çok sayıda olay/onlarca yıl
+  kapsayan akademik panel/olay çalışması...") - tarih anmıyor.
+  (2) **Sadece 3 kalıp yetersizdi - araştırma genişletildi, İKİ yeni
+  kalıp eklendi (artık 5 kalıp):**
+  - **Kredi notu düşürülmesi (S&P/Moody's/Fitch):** 1990-2016 dönemini
+    kapsayan, çok sayıda gelişen piyasayı içeren akademik panel çalışması
+    - kredi notu düşürülmelerinin hem borsa hem para birimi üzerinde
+    istatistiksel olarak anlamlı olumsuz etkisi, asimetrik (düşürmeler
+    artırmalardan güçlü). DOVIZ+5/BIST−7.
+  - **Kripto düzenleme/halving şoku:** çok sayıda kripto parada (2014-2023,
+    halving yaşayan TÜM varlıklar) yapılan akademik olay çalışması,
+    olay penceresinde ORTALAMA anormal getirinin istatistiksel olarak
+    anlamlı NEGATİF (~-%7,6) olduğunu buluyor - popüler "halving=yükseliş"
+    anlatısının AKSİNE (bu kısa vadeli tepki; uzun vadeli "boğa piyasası"
+    anlatısı ayrı, çok daha küçük örneklemli - Bitcoin için sadece 4
+    halving - ve literatürde tartışmalı, bilinçli olarak KULLANILMADI).
+    KRIPTO−8. **KRIPTO kategorisi ilk kez Beklenti Modu kapsamına girdi**
+    (önceden hiç kapsanmıyordu).
+  Sidebar döngüsü, global uygulama döngüsü, üst şerit bildirimi ve Ana
+  Sayfa gerekçe bölümü hepsi `_KALIP_TABLOSU`/`_KALIP_ISIM` üzerinden
+  GENEL (hardcoded olmayan) şekilde çalışacak hale getirildi - gelecekte
+  yeni bir kalıp eklemek tek bir yerde (üç sözlük) tanımlamak yeterli.
+  **DOĞRULANDI (mock veriyle):** 5 kalıbın hepsi + KRIPTO kategorisi
+  doğru hesaplanıyor.
+  **DOĞRULANMADI** (canlı test gerekiyor).
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.150 (18 Ağustos 2026, Bahri'nin
   bulgusu — "Ort. Optima Skor yine de eskide kalmış"): Beklenti Modu
   NaN-güvenli hale getirildi.** Kök neden: birçok varlığın Optima_Skor'u

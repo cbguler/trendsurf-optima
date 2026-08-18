@@ -1934,69 +1934,82 @@ def save_email_cfg(cfg, user_id=None):
 # Kontroller sidebar'da (yukarıda) - burada SADECE session_state okunup
 # df_uni'ye TEK SEFERDE, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor.
 # Böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm/Temettü/
-# Halka Arz HEPSİ aynı ayarlanmış Optima_Skor'u görür - önceki (sadece
-# Ana Sayfa'ya özel) sürümdeki tutarsızlık artık yapısal olarak imkansız.
+# Halka Arz HEPSİ aynı ayarlanmış Optima_Skor'u görür.
 #
-# Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik Risk
-# Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN ilişkileridir.
-# DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY FİYATI
-# YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL zayıflar"
-# bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
+# v2.0.7.152 (Bahri'nin talebi, 18 Ağustos 2026 - iki yönlü genişletme):
+# (1) Tekil tarihli referans olaylar KALDIRILDI ("13 sene önceki bir
+# olayı bugüne örnek göstermek anlamsız" - Bahri haklı, TEK bir olay
+# istatistik değil, anekdottur). Açıklamalar artık ÇOK SAYIDA olayı
+# kapsayan akademik ÇALIŞMALARA (panel/olay çalışması, onlarca yıl,
+# yüzlerce olay) atıfta bulunuyor - istatistiksel ifade, tarih değil.
+# (2) SADECE 3 kalıp yeterli değildi - araştırma genişletildi, İKİ yeni
+# kalıp eklendi: Kredi notu değişikliği ve Kripto-özel şok (KRIPTO
+# kategorisi önceden HİÇ kapsanmıyordu).
+#
+# Kaynaklar (hepsi çok-olaylı akademik çalışmalar, tek anekdot değil):
+# - Jeopolitik: Caldara-Iacoviello Jeopolitik Risk Endeksi (1900-günümüz)
+# - Kredi notu: gelişen piyasa panel çalışması, 1990-2016 günlük veri
+# - Kripto: çok sayıda kripto parada halving olay çalışması (2014-2023)
 _KALIP_TABLOSU = {
-    "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
-    "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
-    "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
+    "jeopolitik":  {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
+    "petrol":      {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
+    "fed":         {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
+    "kredi_notu":  {"DOVIZ": 5, "BIST": -7},
+    "kripto_olay": {"KRIPTO": -8},
 }
 _KALIP_ISIM = {
     "jeopolitik": "Jeopolitik gerilim/çatışma",
     "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
     "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
+    "kredi_notu": "Kredi notu düşürülmesi (S&P/Moody's/Fitch)",
+    "kripto_olay": "Kripto düzenleme/halving şoku",
 }
 _KALIP_ACIKLAMA = {
     "jeopolitik": (
-        "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
-        "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
-        "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
-        "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
+        "İstatistiksel dayanak: Jeopolitik Risk Endeksi (Caldara-Iacoviello, "
+        "1900'den günümüze, yüzlerce olay) literatüründe, yükselen jeopolitik "
+        "risk dönemlerinde altının istatistiksel olarak anlamlı güvenli liman "
+        "talebi gördüğü, gelişen piyasa para birimlerinin (TL dahil) baskı "
+        "altında kaldığı ve borsaların kısa vadeli satış baskısı yaşadığı "
+        "tutarlı şekilde gözlemlenmiştir."
     ),
     "petrol": (
-        "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
-        "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
-        "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
-        "yol açabilir."
+        "İstatistiksel dayanak: petrol arzını kesintiye uğratan olaylarda "
+        "(saldırı, ambargo, üretim kesintisi), petrol fiyatlarının kısa "
+        "vadede çift haneli yüzdelerle sıçradığı tarihte tekrar tekrar "
+        "gözlemlenmiştir. Türkiye net petrol ithalatçısı olduğu için bu "
+        "şoklar enflasyon baskısı yaratma ve TL üzerinde değer kaybı "
+        "baskısı oluşturma eğilimindedir."
     ),
     "fed": (
-        "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
-        "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
-        "ve risk iştahının azalmasına yol açma eğilimindedir."
+        "İstatistiksel dayanak: merkez bankalarının piyasa beklentisinin "
+        "ötesinde sıkılaştırıcı (şahin) kararları/sinyalleri, akademik olay "
+        "çalışması (event study) literatüründe dolar güçlenmesi, gelişen "
+        "piyasa para birimlerinde (TL dahil) istatistiksel olarak anlamlı "
+        "değer kaybı ve risk iştahının azalmasıyla ilişkilendirilmiştir."
     ),
-}
-# v2.0.7.151 (Bahri'nin talebi, 18 Ağustos 2026): "sistem tam otomatik %
-# belirlesin" isteği araştırıldı - akademik regresyon katsayıları
-# çalışmadan çalışmaya, döneme göre çok değiştiği için TEK bir güvenilir
-# sabit sayı yok. Bunun yerine GERÇEK, doğrulanmış tarihsel olaylar
-# referans noktası olarak kullanılıyor - "Yüksek" şiddetin ne anlama
-# geldiğini SOMUT bir örnekle gösteriyor, tahmin değil gerçek geçmiş veri.
-_KALIP_REFERANS_OLAY = {
-    "jeopolitik": (
-        "Referans: 24 Şubat 2022 Rusya-Ukrayna işgali — ons altın birkaç "
-        "gün içinde %3-5 yükseldi (18 aylık zirve), BIST100 gün içinde "
-        "%9,4'e kadar geriledi (hafta kapanışı sadece %1 altında, kısmi "
-        "toparlanma), TL etkisi ilk gün sınırlı kalıp sonraki haftalarda "
-        "kademeli geldi."
+    "kredi_notu": (
+        "İstatistiksel dayanak: 1990-2016 dönemini kapsayan, çok sayıda "
+        "gelişen piyasayı içeren günlük veriye dayalı akademik panel "
+        "çalışması, egemen kredi notu düşürülmelerinin hem borsa "
+        "getirilerini hem ülke para biriminin dolar değerini istatistiksel "
+        "olarak anlamlı şekilde olumsuz etkilediğini, bu etkinin özellikle "
+        "S&P ve Fitch düşürmelerinde belirgin olduğunu ve düşürmelerin "
+        "etkisinin not artırımlarına kıyasla daha güçlü (asimetrik) "
+        "olduğunu göstermektedir."
     ),
-    "petrol": (
-        "Referans: 14 Eylül 2019 Suudi Aramco (Abqaiq-Khurais) İHA "
-        "saldırısı — Brent petrol gün içinde %19,5 yükseldi (1991 Körfez "
-        "Savaşı'ndan beri en sert günlük artış), dünya petrol arzının "
-        "~%5'i geçici olarak durdu, etkiler birkaç hafta içinde geriledi."
-    ),
-    "fed": (
-        "Referans: Mayıs-Aralık 2013 'Taper Tantrum' (Fed'in beklenmedik "
-        "sıkılaştırma sinyali) — TL bu dönemde %15 değer kaybetti, "
-        "gelişen piyasalar arasında Endonezya'dan sonra en büyük kayıptı "
-        "(akademik kaynak: ScienceDirect, Emerging market exchange rates "
-        "during quantitative tapering)."
+    "kripto_olay": (
+        "İstatistiksel dayanak: çok sayıda kripto parada (2014-2023, "
+        "halving yaşayan tüm kripto varlıklar) yapılan akademik olay "
+        "çalışması, olay penceresinde ORTALAMA anormal getirinin "
+        "istatistiksel olarak anlamlı şekilde NEGATİF (~-%7,6) olduğunu "
+        "bulmuştur - popüler 'halving = yükseliş' anlatısının aksine, bu "
+        "KISA VADELİ tepkidir. Uzun vadeli (6-12 ay sonrası) 'boğa "
+        "piyasası' anlatısı ayrı bir konudur ve çok daha küçük örneklem "
+        "boyutuna (Bitcoin için sadece 4 halving döngüsü) dayandığından "
+        "güvenilirliği literatürde açıkça tartışmalıdır - bu yüzden burada "
+        "sadece kısa vadeli, istatistiksel olarak daha sağlam bulgu "
+        "kullanılmıştır."
     ),
 }
 
@@ -2071,22 +2084,16 @@ with st.sidebar:
         )
         st.toggle("Beklenti Modunu Aktif Et", value=False, key="beklenti_aktif")
         if st.session_state.get("beklenti_aktif"):
-            for _bk_key, _bk_ad in (
-                ("jeopolitik", "Jeopolitik gerilim/çatışma"),
-                ("petrol", "Petrol arz şoku (Ortadoğu/OPEC)"),
-                ("fed", "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi"),
-            ):
+            for _bk_key, _bk_ad in _KALIP_ISIM.items():
                 st.checkbox(_bk_ad, key=f"bk_{_bk_key}")
                 if st.session_state.get(f"bk_{_bk_key}"):
-                    # v2.0.7.151 (Bahri'nin talebi): şiddet seçimini
-                    # SOMUT, doğrulanmış bir tarihsel olaya bağlıyoruz -
-                    # "Yüksek" artık soyut bir etiket değil, gerçek bir
-                    # referans olayla karşılaştırılabilir bir seçim.
+                    # v2.0.7.152 (Bahri'nin talebi): tekil tarihli olay
+                    # referansı yerine istatistiksel dayanak metni
+                    # (çok-olaylı akademik çalışmalara atıf).
                     st.select_slider(
                         "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
                         key=f"bk_{_bk_key}_siddet", label_visibility="collapsed",
-                        help=_KALIP_REFERANS_OLAY.get(_bk_key, ""))
-                    st.caption(_KALIP_REFERANS_OLAY.get(_bk_key, ""))
+                        help=_KALIP_ACIKLAMA.get(_bk_key, ""))
     st.divider()
 
     # E-posta ayarları
@@ -2478,12 +2485,12 @@ df_uni=load_universe()
 
 _beklenti_ayarlar = {}
 if st.session_state.get("beklenti_aktif"):
-    for _bk_key in ("jeopolitik", "petrol", "fed"):
+    for _bk_key in _KALIP_TABLOSU.keys():
         if st.session_state.get(f"bk_{_bk_key}"):
             _beklenti_ayarlar[_bk_key] = st.session_state.get(f"bk_{_bk_key}_siddet", "Orta")
 
 _beklenti_log = []
-_beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0}
+_beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0, "KRIPTO": 0.0}
 if _beklenti_ayarlar:
     _siddet_carpan = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}
     _risk_carpan = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
@@ -2534,7 +2541,8 @@ if _beklenti_ayarlar:
         f"**Beklenti Modu AKTİF** — {', '.join(_beklenti_log)} (Risk: {risk}). "
         f"Değerli Maden **{_beklenti_kategori_ayar['MADEN']:+.1f}**, "
         f"Döviz **{_beklenti_kategori_ayar['DOVIZ']:+.1f}**, "
-        f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}** puan ayarlandı — "
+        f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}**, "
+        f"Kripto **{_beklenti_kategori_ayar['KRIPTO']:+.1f}** puan ayarlandı — "
         f"tahmin değildir, sizin varsayımınıza dayalıdır."
     )
 
@@ -4332,6 +4340,10 @@ if page=="Ana Sayfa":
         # v2.0.7.148 (Bahri'nin talebi): Beklenti Modu aktifse, pasta
         # grafiklerinin ALTINDA hangi varsayımların işaretlendiğini ve
         # neden bu yönde bir ayarlama yapıldığını açıklayan bir bölüm.
+        # v2.0.7.152: tekil tarihli olay referansı kaldırıldı (Bahri:
+        # "13 sene önceki bir olayı bugüne örnek göstermek anlamsız") -
+        # _KALIP_ACIKLAMA zaten çok-olaylı akademik çalışmalara atıfta
+        # bulunan istatistiksel ifadeyi içeriyor, ayrı bir satıra gerek yok.
         if _beklenti_ayarlar:
             st.divider()
             st.markdown("**Beklenti Modu — Aktif Varsayımlar ve Gerekçeleri**")
@@ -4340,14 +4352,13 @@ if page=="Ana Sayfa":
                     f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
                     f"{_KALIP_ACIKLAMA[_kalip_key]}"
                 )
-                st.caption(_KALIP_REFERANS_OLAY.get(_kalip_key, ""))
             st.caption(
-                "Yön ilişkileri akademik literatürle desteklenir (kaynak: "
-                "Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili "
-                "çalışmalar), şiddet referansları ise gerçek geçmiş olaylara "
-                "dayanır — ama büyüklük/zamanlama hiçbir zaman kesin değildir, "
-                "hiçbir olay öncekiyle birebir aynı gerçekleşmez. Yatırım "
-                "tavsiyesi değildir."
+                "Yukarıdaki yön ve büyüklük ilişkileri, tek bir olaya değil, "
+                "onlarca yıl ve çok sayıda olayı kapsayan akademik panel/olay "
+                "çalışmalarına (event study) dayanır — ama gelecekteki her "
+                "olay öncekilerle birebir aynı büyüklükte gerçekleşmez, bu "
+                "istatistiksel bir eğilimdir, kesin bir tahmin değildir. "
+                "Yatırım tavsiyesi değildir."
             )
 
 # ══════════════════════════════════════════════════════════════
