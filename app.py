@@ -3974,6 +3974,18 @@ if page=="Ana Sayfa":
                 bit = basla + (v/toplam)*360.0
                 acilar.append((basla, bit))
                 basla = bit
+            # v2.0.7.145 (Bahri'nin bulgusu, 18 Ağustos 2026): tek bir
+            # kategori %100 olduğunda (ör. portföy tamamen TEFAS), bu
+            # dilimin başlangıç açısı (-90°) ile bitiş açısı (270°) AYNI
+            # NOKTAYA denk geliyordu (270° = -90°+360° aynı koordinat).
+            # SVG standardına göre bir yayın başlangıç/bitiş noktaları
+            # aynıysa o yay TAMAMEN ATLANIR (görünmez olur) - sadece
+            # <text> etiketleri (başlık, "TEFAS", "%100,0") kalıyordu,
+            # dilimin kendisi hiç çizilmiyordu. Düzeltme: herhangi bir
+            # dilimin açısal genişliği 359,99°'yi geçemez - matematiksel
+            # olarak görünmez fark ama SVG'nin "aynı nokta" kenar durumunu
+            # kesin olarak önler.
+            acilar = [(a0, min(a1, a0 + 359.99)) for (a0, a1) in acilar]
 
             dilimler = []
             for i, ((a0, a1), renk) in enumerate(zip(acilar, renkler)):

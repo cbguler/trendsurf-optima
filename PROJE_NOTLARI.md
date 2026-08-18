@@ -389,6 +389,39 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI] v2.0.7.145 (18 Ağustos 2026, Bahri'nin bulgusu — "Kategori
+  Dağılımı" pasta grafiği görünmüyor, sadece "TEFAS %100,0" yazısı
+  görünüyor).** Bu, önceden var olan (bugünkü çalışmayla ilgisiz) elle
+  yazılmış bir SVG pasta grafiğiydi (Plotly değil) - bugüne kadar hiç
+  ortaya çıkmamış bir kenar durum hatasıydı çünkü portföy ilk kez tek bir
+  kategoriden (%100 TEFAS) oluştu. **Kesin kanıtlanmış kök neden:** kod,
+  SVG koordinatlarını `.2f` (2 ondalık) ile string'e yazıyor - %100 tek
+  dilimde başlangıç açısı (-90°) ile bitiş açısı (270°) matematiksel
+  olarak AYNI noktaya denk geliyor, ve 2 ondalığa yuvarlanınca bu iki
+  nokta BİREBİR AYNI STRING'e dönüşüyor ("294.00,71.75" ==
+  "294.00,71.75"). SVG standardına göre bir yayın başlangıç/bitiş
+  noktaları aynıysa o yay tamamen atlanır (görünmez olur) - sadece
+  `<text>` etiketleri (başlık, kategori adı, yüzde) kalır, tam
+  görülen davranış. **Doğrulama (Python ile birebir simülasyon):**
+  düzeltme öncesi iki nokta `.2f` sonrası "294.00,71.75" / "294.00,71.75"
+  (AYNI) - düzeltme sonrası "294.00,71.75" / "293.97,71.75" (FARKLI).
+  **Düzeltme:** herhangi bir dilimin açısal genişliği artık 359,99°'yi
+  geçemiyor - matematiksel olarak görünmez bir fark ama SVG'nin "aynı
+  nokta" kenar durumunu kesinlikle önlüyor.
+  **DOĞRULANMADI** (canlı test gerekiyor): push sonrası tek-kategori
+  (%100 TEFAS gibi) durumunda pasta diliminin artık gerçekten göründüğü
+  kontrol edilmeli.
+
+- **[NOT - "Beklenti Modu" tasarımı netleşti] Bahri'nin ek detayları
+  (18 Ağustos 2026):** "Beklenti Modu" bir buton/anahtar ile devreye
+  girecek; devreye girdiğinde Optima Skor Bileşimi pasta grafiğinin
+  ALTINDA ilgili haberler/açıklamalar gösterilecek ("bu nedenle
+  dağılım şöyle olacaktır" formatında); kullanıcının risk toleransı
+  (Ana Sayfa'daki mevcut "Risk Toleransı" kaydırıcısı) ile orantılı
+  olarak skor ayarlamasının büyüklüğü de artırılabilir/azaltılabilir.
+  Henüz kod yazılmadı - v2.0.7.132'deki akademik kalıp araştırmasıyla
+  birlikte bir sonraki oturumda ele alınacak.
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.144 (18 Ağustos 2026, Bahri'nin
   talebi): Optima Skor Bileşimi pasta grafiği — her varlığın Detay
   sayfasının en başına eklendi.**
