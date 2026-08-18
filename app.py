@@ -33,6 +33,18 @@ st.markdown("""<style>
     transition:none!important;
 }
 .stApp,[data-testid="stAppViewContainer"],.main,.block-container{background:#f0f4f8!important;}
+/* v2.0.7.146 (Bahri'nin bulgusu, ikinci kez bildirdi - "sayfaların
+   üstlerindeki devasa boşluk her sayfada var"): Streamlit'in KENDİ
+   varsayılan .block-container üst dolgusu (araç çubuğuyla çakışmasın
+   diye tasarımda bırakılan, genellikle ~6rem gibi geniş bir değer)
+   şimdiye kadar hiç küçültülmemişti - sadece MOBİL breakpoint'te
+   (aşağıdaki @media satırı) küçültülüyordu, masaüstü/geniş görünümde
+   Streamlit'in varsayılanı aynen kalıyordu. Bu CSS global olduğu için
+   (her sayfa aynı stili paylaşıyor) "her sayfada var" şikayeti tam
+   olarak buradan kaynaklanıyordu. Not: sadece st.set_page_config'teki
+   Streamlit sürüm varsayılanına bağlı olarak bu deger degisebilir; asil
+   test canli ortamda yapilmali.*/
+.block-container{padding-top:2rem!important;}
 /* v2.0.4.38: Mobilde sidebar kapaliyken acma oku (>>) sayfayla birlikte
    kayip yukari gitmeden gorunmez oluyordu - tablonun altindaysaniz sidebar'i
    acmak icin en tepeye scroll etmek gerekiyordu. Sabit (fixed) konuma
@@ -3955,7 +3967,7 @@ if page=="Ana Sayfa":
             a = math.radians(aci_derece)
             return cx + rx*math.cos(a), cy + ry*math.sin(a)
 
-        def _3d_pasta_svg(etiketler, degerler, renkler, genislik=700, yukseklik=410):
+        def _3d_pasta_svg(etiketler, degerler, renkler, baslik="Kategori Dağılımı", genislik=700, yukseklik=410):
             toplam = sum(degerler)
             cx0, cy0 = genislik*0.42, yukseklik*0.44
             rx, ry = genislik*0.235, yukseklik*0.265
@@ -3996,7 +4008,7 @@ if page=="Ana Sayfa":
 
             parcalar = [f'<svg viewBox="0 0 {genislik} {yukseklik}" width="100%" '
                         f'xmlns="http://www.w3.org/2000/svg" style="font-family:Segoe UI,Arial,sans-serif;">']
-            parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">Kategori Dağılımı</text>')
+            parcalar.append(f'<text x="14" y="26" font-size="15" font-weight="700" fill="#1b2a4a">{_html_esc(baslik)}</text>')
 
             for w in sirali:
                 a0, a1, renk = w["a0"], w["a1"], w["renk"]
@@ -4043,9 +4055,56 @@ if page=="Ana Sayfa":
 
         import html as _html_mod
         _html_esc = _html_mod.escape
-        st.markdown(_3d_pasta_svg(cat_sum["Kategori"].tolist(),
-                                    cat_sum["Tutar (₺)"].tolist(),
-                                    colors), unsafe_allow_html=True)
+
+        # v2.0.7.146 (Bahri'nin talebi, 18 Ağustos 2026): "Optima skor
+        # bileşimi pasta grafiğini herhangi bir varlığa tıklanmadan,
+        # Kategori Dağılımı ile yan yana görmek istiyorum" - önerilen
+        # SEPETTEKİ TÜM varlıkların skor bileşimini (Tutar'a göre
+        # ağırlıklı ortalama), Kategori Dağılımı ile AYNI 3D SVG
+        # tarzında, yan yana gösteriyor. Tek bir varlığa tıklamaya HİÇ
+        # gerek yok - "neden bu sepeti önerdik" sorusunun toplu cevabı.
+        _agirlikli_bilesim = {}
+        _toplam_agirlik_bilesim = 0.0
+        for _, _or in df_opt.iterrows():
+            _tkr_o = _or.get("Ticker")
+            _agirlik_o = float(_or.get("Tutar (₺)", 0) or 0)
+            if _agirlik_o <= 0:
+                continue
+            _match_o = df_uni[df_uni["Ticker"] == _tkr_o]
+            if _match_o.empty:
+                continue
+            _row_o = _match_o.iloc[0]
+            _pb_o, _pe_o, _dy_o = _row_o.get("PB"), _row_o.get("PE"), _row_o.get("DY")
+            _has_fund_o = any(
+                v is not None and str(v) != "nan" and float(v or 0) > 0
+                for v in (_pb_o, _pe_o, _dy_o))
+            _parcalar_o = optima_score_breakdown(
+                float(_or.get("RSI", 50) or 50), float(_or.get("1A Getiri %", 0) or 0),
+                vol=float(_row_o.get("Vol", 30) or 30), has_fundamental=_has_fund_o,
+                pb=_pb_o, pe=_pe_o, dy=_dy_o)
+            _toplam_agirlik_bilesim += _agirlik_o
+            for _k_o, _v_o in _parcalar_o.items():
+                _agirlikli_bilesim[_k_o] = _agirlikli_bilesim.get(_k_o, 0.0) + _v_o * _agirlik_o
+
+        _kg_col, _sk_col = st.columns(2)
+        with _kg_col:
+            st.markdown(_3d_pasta_svg(cat_sum["Kategori"].tolist(),
+                                        cat_sum["Tutar (₺)"].tolist(),
+                                        colors, baslik="Kategori Dağılımı"), unsafe_allow_html=True)
+        with _sk_col:
+            if _toplam_agirlik_bilesim > 0:
+                _bilesim_etiket = list(_agirlikli_bilesim.keys())
+                _bilesim_deger = [round(v / _toplam_agirlik_bilesim, 1) for v in _agirlikli_bilesim.values()]
+                _bilesim_renk_harita = {
+                    "RSI Bölgesi": "#1d4ed8", "Momentum": "#15803d", "Volatilite": "#b45309",
+                    "F/K": "#7e22ce", "PD/DD": "#a21caf", "Temettü Verimi": "#0e7490",
+                }
+                _bilesim_renkler = [_bilesim_renk_harita.get(k, "#6b7280") for k in _bilesim_etiket]
+                st.markdown(_3d_pasta_svg(_bilesim_etiket, _bilesim_deger, _bilesim_renkler,
+                                            baslik="Optima Skor Bileşimi (Ağırlıklı Ort.)"),
+                           unsafe_allow_html=True)
+            else:
+                st.caption("Skor bileşimi için yeterli veri yok.")
 
 # ══════════════════════════════════════════════════════════════
 # PORTFÖYÜM

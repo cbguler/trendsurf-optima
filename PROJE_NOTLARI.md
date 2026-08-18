@@ -389,6 +389,38 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.146 (18 Ağustos 2026, Bahri'nin
+  ikinci bulgusu — "devasa boşluk" hâlâ duruyordu): kök neden nihayet
+  bulundu.** Streamlit'in KENDİ varsayılan `.block-container` üst dolgusu
+  (araç çubuğuyla çakışmasın diye tasarımda bırakılan geniş bir değer)
+  şimdiye kadar hiç küçültülmemişti - sadece mobil breakpoint'te
+  küçültülüyordu, masaüstü/geniş görünümde Streamlit'in varsayılanı aynen
+  kalıyordu. Bu CSS GLOBAL olduğu için "her sayfada var" şikayeti tam
+  buradan kaynaklanıyordu. `.block-container{padding-top:2rem!important;}`
+  eklendi (masaüstü için, mobil kural zaten kendi değerini eziyor).
+  **DOĞRULANMADI** - tam değer (2rem) Streamlit'in gerçek varsayılanına
+  bağlı, canlıda ince ayar gerekebilir.
+
+  **Ayrıca aynı oturumda: Optima Skor Bileşimi artık Ana Sayfa'da,
+  TIKLAMA GEREKTİRMEDEN, Kategori Dağılımı'nın yanında.** Önceki
+  (v2.0.7.144) pasta grafiği SADECE bir varlığa tıklanınca (Detay
+  sayfasında) görünüyordu - Bahri bunun yerine (ya da buna ek olarak)
+  Ana Sayfa'da, önerilen SEPETTEKİ TÜM varlıkların Tutar'a göre
+  AĞIRLIKLI ORTALAMA skor bileşimini, hiçbir tıklama olmadan, Kategori
+  Dağılımı ile yan yana istedi - "neden bu sepeti önerdik" sorusunun
+  toplu/özet cevabı. Uygulandı: `_3d_pasta_svg()`'ye `baslik` parametresi
+  eklendi (önceden "Kategori Dağılımı" hardcoded'du, artık iki farklı
+  başlıkla yeniden kullanılabiliyor - tek fonksiyon, iki grafik, kod
+  tekrarı yok). `st.columns(2)` ile iki grafik yan yana. Mock veriyle
+  ağırlıklı ortalama mantığı doğrulandı.
+  **NOT:** bu, Detay sayfalarındaki (v2.0.7.144, Plotly tabanlı) TEK
+  VARLIK breakdown'ını KALDIRMADI, sadece Ana Sayfa'ya AYRI, TOPLU bir
+  görünüm ekledi - ikisi farklı amaçlara hizmet ediyor (biri "bu tek
+  hisse neden böyle skorlandı", diğeri "genel olarak bu sepeti neden
+  önerdik"). Bahri Detay sayfasındaki Plotly versiyonunu da Kategori
+  Dağılımı'nın 3D SVG tarzına çevirmek isterse ayrı bir iş.
+  **DOĞRULANMADI** (canlı test gerekiyor).
+
 - **[UYGULANDI] v2.0.7.145 (18 Ağustos 2026, Bahri'nin bulgusu — "Kategori
   Dağılımı" pasta grafiği görünmüyor, sadece "TEFAS %100,0" yazısı
   görünüyor).** Bu, önceden var olan (bugünkü çalışmayla ilgisiz) elle
