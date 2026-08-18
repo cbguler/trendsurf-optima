@@ -1928,6 +1928,78 @@ def save_email_cfg(cfg, user_id=None):
 # ══════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# BEKLENTİ MODU — GLOBAL uygulama (v2.0.7.149, Bahri'nin bulgusu)
+# ══════════════════════════════════════════════════════════════
+# Kontroller sidebar'da (yukarıda) - burada SADECE session_state okunup
+# df_uni'ye TEK SEFERDE, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor.
+# Böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm/Temettü/
+# Halka Arz HEPSİ aynı ayarlanmış Optima_Skor'u görür - önceki (sadece
+# Ana Sayfa'ya özel) sürümdeki tutarsızlık artık yapısal olarak imkansız.
+#
+# Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik Risk
+# Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN ilişkileridir.
+# DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY FİYATI
+# YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL zayıflar"
+# bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
+_KALIP_TABLOSU = {
+    "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
+    "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
+    "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
+}
+_KALIP_ISIM = {
+    "jeopolitik": "Jeopolitik gerilim/çatışma",
+    "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
+    "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
+}
+_KALIP_ACIKLAMA = {
+    "jeopolitik": (
+        "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
+        "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
+        "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
+        "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
+    ),
+    "petrol": (
+        "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
+        "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
+        "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
+        "yol açabilir."
+    ),
+    "fed": (
+        "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
+        "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
+        "ve risk iştahının azalmasına yol açma eğilimindedir."
+    ),
+}
+# v2.0.7.151 (Bahri'nin talebi, 18 Ağustos 2026): "sistem tam otomatik %
+# belirlesin" isteği araştırıldı - akademik regresyon katsayıları
+# çalışmadan çalışmaya, döneme göre çok değiştiği için TEK bir güvenilir
+# sabit sayı yok. Bunun yerine GERÇEK, doğrulanmış tarihsel olaylar
+# referans noktası olarak kullanılıyor - "Yüksek" şiddetin ne anlama
+# geldiğini SOMUT bir örnekle gösteriyor, tahmin değil gerçek geçmiş veri.
+_KALIP_REFERANS_OLAY = {
+    "jeopolitik": (
+        "Referans: 24 Şubat 2022 Rusya-Ukrayna işgali — ons altın birkaç "
+        "gün içinde %3-5 yükseldi (18 aylık zirve), BIST100 gün içinde "
+        "%9,4'e kadar geriledi (hafta kapanışı sadece %1 altında, kısmi "
+        "toparlanma), TL etkisi ilk gün sınırlı kalıp sonraki haftalarda "
+        "kademeli geldi."
+    ),
+    "petrol": (
+        "Referans: 14 Eylül 2019 Suudi Aramco (Abqaiq-Khurais) İHA "
+        "saldırısı — Brent petrol gün içinde %19,5 yükseldi (1991 Körfez "
+        "Savaşı'ndan beri en sert günlük artış), dünya petrol arzının "
+        "~%5'i geçici olarak durdu, etkiler birkaç hafta içinde geriledi."
+    ),
+    "fed": (
+        "Referans: Mayıs-Aralık 2013 'Taper Tantrum' (Fed'in beklenmedik "
+        "sıkılaştırma sinyali) — TL bu dönemde %15 değer kaybetti, "
+        "gelişen piyasalar arasında Endonezya'dan sonra en büyük kayıptı "
+        "(akademik kaynak: ScienceDirect, Emerging market exchange rates "
+        "during quantitative tapering)."
+    ),
+}
+
 with st.sidebar:
     # v2.0.3.5: Sadece login aninda 2 kez oynayan hareketli logo, sonra statik logo
     if not st.session_state.get("logo_splash_played", False):
@@ -2006,9 +2078,15 @@ with st.sidebar:
             ):
                 st.checkbox(_bk_ad, key=f"bk_{_bk_key}")
                 if st.session_state.get(f"bk_{_bk_key}"):
+                    # v2.0.7.151 (Bahri'nin talebi): şiddet seçimini
+                    # SOMUT, doğrulanmış bir tarihsel olaya bağlıyoruz -
+                    # "Yüksek" artık soyut bir etiket değil, gerçek bir
+                    # referans olayla karşılaştırılabilir bir seçim.
                     st.select_slider(
                         "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
-                        key=f"bk_{_bk_key}_siddet", label_visibility="collapsed")
+                        key=f"bk_{_bk_key}_siddet", label_visibility="collapsed",
+                        help=_KALIP_REFERANS_OLAY.get(_bk_key, ""))
+                    st.caption(_KALIP_REFERANS_OLAY.get(_bk_key, ""))
     st.divider()
 
     # E-posta ayarları
@@ -2398,49 +2476,6 @@ if st.session_state.get("page_override") == "admin":
 # ══════════════════════════════════════════════════════════════
 df_uni=load_universe()
 
-# ══════════════════════════════════════════════════════════════
-# BEKLENTİ MODU — GLOBAL uygulama (v2.0.7.149, Bahri'nin bulgusu)
-# ══════════════════════════════════════════════════════════════
-# Kontroller sidebar'da (yukarıda) - burada SADECE session_state okunup
-# df_uni'ye TEK SEFERDE, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor.
-# Böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm/Temettü/
-# Halka Arz HEPSİ aynı ayarlanmış Optima_Skor'u görür - önceki (sadece
-# Ana Sayfa'ya özel) sürümdeki tutarsızlık artık yapısal olarak imkansız.
-#
-# Kalıp yönleri akademik literatürle (Caldara-Iacoviello Jeopolitik Risk
-# Endeksi ve ilişkili çalışmalar) desteklenmiş DIŞ YÖN ilişkileridir.
-# DOVIZ yönü dikkatlice düşünülmeli: TL zayıflarsa USDTRY/EURTRY FİYATI
-# YÜKSELİR (DOVIZ varlığının kendisi bu fiyattır) - yani "TL zayıflar"
-# bir DOVIZ skoru İNDİRİMİ değil, ARTIŞI anlamına gelir.
-_KALIP_TABLOSU = {
-    "jeopolitik": {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
-    "petrol":     {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
-    "fed":        {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
-}
-_KALIP_ISIM = {
-    "jeopolitik": "Jeopolitik gerilim/çatışma",
-    "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
-    "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
-}
-_KALIP_ACIKLAMA = {
-    "jeopolitik": (
-        "Jeopolitik çatışmalarda altın güvenli liman talebi görme eğilimindedir "
-        "(Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili akademik "
-        "literatür), gelişen piyasa para birimleri (TL dahil) baskı altında "
-        "kalma eğilimindedir, borsalar kısa vadede satış baskısı yaşayabilir."
-    ),
-    "petrol": (
-        "Türkiye net petrol ithalatçısı olduğu için petrol arz şokları "
-        "enflasyon baskısı yaratma eğilimindedir, bu da TL üzerinde değer "
-        "kaybı baskısına (dolayısıyla döviz fiyatlarında yükseliş beklentisine) "
-        "yol açabilir."
-    ),
-    "fed": (
-        "Merkez bankalarının beklenenden şahin (agresif) kararları dolar "
-        "güçlenmesine, gelişen piyasa para birimlerinde (TL dahil) baskıya "
-        "ve risk iştahının azalmasına yol açma eğilimindedir."
-    ),
-}
 _beklenti_ayarlar = {}
 if st.session_state.get("beklenti_aktif"):
     for _bk_key in ("jeopolitik", "petrol", "fed"):
@@ -2458,6 +2493,32 @@ if _beklenti_ayarlar:
         for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
             _beklenti_kategori_ayar[_kat] += _puan * _carpan
         _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet})")
+
+    # v2.0.7.150 (Bahri'nin bulgusu, 18 Ağustos 2026 — "Ort. Optima Skor
+    # yine de eskide kalmış"): KÖK NEDEN bulundu - birçok Döviz/Maden/
+    # BIST varlığının Optima_Skor'u henüz NaN'dı (hiç hesaplanmamış).
+    # NaN + puan = NaN (Python/pandas'ta NaN aritmetiği hep NaN verir) -
+    # yani ayarlama bu varlıklar için SESSİZCE hiç uygulanmıyordu, sonra
+    # sayfa kendi "eksik skoru doldur" mantığıyla bunları HAM (ayarlanmamış)
+    # formülle dolduruyordu. En üstte gösterilen (zaten skoru olan) birkaç
+    # varlık doğru ayarlanmış görünürken, geri kalanların ÇOĞU ayarlamayı
+    # hiç almıyor, ortalama da bu yüzden eski kalıyordu. Düzeltme:
+    # ayarlama uygulanmadan ÖNCE, etkilenen kategorilerdeki TÜM eksik
+    # (NaN) Optima_Skor'lar önce scoring.py ile tam olarak hesaplanıp
+    # dolduruluyor - böylece ayarlama HİÇBİR varlığı atlamadan uygulanır.
+    _etkilenen_kategoriler = [k for k, v in _beklenti_kategori_ayar.items() if v != 0]
+    for _kat_doldur in _etkilenen_kategoriler:
+        _mask_eksik = (df_uni["Kategori"] == _kat_doldur) & (df_uni["Optima_Skor"].isna())
+        if _mask_eksik.any():
+            df_uni.loc[_mask_eksik, "Optima_Skor"] = df_uni.loc[_mask_eksik].apply(
+                lambda r: optima_score(
+                    float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
+                    vol=float(r.get("Vol", 30) or 30),
+                    has_fundamental=any(
+                        v is not None and str(v) != "nan" and float(v or 0) > 0
+                        for v in (r.get("PB"), r.get("PE"), r.get("DY"))),
+                    pb=r.get("PB"), pe=r.get("PE"), dy=r.get("DY")),
+                axis=1)
 
     for _kat, _ayar in _beklenti_kategori_ayar.items():
         if _ayar != 0:
@@ -4279,12 +4340,14 @@ if page=="Ana Sayfa":
                     f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
                     f"{_KALIP_ACIKLAMA[_kalip_key]}"
                 )
+                st.caption(_KALIP_REFERANS_OLAY.get(_kalip_key, ""))
             st.caption(
-                "Bu açıklamalar akademik literatürde desteklenen genel YÖN "
-                "ilişkileridir (kaynak: Caldara-Iacoviello Jeopolitik Risk "
-                "Endeksi ve ilişkili çalışmalar) — büyüklük ve zamanlama kesin "
-                "değildir, bu yüzden ayarlamalar bilinçli olarak küçük "
-                "tutulmuştur. Yatırım tavsiyesi değildir."
+                "Yön ilişkileri akademik literatürle desteklenir (kaynak: "
+                "Caldara-Iacoviello Jeopolitik Risk Endeksi ve ilişkili "
+                "çalışmalar), şiddet referansları ise gerçek geçmiş olaylara "
+                "dayanır — ama büyüklük/zamanlama hiçbir zaman kesin değildir, "
+                "hiçbir olay öncekiyle birebir aynı gerçekleşmez. Yatırım "
+                "tavsiyesi değildir."
             )
 
 # ══════════════════════════════════════════════════════════════

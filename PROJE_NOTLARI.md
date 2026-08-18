@@ -389,6 +389,41 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.150 (18 Ağustos 2026, Bahri'nin
+  bulgusu — "Ort. Optima Skor yine de eskide kalmış"): Beklenti Modu
+  NaN-güvenli hale getirildi.** Kök neden: birçok varlığın Optima_Skor'u
+  henüz NaN'dı (hiç hesaplanmamış), `NaN + puan = NaN` (pandas'ta NaN
+  aritmetiği hep NaN verir) - yani ayarlama bu varlıklar için SESSİZCE
+  hiç uygulanmıyordu, sayfa kendi "eksik skoru doldur" mantığıyla
+  bunları HAM formülle dolduruyordu. En üstte gösterilen (zaten skoru
+  olan) birkaç varlık doğru ayarlanmış görünürken, ortalamayı oluşturan
+  çoğu varlık ayarlamayı hiç almıyordu. **Düzeltme:** ayarlama
+  uygulanmadan ÖNCE, etkilenen kategorilerdeki TÜM eksik (NaN)
+  Optima_Skor'lar önce scoring.py ile tam hesaplanıp dolduruluyor -
+  ayarlama artık hiçbir varlığı atlamadan uygulanıyor.
+
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.151 (18 Ağustos 2026, Bahri'nin
+  talebi): "Sistem otomatik belirlesin" isteği için GERÇEK EN İYİ
+  ÇÖZÜM uygulandı - tam otomatik değil, ama artık gerçek tarihe dayalı.**
+  Önceki oturumda akademik regresyon katsayılarının çalışmadan çalışmaya
+  çok değiştiği, TEK güvenilir bir sabit sayı olmadığı tespit edilmişti.
+  Bunun yerine ÜÇ GERÇEK, DOĞRULANMIŞ tarihsel olay araştırıldı ve şiddet
+  seçicisine (hem sidebar'da help/caption, hem Ana Sayfa'daki gerekçe
+  bölümünde) somut referans olarak eklendi:
+  - **Jeopolitik:** 24 Şubat 2022 Rusya-Ukrayna işgali — ons altın %3-5
+    (birkaç gün), BIST100 gün içi -%9,4 (hafta kapanışı sadece -%1).
+  - **Petrol:** 14 Eylül 2019 Suudi Aramco (Abqaiq-Khurais) İHA saldırısı
+    — Brent petrol gün içi +%19,5 (1991'den beri en sert).
+  - **Fed:** Mayıs-Aralık 2013 "Taper Tantrum" — TL %15 değer kaybı
+    (akademik kaynak: ScienceDirect, "Emerging market exchange rates
+    during quantitative tapering", Türkiye Endonezya'dan sonra en büyük
+    kayıp yaşayan ülkeydi).
+  Bu, "kullanıcı tamamen keyfi seçiyor" ile "sistem güvenilmez şekilde
+  tam otomatik tahmin ediyor" arasındaki en dürüst orta yol - kullanıcı
+  hâlâ "bu olay Yüksek mi" kararını veriyor ama artık SOMUT, gerçek bir
+  karşılaştırma noktasıyla, keyfi bir etiketle değil.
+  **DOĞRULANMADI** (canlı test gerekiyor).
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.149 (18 Ağustos 2026, Bahri'nin
   bulgusu — KRİTİK mimari düzeltme): Beklenti Modu artık gerçekten
   GLOBAL.** Önceki hali SADECE Ana Sayfa'nın kendi bloğu içindeydi -
