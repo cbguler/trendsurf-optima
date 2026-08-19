@@ -309,10 +309,15 @@ def init_db():
         unit_type     TEXT    DEFAULT 'Adet'
     )""")
 
-    # v2.0.7.154 (Bahri'nin talebi, 18 Ağustos 2026): Beklenti Modu'nun
-    # otomatik haber izleme katmanı - haber_izleme.py (GitHub Actions,
-    # 10 dakikada bir) bu tabloya yazar, app.py okuyup Optima Skor'a
-    # OTOMATİK uygular (Bahri'nin seçimi: "hemen otomatik uygula").
+    # v2.0.7.156 (Bahri'nin talebi, 18 Ağustos 2026 — KRİTİK tasarım
+    # düzeltmesi): "hemen otomatik uygula" YANLIŞ anlaşılmıştı/yanlış
+    # seçilmişti - Bahri'nin gerçekte istediği: sistem tespit eder,
+    # KULLANICIYA gösterir (haber + AI gerekçesi + hangi kategoriye ne
+    # kadar puan etkisi olacağı), kullanıcı UYGUN BULURSA onaylar, ANCAK
+    # o zaman Optima Skor'a uygulanır. `kullanici_iptal` (uygulandıktan
+    # SONRA geri alma) yerine `onay_durumu` (uygulanmadan ÖNCE onay
+    # bekleme: 'bekliyor'/'onaylandi'/'reddedildi') - v2.0.7.154'ün
+    # "otomatik uygula" mantığı TAMAMEN kaldırıldı.
     c.execute("""
     CREATE TABLE IF NOT EXISTS beklenti_otomatik_tespit (
         id                SERIAL PRIMARY KEY,
@@ -324,7 +329,8 @@ def init_db():
         ai_gerekce        TEXT,
         tespit_zamani     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         gecerlilik_bitis  TIMESTAMP NOT NULL,
-        kullanici_iptal   INTEGER NOT NULL DEFAULT 0
+        onay_durumu       TEXT NOT NULL DEFAULT 'bekliyor',
+        onay_zamani       TIMESTAMP
     )""")
     c.execute("""
     CREATE TABLE IF NOT EXISTS haber_islenmis (
@@ -453,6 +459,18 @@ def init_db():
             c.execute(f"ALTER TABLE {_tablo} ALTER COLUMN {_kolon} TYPE DOUBLE PRECISION")
         except Exception as _e:
             print(f"[db] REAL->DOUBLE PRECISION yukseltme atlandi ({_tablo}.{_kolon}): {_e}")
+
+    # v2.0.7.156: beklenti_otomatik_tespit tablosu v2.0.7.154'te
+    # (eski "kullanici_iptal" semasiyla) zaten olusturulmus olabilir -
+    # bu ALTER'lar idempotent, tabloyu yeni ("onay_durumu") semaya
+    # guvenle yukseltir. Eski kayitlar varsa (hicbiri Bahri tarafindan
+    # gercekten onaylanmamisti - "kullanici_iptal" mantigi hicbir zaman
+    # canliya cikmadi) onay_durumu='bekliyor' varsayilanina duser.
+    try:
+        c.execute("ALTER TABLE beklenti_otomatik_tespit ADD COLUMN IF NOT EXISTS onay_durumu TEXT NOT NULL DEFAULT 'bekliyor'")
+        c.execute("ALTER TABLE beklenti_otomatik_tespit ADD COLUMN IF NOT EXISTS onay_zamani TIMESTAMP")
+    except Exception as _e:
+        print(f"[db] beklenti_otomatik_tespit sema yukseltme atlandi: {_e}")
 
     # Idempotent index'ler
     c.execute("CREATE INDEX IF NOT EXISTS idx_users_email      ON users(LOWER(email))")
@@ -612,9 +630,13 @@ def haber_islendi_isaretle(url: str):
 def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,
                           haber_url: str, haber_kaynak: str, ai_gerekce: str,
                           gecerlilik_saat: int = 48):
-    """haber_izleme.py, AI dogrulamasi basarili olunca bunu cagirir.
-    gecerlilik_saat: bu tespitin kac saat sonra otomatik "suresi dolmus"
-    sayilacagi - olay etkileri kalici degildir, zamanla sonmelidir."""
+    """haber_izleme.py, AI dogrulamasi basarili olunca bunu cagirir -
+    tespit varsayilan olarak 'bekliyor' durumunda eklenir, HENUZ
+    UYGULANMAZ (bkz. v2.0.7.156 - onay bekleme modeline gecis).
+    gecerlilik_saat: kullanici onaylamazsa bu tespitin kac saat sonra
+    otomatik "suresi dolmus" sayilacagi (bekleyenler listesinden
+    kaybolur) - olay etkileri kalici degildir, sonsuza kadar onay
+    beklememelidir."""
     try:
         conn = get_conn()
         conn.execute(
@@ -631,21 +653,40 @@ def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,
         return False
 
 
-def get_aktif_otomatik_tespitler() -> list:
-    """app.py bunu her sayfa yuklemesinde cagirir - suresi gecmemis VE
-    kullanici tarafindan iptal edilmemis tum otomatik tespitleri doner.
-    Ayni kalip icin BIRDEN FAZLA aktif tespit varsa (ayni olay turunden
-    birden fazla haber), EN YUKSEK siddetli olan kullanilir - cagiran
-    taraf bunu kendi yapar, burada ham liste donuyor."""
+def get_bekleyen_tespitler() -> list:
+    """v2.0.7.156 (Bahri'nin talebi, KRİTİK tasarım düzeltmesi): app.py
+    bunu her sayfa yuklemesinde cagirir - suresi gecmemis VE HENUZ
+    ONAY/RED VERİLMEMİŞ tespitleri doner. Bunlar Optima Skor'a HENUZ
+    UYGULANMAMIŞTIR - sadece kullanıcıya "onaylar mısınız?" diye
+    gösterilecek adaylardır."""
     try:
         rows = get_conn().execute(
             "SELECT id, kalip_key, siddet, haber_basligi, haber_url, "
             "haber_kaynak, ai_gerekce, tespit_zamani FROM beklenti_otomatik_tespit "
-            "WHERE gecerlilik_bitis > now() AND kullanici_iptal = 0 "
+            "WHERE gecerlilik_bitis > now() AND onay_durumu = 'bekliyor' "
             "ORDER BY tespit_zamani DESC"
         ).fetchall()
     except Exception:
         return []
+    return _tespit_satirlarini_donustur(rows)
+
+
+def get_onaylanmis_tespitler() -> list:
+    """v2.0.7.156: kullanıcının AÇIKÇA onayladığı, hâlâ geçerlilik
+    süresi dolmamış tespitler - SADECE BUNLAR Optima Skor'a uygulanır."""
+    try:
+        rows = get_conn().execute(
+            "SELECT id, kalip_key, siddet, haber_basligi, haber_url, "
+            "haber_kaynak, ai_gerekce, tespit_zamani FROM beklenti_otomatik_tespit "
+            "WHERE gecerlilik_bitis > now() AND onay_durumu = 'onaylandi' "
+            "ORDER BY tespit_zamani DESC"
+        ).fetchall()
+    except Exception:
+        return []
+    return _tespit_satirlarini_donustur(rows)
+
+
+def _tespit_satirlarini_donustur(rows) -> list:
     sonuc = []
     for r in rows:
         def _rv(k, i):
@@ -659,20 +700,35 @@ def get_aktif_otomatik_tespitler() -> list:
     return sonuc
 
 
-def otomatik_tespit_iptal_et(tespit_id: int):
-    """Kullanici (Ana Sayfa'daki "Iptal Et" butonu) bir otomatik tespiti
-    yanlis bulursa - bu, "hemen otomatik uygula" secimiyle celismez,
-    UYGULANDIKTAN SONRA duzeltme mekanizmasidir."""
+def tespit_onayla(tespit_id: int):
+    """Kullanıcı (Ana Sayfa'daki "Onayla" butonu) bir tespiti uygun
+    bulursa - BUNDAN SONRA Optima Skor'a uygulanır."""
     try:
         conn = get_conn()
         conn.execute(
-            "UPDATE beklenti_otomatik_tespit SET kullanici_iptal=1 WHERE id=?",
-            (tespit_id,))
+            "UPDATE beklenti_otomatik_tespit SET onay_durumu='onaylandi', "
+            "onay_zamani=now() WHERE id=?", (tespit_id,))
         conn.commit()
         conn.close()
         return True
     except Exception as e:
-        print(f"[db] otomatik_tespit_iptal_et hata: {e}", file=sys.stderr)
+        print(f"[db] tespit_onayla hata: {e}", file=sys.stderr)
+        return False
+
+
+def tespit_reddet(tespit_id: int):
+    """Kullanıcı bir tespiti uygun bulmazsa - bir daha gösterilmez,
+    Optima Skor'a HİÇ uygulanmaz."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE beklenti_otomatik_tespit SET onay_durumu='reddedildi', "
+            "onay_zamani=now() WHERE id=?", (tespit_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] tespit_reddet hata: {e}", file=sys.stderr)
         return False
 
 

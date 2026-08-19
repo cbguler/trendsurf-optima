@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 haber_izleme.py — TrendSurf Optima
-Beklenti Modu'nun OTOMATIK haber izleme katmani (v2.0.7.154/155,
+Beklenti Modu'nun OTOMATIK haber TESPİT katmani (v2.0.7.154/155/156,
 Bahri'nin talebi, 18 Agustos 2026).
 
 GitHub Actions uzerinde 10 dakikada bir calisir:
@@ -11,9 +11,17 @@ GitHub Actions uzerinde 10 dakikada bir calisir:
      kripto_olay/tcmb_kredibilite)
   3) On-filtreden gecen haberleri Google Gemini API ile DOGRULAR
      (gercekten ilgili kalibi mi anlatiyor, hangi siddette)
-  4) Dogrulanan tespitleri Supabase'e yazar - app.py bunlari OTOMATIK
-     olarak Optima Skor'a uygular (Bahri'nin secimi: "hemen otomatik
-     uygula", onay beklemeden)
+  4) Dogrulanan tespitleri Supabase'e "bekliyor" durumunda yazar.
+
+v2.0.7.156 (Bahri'nin bulgusu, KRİTİK tasarım düzeltmesi - "hemen
+otomatik uygula" YANLIŞ anlaşılmıştı): bu script SADECE TESPIT EDER ve
+Supabase'e yazar - Optima Skor'a OTOMATİK UYGULAMAZ. app.py, bekleyen
+tespitleri kullanıcıya (haber + AI gerekçesi + tahmini puan etkisiyle)
+gösterir, kullanıcı Onayla/Reddet der, SADECE ONAYLANANLAR uygulanır.
+Bu script'in KENDİSİNDE bu değişiklik için kod değişikliği GEREKMEDİ -
+sadece db.py'deki tablo şeması ve app.py'nin okuma/uygulama mantığı
+değişti (onay_durumu='bekliyor' varsayılanı zaten buradan
+`otomatik_tespit_ekle()` ile ekleniyordu).
 
 v2.0.7.155 (Bahri'nin talebi: "ucretli ise kurmayacagim, ucretsiz
 alternatif bulalim"): Anthropic API'den Google Gemini API'ye gecildi -
@@ -92,6 +100,25 @@ _KALIP_ISIM = {
     "tcmb_kredibilite": "TCMB para politikası kredibilite kaybı",
 }
 
+# v2.0.7.157 (Bahri'nin talebi, 18 Ağustos 2026): AI'nin ürettiği doğal
+# cümlede "XXX varlıklarının Optima Skorlarını artırmamız/azaltmamız
+# gerekir" derken HANGİ kategorilerden bahsedeceğini bilmesi için -
+# app.py'deki _KALIP_TABLOSU ile AYNI olmalı (yön/kategori eşlemesi,
+# tam sayısal puan değil - o hesap zaten app.py'de risk/şiddet
+# çarpanlarıyla ayrıca yapılıyor).
+_KALIP_KATEGORI_YONU = {
+    "jeopolitik": {"MADEN": "artış", "DOVIZ": "artış", "BIST": "azalış"},
+    "petrol": {"MADEN": "artış", "DOVIZ": "artış", "BIST": "azalış"},
+    "fed": {"MADEN": "azalış", "DOVIZ": "artış", "BIST": "azalış"},
+    "kredi_notu": {"DOVIZ": "artış", "BIST": "azalış"},
+    "kripto_olay": {"KRIPTO": "azalış"},
+    "tcmb_kredibilite": {"DOVIZ": "artış", "MADEN": "artış", "BIST": "azalış"},
+}
+_KATEGORI_ISIM_TR = {
+    "MADEN": "Değerli Maden", "DOVIZ": "Döviz", "BIST": "BIST",
+    "KRIPTO": "Kripto",
+}
+
 
 def _on_filtre_eslesen_kaliplar(baslik, ozet):
     """Basit anahtar kelime eslestirmesi - kucuk/buyuk harf duyarsiz.
@@ -128,6 +155,10 @@ def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
     try:
         import requests
         kalip_aciklama = _KALIP_ISIM.get(kalip_key, kalip_key)
+        _yon_haritasi = _KALIP_KATEGORI_YONU.get(kalip_key, {})
+        _kategori_aciklama = "; ".join(
+            f"{_KATEGORI_ISIM_TR.get(k, k)} kategorisi {v}"
+            for k, v in _yon_haritasi.items())
         prompt = f"""Bir finansal haber izleme sistemisin. Aşağıdaki haberin
 GERÇEKTEN "{kalip_aciklama}" kategorisine ait, PİYASALARI ETKİLEYECEK
 ÖNEMLİ bir olayı anlatıp anlatmadığını değerlendir.
@@ -136,13 +167,23 @@ Haber başlığı: {baslik}
 Haber özeti: {ozet}
 Kaynak: {kaynak}
 
+Bu kalıp eşleşirse, normalde şu yönde etki beklenir: {_kategori_aciklama}
+
 ÖNEMLİ: Sadece GERÇEKTEN önemli, taze, piyasa etkisi olası bir olaysa
 eşleşme=true de. Genel yorum/analiz makaleleri, geçmiş olayların tekrar
 anılması, veya kategoriye YÜZEYSEL benzeyen ama önemsiz haberler için
 eşleşme=false de. Şüpheye düşersen false de (temkinli ol).
 
+Eşleşirse, kullanıcıya sunulacak DOĞAL, AKICI BİR TÜRKÇE CÜMLE yaz -
+TAM OLARAK şu kalıpta: "[Kaynak] kaynağından alınan habere göre,
+[haberin somut içeriği - varsa haberdeki SAYISAL/SOMUT detayı (ör. '25
+baz puan artış', '%X üretim kesintisi' gibi) MUTLAKA dahil et], bu
+durumda [ilgili kategori(ler)]'in Optima Skorlarını [artırmamız/
+azaltmamız] gerekir." - haberde somut bir sayı YOKSA sayı uydurma,
+sadece "artış/azalış" yönünü belirt.
+
 SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
-{{"eslesme": true/false, "siddet": "Düşük"/"Orta"/"Yüksek", "gerekce": "kısa açıklama (max 200 karakter)"}}"""
+{{"eslesme": true/false, "siddet": "Düşük"/"Orta"/"Yüksek", "gerekce": "yukarıdaki kalıpta doğal cümle (max 400 karakter)"}}"""
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
         resp = requests.post(
@@ -158,7 +199,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
         veri = json.loads(metin)
         return (bool(veri.get("eslesme", False)),
                 veri.get("siddet", "Orta"),
-                str(veri.get("gerekce", ""))[:200])
+                str(veri.get("gerekce", ""))[:400])
     except Exception as e:
         print(f"[haber_izleme] AI dogrulama hatasi: {type(e).__name__}: {e}")
         return False, None, f"AI hatasi: {e}"

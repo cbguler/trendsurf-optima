@@ -389,6 +389,44 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[KRİTİK - HÂLÂ PUSH EDİLMEMİŞ] v2.0.7.156 hâlâ GitHub'a hiç
+  push edilmedi (19 Ağustos 2026 itibarıyla doğrulandı) - bu turda
+  v2.0.7.157 üzerine inşa edildiği için ikisi BİRLİKTE push
+  edilmeli.** GitHub'daki son commit hâlâ v2.0.7.155 (Gemini geçişi).
+  Bir önceki mesajda verilen db.py/app.py/haber_izleme.py dosyaları
+  (onay bekleme akışı) hiç Git'e gitmemiş - bu oturumdaki
+  v2.0.7.157 değişiklikleri o (henüz push edilmemiş) temel üzerine
+  inşa edildi. **Push sırası önemli değil çünkü tek bir pakette
+  gönderiliyor, ama BU ÜÇ DOSYANIN TAMAMI push edilmeden hiçbiri
+  çalışmaz.**
+
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.157 (18 Ağustos 2026, Bahri'nin
+  talebi): Otomatik tespitler artık DOĞAL, AKICI bir Türkçe cümleyle
+  sunuluyor - "Onaylıyor musunuz?" ile bitiyor.** Örnek istenen format:
+  "XXX haber kaynağından aldığım son dakika haberine göre, XXX Merkez
+  bankası politika faizini 25 puan yükseltmiş, bu durumda XXX
+  varlıklarının optima skorlarını arttırmamız gerekir, Onaylıyor
+  musun?" Uygulama:
+  - `haber_izleme.py`'ye `_KALIP_KATEGORI_YONU` eklendi (her kalıbın
+    hangi kategoriyi hangi yönde etkilediği - MADEN/DOVIZ/BIST/KRIPTO,
+    artış/azalış) - bu bilgi Gemini'ye prompt içinde veriliyor, AI'nin
+    kategori isimlerini KENDİ UYDURMASI değil, bizim tanımladığımız
+    gerçek kategorilerden seçmesi sağlanıyor.
+  - Gemini prompt'u artık `gerekce` alanında TAM OLARAK şu kalıpta bir
+    cümle istiyor: "[Kaynak]'a göre, [haberin somut/sayısal detayı -
+    varsa], bu durumda [kategori(ler)]'in Optima Skorlarını
+    [artırmamız/azaltmamız] gerekir." Haberde sayı yoksa AI'nin sayı
+    UYDURMAMASI özellikle belirtildi.
+  - `app.py`'nin onay-bekleyen gösterim bloğu bu cümleyi ARTIK teknik
+    bir "AI gerekçesi:" alt-etiketi arkasına gizlemiyor - doğrudan ana
+    mesaj olarak gösterip sonuna **"Onaylıyor musunuz?"** ekliyor,
+    hemen altında Onayla/Reddet düğmeleri.
+  **DOĞRULANDI (mock veriyle):** örnek senaryo (Fed 25 baz puan) tam
+  istenen formatta üretiliyor.
+  **DOĞRULANMAMIŞ** (canlı test gerekiyor - GEMINI_API_KEY zaten ekli
+  olduğu için, push sonrası bir sonraki gerçek haber taramasında
+  bu formatın doğru üretildiği kontrol edilmeli).
+
 - **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.155 (18 Ağustos 2026, Bahri'nin
   talebi — "ücretli ise kurmayacağım, ücretsiz alternatif bulalım"):
   AI doğrulama katmanı Anthropic API'den Google Gemini API'ye çevrildi.**

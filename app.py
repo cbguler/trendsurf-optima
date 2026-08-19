@@ -2500,30 +2500,46 @@ df_uni=load_universe()
 
 _beklenti_ayarlar = {}
 _beklenti_kaynak = {}  # v2.0.7.154: her kalibin "manuel" mi "otomatik" mi geldigini takip eder
-_aktif_otomatik_tespitler = []
+
+# v2.0.7.156 (Bahri'nin talebi, 18 Ağustos 2026 — KRİTİK tasarım
+# düzeltmesi, "hemen otomatik uygula" YANLIŞ anlaşılmıştı): Otomatik
+# tespitler ARTIK ASLA kendiliğinden uygulanmaz. Akış: haber_izleme.py
+# tespit eder → burada "bekliyor" olarak okunur → TÜM sayfalarda görünen
+# bir bildirimle kullanıcıya gösterilir (haber + AI gerekçesi + hangi
+# kategoriye ne kadar puan etkisi olacağı) → kullanıcı Ana Sayfa'da
+# Onayla/Reddet der → SADECE onaylananlar Optima Skor'a uygulanır.
+# Bu bildirim, "Beklenti Modu" anahtarının açık/kapalı olmasından
+# BAĞIMSIZ gösterilir (kapalıyken de "şunlar bekliyor" bilgisi verilir),
+# ama uygulanması hâlâ anahtara bağlıdır.
+try:
+    from db import get_bekleyen_tespitler, get_onaylanmis_tespitler
+    _bekleyen_tespitler = get_bekleyen_tespitler()
+except Exception:
+    _bekleyen_tespitler = []
+
+if _bekleyen_tespitler:
+    st.warning(
+        f"🔔 **{len(_bekleyen_tespitler)} adet otomatik tespit edilen olay onayınızı bekliyor** "
+        f"— incelemek için Ana Sayfa'daki 'Beklenti Modu' bölümüne gidin. Hiçbiri "
+        f"onaylamadan Optima Skor'a uygulanmaz."
+    )
+
 if st.session_state.get("beklenti_aktif"):
     for _bk_key in _KALIP_TABLOSU.keys():
         if st.session_state.get(f"bk_{_bk_key}"):
             _beklenti_ayarlar[_bk_key] = st.session_state.get(f"bk_{_bk_key}_siddet", "Orta")
             _beklenti_kaynak[_bk_key] = "manuel"
 
-    # v2.0.7.154 (Bahri'nin talebi, 18 Ağustos 2026): OTOMATİK haber
-    # tespiti - haber_izleme.py'nin (GitHub Actions, 10 dk'da bir) AI ile
-    # doğruladığı tespitler burada okunup, MANUEL seçimlerle AYNI şekilde
-    # (Bahri'nin seçimi: "hemen otomatik uygula", onay beklemeden)
-    # uygulanıyor. Aynı kalıp için birden fazla aktif tespit varsa (ör.
-    # aynı olay hakkında birden fazla haber), EN YÜKSEK şiddetli olan
-    # kullanılır. Manuel seçim varsa VE otomatik tespit de varsa, ikisi
-    # arasında YÜKSEK olan şiddet kullanılır (ikisi çelişmez, sadece
-    # büyüklük güncellenir).
+    # SADECE kullanıcının AÇIKÇA onayladığı tespitler uygulanır (bekleyenler
+    # DEĞİL). Aynı kalıp için manuel seçim de varsa, YÜKSEK olan şiddet
+    # kazanır (ikisi çelişmez, sadece büyüklük güncellenir).
     try:
-        from db import get_aktif_otomatik_tespitler
-        _aktif_otomatik_tespitler = get_aktif_otomatik_tespitler()
+        _onaylanmis_tespitler = get_onaylanmis_tespitler()
     except Exception:
-        _aktif_otomatik_tespitler = []
+        _onaylanmis_tespitler = []
 
     _siddet_sira = {"Düşük": 0, "Orta": 1, "Yüksek": 2}
-    for _tespit in _aktif_otomatik_tespitler:
+    for _tespit in _onaylanmis_tespitler:
         _tk = _tespit["kalip_key"]
         _ts = _tespit.get("siddet", "Orta")
         if _tk not in _KALIP_TABLOSU:
@@ -2531,7 +2547,7 @@ if st.session_state.get("beklenti_aktif"):
         _mevcut = _beklenti_ayarlar.get(_tk)
         if _mevcut is None or _siddet_sira.get(_ts, 1) > _siddet_sira.get(_mevcut, 1):
             _beklenti_ayarlar[_tk] = _ts
-            _beklenti_kaynak[_tk] = "otomatik" if _mevcut is None else "manuel+otomatik"
+            _beklenti_kaynak[_tk] = "onaylanmış otomatik" if _mevcut is None else "manuel+onaylanmış otomatik"
 
 _beklenti_log = []
 _beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0, "KRIPTO": 0.0}
@@ -4392,10 +4408,56 @@ if page=="Ana Sayfa":
         # "13 sene önceki bir olayı bugüne örnek göstermek anlamsız") -
         # _KALIP_ACIKLAMA zaten çok-olaylı akademik çalışmalara atıfta
         # bulunan istatistiksel ifadeyi içeriyor, ayrı bir satıra gerek yok.
-        # v2.0.7.154: otomatik tespit edilen kalıplar için haber kaynağı +
-        # "İptal Et" butonu eklendi - "hemen otomatik uygula" seçimiyle
-        # ÇELİŞMEZ (uygulama zaten olmuş), bu UYGULANDIKTAN SONRA yanlış
-        # bir tespiti düzeltme mekanizmasıdır.
+        # v2.0.7.156 (Bahri'nin talebi, KRİTİK tasarım düzeltmesi):
+        # "hemen otomatik uygula" YANLIŞ anlaşılmıştı - Bahri'nin gerçekte
+        # istediği: sistem tespit eder, KULLANICIYA gösterir, kullanıcı
+        # UYGUN BULURSA onaylar, ANCAK O ZAMAN uygulanır. Aşağıda ÖNCE
+        # onay bekleyen tespitler (Onayla/Reddet düğmeleriyle), SONRA
+        # (varsa) zaten onaylanmış/manuel aktif varsayımlar gösteriliyor.
+        if _bekleyen_tespitler:
+            st.divider()
+            st.markdown("**🔔 Onay Bekleyen Otomatik Tespitler**")
+            st.caption(
+                "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece işaretlediğiniz "
+                "(veya onayladığınız) durumlar uygulanır."
+            )
+            for _tespit in _bekleyen_tespitler:
+                _tk2 = _tespit["kalip_key"]
+                _kalip_adi_gosterim = _KALIP_ISIM.get(_tk2, _tk2)
+                with st.container(border=True):
+                    # v2.0.7.157 (Bahri'nin talebi): AI'nin ürettiği doğal
+                    # cümle ("[Kaynak]'a göre, ... bu durumda ... Optima
+                    # Skorlarını artırmamız/azaltmamız gerekir") artık
+                    # ANA MESAJ olarak, teknik bir "AI gerekçesi:" etiketi
+                    # ARKASINDA gizlenmeden, doğrudan gösteriliyor.
+                    _dogal_cumle = _tespit.get('ai_gerekce', '') or (
+                        f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
+                    st.markdown(f"💬 {_dogal_cumle} **Onaylıyor musunuz?**")
+                    st.caption(
+                        f"Kalıp: {_kalip_adi_gosterim} · Önerilen şiddet: "
+                        f"{_tespit.get('siddet','Orta')} · Kaynak: "
+                        f"[{_tespit.get('haber_kaynak','')} — "
+                        f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
+                    _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
+                    with _oc1:
+                        if st.button("✅ Onayla", key=f"tespit_onay_{_tespit['id']}"):
+                            try:
+                                from db import tespit_onayla
+                                tespit_onayla(_tespit["id"])
+                                st.success("Onaylandı, Optima Skor'a uygulanacak.")
+                                st.rerun()
+                            except Exception as _onay_err:
+                                st.error(f"Onaylanamadı: {_onay_err}")
+                    with _oc2:
+                        if st.button("❌ Reddet", key=f"tespit_red_{_tespit['id']}"):
+                            try:
+                                from db import tespit_reddet
+                                tespit_reddet(_tespit["id"])
+                                st.info("Reddedildi, bir daha gösterilmeyecek.")
+                                st.rerun()
+                            except Exception as _red_err:
+                                st.error(f"Reddedilemedi: {_red_err}")
+
         if _beklenti_ayarlar:
             st.divider()
             st.markdown("**Beklenti Modu — Aktif Varsayımlar ve Gerekçeleri**")
@@ -4403,41 +4465,20 @@ if page=="Ana Sayfa":
                 _kaynak_etiket2 = _beklenti_kaynak.get(_kalip_key, "manuel")
                 _kaynak_gosterim = {
                     "manuel": "👤 elle işaretlendi",
-                    "otomatik": "🤖 otomatik tespit edildi",
-                    "manuel+otomatik": "👤+🤖 elle işaretlendi + otomatik tespit doğruladı",
+                    "onaylanmış otomatik": "🤖✅ otomatik tespit edildi, onayladınız",
+                    "manuel+onaylanmış otomatik": "👤+🤖✅ elle işaretlendi + onayladığınız otomatik tespit",
                 }.get(_kaynak_etiket2, _kaynak_etiket2)
                 st.markdown(
                     f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet, {_kaynak_gosterim}): "
                     f"{_KALIP_ACIKLAMA[_kalip_key]}"
                 )
-                if "otomatik" in _kaynak_etiket2:
-                    for _tespit in _aktif_otomatik_tespitler:
-                        if _tespit["kalip_key"] != _kalip_key:
-                            continue
-                        _tc1, _tc2 = st.columns([5, 1])
-                        with _tc1:
-                            st.caption(
-                                f"📰 {_tespit.get('haber_kaynak','')}: "
-                                f"[{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')}) "
-                                f"— AI gerekçesi: {_tespit.get('ai_gerekce','')}")
-                        with _tc2:
-                            if st.button("İptal Et", key=f"tespit_iptal_{_tespit['id']}"):
-                                try:
-                                    from db import otomatik_tespit_iptal_et
-                                    otomatik_tespit_iptal_et(_tespit["id"])
-                                    st.success("Tespit iptal edildi.")
-                                    st.rerun()
-                                except Exception as _iptal_err:
-                                    st.error(f"İptal edilemedi: {_iptal_err}")
             st.caption(
                 "Yukarıdaki yön ve büyüklük ilişkileri, tek bir olaya değil, "
                 "onlarca yıl ve çok sayıda olayı kapsayan akademik panel/olay "
                 "çalışmalarına (event study) dayanır — ama gelecekteki her "
                 "olay öncekilerle birebir aynı büyüklükte gerçekleşmez, bu "
                 "istatistiksel bir eğilimdir, kesin bir tahmin değildir. "
-                "Otomatik tespitler, anahtar kelime ön-filtresi + yapay zeka "
-                "doğrulamasıyla ONAY BEKLENMEDEN uygulanır (yanlış bir tespit "
-                "fark edersen yukarıdaki 'İptal Et' ile geri alabilirsin). "
+                "Otomatik tespitler SİZ ONAYLAMADAN asla uygulanmaz. "
                 "Yatırım tavsiyesi değildir."
             )
 
