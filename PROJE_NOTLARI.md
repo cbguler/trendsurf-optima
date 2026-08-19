@@ -389,6 +389,61 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+### 🔴 OTURUM DEVİR ÖZETİ (19 Ağustos 2026, sohbet görsel kapasitesi doldu — YENİ SOHBETE BAŞLARKEN ÖNCE BURAYI OKU)
+
+**Son doğrulanmış canlı durum:** `v2.0.7.157`, commit `46fe734`,
+GitHub'da doğrulandı (taze klon + `py_compile` ile). Bu, bugünkü (18-19
+Ağustos) maraton oturumun SONUNDAKİ commit — birçok özellik art arda
+eklendi, çoğu **KOD OLARAK doğru derleniyor ve mantık mock veriyle test
+edildi, AMA HİÇBİRİ CANLI ORTAMDA (gerçek Streamlit Cloud üzerinde,
+gerçek kullanıcı etkileşimiyle) DOĞRULANMADI.**
+
+**Bu oturumda eklenen/değişen ana özellikler (hepsi teorik olarak
+tamam, canlı doğrulama BEKLİYOR):**
+1. **Getiri Kıyaslaması + Pozisyon Bazlı grafik** (Portföyüm) - renkler,
+   hover, grafik matematiği düzeltildi.
+2. **scoring.py birleştirmesi** - TUPRS tutarsızlığı kök nedenine kadar
+   izlenip düzeltildi (worker.py'nin Hacim/Düşüş düzeltmesi keşfi dahil).
+3. **Fırsat Radarı overlay tek kaynağa taşındı** (`db.get_intraday_overlay`).
+4. **Supabase bağlantı havuzu eklendi, SONRA tamamen GERİ ALINDI**
+   (iki farklı çöküş türüne yol açtı - v2.0.7.142, basit yönteme dönüldü).
+5. **Optima Skor Bileşimi pasta grafikleri** (Ana Sayfa - Kategori
+   Dağılımı yanında, tıklamasız; tekil varlık versiyonu KALDIRILDI).
+6. **Üst boşluk + sidebar aralık düzeltmeleri** (CSS).
+7. **"Beklenti Modu"** - EN BÜYÜK ve EN KARMAŞIK yeni özellik:
+   - 6 kalıp (jeopolitik/petrol/fed/kredi_notu/kripto_olay/tcmb_kredibilite),
+     hepsi çok-olaylı akademik çalışmalara dayalı, istatistiksel ifadeli
+     (tekil tarih referansı YOK, Bahri'nin talebiyle kaldırıldı).
+   - Sidebar'da manuel işaretleme + GitHub Actions'ta 10 dk'da bir
+     çalışan `haber_izleme.py` (5 RSS kaynağı + anahtar kelime ön-filtre
+     + Google Gemini API doğrulama - ÜCRETSİZ katman, GEMINI_API_KEY
+     zaten Bahri tarafından eklendi).
+   - **KRİTİK tasarım düzeltmesi (v2.0.7.156):** "hemen otomatik uygula"
+     YANLIŞ anlaşılmıştı - gerçek istenen akış ONAY BEKLEME: sistem
+     tespit eder → kullanıcıya DOĞAL bir cümleyle gösterir ("[Kaynak]'a
+     göre..., bu durumda...Optima Skorlarını artırmamız/azaltmamız
+     gerekir. Onaylıyor musunuz?") → SADECE onaylanırsa uygulanır.
+   - Ayarlama GLOBAL olarak uygulanıyor (df_uni yüklendikten hemen sonra,
+     TÜM sayfalardan önce) - önceki "sadece Ana Sayfa'da" tutarsızlığı
+     yapısal olarak imkansız hale getirildi.
+
+**Bir sonraki oturumda İLK yapılması gerekenler (öncelik sırasıyla):**
+1. **Uygulamanın genel olarak hâlâ çalıştığını doğrula** (BIST/Portföyüm/
+   Ana Sayfa gibi birkaç sayfaya gidip çökme olmadığını kontrol et) -
+   bu kadar çok değişiklikten sonra bu ilk kontrol.
+2. **Beklenti Modu'nun onay akışını gerçek bir senaryoda test et** -
+   sidebar'dan bir kalıbı elle işaretleyip Optima Skor'un GERÇEKTEN
+   TÜM sayfalarda tutarlı değiştiğini doğrula.
+3. **haber_izleme.py'nin GitHub Actions'ta gerçekten çalışıp
+   çalışmadığını kontrol et** (Actions sekmesi → "Beklenti Modu Haber
+   Izleme" → loglar) - bekleyen bir tespit oluşup oluşmadığına bak.
+4. Eğer performans/yavaşlık şikayeti tekrar gelirse: bu oturumda EKLENEN
+   özelliklerin (özellikle Beklenti Modu'nun her sayfa yüklemesinde
+   yaptığı ekstra DB sorguları - `get_bekleyen_tespitler`/
+   `get_onaylanmis_tespitler`) payı olup olmadığı ayrıca değerlendirilmeli
+   - bağlantı havuzu denemesinin NEDEN geri alındığını (yukarıdaki not)
+   unutma, aynı hataya düşme.
+
 - **[KRİTİK - HÂLÂ PUSH EDİLMEMİŞ] v2.0.7.156 hâlâ GitHub'a hiç
   push edilmedi (19 Ağustos 2026 itibarıyla doğrulandı) - bu turda
   v2.0.7.157 üzerine inşa edildiği için ikisi BİRLİKTE push
