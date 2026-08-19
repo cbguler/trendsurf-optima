@@ -41,6 +41,7 @@ Yeni bir kalip eklenirse HER IKI yerde de guncellenmelidir.
 import os
 import sys
 import json
+import re  # v2.0.7.161: kelime siniri eslestirmesi icin
 import time
 import datetime
 
@@ -60,36 +61,70 @@ _RSS_KAYNAKLARI = [
 # ══════════════════════════════════════════════════════════════
 # Anahtar kelime on-filtresi (Turkce + Ingilizce - kaynaklar karisik)
 # ══════════════════════════════════════════════════════════════
+# v2.0.7.161 (Bahri'nin bulgusu, 19 Ağustos 2026 — "Maradona'nın doktoru
+# ile ilgili haberi neden piyasa etkisi olası haberlerin içine aldın?"):
+# KÖK NEDEN: eski filtre kelimeyi düz alt-dize (substring) olarak arıyordu.
+# "war" kelimesi, haber özetindeki "crucial WARning signs" ifadesinin
+# içinde geçtiği için Maradona haberi "Jeopolitik gerilim" kalıbına takıldı.
+# Aynı tuzağın diğer örnekleri: "attack" -> "heart attack", "fed" ->
+# "conFEDeration"/"FedEx", "oil" -> "turmOIL"/"spOILed", "crude" -> "crudely".
+#
+# ÇÖZÜM: kelime sınırı (\b) ile eşleştirme. Ama Türkçe ve İngilizce AYNI
+# kuralla ele alınamaz:
+#   - Türkçe SONDAN EKLEMELİ bir dil: "savaş" kelimesi haberde "savaşı",
+#     "savaşta", "savaşın" olarak geçer. Bu yüzden Türkçe kelimeler
+#     \bkelime\w*  (baştan sınırlı, sona ek serbest) kalıbıyla aranır.
+#   - İngilizce'de ek yok, sadece çoğul var: \bkelimes?\b
+# Bu ayrım olmadan ya Türkçe haberleri kaçırırız ya da "warning" tuzağına
+# tekrar düşeriz - LİSTEYE KELİME EKLERKEN DOĞRU DİLE EKLE.
 _ANAHTAR_KELIMELER = {
-    "jeopolitik": [
-        "savaş", "çatışma", "saldırı", "gerilim", "işgal", "füze", "ordu",
-        "askeri operasyon", "ateşkes", "bombalama",
-        "war", "conflict", "attack", "invasion", "missile", "military",
-        "ceasefire", "airstrike", "troops", "strike on",
-    ],
-    "petrol": [
-        "petrol", "opec", "hürmüz", "boğazı", "ambargo", "üretim kesintisi",
-        "boru hattı", "rafineri", "tanker",
-        "oil", "strait of hormuz", "pipeline", "refinery", "crude",
-    ],
-    "fed": [
-        "fed", "fomc", "faiz kararı", "ecb", "avrupa merkez bankası",
-        "federal reserve", "interest rate decision", "rate hike",
-        "rate cut", "powell", "lagarde",
-    ],
-    "kredi_notu": [
-        "kredi notu", "moody's", "s&p", "fitch", "not indirimi",
-        "credit rating", "sovereign rating", "downgrade",
-    ],
-    "kripto_olay": [
-        "halving", "kripto düzenleme", "borsa çöktü", "bitcoin hack",
-        "crypto regulation", "exchange collapse", "sec lawsuit",
-    ],
-    "tcmb_kredibilite": [
-        "tcmb", "ppk", "para politikası kurulu", "faiz indirimi",
-        "merkez bankası bağımsızlığı",
-    ],
+    "jeopolitik": {
+        "tr": ["savaş", "çatışma", "saldırı", "gerilim", "işgal", "füze",
+               "ordu", "askeri operasyon", "ateşkes", "bombalama"],
+        "en": ["war", "conflict", "attack", "invasion", "missile", "military",
+               "ceasefire", "airstrike", "troops", "strike on"],
+    },
+    "petrol": {
+        "tr": ["petrol", "opec", "hürmüz", "ambargo", "üretim kesintisi",
+               "boru hattı", "rafineri", "tanker"],
+        "en": ["oil", "strait of hormuz", "pipeline", "refinery", "crude"],
+    },
+    "fed": {
+        "tr": ["faiz kararı", "avrupa merkez bankası"],
+        "en": ["fed", "fomc", "ecb", "federal reserve",
+               "interest rate decision", "rate hike", "rate cut",
+               "powell", "lagarde"],
+    },
+    "kredi_notu": {
+        "tr": ["kredi notu", "not indirimi"],
+        "en": ["moody's", "s&p", "fitch", "credit rating",
+               "sovereign rating", "downgrade"],
+    },
+    "kripto_olay": {
+        "tr": ["kripto düzenleme", "borsa çöktü"],
+        "en": ["halving", "bitcoin hack", "crypto regulation",
+               "exchange collapse", "sec lawsuit"],
+    },
+    "tcmb_kredibilite": {
+        "tr": ["tcmb", "ppk", "para politikası kurulu", "faiz indirimi",
+               "merkez bankası bağımsızlığı"],
+        "en": [],
+    },
 }
+
+# v2.0.7.161: kelime listeleri regex'e BİR KEZ derlenir (her haber için
+# yeniden derlemek 10 dakikada bir yüzlerce haber tarayan bir script'te
+# gereksiz yük olurdu).
+_DERLENMIS_KALIPLAR = {}
+for _kk, _diller in _ANAHTAR_KELIMELER.items():
+    _parcalar = []
+    for _k_tr in _diller.get("tr", []):
+        _parcalar.append(re.escape(_k_tr.lower()) + r"\w*")   # Türkçe: sona ek serbest
+    for _k_en in _diller.get("en", []):
+        _parcalar.append(re.escape(_k_en.lower()) + r"s?\b")  # İngilizce: sadece çoğul
+    if _parcalar:
+        _DERLENMIS_KALIPLAR[_kk] = re.compile(
+            r"\b(?:" + "|".join(_parcalar) + r")", re.IGNORECASE | re.UNICODE)
 
 _KALIP_ISIM = {
     "jeopolitik": "Jeopolitik gerilim/çatışma",
@@ -121,17 +156,14 @@ _KATEGORI_ISIM_TR = {
 
 
 def _on_filtre_eslesen_kaliplar(baslik, ozet):
-    """Basit anahtar kelime eslestirmesi - kucuk/buyuk harf duyarsiz.
-    Eslesen TUM kaliplari doner (bir haber birden fazla kaliba
-    eslesebilir, orn. hem 'jeopolitik' hem 'petrol')."""
+    """v2.0.7.161: Kelime SINIRINA saygili eslestirme (eski surum duz
+    alt-dize ariyordu, "warning" icindeki "war" yuzunden alakasiz haberler
+    takiliyordu - bkz. yukaridaki not).
+    Eslesen TUM kaliplari doner (bir haber birden fazla kaliba eslesebilir,
+    orn. hem 'jeopolitik' hem 'petrol')."""
     metin = f"{baslik} {ozet}".lower()
-    eslesenler = []
-    for kalip_key, kelimeler in _ANAHTAR_KELIMELER.items():
-        for kelime in kelimeler:
-            if kelime.lower() in metin:
-                eslesenler.append(kalip_key)
-                break
-    return eslesenler
+    return [kk for kk, kalip in _DERLENMIS_KALIPLAR.items()
+            if kalip.search(metin)]
 
 
 def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
@@ -281,16 +313,13 @@ KURALLAR:
 def main():
     from db import (haber_islendi_mi, haber_islendi_isaretle, otomatik_tespit_ekle,
                     haber_akisi_ekle, haber_akisi_ceviri_yaz, haber_akisi_temizle,
-                    ai_cagri_sayisi_bugun, ai_cagri_kaydet)
+                    ai_cagri_sayisi_bugun, ai_cagri_kaydet, get_cevrilmemis_haberler)
 
     print(f"[haber_izleme] Baslangic: {datetime.datetime.now().isoformat()}")
     toplam_haber = 0
     on_filtre_gecen = 0
     ai_dogrulanan = 0
     akisa_eklenen = 0
-    # v2.0.7.160: bu turda cevrilecek Ingilizce basliklar burada birikir,
-    # tur sonunda TEK istekle cevrilir (baslik basina ayri istek DEGIL).
-    ceviri_kuyrugu = []
 
     for kaynak_adi, rss_url in _RSS_KAYNAKLARI:
         try:
@@ -332,8 +361,6 @@ def main():
                 eslesen_kalip=",".join(eslesenler) if eslesenler else None,
                 yayin_zamani=yayin_zamani)
             akisa_eklenen += 1
-            if kaynak_adi in _INGILIZCE_KAYNAKLAR:
-                ceviri_kuyrugu.append((url, baslik[:300]))
 
             if not eslesenler:
                 haber_islendi_isaretle(url)  # eslesmeyen haberi de isaretle - tekrar bakma
@@ -361,24 +388,36 @@ def main():
             haber_islendi_isaretle(url)
             time.sleep(1)  # API rate limit icin kucuk bir bekleme
 
-    # ── v2.0.7.160: TOPLU CEVIRI (tur sonunda, tek istek) ──────────────
-    # Butce esigi asildiysa ceviri HIC yapilmaz - haberler orijinal
-    # Ingilizce basligiyla gorunur. Tespit dogrulamasi bundan etkilenmez
-    # (yukarida ayri butce kontrolu var, esigi daha yuksek).
+    # ── v2.0.7.161: TOPLU CEVIRI (veritabani tabanli, kendini onarir) ──
+    # v2.0.7.160'ta bu blok bellekteki `ceviri_kuyrugu`ndan besleniyordu:
+    # o turda Gemini cagrisi basarisiz olursa haberler SONSUZA KADAR
+    # Ingilizce kaliyordu. Artik veritabanindaki cevrilmemis satirlar
+    # okunuyor - sorun cozulunce birikmis basliklar kendiliginden cevriliyor.
     cevrilen = 0
-    if ceviri_kuyrugu:
-        if ai_cagri_sayisi_bugun() >= _CEVIRI_ONCELIK_ESIGI:
-            print(f"[haber_izleme] Ceviri butcesi doldu - {len(ceviri_kuyrugu)} "
-                  f"baslik orijinal haliyle kalacak.")
+    bekleyen_ceviri = get_cevrilmemis_haberler(sorted(_INGILIZCE_KAYNAKLAR), limit=40)
+    if bekleyen_ceviri:
+        _bugunku = ai_cagri_sayisi_bugun()
+        if _bugunku >= _CEVIRI_ONCELIK_ESIGI:
+            print(f"[haber_izleme] CEVIRI ATLANDI - gunluk AI butcesi "
+                  f"({_bugunku}/{_CEVIRI_ONCELIK_ESIGI}) doldu. "
+                  f"{len(bekleyen_ceviri)} baslik orijinal haliyle bekliyor, "
+                  f"yarin tekrar denenecek.")
+        elif not os.environ.get("GEMINI_API_KEY", ""):
+            print("[haber_izleme] CEVIRI ATLANDI - GEMINI_API_KEY ortam "
+                  "degiskeni BOS/TANIMSIZ. Workflow secrets ayarini kontrol et.")
         else:
-            # Cok uzun listeyi tek istege sikistirmamak icin 40'lik parcalar
-            for i in range(0, len(ceviri_kuyrugu), 40):
-                parca = ceviri_kuyrugu[i:i + 40]
-                ceviriler = _toplu_ceviri(parca)
-                ai_cagri_kaydet(1)
-                for u, tr in ceviriler.items():
-                    haber_akisi_ceviri_yaz(u, tr)
-                    cevrilen += 1
+            print(f"[haber_izleme] Ceviri deneniyor: {len(bekleyen_ceviri)} baslik...")
+            ceviriler = _toplu_ceviri(bekleyen_ceviri)
+            ai_cagri_kaydet(1)
+            for u, tr in ceviriler.items():
+                haber_akisi_ceviri_yaz(u, tr)
+                cevrilen += 1
+            if cevrilen == 0:
+                print("[haber_izleme] UYARI: ceviri istegi sonuc dondurmedi - "
+                      "yukaridaki hata satirina bak. Basliklar Ingilizce kalacak, "
+                      "sonraki turda tekrar denenecek.")
+            else:
+                print(f"[haber_izleme] {cevrilen} baslik cevrildi.")
 
     haber_akisi_temizle(7)  # 7 gunden eskiyi sil - tablo sinirsiz buyumesin
 

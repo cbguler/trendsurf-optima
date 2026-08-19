@@ -389,7 +389,56 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.160 (19 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.161 (19 Ağustos 2026,
+  Bahri'nin bulgusu — "Maradona'nın doktoru ile ilgili haberi neden
+  piyasa etkisi olası haberlerin içine aldın?"): ÖN-FİLTRE ALT-DİZE
+  HATASI + ÇEVİRİ DAYANIKLILIĞI.**
+  - **KÖK NEDEN (kesin, yeniden üretildi):** `_on_filtre_eslesen_kaliplar`
+    anahtar kelimeyi düz alt-dize olarak arıyordu (`if kelime in metin`).
+    "war" kelimesi, Maradona haberinin özetindeki **"crucial WARning
+    signs"** ifadesinin içinde geçtiği için haber "Jeopolitik gerilim"
+    kalıbına takıldı. Aynı tuzağın doğrulanmış diğer örnekleri:
+    "attack"→"heart attack" (bu kelime bazlı, aşağıya bak),
+    "fed"→"conFEDeration"/"FedEx", "oil"→"turmOIL", "crude"→"crudely".
+  - **ÇÖZÜM:** kelime sınırı (`\b`) ile regex eşleştirme. Türkçe ve
+    İngilizce AYRI ele alınıyor çünkü Türkçe sondan eklemeli:
+    Türkçe `\bkelime\w*` (savaş → savaşı/savaşta yakalanır),
+    İngilizce `\bkelimes?\b` (sadece çoğul). **LİSTEYE KELİME EKLERKEN
+    DOĞRU DİL ANAHTARINA EKLE** (`_ANAHTAR_KELIMELER[kalip]["tr"/"en"]`).
+    Regex'ler modül seviyesinde BİR KEZ derleniyor (`_DERLENMIS_KALIPLAR`).
+  - **Test sonucu:** 7 yanlış eşleşme senaryosunun 6'sı temizlendi,
+    10 doğru eşleşme senaryosunun 10'u korundu (Türkçe çekimli haller
+    dahil). **"heart attack" hâlâ takılıyor** — orada "attack" gerçekten
+    ayrı bir kelime, alt-dize hatası DEĞİL. Bunu kelime listesiyle
+    çözmeye çalışma (kara liste yaklaşımı sonsuz kuyruk olur); AI
+    doğrulama katmanının elemesi gerekir, zaten görevi bu.
+  - **ÇEVİRİ ARTIK VERİTABANI TABANLI VE KENDİNİ ONARIYOR:** v2.0.7.160'ta
+    çeviri bellekteki `ceviri_kuyrugu`ndan besleniyordu — o turda Gemini
+    çağrısı herhangi bir sebeple başarısız olursa o haberler SONSUZA
+    KADAR İngilizce kalıyordu, bir daha hiç denenmiyordu. Artık
+    `get_cevrilmemis_haberler()` ile `baslik_tr IS NULL` olan İngilizce
+    kaynak satırları okunuyor; kök neden çözülünce birikmiş başlıklar
+    sonraki turlarda otomatik çevriliyor.
+  - **AÇIK SORUN — ÇEVİRİ NEDEN HİÇ ÇALIŞMADI, HENÜZ BİLİNMİYOR:**
+    Bahri 19 Ağustos'ta haberlerin geldiğini ama hiç çevrilmediğini
+    bildirdi. Elenen ihtimaller: workflow GEMINI_API_KEY'i geçiriyor
+    (yml doğrulandı), `requests`/`json`/`feedparser` importları yerinde,
+    zaman aşımı değil (98 haber + 14 eşleşme için kaba hesap ~183 sn,
+    limit 600 sn). **Kalan en güçlü ihtimal: Gemini çağrısının kendisi
+    başarısız** (anahtar geçersiz, model adı, kota). Aynı çağrı
+    `_ai_dogrula`'da da kullanılıyor ve "onay bekleyen tespit: 0" olması
+    bu şüpheyi güçlendiriyor. **KESİN CEVAP GITHUB ACTIONS LOGUNDA** —
+    v2.0.7.161 ile log çıktısı ayrıştırıcı hale getirildi: artık
+    "CEVIRI ATLANDI - GEMINI_API_KEY ... BOS", "CEVIRI ATLANDI - gunluk
+    AI butcesi doldu", "Toplu ceviri hatasi: <tip>: <mesaj>" veya
+    "N baslik cevrildi" satırlarından hangisinin bastığına bakılmalı.
+  - **Haberler sayfası metinleri düzeltildi:** "Piyasa etkisi olası"
+    ifadesi yanıltıcıydı (ön-filtreye takılmak bir değerlendirme değil,
+    kaba bir elemedir). "Anahtar kelime filtresine takılan haberler"
+    olarak değiştirildi, altına bunun bir değerlendirme OLMADIĞI açıkça
+    yazıldı.
+
+
   Bahri'nin talebi — "durumun stabil olduğunu nasıl görebilirim diye
   düşünürken haber sayfası fikri oluşmaya başladı"): HABERLER SAYFASI.**
   - **MİMARİ DEĞİŞİKLİĞİ:** `haber_izleme.py` önceden ön-filtreye

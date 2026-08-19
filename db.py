@@ -664,6 +664,32 @@ def haber_islendi_isaretle(url: str):
         print(f"[db] haber_islendi_isaretle hata: {e}", file=sys.stderr)
 
 
+def get_cevrilmemis_haberler(kaynaklar: list, limit: int = 40) -> list:
+    """v2.0.7.161: Ceviri artik SADECE o turda gelen haberlerle sinirli degil -
+    veritabanindaki HENUZ CEVRILMEMIS Ingilizce basliklari doner.
+
+    Sebep: v2.0.7.160'ta ceviri bellekteki kuyruktan besleniyordu. O turda
+    Gemini cagrisi herhangi bir sebeple basarisiz olursa (kota, ag, API
+    hatasi) o haberler SONSUZA KADAR Ingilizce kaliyordu - bir daha hic
+    denenmiyordu. Bu fonksiyonla sistem kendini onariyor: sorun cozulunce
+    birikmis basliklar sonraki turlarda otomatik cevriliyor."""
+    if not kaynaklar:
+        return []
+    try:
+        isaretler = ",".join(["?"] * len(kaynaklar))
+        rows = get_conn().execute(
+            "SELECT haber_url, baslik FROM haber_akisi "
+            "WHERE baslik_tr IS NULL "
+            f"AND kaynak IN ({isaretler}) "
+            "ORDER BY eklenme_zamani DESC LIMIT ?",
+            (*kaynaklar, int(limit))).fetchall()
+    except Exception as e:
+        print(f"[db] get_cevrilmemis_haberler hata: {e}", file=sys.stderr)
+        return []
+    return [((r["haber_url"] if isinstance(r, dict) else r[0]),
+             (r["baslik"] if isinstance(r, dict) else r[1])) for r in rows]
+
+
 def haber_akisi_ekle(haber_url: str, kaynak: str, baslik: str,
                      baslik_tr: str = None, eslesen_kalip: str = None,
                      yayin_zamani=None):

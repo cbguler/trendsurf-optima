@@ -6326,12 +6326,12 @@ elif page=="Haberler":
         # ── Durum özeti: Bahri'nin asıl sorusuna doğrudan cevap ──────
         _c1, _c2, _c3 = st.columns(3)
         _c1.metric("Son 48 saatte taranan", len(_akis))
-        _c2.metric("Piyasa etkisi olası", len(_ilgili))
+        _c2.metric("Filtreye takılan", len(_ilgili))
         _c3.metric("Onay bekleyen tespit", len(_bekleyen_tespitler))
         if not _ilgili:
             st.success(
-                "Son 48 saatte hiçbir haber izlenen 6 kalıptan birine "
-                "takılmadı — piyasa etkisi beklenen bir gelişme görünmüyor."
+                "Son 48 saatte hiçbir haber izlenen 6 kalıbın anahtar "
+                "kelimelerine takılmadı."
             )
         st.divider()
 
@@ -6357,11 +6357,14 @@ elif page=="Haberler":
             st.caption(f"{_h.get('kaynak','')} · {_zaman_str}{_kalip_etiket}{_cev_not}")
 
         if _ilgili:
-            st.subheader("Piyasa etkisi olası haberler")
+            st.subheader("Anahtar kelime filtresine takılan haberler")
             st.caption(
-                "Bunlar anahtar kelime ön-filtresine takıldı. Takılmak tek "
-                "başına bir şey ifade etmez — Optima Skor'a etki etmesi için "
-                "AI doğrulamasından da geçip SİZİN onayınızı alması gerekir."
+                "Bu bölüm bir DEĞERLENDİRME DEĞİL, sadece kaba bir eleme. "
+                "Buradaki haberlerin çoğunun piyasayla ilgisi olmayabilir — "
+                "listede olmak yalnızca haberin metninde kalıbın anahtar "
+                "kelimelerinden biri geçtiği anlamına gelir. Gerçek "
+                "değerlendirmeyi AI doğrulaması yapar; Optima Skor'a etki "
+                "etmesi için oradan da geçip SİZİN onayınızı alması gerekir."
             )
             for _h in _ilgili:
                 with st.container(border=True):
