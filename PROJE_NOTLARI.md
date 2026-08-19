@@ -389,7 +389,49 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.163 (19 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.164 (19 Ağustos 2026,
+  Bahri Actions logunu paylaştı — kesin teşhis): GEMINI 429 "TOO MANY
+  REQUESTS" - RETRY-WITH-BACKOFF EKLENDİ, KESİN RAKAM HÂLÂ BİLİNMİYOR.**
+  - **Log kanıtı:** `[haber_izleme] Toplu ceviri hatasi: HTTPError: 429
+    Client Error: Too Many Requests` + `Bugunku toplam AI cagrisi: 20/120`.
+    Yani: (1) 429 GERÇEK, tahmin değil - bu turun ÇEVİRİSİ gerçekten
+    reddedildi. (2) Bugünkü kümülatif çağrı sadece 20 - kendi koyduğumuz
+    120 günlük bütçenin çok altında. (3) Bu turdaki TEK Gemini isteği
+    (çeviri) BİLE 429 aldı - yani sorun bizim günlük bütçemiz değil,
+    Google'ın kendi tarafındaki bir kısıt.
+  - **19 Ağustos'ta 5 farklı üçüncü taraf kaynak tarandı, HEPSİ
+    BİRBİRİNDEN FARKLI dakikalık/günlük rakam verdi** (dakikalık 5/10/15,
+    günlük 25/50/100/250/1500 gibi). Bu dağınıklık zaten kod içinde
+    belgeleniyordu (v2.0.7.160). Kesin rakam KODA GÖMÜLMEDİ - bunun
+    yerine dayanıklılık eklendi: **KESİN RAKAM Google AI Studio /
+    Google Cloud Console'un kendi kota sayfasından görülmeli**
+    (aistudio.google.com/apikey veya Cloud Console > APIs & Services >
+    Quotas) - bu proje için GERÇEK, üçüncü taraf tahmini olmayan rakam
+    orada. **Bahri isterse bu sayfaya birlikte bakılabilir.**
+  - **Eklenen dayanıklılık (`_gemini_istek_gonder` sarmalayıcı, HER İKİ
+    Gemini çağrı noktasında kullanılıyor - `_ai_dogrula` ve
+    `_toplu_ceviri`):** 429 alınırsa 65 saniye (dakikalık pencerenin
+    resetlenmesi için 60 sn + güvenlik payı) beklenip BİR KEZ DAHA
+    denenir. **GÜVENLİK SINIRI:** bir turda bekleyip tekrar deneyip YİNE
+    429 alınırsa, o turun GERİ KALANINDA bir daha BEKLENMEZ (hemen
+    başarısız olunur) - yoksa çok sayıda eşleşmeli bir turda TÜM 10
+    dakikalık workflow zaman aşımı retry beklemelerinde tükenebilirdi.
+    Bayrak (`_ardisik_429_goruldu`) her turun başında sıfırlanır.
+    İzole test edildi (sahte 429 senaryosu): ilk çağrı 1 kez bekleyip
+    tekrar deniyor, ikinci çağrıda hiç beklemeden hemen başarısız oluyor
+    - doğrulandı.
+  - **429 DIŞINDAKİ hatalarda YENİDEN DENENMEZ** (400/401/500 vb. -
+    bunlar beklemekle düzelmez, ör. geçersiz anahtar).
+  - **AYRI, DAHA KÜÇÜK BİR ŞÜPHE - Actions ekran görüntüsünden
+    gözlemlendi:** workflow'un çalışma sıklığı yapılandırılan "10
+    dakikada bir" DEĞİL, gözlemlenen aralık ~25-40 dakika. Bu,
+    `haber_izleme.yml`'in kendi yorumunda zaten belgelenen "GitHub'ın
+    best-effort cron'u" sorununun CANLI KANITI. Kalıcı çözüm hâlâ
+    kurulmadı (cron-job.org + workflow_dispatch, `firsat_radari`'de
+    zaten kullanılan yöntem) - bu bir GitHub Secrets/harici servis
+    kurulumu, git push ile yapılamaz, Bahri karar verip kurmalı.
+
+
   Bahri'nin bulgusu — "değişen bir şey olmadı, haberler yine ingilizce,
   maradona haberi yine filtreye takılan haberler arasına giriyor"):
   MARADONA BULGUSUNUN KESİN KÖK NEDENİ + "HABER AKIŞI BAKIMI" ARACI.**

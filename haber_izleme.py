@@ -132,6 +132,61 @@ def _on_filtre_eslesen_kaliplar(baslik, ozet):
             if kalip.search(metin)]
 
 
+# v2.0.7.164 (Bahri'nin bulgusu, 19 Ağustos 2026 - Actions logu ile
+# doğrulandı): Gemini 429 "Too Many Requests" döndürüyor - bugünkü toplam
+# çağrı sadece 20 (kendi koyduğumuz 120 bütçesinin çok altında) ve bu
+# turdaki TEK Gemini isteği (çeviri) bile 429 aldı. Üçüncü taraf kaynaklar
+# gemini-2.5-flash için dakikalık limit olarak 5/10/15 gibi BİRBİRİYLE
+# ÇELİŞEN ama HEPSİ ÇOK DÜŞÜK rakamlar veriyor - bu, günlük kotadan çok
+# DAKİKALIK limitin (ya da bu projeye özgü daha sıkı bir kotanın)
+# vurulduğuna işaret ediyor. Kesin rakam Google AI Studio/Cloud Console'un
+# kendi kota sayfasından görülmeli (bkz. PROJE_NOTLARI.md) - koda tahmini
+# bir sayı gömülmedi, bunun yerine 429'a karşı TEK SEFERLİK, KISA bir
+# bekleme + yeniden deneme eklendi (dakikalık pencere resetlenene kadar
+# beklemek, aynı dakika içinde tekrar denemekten daha güvenilir)."""
+# v2.0.7.164: Bir turda BİRDEN FAZLA on-filtre eşleşmesi varsa, her biri
+# ayrı bir Gemini çağrısı yapar. 429 her çağrıda 65 sn beklenip yeniden
+# denenirse, çok sayıda eşleşme olan bir turda TÜM 10 dakikalık workflow
+# zaman aşımı retry beklemelerinde tükenebilir. Bu yüzden: bir kez
+# "ardışık 429" (yani bekleyip tekrar denedik, YİNE 429) görülürse, bu
+# TURUN GERİ KALANINDA artık BEKLEMEDEN (retry=1) denenir - hız için
+# doğruluktan ödün verilmez, sadece gereksiz bekleme kesilir.
+_ardisik_429_goruldu = False
+
+
+def _gemini_istek_gonder(url, headers, payload, timeout=30, deneme=2, bekleme_sn=65):
+    """requests.post'u SARMALAR - 429 (rate limit) alırsa `bekleme_sn`
+    kadar bekleyip BİR KEZ DAHA dener (dakikalık pencerenin resetlenmesi
+    için 65 sn - 60 sn'lik pencereden biraz fazla, güvenlik payı).
+    429 DIŞINDAKİ hatalarda (400/401/500 vb.) YENİDEN DENEMEZ - bunlar
+    beklemekle düzelmez (ör. geçersiz anahtar), zaman kaybettirir.
+    Bu turda DAHA ÖNCE bekleyip tekrar deneyip YİNE 429 aldıysak, bir
+    daha BEKLEMEZ (workflow'un 10 dakikalık zaman aşımını retry
+    beklemelerinde tüketmemek için - bkz. yukarıdaki not).
+    Son denemede de başarısız olursa exception'ı OLDUĞU GİBİ fırlatır -
+    çağıran taraf (mevcut try/except) zaten güvenli şekilde ele alıyor."""
+    global _ardisik_429_goruldu
+    import requests
+    _bu_cagrida_deneme = 1 if _ardisik_429_goruldu else deneme
+    for _deneme_no in range(1, _bu_cagrida_deneme + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.HTTPError as e:
+            _kod = e.response.status_code if e.response is not None else None
+            if _kod == 429 and _deneme_no < _bu_cagrida_deneme:
+                print(f"[haber_izleme] 429 alindi (deneme {_deneme_no}/{_bu_cagrida_deneme}) - "
+                      f"{bekleme_sn} sn bekleyip tekrar denenecek.")
+                time.sleep(bekleme_sn)
+                continue
+            if _kod == 429:
+                _ardisik_429_goruldu = True
+                print("[haber_izleme] 429 tekrarlandi - bu turun geri kalaninda "
+                      "artik beklenmeyecek (zaman asimini korumak icin).")
+            raise
+
+
 def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
     """v2.0.7.155 (Bahri'nin talebi, 18 Ağustos 2026 — "ücretli ise
     kurmayacağım, ücretsiz alternatif bulalım"): Anthropic API yerine
@@ -189,13 +244,12 @@ SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
 {{"eslesme": true/false, "siddet": "Düşük"/"Orta"/"Yüksek", "gerekce": "yukarıdaki kalıpta doğal cümle (max 400 karakter)"}}"""
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
-        resp = requests.post(
+        resp = _gemini_istek_gonder(
             url,
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
+            payload={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=30,
         )
-        resp.raise_for_status()
         veri_ham = resp.json()
         metin = veri_ham["candidates"][0]["content"]["parts"][0]["text"].strip()
         metin = metin.replace("```json", "").replace("```", "").strip()
@@ -255,13 +309,12 @@ KURALLAR:
 {{"ceviriler": {{"1": "birinci başlığın çevirisi", "2": "ikinci başlığın çevirisi"}}}}"""
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
-        resp = requests.post(
+        resp = _gemini_istek_gonder(
             url,
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
+            payload={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=45,
         )
-        resp.raise_for_status()
         metin = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         metin = metin.replace("```json", "").replace("```", "").strip()
         ceviriler = json.loads(metin).get("ceviriler", {})
@@ -277,6 +330,9 @@ KURALLAR:
 
 
 def main():
+    global _ardisik_429_goruldu
+    _ardisik_429_goruldu = False  # v2.0.7.164: her tur temiz baslar
+
     from db import (haber_islendi_mi, haber_islendi_isaretle, otomatik_tespit_ekle,
                     haber_akisi_ekle, haber_akisi_ceviri_yaz, haber_akisi_temizle,
                     ai_cagri_sayisi_bugun, ai_cagri_kaydet, get_cevrilmemis_haberler)
