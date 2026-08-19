@@ -375,6 +375,43 @@ def init_db():
         cagri_sayisi INTEGER NOT NULL DEFAULT 0
     )""")
 
+    # v2.0.7.162 (Bahri'nin talebi, 19 Ağustos 2026 — "anahtar kelime
+    # ön-filtresi ve kalıplara daha sonra ekleme yapılabilir hale
+    # getirilebilir mi"): Beklenti Modu'nun 6 kalıbı ARTIK KODA GÖMÜLÜ
+    # DEĞİL, bu üç tabloda yaşıyor. app.py ve haber_izleme.py ikisi de
+    # BAŞLANGIÇTA buradan okur - kod değişikliği/deploy GEREKMEDEN yeni
+    # kalıp eklenebilir, kelime eklenebilir/çıkarılabilir, etki puanı
+    # değiştirilebilir. Yönetim arayüzü: Admin Paneli.
+    # DİKKAT — kalip_key SİLİNİRSE kelime ve etki satırları CASCADE ile
+    # otomatik silinir (aşağıdaki FOREIGN KEY ... ON DELETE CASCADE).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS haber_kaliplari (
+        kalip_key   TEXT PRIMARY KEY,
+        ad          TEXT NOT NULL,
+        aciklama    TEXT,
+        aktif       BOOLEAN NOT NULL DEFAULT TRUE,
+        olusturma_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS haber_kalip_kelime (
+        id        SERIAL PRIMARY KEY,
+        kalip_key TEXT NOT NULL REFERENCES haber_kaliplari(kalip_key) ON DELETE CASCADE,
+        dil       TEXT NOT NULL,
+        kelime    TEXT NOT NULL
+    )""")
+    # kategori: MADEN / DOVIZ / BIST / KRIPTO. puan POZİTİFSE o kategorinin
+    # Optima Skoru ARTAR, NEGATİFSE AZALIR - yön ayrıca saklanmaz, işaretten
+    # okunur (tek doğruluk kaynağı - iki yerde tutulup birbirinden
+    # sapma riski olmasın diye).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS haber_kalip_etki (
+        id        SERIAL PRIMARY KEY,
+        kalip_key TEXT NOT NULL REFERENCES haber_kaliplari(kalip_key) ON DELETE CASCADE,
+        kategori  TEXT NOT NULL,
+        puan      NUMERIC NOT NULL
+    )""")
+    _kaliplar_tohumla(conn)
+
     # sessions tablosu
     c.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
@@ -690,6 +727,52 @@ def get_cevrilmemis_haberler(kaynaklar: list, limit: int = 40) -> list:
              (r["baslik"] if isinstance(r, dict) else r[1])) for r in rows]
 
 
+# ══════════════════════════════════════════════════════════════
+# v2.0.7.162: TOHUM VERİSİ - haber_kaliplari tablosu BOŞSA (ilk kurulum)
+# önceden koda gömülü olan 6 kalıp BİREBİR AYNI değerlerle buraya
+# aktarılır. DEĞERLER app.py/haber_izleme.py'nin eski hardcoded
+# hallerinden PROGRAMATİK OLARAK çekildi (elle yeniden yazılmadı) -
+# transkripsiyon hatası riski yok.
+# ══════════════════════════════════════════════════════════════
+_SEED_TABLOSU = {'jeopolitik': {'MADEN': 8, 'DOVIZ': 6, 'BIST': -6}, 'petrol': {'MADEN': 3, 'DOVIZ': 5, 'BIST': -3}, 'fed': {'MADEN': -5, 'DOVIZ': 6, 'BIST': -5}, 'kredi_notu': {'DOVIZ': 5, 'BIST': -7}, 'kripto_olay': {'KRIPTO': -8}, 'tcmb_kredibilite': {'DOVIZ': 10, 'MADEN': 4, 'BIST': -3}}
+_SEED_ISIM = {'jeopolitik': 'Jeopolitik gerilim/çatışma', 'petrol': 'Petrol arz şoku (Ortadoğu/OPEC)', 'fed': 'Merkez bankası (Fed/ECB/TCMB) şahin sürprizi', 'kredi_notu': "Kredi notu düşürülmesi (S&P/Moody's/Fitch)", 'kripto_olay': 'Kripto düzenleme/halving şoku', 'tcmb_kredibilite': 'TCMB para politikası kredibilite kaybı (beklenmedik gevşeme)'}
+_SEED_ACIKLAMA = {'jeopolitik': "İstatistiksel dayanak: Jeopolitik Risk Endeksi (Caldara-Iacoviello, 1900'den günümüze, yüzlerce olay) literatüründe, yükselen jeopolitik risk dönemlerinde altının istatistiksel olarak anlamlı güvenli liman talebi gördüğü, gelişen piyasa para birimlerinin (TL dahil) baskı altında kaldığı ve borsaların kısa vadeli satış baskısı yaşadığı tutarlı şekilde gözlemlenmiştir.", 'petrol': 'İstatistiksel dayanak: petrol arzını kesintiye uğratan olaylarda (saldırı, ambargo, üretim kesintisi), petrol fiyatlarının kısa vadede çift haneli yüzdelerle sıçradığı tarihte tekrar tekrar gözlemlenmiştir. Türkiye net petrol ithalatçısı olduğu için bu şoklar enflasyon baskısı yaratma ve TL üzerinde değer kaybı baskısı oluşturma eğilimindedir.', 'fed': 'İstatistiksel dayanak: merkez bankalarının piyasa beklentisinin ötesinde sıkılaştırıcı (şahin) kararları/sinyalleri, akademik olay çalışması (event study) literatüründe dolar güçlenmesi, gelişen piyasa para birimlerinde (TL dahil) istatistiksel olarak anlamlı değer kaybı ve risk iştahının azalmasıyla ilişkilendirilmiştir.', 'kredi_notu': 'İstatistiksel dayanak: 1990-2016 dönemini kapsayan, çok sayıda gelişen piyasayı içeren günlük veriye dayalı akademik panel çalışması, egemen kredi notu düşürülmelerinin hem borsa getirilerini hem ülke para biriminin dolar değerini istatistiksel olarak anlamlı şekilde olumsuz etkilediğini, bu etkinin özellikle S&P ve Fitch düşürmelerinde belirgin olduğunu ve düşürmelerin etkisinin not artırımlarına kıyasla daha güçlü (asimetrik) olduğunu göstermektedir.', 'kripto_olay': "İstatistiksel dayanak: çok sayıda kripto parada (2014-2023, halving yaşayan tüm kripto varlıklar) yapılan akademik olay çalışması, olay penceresinde ORTALAMA anormal getirinin istatistiksel olarak anlamlı şekilde NEGATİF (~-%7,6) olduğunu bulmuştur - popüler 'halving = yükseliş' anlatısının aksine, bu KISA VADELİ tepkidir. Uzun vadeli (6-12 ay sonrası) 'boğa piyasası' anlatısı ayrı bir konudur ve çok daha küçük örneklem boyutuna (Bitcoin için sadece 4 halving döngüsü) dayandığından güvenilirliği literatürde açıkça tartışmalıdır - bu yüzden burada sadece kısa vadeli, istatistiksel olarak daha sağlam bulgu kullanılmıştır.", 'tcmb_kredibilite': "İstatistiksel dayanak: TCMB'nin piyasa beklentisinin tersine hareket ettiği (ör. enflasyon yükselirken faiz indirmesi gibi) dönemlerde, Türkiye kendi para politikası kredibilitesini kaybetme riskiyle karşı karşıya kalır - bu, global faiz/risk ortamından BAĞIMSIZ, yerli bir mekanizmadır. Belgelenmiş örnek:  2021 Eylül-Kasım döneminde TCMB, enflasyon %20'ye yaklaşırken piyasa beklentisinin aksine toplam 400 baz puan faiz indirdi; TL o yıl doları karşısında %44 değer kaybederek gelişen piyasalar arasında en kötü performans gösteren para birimi oldu (Arjantin pesosu %18,1, Şili pesosu %16,5 kayıpla onu takip etti - TL'nin kaybı ikinciden yaklaşık 2,5 kat fazlaydı)."}
+_SEED_KELIMELER = {'jeopolitik': {'tr': ['savaş', 'çatışma', 'saldırı', 'gerilim', 'işgal', 'füze', 'ordu', 'askeri operasyon', 'ateşkes', 'bombalama'], 'en': ['war', 'conflict', 'attack', 'invasion', 'missile', 'military', 'ceasefire', 'airstrike', 'troops', 'strike on']}, 'petrol': {'tr': ['petrol', 'opec', 'hürmüz', 'ambargo', 'üretim kesintisi', 'boru hattı', 'rafineri', 'tanker'], 'en': ['oil', 'strait of hormuz', 'pipeline', 'refinery', 'crude']}, 'fed': {'tr': ['faiz kararı', 'avrupa merkez bankası'], 'en': ['fed', 'fomc', 'ecb', 'federal reserve', 'interest rate decision', 'rate hike', 'rate cut', 'powell', 'lagarde']}, 'kredi_notu': {'tr': ['kredi notu', 'not indirimi'], 'en': ["moody's", 's&p', 'fitch', 'credit rating', 'sovereign rating', 'downgrade']}, 'kripto_olay': {'tr': ['kripto düzenleme', 'borsa çöktü'], 'en': ['halving', 'bitcoin hack', 'crypto regulation', 'exchange collapse', 'sec lawsuit']}, 'tcmb_kredibilite': {'tr': ['tcmb', 'ppk', 'para politikası kurulu', 'faiz indirimi', 'merkez bankası bağımsızlığı'], 'en': []}}
+
+
+def _kaliplar_tohumla(conn):
+    """init_db() cagirir - haber_kaliplari BOSSA tohum veriyi yazar.
+    Zaten doluysa HICBIR SEY yapmaz (Bahri'nin admin panelinden yaptigi
+    duzenlemelerin uzerine YAZILMAZ)."""
+    try:
+        mevcut = conn.execute("SELECT COUNT(*) AS n FROM haber_kaliplari").fetchone()
+        if mevcut and int(mevcut["n"] if isinstance(mevcut, dict) else mevcut[0]) > 0:
+            return  # zaten tohumlanmis (veya admin tarafindan duzenlenmis)
+        for kalip_key, ad in _SEED_ISIM.items():
+            conn.execute(
+                "INSERT INTO haber_kaliplari (kalip_key, ad, aciklama, aktif) "
+                "VALUES (?,?,?,TRUE) ON CONFLICT (kalip_key) DO NOTHING",
+                (kalip_key, ad, _SEED_ACIKLAMA.get(kalip_key, "")))
+            for dil, kelimeler in _SEED_KELIMELER.get(kalip_key, {}).items():
+                for kelime in kelimeler:
+                    conn.execute(
+                        "INSERT INTO haber_kalip_kelime (kalip_key, dil, kelime) "
+                        "VALUES (?,?,?)", (kalip_key, dil, kelime))
+            for kategori, puan in _SEED_TABLOSU.get(kalip_key, {}).items():
+                conn.execute(
+                    "INSERT INTO haber_kalip_etki (kalip_key, kategori, puan) "
+                    "VALUES (?,?,?)", (kalip_key, kategori, puan))
+        conn.commit()
+        print("[db] haber_kaliplari tohumlandi (6 varsayilan kalip).", file=sys.stderr)
+    except Exception as e:
+        print(f"[db] _kaliplar_tohumla hata: {e}", file=sys.stderr)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+
 def haber_akisi_ekle(haber_url: str, kaynak: str, baslik: str,
                      baslik_tr: str = None, eslesen_kalip: str = None,
                      yayin_zamani=None):
@@ -789,6 +872,153 @@ def ai_cagri_kaydet(adet: int = 1):
         conn.close()
     except Exception as e:
         print(f"[db] ai_cagri_kaydet hata: {e}", file=sys.stderr)
+
+
+# ══════════════════════════════════════════════════════════════
+# v2.0.7.162: KALIP YÖNETİMİ (okuma + CRUD) - Admin Paneli'nden çağrılır.
+# ══════════════════════════════════════════════════════════════
+
+def get_kaliplar(sadece_aktif: bool = False) -> list:
+    """Tum kaliplari, her birinin kelimeleri VE etki puanlariyla BIRLIKTE
+    doner - Admin Paneli'ndeki tablo ve haber_izleme.py/app.py'nin
+    baslangic yuklemesi bunu kullanir. Tek sorguda N+1 sorgu sorunundan
+    kacinmak icin 3 ayri sorgu yapip Python tarafinda birlestiriyoruz -
+    3 sorgu, kalip basina 1 sorgu yerine 3 sabit sorgu (kalip sayisi
+    artsa da sorgu sayisi artmaz)."""
+    try:
+        conn = get_conn()
+        where = "WHERE aktif = TRUE" if sadece_aktif else ""
+        kaliplar = conn.execute(
+            f"SELECT kalip_key, ad, aciklama, aktif FROM haber_kaliplari "
+            f"{where} ORDER BY olusturma_zamani").fetchall()
+        kelimeler = conn.execute(
+            "SELECT kalip_key, dil, kelime FROM haber_kalip_kelime "
+            "ORDER BY id").fetchall()
+        etkiler = conn.execute(
+            "SELECT kalip_key, kategori, puan FROM haber_kalip_etki "
+            "ORDER BY id").fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"[db] get_kaliplar hata: {e}", file=sys.stderr)
+        return []
+
+    def _v(row, key, idx):
+        return row[key] if isinstance(row, dict) else row[idx]
+
+    sonuc = {}
+    for r in kaliplar:
+        kk = _v(r, "kalip_key", 0)
+        sonuc[kk] = {
+            "kalip_key": kk, "ad": _v(r, "ad", 1),
+            "aciklama": _v(r, "aciklama", 2), "aktif": bool(_v(r, "aktif", 3)),
+            "kelimeler": {"tr": [], "en": []}, "etkiler": {},
+        }
+    for r in kelimeler:
+        kk = _v(r, "kalip_key", 0)
+        if kk in sonuc:
+            sonuc[kk]["kelimeler"].setdefault(_v(r, "dil", 1), []).append(_v(r, "kelime", 2))
+    for r in etkiler:
+        kk = _v(r, "kalip_key", 0)
+        if kk in sonuc:
+            sonuc[kk]["etkiler"][_v(r, "kategori", 1)] = float(_v(r, "puan", 2))
+    return list(sonuc.values())
+
+
+def kalip_ekle(kalip_key: str, ad: str, aciklama: str = "") -> bool:
+    """Yeni kalip olusturur (henuz kelime/etki icermez - ayrica eklenmeli).
+    kalip_key benzersiz olmali - zaten varsa False doner, coker degil."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO haber_kaliplari (kalip_key, ad, aciklama, aktif) "
+            "VALUES (?,?,?,TRUE)", (kalip_key, ad, aciklama))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] kalip_ekle hata (muhtemelen kalip_key zaten var): {e}", file=sys.stderr)
+        return False
+
+
+def kalip_aktif_durum_degistir(kalip_key: str, aktif: bool):
+    """Kalibi PASIFE alir/aktif eder - SILMEZ. Pasif kaliplar hem
+    on-filtrede hem AI dogrulamasinda ATLANIR ama kelime/etki gecmisi
+    kaybolmaz - yanlislikla kapatilirsa geri acilabilir."""
+    try:
+        conn = get_conn()
+        conn.execute("UPDATE haber_kaliplari SET aktif=? WHERE kalip_key=?",
+                     (aktif, kalip_key))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kalip_aktif_durum_degistir hata: {e}", file=sys.stderr)
+
+
+def kalip_sil(kalip_key: str):
+    """Kalibi VE ona bagli TUM kelime/etki satirlarini siler (CASCADE).
+    GERI ALINAMAZ - Admin Paneli'nde onay istenmeli."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM haber_kaliplari WHERE kalip_key=?", (kalip_key,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kalip_sil hata: {e}", file=sys.stderr)
+
+
+def kalip_kelime_ekle(kalip_key: str, dil: str, kelime: str):
+    """dil: 'tr' veya 'en'. Turkce kelimeler haberde COKUL/hal EKLERIYLE
+    de eslesir (ornek: 'savas' -> 'savasi','savasta'), Ingilizce SADECE
+    coguluyla eslesir - bkz. haber_izleme.py _DERLENMIS_KALIPLAR notu."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO haber_kalip_kelime (kalip_key, dil, kelime) VALUES (?,?,?)",
+            (kalip_key, dil, kelime.strip().lower()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kalip_kelime_ekle hata: {e}", file=sys.stderr)
+
+
+def kalip_kelime_sil(kalip_key: str, dil: str, kelime: str):
+    try:
+        conn = get_conn()
+        conn.execute(
+            "DELETE FROM haber_kalip_kelime WHERE kalip_key=? AND dil=? AND kelime=?",
+            (kalip_key, dil, kelime))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kalip_kelime_sil hata: {e}", file=sys.stderr)
+
+
+def kalip_etki_kaydet(kalip_key: str, kategori: str, puan: float):
+    """UPSERT - kategori icin etki zaten varsa GUNCELLER, yoksa EKLER.
+    kategori: MADEN / DOVIZ / BIST / KRIPTO. puan=0 verilirse satir SILINIR
+    (0 puan 'etkisiz' demektir, saklamanin anlami yok)."""
+    try:
+        conn = get_conn()
+        if float(puan) == 0:
+            conn.execute(
+                "DELETE FROM haber_kalip_etki WHERE kalip_key=? AND kategori=?",
+                (kalip_key, kategori))
+        else:
+            _var = conn.execute(
+                "SELECT id FROM haber_kalip_etki WHERE kalip_key=? AND kategori=?",
+                (kalip_key, kategori)).fetchone()
+            if _var:
+                conn.execute(
+                    "UPDATE haber_kalip_etki SET puan=? WHERE kalip_key=? AND kategori=?",
+                    (puan, kalip_key, kategori))
+            else:
+                conn.execute(
+                    "INSERT INTO haber_kalip_etki (kalip_key, kategori, puan) VALUES (?,?,?)",
+                    (kalip_key, kategori, puan))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kalip_etki_kaydet hata: {e}", file=sys.stderr)
 
 
 def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,

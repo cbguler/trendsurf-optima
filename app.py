@@ -1954,84 +1954,37 @@ def save_email_cfg(cfg, user_id=None):
 # - Jeopolitik: Caldara-Iacoviello Jeopolitik Risk Endeksi (1900-günümüz)
 # - Kredi notu: gelişen piyasa panel çalışması, 1990-2016 günlük veri
 # - Kripto: çok sayıda kripto parada halving olay çalışması (2014-2023)
-_KALIP_TABLOSU = {
-    "jeopolitik":  {"MADEN": 8, "DOVIZ": 6, "BIST": -6},
-    "petrol":      {"MADEN": 3, "DOVIZ": 5, "BIST": -3},
-    "fed":         {"MADEN": -5, "DOVIZ": 6, "BIST": -5},
-    "kredi_notu":  {"DOVIZ": 5, "BIST": -7},
-    "kripto_olay": {"KRIPTO": -8},
-    "tcmb_kredibilite": {"DOVIZ": 10, "MADEN": 4, "BIST": -3},
-}
-_KALIP_ISIM = {
-    "jeopolitik": "Jeopolitik gerilim/çatışma",
-    "petrol": "Petrol arz şoku (Ortadoğu/OPEC)",
-    "fed": "Merkez bankası (Fed/ECB/TCMB) şahin sürprizi",
-    "kredi_notu": "Kredi notu düşürülmesi (S&P/Moody's/Fitch)",
-    "kripto_olay": "Kripto düzenleme/halving şoku",
-    "tcmb_kredibilite": "TCMB para politikası kredibilite kaybı (beklenmedik gevşeme)",
-}
-_KALIP_ACIKLAMA = {
-    "jeopolitik": (
-        "İstatistiksel dayanak: Jeopolitik Risk Endeksi (Caldara-Iacoviello, "
-        "1900'den günümüze, yüzlerce olay) literatüründe, yükselen jeopolitik "
-        "risk dönemlerinde altının istatistiksel olarak anlamlı güvenli liman "
-        "talebi gördüğü, gelişen piyasa para birimlerinin (TL dahil) baskı "
-        "altında kaldığı ve borsaların kısa vadeli satış baskısı yaşadığı "
-        "tutarlı şekilde gözlemlenmiştir."
-    ),
-    "petrol": (
-        "İstatistiksel dayanak: petrol arzını kesintiye uğratan olaylarda "
-        "(saldırı, ambargo, üretim kesintisi), petrol fiyatlarının kısa "
-        "vadede çift haneli yüzdelerle sıçradığı tarihte tekrar tekrar "
-        "gözlemlenmiştir. Türkiye net petrol ithalatçısı olduğu için bu "
-        "şoklar enflasyon baskısı yaratma ve TL üzerinde değer kaybı "
-        "baskısı oluşturma eğilimindedir."
-    ),
-    "fed": (
-        "İstatistiksel dayanak: merkez bankalarının piyasa beklentisinin "
-        "ötesinde sıkılaştırıcı (şahin) kararları/sinyalleri, akademik olay "
-        "çalışması (event study) literatüründe dolar güçlenmesi, gelişen "
-        "piyasa para birimlerinde (TL dahil) istatistiksel olarak anlamlı "
-        "değer kaybı ve risk iştahının azalmasıyla ilişkilendirilmiştir."
-    ),
-    "kredi_notu": (
-        "İstatistiksel dayanak: 1990-2016 dönemini kapsayan, çok sayıda "
-        "gelişen piyasayı içeren günlük veriye dayalı akademik panel "
-        "çalışması, egemen kredi notu düşürülmelerinin hem borsa "
-        "getirilerini hem ülke para biriminin dolar değerini istatistiksel "
-        "olarak anlamlı şekilde olumsuz etkilediğini, bu etkinin özellikle "
-        "S&P ve Fitch düşürmelerinde belirgin olduğunu ve düşürmelerin "
-        "etkisinin not artırımlarına kıyasla daha güçlü (asimetrik) "
-        "olduğunu göstermektedir."
-    ),
-    "kripto_olay": (
-        "İstatistiksel dayanak: çok sayıda kripto parada (2014-2023, "
-        "halving yaşayan tüm kripto varlıklar) yapılan akademik olay "
-        "çalışması, olay penceresinde ORTALAMA anormal getirinin "
-        "istatistiksel olarak anlamlı şekilde NEGATİF (~-%7,6) olduğunu "
-        "bulmuştur - popüler 'halving = yükseliş' anlatısının aksine, bu "
-        "KISA VADELİ tepkidir. Uzun vadeli (6-12 ay sonrası) 'boğa "
-        "piyasası' anlatısı ayrı bir konudur ve çok daha küçük örneklem "
-        "boyutuna (Bitcoin için sadece 4 halving döngüsü) dayandığından "
-        "güvenilirliği literatürde açıkça tartışmalıdır - bu yüzden burada "
-        "sadece kısa vadeli, istatistiksel olarak daha sağlam bulgu "
-        "kullanılmıştır."
-    ),
-    "tcmb_kredibilite": (
-        "İstatistiksel dayanak: TCMB'nin piyasa beklentisinin tersine "
-        "hareket ettiği (ör. enflasyon yükselirken faiz indirmesi gibi) "
-        "dönemlerde, Türkiye kendi para politikası kredibilitesini "
-        "kaybetme riskiyle karşı karşıya kalır - bu, global faiz/risk "
-        "ortamından BAĞIMSIZ, yerli bir mekanizmadır. Belgelenmiş örnek:  "
-        "2021 Eylül-Kasım döneminde TCMB, enflasyon %20'ye yaklaşırken "
-        "piyasa beklentisinin aksine toplam 400 baz puan faiz indirdi; "
-        "TL o yıl doları karşısında %44 değer kaybederek gelişen "
-        "piyasalar arasında en kötü performans gösteren para birimi oldu "
-        "(Arjantin pesosu %18,1, Şili pesosu %16,5 kayıpla onu takip etti "
-        "- TL'nin kaybı ikinciden yaklaşık 2,5 kat fazlaydı)."
-    ),
-}
+# v2.0.7.162 (Bahri'nin talebi, 19 Ağustos 2026 — "anahtar kelime
+# ön-filtresi ve kalıplara daha sonra ekleme yapılabilir hale getirilebilir
+# mi, kalıpların netleşmesi halinde hangi varlıkların skorları hangi
+# oranda etkilenecek tabloda görmek isterim"): 6 kalıp ARTIK KODA GÖMÜLÜ
+# DEĞİL — db.get_kaliplar() ile Supabase'den okunuyor. Yeni kalıp/kelime/
+# etki puanı eklemek Admin Paneli > "Kalıp Yönetimi" bölümünden yapılır,
+# KOD DEĞİŞİKLİĞİ/DEPLOY GEREKMEZ. Puan tablosu da aynı yerde görünür
+# hale geldi (Bahri'nin istediği "hangi kategori hangi oranda etkilenecek"
+# tablosu).
+# SADECE aktif=True kalıplar yüklenir - pasif kalıp hem ön-filtrede hem AI
+# doğrulamasında hem skor uygulamasında görünmez (kalıcı silme değil,
+# admin panelinden geri açılabilir).
+@st.cache_data(ttl=300, show_spinner=False)
+def _kalip_verilerini_yukle():
+    """5 dakikada bir tazelenir - Admin Paneli'nde bir kalıp
+    değiştirildiğinde de cache açıkça temizlenir (bkz. admin.py), yani
+    değişiklik en geç 5 dakikada, çoğu zaman ANINDA yansır."""
+    from db import get_kaliplar
+    try:
+        _kaliplar = get_kaliplar(sadece_aktif=True)
+    except Exception:
+        _kaliplar = []
+    _tablosu, _isim, _aciklama = {}, {}, {}
+    for _k in _kaliplar:
+        _kk = _k["kalip_key"]
+        _tablosu[_kk] = _k["etkiler"]
+        _isim[_kk] = _k["ad"]
+        _aciklama[_kk] = _k["aciklama"] or ""
+    return _tablosu, _isim, _aciklama
 
+_KALIP_TABLOSU, _KALIP_ISIM, _KALIP_ACIKLAMA = _kalip_verilerini_yukle()
 with st.sidebar:
     # v2.0.3.5: Sadece login aninda 2 kez oynayan hareketli logo, sonra statik logo
     if not st.session_state.get("logo_splash_played", False):
@@ -2088,11 +2041,11 @@ with st.sidebar:
     # dakika haberi yakalar → 6 kalıptan birine eşler → kategori/yön/şiddet
     # hesaplar → kullanıcıya doğal bir cümleyle sunar → SADECE onaylanırsa
     # uygulanır) elle işaretlemeyi gereksiz kıldı.
-    # DİKKAT — 6 KALIP KODDAN KALDIRILMADI, SADECE ARAYÜZDEN KALDIRILDI:
-    # `_KALIP_TABLOSU`/`_KALIP_ISIM`/`_KALIP_ACIKLAMA` sistemin MOTORUDUR
-    # (haber_izleme.py gelen haberi tam olarak bu 6 kalıptan birine eşler,
-    # hangi kategorinin kaç puan etkileneceği bu tablodan gelir). Bunları
-    # silmek otomatik sistemi tamamen işlevsiz bırakır — silme.
+    # DİKKAT — 6 KALIP v2.0.7.162'den beri KOD DEĞİL, VERİTABANI (bkz.
+    # yukarıdaki `_kalip_verilerini_yukle`). `_KALIP_TABLOSU`/`_KALIP_ISIM`/
+    # `_KALIP_ACIKLAMA` artık db.get_kaliplar()'ın CACHE'LENMİŞ sonucudur -
+    # bunları elle koda geri yazmaya kalkma, tek doğruluk kaynağı
+    # `haber_kaliplari`/`haber_kalip_kelime`/`haber_kalip_etki` tabloları.
     # Ayarlamanın kendisi df_uni yüklendikten HEMEN SONRA, TÜM sayfa
     # yönlendirmesinden ÖNCE uygulanır (v2.0.7.149'da kurulan mimari aynen
     # korunuyor) - böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm

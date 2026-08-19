@@ -389,7 +389,63 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.161 (19 Ağustos 2026,
+- **[UYGULANDI, GERÇEK SUPABASE İLE TEST EDİLMEDİ] v2.0.7.162
+  (19 Ağustos 2026, Bahri'nin talebi — "anahtar kelime ön-filtresi ve
+  kalıplara daha sonra ekleme yapılabilir hale getirilebilir mi ...
+  kalıpların netleşmesi halinde hangi varlıkların Optima Skorları hangi
+  oranda etkilenecek tabloda görmek isterdim"): KALIPLAR KODDAN
+  VERİTABANINA TAŞINDI + ADMIN PANELİNDEN YÖNETİLEBİLİR HALE GETİRİLDİ.**
+  - **Üç yeni tablo:** `haber_kaliplari` (ad/açıklama/aktif), `haber_kalip_kelime`
+    (TR/EN kelime listeleri, kalıp silinince CASCADE ile silinir),
+    `haber_kalip_etki` (kategori başına puan — MADEN/DOVIZ/BIST/KRIPTO).
+    Yön (artış/azalış) AYRI SAKLANMIYOR, puanın işaretinden türetiliyor
+    (tek doğruluk kaynağı — iki yerde tutup sapma riski yok).
+  - **Tohumlama programatik yapıldı:** eski koda gömülü 6 kalıbın
+    (kelimeler + puanlar + açıklamalar) TAMAMI Python `exec()` ile
+    KAYNAK DOSYALARDAN çekilip veritabanına yazıldı — elle yeniden
+    yazılmadı, transkripsiyon hatası riski yok. `init_db()` her
+    çalıştığında kontrol eder, tablo BOŞSA tohumlar, DOLUYSA hiçbir şey
+    yapmaz (admin'in yaptığı düzenlemelerin üzerine yazmaz).
+  - **haber_izleme.py:** `_kaliplari_yukle()` her turun başında
+    `db.get_kaliplar(sadece_aktif=True)` çağırıp kelime listelerini
+    kelime-sınırlı regex'e derliyor (v2.0.7.161'deki "warning" düzeltmesi
+    AYNEN korunuyor). DB okunamazsa boş sözlüklerle devam eder — o tur
+    hiçbir haberi tespit etmez ama akışa yazmaya devam eder (güvenli
+    taraf: "hiçbir şey tespit etme", "her şeyi tespit et" değil).
+  - **app.py:** `_KALIP_TABLOSU`/`_KALIP_ISIM`/`_KALIP_ACIKLAMA` artık
+    `st.cache_data(ttl=300)` ile veritabanından yükleniyor — Admin
+    Panelinde bir değişiklik yapılınca `st.cache_data.clear()` çağrılıyor,
+    yani değişiklik ANINDA yansır, 5 dakika beklemeye gerek yok.
+  - **admin.py — "Kalıp Yönetimi" bölümü eklendi:**
+    - **Bahri'nin istediği etki tablosu:** her kalıp satır, her kategori
+      sütun, hücrede işaretli puan (`+8.0`, `-6.0`, boşsa `—`).
+    - Her kalıp için: aktif/pasif anahtarı, kelime ekleme/çıkarma
+      (TR/EN ayrı), kategori başına puan girişi, "Bu Kalıbı Kalıcı Olarak
+      Sil" (iki adımlı onay — "Evet, Sil" / "Vazgeç").
+    - "Yeni Kalıp Ekle" — anahtar/ad/açıklama girip oluşturur, sonra aynı
+      ekrandan kelime ve puan eklenir. **Kelimesiz veya etkisiz bir kalıp
+      hiçbir şeyi tetiklemez** (regex boşsa derlenmez, etki boşsa skor
+      değişmez) — UI bunu açıkça belirtiyor.
+  - **DÜZELTILEN BİR HATA (kendi kendine yakalandı, canlıya gitmeden):**
+    admin.py'ye Kalıp Yönetimi bölümünü eklerken yapılan bir `str_replace`
+    yanlışlıkla mevcut kullanıcı "Sil" düğmesinin kodunu SİLDİ (eşleşen
+    metnin içine dahil edilip yeni metinde korunmadı). Derleme hatası
+    vermediği için (geçerli Python'du, sadece işlevsellik eksikti) fark
+    edilmesi ZOR bir hataydı — `grep -n '.button('` ile TÜM düğme
+    çağrılarını tek tek sayarak yakalandı ve geri eklendi. **DERS: kod
+    kaldıran bir str_replace'ten sonra, değişen dosyadaki TÜM
+    etkileşim noktalarını (düğme/fonksiyon/tablo referansı) tek tek
+    sayıp orijinaliyle karşılaştırmadan "tamamlandı" denemez.**
+  - **AÇIK KALAN İKİ MADDE:**
+    1. Bu turun tamamı gerçek Supabase bağlantısı olmadan (sandbox'ta
+       ağ/kimlik bilgisi yok) test edildi — SQL sözdizimi ve mantık
+       sahte veriyle doğrulandı ama GERÇEK Postgres'e karşı ÇALIŞTIRILMADI.
+       İlk push sonrası Streamlit Cloud loglarında `init_db basliyor` ve
+       ardından hata OLMADIĞI teyit edilmeli.
+    2. v2.0.7.161'de açık bırakılan "çeviri neden hiç çalışmadı" sorusu
+       HÂLÂ AÇIK — Bahri'den Actions log çıktısı bekleniyor.
+
+
   Bahri'nin bulgusu — "Maradona'nın doktoru ile ilgili haberi neden
   piyasa etkisi olası haberlerin içine aldın?"): ÖN-FİLTRE ALT-DİZE
   HATASI + ÇEVİRİ DAYANIKLILIĞI.**
