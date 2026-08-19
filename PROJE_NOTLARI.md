@@ -2093,6 +2093,7 @@ tamam, canlı doğrulama BEKLİYOR):**
 
 | Yaklaşım | Durum | Sebep |
 |---|---|---|
+| Sistem Tanılama panelini kaldırmak | REDDEDİLDİ (19 Ağustos 2026, Bahri'nin kararı) | Bahri "yük getiriyorsa kaldırılsın" dedi, ölçüldü: 7 blok için sayfa yüklemesi başına ~1,5 mikrosaniye (ölçtüğü ağ çağrıları saniyelerle ölçülüyor — maliyet yüz binde bir bile değil). Panel ayrıca admin-only, abonede hiç render edilmiyor. Ve §5'teki açık performans maddesi (Beklenti Modu + haber akışı yazmalarının yavaşlık yaratıp yaratmadığı) tam da bu panelle ölçülecek. **Karar: olduğu gibi kalsın. Tekrar kaldırmayı önerme.** |
 | TCMB (Döviz veri kaynağı) | REDDEDİLDİ (v2.0.7.74) | Sadece 21 döviz kapsıyor, resmi/banka kuru. Harem/canlidoviz 51'in tamamını serbest piyasa fiyatıyla kapsıyor. |
 | Manuel "Canlı Fiyatları Yenile" (BIST) | KALDIRILDI (v2.0.7.64) | Fırsat Radarı zaten otomatik + daha kapsamlı (772 vs 100 hisse). |
 | KAP JSON API (`api/financialReport/...`) | HİÇ GERÇEK DEĞİLDİ (v2.0.7.66) | Doğrulanmadan varsayılmış, hiçbir zaman çalışan bir endpoint olmadı. Gerçek yol: HTML tablo parse. |
