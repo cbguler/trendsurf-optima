@@ -389,6 +389,42 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.158 (19 Ağustos 2026,
+  Bahri'nin kararı — "zaten son dakika haberini alıp istatistiksel verilere
+  göre hesaplayıp onaya sunuyoruz, bunlara gerek kalmadı ki"): Sidebar'daki
+  "Beklenti Modu" bölümü TAMAMEN KALDIRILDI.**
+  - Kaldırılanlar: `Beklenti Modunu Aktif Et` anahtarı (`beklenti_aktif`
+    session key), 6 kalıbın elle işaretlendiği checkbox'lar (`bk_*`),
+    her kalıbın altındaki Şiddet kaydırıcısı (`bk_*_siddet`), ve artık
+    okunmayan `_beklenti_kaynak` sözlüğü.
+  - **KAldırılmayan (ASLA KALDIRMA): `_KALIP_TABLOSU` / `_KALIP_ISIM` /
+    `_KALIP_ACIKLAMA`.** Bunlar arayüz değil, SİSTEMİN MOTORUDUR —
+    `haber_izleme.py` gelen haberi tam olarak bu 6 kalıptan birine eşler
+    (`_KALIP_KATEGORI_YONU` ile birlikte), hangi kategorinin kaç puan
+    etkileneceği `_KALIP_TABLOSU`'ndan gelir. Sidebar gitti diye bunları
+    silmeye kalkma, otomatik sistem tamamen işlevsiz kalır.
+  - **BU DEĞİŞİKLİĞİN ASIL SEBEBİ OLAN GİZLİ HATA:** Onaylanmış tespitleri
+    okuyup uygulayan blok (`get_onaylanmis_tespitler()` + skor ayarlaması)
+    `if st.session_state.get("beklenti_aktif"):` içindeydi. Yani anahtar
+    KAPALIYKEN (varsayılan) kullanıcı bir tespiti Onayla'sa bile Optima
+    Skor'a HİÇ uygulanmıyordu — sessiz işlevsizlik. Sidebar kaldırılırken
+    bu kapı da kaldırıldı: **onaylanan tespitler artık HER ZAMAN uygulanır.**
+  - Yeni kontrol modeli: tek kontrol ONAY/RED kararının kendisi. Uygulamayı
+    durdurmanın yolları: (1) tespiti Reddet, (2) hiçbir şey yapma —
+    onaylananlar 48 saat sonra `gecerlilik_bitis` ile kendiliğinden düşer.
+  - Metin güncellemeleri: üst şerit artık "Onayladığınız tespitler
+    uygulanıyor", Ana Sayfa bölüm başlığı "Onayladığınız Tespitler ve
+    Gerekçeleri", log satırından kaynak etiketi ("manuel"/"otomatik")
+    çıkarıldı (tek tür kaldı).
+  - **Emoji temizliği (kalıcı kural ihlali düzeltildi):** v2.0.7.154-157
+    ile eklenen 6 emoji kaldırıldı — bildirimdeki zil, Onayla/Reddet
+    düğmelerindeki tik/çarpı, doğal cümle önündeki konuşma balonu, kaynak
+    etiketlerindeki kişi/robot işaretleri.
+  - **YAN ETKİ — TEST YOLU DEĞİŞTİ:** Beklenti Modu'nu elle işaretleyerek
+    test etmek ARTIK MÜMKÜN DEĞİL. Skor ayarlamasını test etmek için ya
+    gerçek bir haber tespiti beklenmeli ya da Supabase'deki tespit tablosuna
+    elle bir satır eklenip onaylanmalı.
+
 ### 🔴 OTURUM DEVİR ÖZETİ (19 Ağustos 2026, sohbet görsel kapasitesi doldu — YENİ SOHBETE BAŞLARKEN ÖNCE BURAYI OKU)
 
 **Son doğrulanmış canlı durum:** `v2.0.7.157`, commit `46fe734`,
@@ -444,7 +480,14 @@ tamam, canlı doğrulama BEKLİYOR):**
    - bağlantı havuzu denemesinin NEDEN geri alındığını (yukarıdaki not)
    unutma, aynı hataya düşme.
 
-- **[KRİTİK - HÂLÂ PUSH EDİLMEMİŞ] v2.0.7.156 hâlâ GitHub'a hiç
+- **[ÇÖZÜLDÜ - 19 Ağustos 2026, taze klonla doğrulandı] Aşağıdaki
+  "push edilmemiş" uyarısı ARTIK GEÇERSİZDİR.** GitHub'daki son commit
+  `ffeab17`; `46fe734` (v2.0.7.156+157) ve `e1f6a17` (v2.0.7.155)
+  ikisi de canlıda, `py_compile` ile doğrulandı. Madde, tarihsel bağlam
+  için aşağıda korunuyor ama BİR EYLEM GEREKTİRMİYOR — tekrar push
+  etmeye kalkma.
+
+- **[TARİHSEL - ARTIK GEÇERSİZ, YUKARIYA BAK] v2.0.7.156 hâlâ GitHub'a hiç
   push edilmedi (19 Ağustos 2026 itibarıyla doğrulandı) - bu turda
   v2.0.7.157 üzerine inşa edildiği için ikisi BİRLİKTE push
   edilmeli.** GitHub'daki son commit hâlâ v2.0.7.155 (Gemini geçişi).

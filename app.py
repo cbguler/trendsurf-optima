@@ -2077,38 +2077,22 @@ with st.sidebar:
     max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,value=10,step=1,
                           help="Portföyde kaç farklı varlık olacağını belirler")
 
-    # v2.0.7.149 (Bahri'nin bulgusu, 18 Ağustos 2026 — KRİTİK mimari
-    # düzeltme): Beklenti Modu önceden SADECE Ana Sayfa'nın kendi bloğu
-    # içindeydi - df_uni'yi SADECE o an render edilen Ana Sayfa'nın
-    # yerel kopyasında değiştiriyordu. Başka bir sayfaya (ör. Döviz)
-    # geçildiğinde YENİ bir script çalışması başlıyor, df_uni() tekrar
-    # (önbellekten) yükleniyor ve Ana Sayfa'daki ayarlama hiç
-    # uygulanmıyordu - "Bütçe tablosunda skor artmış ama Döviz sayfasında
-    # artmamış" tam olarak bu yüzdendi. Kontroller artık SIDEBAR'da
-    # (her sayfada kalıcı) - gerçek AYARLAMA ise df_uni yüklendikten
-    # HEMEN SONRA, TÜM sayfa yönlendirmesinden ÖNCE uygulanıyor (bkz.
-    # aşağıda "df_uni=load_universe()" sonrası blok) - böylece Ana Sayfa/
-    # Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm HEPSİ AYNI ayarlanmış
-    # skoru görür.
-    with st.expander("Beklenti Modu"):
-        st.caption(
-            "Varsayılan KAPALI — hiçbir şey değişmez. Açarsanız, "
-            "işaretlediğiniz durumlara göre TÜM sayfalardaki Optima Skor "
-            "şeffaf şekilde ayarlanır. Otomatik haber sınıflandırma yok — "
-            "karar sizde."
-        )
-        st.toggle("Beklenti Modunu Aktif Et", value=False, key="beklenti_aktif")
-        if st.session_state.get("beklenti_aktif"):
-            for _bk_key, _bk_ad in _KALIP_ISIM.items():
-                st.checkbox(_bk_ad, key=f"bk_{_bk_key}")
-                if st.session_state.get(f"bk_{_bk_key}"):
-                    # v2.0.7.152 (Bahri'nin talebi): tekil tarihli olay
-                    # referansı yerine istatistiksel dayanak metni
-                    # (çok-olaylı akademik çalışmalara atıf).
-                    st.select_slider(
-                        "Şiddet", ["Düşük", "Orta", "Yüksek"], value="Orta",
-                        key=f"bk_{_bk_key}_siddet", label_visibility="collapsed",
-                        help=_KALIP_ACIKLAMA.get(_bk_key, ""))
+    # v2.0.7.158 (Bahri'nin talebi, 19 Ağustos 2026 — "artık bunlara gerek
+    # kalmadı ki"): Sidebar'daki "Beklenti Modu" bölümü (ana anahtar + 6
+    # kalıbın elle işaretlenmesi + şiddet kaydırıcıları) TAMAMEN KALDIRILDI.
+    # Sebep: v2.0.7.154-157 ile kurulan otomatik akış (haber_izleme.py son
+    # dakika haberi yakalar → 6 kalıptan birine eşler → kategori/yön/şiddet
+    # hesaplar → kullanıcıya doğal bir cümleyle sunar → SADECE onaylanırsa
+    # uygulanır) elle işaretlemeyi gereksiz kıldı.
+    # DİKKAT — 6 KALIP KODDAN KALDIRILMADI, SADECE ARAYÜZDEN KALDIRILDI:
+    # `_KALIP_TABLOSU`/`_KALIP_ISIM`/`_KALIP_ACIKLAMA` sistemin MOTORUDUR
+    # (haber_izleme.py gelen haberi tam olarak bu 6 kalıptan birine eşler,
+    # hangi kategorinin kaç puan etkileneceği bu tablodan gelir). Bunları
+    # silmek otomatik sistemi tamamen işlevsiz bırakır — silme.
+    # Ayarlamanın kendisi df_uni yüklendikten HEMEN SONRA, TÜM sayfa
+    # yönlendirmesinden ÖNCE uygulanır (v2.0.7.149'da kurulan mimari aynen
+    # korunuyor) - böylece Ana Sayfa/Döviz/BIST/TEFAS/Maden/Kripto/Portföyüm
+    # HEPSİ AYNI ayarlanmış skoru görür.
     st.divider()
 
     # E-posta ayarları
@@ -2499,7 +2483,6 @@ if st.session_state.get("page_override") == "admin":
 df_uni=load_universe()
 
 _beklenti_ayarlar = {}
-_beklenti_kaynak = {}  # v2.0.7.154: her kalibin "manuel" mi "otomatik" mi geldigini takip eder
 
 # v2.0.7.156 (Bahri'nin talebi, 18 Ağustos 2026 — KRİTİK tasarım
 # düzeltmesi, "hemen otomatik uygula" YANLIŞ anlaşılmıştı): Otomatik
@@ -2508,9 +2491,9 @@ _beklenti_kaynak = {}  # v2.0.7.154: her kalibin "manuel" mi "otomatik" mi geldi
 # bir bildirimle kullanıcıya gösterilir (haber + AI gerekçesi + hangi
 # kategoriye ne kadar puan etkisi olacağı) → kullanıcı Ana Sayfa'da
 # Onayla/Reddet der → SADECE onaylananlar Optima Skor'a uygulanır.
-# Bu bildirim, "Beklenti Modu" anahtarının açık/kapalı olmasından
-# BAĞIMSIZ gösterilir (kapalıyken de "şunlar bekliyor" bilgisi verilir),
-# ama uygulanması hâlâ anahtara bağlıdır.
+# v2.0.7.158 GÜNCELLEMESİ: buradaki eski "anahtara bağlıdır" cümlesi
+# geçersiz - sidebar'daki Beklenti Modu anahtarı tamamen kaldırıldı,
+# artık ONAY/RED kararının kendisi tek kontroldür.
 try:
     from db import get_bekleyen_tespitler, get_onaylanmis_tespitler
     _bekleyen_tespitler = get_bekleyen_tespitler()
@@ -2519,35 +2502,37 @@ except Exception:
 
 if _bekleyen_tespitler:
     st.warning(
-        f"🔔 **{len(_bekleyen_tespitler)} adet otomatik tespit edilen olay onayınızı bekliyor** "
-        f"— incelemek için Ana Sayfa'daki 'Beklenti Modu' bölümüne gidin. Hiçbiri "
-        f"onaylamadan Optima Skor'a uygulanmaz."
+        f"**{len(_bekleyen_tespitler)} adet otomatik tespit edilen olay onayınızı bekliyor** "
+        f"— incelemek için Ana Sayfa'daki 'Onay Bekleyen Otomatik Tespitler' "
+        f"bölümüne gidin. Hiçbiri siz onaylamadan Optima Skor'a uygulanmaz."
     )
 
-if st.session_state.get("beklenti_aktif"):
-    for _bk_key in _KALIP_TABLOSU.keys():
-        if st.session_state.get(f"bk_{_bk_key}"):
-            _beklenti_ayarlar[_bk_key] = st.session_state.get(f"bk_{_bk_key}_siddet", "Orta")
-            _beklenti_kaynak[_bk_key] = "manuel"
+# v2.0.7.158 (Bahri'nin kararı, 19 Ağustos 2026): Bu blok ESKİDEN
+# `if st.session_state.get("beklenti_aktif"):` içindeydi - yani sidebar'daki
+# ana anahtar KAPALIYKEN, kullanıcı bir tespiti onaylasa bile Optima Skor'a
+# HİÇ uygulanmıyordu (sessiz işlevsizlik). Sidebar bölümü kaldırıldığı için
+# bu kapı da kaldırıldı: ONAYLANAN TESPİTLER ARTIK HER ZAMAN UYGULANIR.
+# Kullanıcının kontrolü artık anahtarda değil, ONAY/RED kararının kendisinde.
+# Uygulanmayı durdurmanın iki yolu var: (1) tespiti en baştan Reddet,
+# (2) hiçbir şey yapma - onaylanan tespitler 48 saat sonra `gecerlilik_bitis`
+# ile kendiliğinden düşer (bkz. db.tespit_ekle, gecerlilik_saat=48).
+try:
+    _onaylanmis_tespitler = get_onaylanmis_tespitler()
+except Exception:
+    _onaylanmis_tespitler = []
 
-    # SADECE kullanıcının AÇIKÇA onayladığı tespitler uygulanır (bekleyenler
-    # DEĞİL). Aynı kalıp için manuel seçim de varsa, YÜKSEK olan şiddet
-    # kazanır (ikisi çelişmez, sadece büyüklük güncellenir).
-    try:
-        _onaylanmis_tespitler = get_onaylanmis_tespitler()
-    except Exception:
-        _onaylanmis_tespitler = []
-
-    _siddet_sira = {"Düşük": 0, "Orta": 1, "Yüksek": 2}
-    for _tespit in _onaylanmis_tespitler:
-        _tk = _tespit["kalip_key"]
-        _ts = _tespit.get("siddet", "Orta")
-        if _tk not in _KALIP_TABLOSU:
-            continue  # eski/tanimsiz bir kalip - guvenli sekilde atla
-        _mevcut = _beklenti_ayarlar.get(_tk)
-        if _mevcut is None or _siddet_sira.get(_ts, 1) > _siddet_sira.get(_mevcut, 1):
-            _beklenti_ayarlar[_tk] = _ts
-            _beklenti_kaynak[_tk] = "onaylanmış otomatik" if _mevcut is None else "manuel+onaylanmış otomatik"
+# Aynı kalıp için birden fazla onaylı tespit varsa (ör. iki ayrı haber aynı
+# "Fed şahin sürprizi" kalıbına düştüyse) puan İKİ KEZ eklenmez - YÜKSEK olan
+# şiddet kazanır, kalıp tek kez sayılır.
+_siddet_sira = {"Düşük": 0, "Orta": 1, "Yüksek": 2}
+for _tespit in _onaylanmis_tespitler:
+    _tk = _tespit["kalip_key"]
+    _ts = _tespit.get("siddet", "Orta")
+    if _tk not in _KALIP_TABLOSU:
+        continue  # eski/tanimsiz bir kalip - guvenli sekilde atla
+    _mevcut = _beklenti_ayarlar.get(_tk)
+    if _mevcut is None or _siddet_sira.get(_ts, 1) > _siddet_sira.get(_mevcut, 1):
+        _beklenti_ayarlar[_tk] = _ts
 
 _beklenti_log = []
 _beklenti_kategori_ayar = {"MADEN": 0.0, "DOVIZ": 0.0, "BIST": 0.0, "KRIPTO": 0.0}
@@ -2559,8 +2544,10 @@ if _beklenti_ayarlar:
         _carpan = _siddet_carpan.get(_siddet, 1.0) * _risk_carpan
         for _kat, _puan in _KALIP_TABLOSU.get(_kalip_key, {}).items():
             _beklenti_kategori_ayar[_kat] += _puan * _carpan
-        _kaynak_etiket = _beklenti_kaynak.get(_kalip_key, "manuel")
-        _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet}, {_kaynak_etiket})")
+        # v2.0.7.158: kaynak etiketi ("manuel"/"onaylanmış otomatik") artık
+        # tek türden olduğu için satırdan çıkarıldı - hepsi onaylanmış
+        # otomatik tespit.
+        _beklenti_log.append(f"{_KALIP_ISIM[_kalip_key]} ({_siddet} şiddet)")
 
     # v2.0.7.150 (Bahri'nin bulgusu, 18 Ağustos 2026 — "Ort. Optima Skor
     # yine de eskide kalmış"): KÖK NEDEN bulundu - birçok Döviz/Maden/
@@ -2599,12 +2586,12 @@ if _beklenti_ayarlar:
     # kategorilerin ne kadar etkilendiğini bilsin, sadece Ana Sayfa'da
     # değil.
     st.info(
-        f"**Beklenti Modu AKTİF** — {', '.join(_beklenti_log)} (Risk: {risk}). "
+        f"**Onayladığınız tespitler uygulanıyor** — {', '.join(_beklenti_log)} (Risk: {risk}). "
         f"Değerli Maden **{_beklenti_kategori_ayar['MADEN']:+.1f}**, "
         f"Döviz **{_beklenti_kategori_ayar['DOVIZ']:+.1f}**, "
         f"BIST **{_beklenti_kategori_ayar['BIST']:+.1f}**, "
         f"Kripto **{_beklenti_kategori_ayar['KRIPTO']:+.1f}** puan ayarlandı — "
-        f"tahmin değildir, sizin varsayımınıza dayalıdır."
+        f"tahmin değildir, onayladığınız tespitlere dayalıdır."
     )
 
 # v1.9.7 - Otomatik veri yenileme (her 60 saniyede sessiz re-run)
@@ -4416,10 +4403,10 @@ if page=="Ana Sayfa":
         # (varsa) zaten onaylanmış/manuel aktif varsayımlar gösteriliyor.
         if _bekleyen_tespitler:
             st.divider()
-            st.markdown("**🔔 Onay Bekleyen Otomatik Tespitler**")
+            st.markdown("**Onay Bekleyen Otomatik Tespitler**")
             st.caption(
-                "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece işaretlediğiniz "
-                "(veya onayladığınız) durumlar uygulanır."
+                "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece onayladığınız "
+                "tespitler uygulanır."
             )
             for _tespit in _bekleyen_tespitler:
                 _tk2 = _tespit["kalip_key"]
@@ -4432,7 +4419,7 @@ if page=="Ana Sayfa":
                     # ARKASINDA gizlenmeden, doğrudan gösteriliyor.
                     _dogal_cumle = _tespit.get('ai_gerekce', '') or (
                         f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
-                    st.markdown(f"💬 {_dogal_cumle} **Onaylıyor musunuz?**")
+                    st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
                     st.caption(
                         f"Kalıp: {_kalip_adi_gosterim} · Önerilen şiddet: "
                         f"{_tespit.get('siddet','Orta')} · Kaynak: "
@@ -4440,7 +4427,7 @@ if page=="Ana Sayfa":
                         f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
                     _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
                     with _oc1:
-                        if st.button("✅ Onayla", key=f"tespit_onay_{_tespit['id']}"):
+                        if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
                             try:
                                 from db import tespit_onayla
                                 tespit_onayla(_tespit["id"])
@@ -4449,7 +4436,7 @@ if page=="Ana Sayfa":
                             except Exception as _onay_err:
                                 st.error(f"Onaylanamadı: {_onay_err}")
                     with _oc2:
-                        if st.button("❌ Reddet", key=f"tespit_red_{_tespit['id']}"):
+                        if st.button("Reddet", key=f"tespit_red_{_tespit['id']}"):
                             try:
                                 from db import tespit_reddet
                                 tespit_reddet(_tespit["id"])
@@ -4460,16 +4447,13 @@ if page=="Ana Sayfa":
 
         if _beklenti_ayarlar:
             st.divider()
-            st.markdown("**Beklenti Modu — Aktif Varsayımlar ve Gerekçeleri**")
+            # v2.0.7.158: manuel işaretleme kaldırıldığı için kaynak ayrımı
+            # (elle/otomatik) da anlamsızlaştı - buradaki her satır artık
+            # kullanıcının ONAYLADIĞI bir otomatik tespittir.
+            st.markdown("**Onayladığınız Tespitler ve Gerekçeleri**")
             for _kalip_key, _siddet in _beklenti_ayarlar.items():
-                _kaynak_etiket2 = _beklenti_kaynak.get(_kalip_key, "manuel")
-                _kaynak_gosterim = {
-                    "manuel": "👤 elle işaretlendi",
-                    "onaylanmış otomatik": "🤖✅ otomatik tespit edildi, onayladınız",
-                    "manuel+onaylanmış otomatik": "👤+🤖✅ elle işaretlendi + onayladığınız otomatik tespit",
-                }.get(_kaynak_etiket2, _kaynak_etiket2)
                 st.markdown(
-                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet, {_kaynak_gosterim}): "
+                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
                     f"{_KALIP_ACIKLAMA[_kalip_key]}"
                 )
             st.caption(
