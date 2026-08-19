@@ -389,7 +389,49 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, GERÇEK SUPABASE İLE TEST EDİLMEDİ] v2.0.7.162
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.163 (19 Ağustos 2026,
+  Bahri'nin bulgusu — "değişen bir şey olmadı, haberler yine ingilizce,
+  maradona haberi yine filtreye takılan haberler arasına giriyor"):
+  MARADONA BULGUSUNUN KESİN KÖK NEDENİ + "HABER AKIŞI BAKIMI" ARACI.**
+  - **DOĞRULAMA:** GitHub'dan taze klonla kontrol edildi - v2.0.7.161
+    VE v2.0.7.162 GERÇEKTEN CANLIDA (commit `1924c0c`, 19 Ağustos
+    14:40'ta push edilmiş). Yani "kod düzeltmesi çalışmıyor" DEĞİL.
+  - **GERÇEK KÖK NEDEN (test edilerek doğrulandı):** `haber_akisi`
+    tablosu sadece `baslik` saklıyor, `ozet` SAKLAMIYOR. Maradona
+    haberinin SADECE başlığıyla test edildi - yeni (düzeltilmiş) kod
+    ile bile HİÇBİR kalıba eşleşmiyor (boş liste döndü). Bu şu demek:
+    o satır, hatanın giderildiği ANDAN ÖNCE yazılmış eski bir kayıt -
+    `eslesen_kalip` ve `baslik_tr` bir haber AKIŞA YAZILDIĞI ANDA
+    hesaplanıp DONUYOR, filtre/çeviri mantığı sonradan düzelse bile
+    ESKİ satırlar KENDİLİĞİNDEN yeniden değerlendirilmiyor - çünkü o
+    haberin URL'si zaten `haber_islenmis`te "görüldü" işaretli, RSS
+    döngüsü bir daha ona hiç uğramıyor.
+  - **ÇEVİRİ İÇİN AYRI BİR ŞÜPHE VAR, HENÜZ DOĞRULANAMADI:**
+    `haber_izleme.yml`'in KENDİ YORUMU (18 Ağustos'tan beri orada duruyor)
+    GitHub'ın varsayılan `schedule: cron` tetikleyicisinin "best-effort"
+    olduğunu ve gecikme/atlama yaşayabileceğini, `firsat_radari.yml`/
+    `send_email.yml` geçmişinde bu sorunun zaten yaşandığını, güvenilir
+    tetikleme için cron-job.org (harici, ücretsiz) kurulması GEREKTİĞİNİ
+    söylüyor - **ama bu HİÇBİR ZAMAN GERÇEKTEN KURULMADI**, sadece yorum
+    olarak kaldı. Workflow'un push'tan bu yana HİÇ ÇALIŞMAMIŞ olma
+    ihtimali güçlü bir şüphe - kesin cevap Actions sekmesinde.
+    **BAHRI'DEN BEKLENEN:** Actions > "Beklenti Modu Haber Izleme" >
+    son çalışma zamanı + logundaki "CEVIRI ATLANDI"/"Toplu ceviri
+    hatasi"/"N baslik cevrildi" satırlarından hangisi bastığı.
+  - **YENİ ARAÇ - Admin Paneli > "Haber Akışı Bakımı":** son N gün
+    (varsayılan 2) `haber_akisi` VE `haber_islenmis` satırlarını siler -
+    böylece RSS'te hâlâ mevcut olan URL'ler bir sonraki turda "yeni"
+    sayılıp GÜNCEL kod ile yeniden işlenir/çevrilir. **SINIRLAMA açıkça
+    UI'da yazılı:** her kaynaktan sadece ~30 haber RSS'te tutulur, bu
+    pencerenin dışına çıkmış eski haberler GERİ GELMEZ (7 günlük doğal
+    temizlikle kaybolurlar, yeniden işlenmezler).
+  - **KALICI ÇÖZÜM (Bahri karar vermeli, kod dışı bir adım):**
+    haber_izleme.yml için de firsat_radari'de zaten kullanılan
+    cron-job.org + workflow_dispatch yöntemi kurulmalı - bu bir GitHub
+    Secrets/harici servis kurulumu, git push ile yapılamaz. Bahri
+    isterse adım adım yardım edilebilir.
+
+
   (19 Ağustos 2026, Bahri'nin talebi — "anahtar kelime ön-filtresi ve
   kalıplara daha sonra ekleme yapılabilir hale getirilebilir mi ...
   kalıpların netleşmesi halinde hangi varlıkların Optima Skorları hangi

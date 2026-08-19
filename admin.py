@@ -56,7 +56,48 @@ def render_admin_panel():
             _delete_user(u["id"])
             st.rerun()
     st.divider()
+    _render_haber_akisi_bakim()
+    st.divider()
     _render_kalip_yonetimi()
+
+# ── Haber Akışı Bakımı (v2.0.7.163, Bahri'nin bulgusu, 19 Ağustos 2026 —
+# "Maradona haberi yine filtreye takılan haberler arasına giriyor,
+# haberler hâlâ İngilizce"): eski satırlar YAZILDIKLARI ANDA dondurulmuş
+# eslesen_kalip/baslik_tr taşır - filtre/çeviri mantığı sonradan düzelse
+# bile bu satırlar KENDİLİĞİNDEN yeniden değerlendirilmez. ─────────────
+def _render_haber_akisi_bakim():
+    from db import haber_akisi_ve_islenmis_sifirla
+
+    st.subheader("Haber Akışı Bakımı")
+    st.caption(
+        "Bir haberin kalıp eşleşmesi ve çevirisi, akışa YAZILDIĞI ANDA "
+        "hesaplanıp SABİTLENİR. Anahtar kelime filtresi veya kalıp listesi "
+        "SONRADAN değişirse, ESKİ haberler kendiliğinden yeniden "
+        "değerlendirilmez — çünkü o haberin bağlantısı zaten 'görüldü' "
+        "işaretlidir ve tarama döngüsü bir daha ona uğramaz."
+    )
+    _gun = st.number_input(
+        "Kaç günlük geçmişi sıfırlamak istiyorsunuz?",
+        min_value=1, max_value=7, value=2, step=1, key="haber_sifirla_gun")
+    st.caption(
+        "SINIRLAMA: her kaynaktan yalnızca en güncel ~30 haber RSS'te "
+        "tutulur. Bu pencerenin dışına çıkmış (kaynağın artık "
+        "listelemediği) haberler GERİ GELMEZ, sadece o satırlar 7 gün "
+        "sonra doğal olarak silinir. Bu yüzden büyük sayı seçmenin "
+        "faydası sınırlıdır - 1-2 gün genelde yeterlidir."
+    )
+    if st.button("Son Günleri Sıfırla ve Yeniden İşlenmeye Aç", key="haber_sifirla_btn"):
+        _sonuc = haber_akisi_ve_islenmis_sifirla(int(_gun))
+        _a = _sonuc.get("akis_silinen")
+        _i = _sonuc.get("islenmis_silinen")
+        st.success(
+            f"Sıfırlandı - akıştan {_a if _a is not None else '?'} satır, "
+            f"işlenmiş listesinden {_i if _i is not None else '?'} satır "
+            f"silindi. Bir sonraki haber_izleme.py turunda (en geç 10 "
+            f"dakika, ya da Actions sekmesinden 'Run workflow' ile hemen) "
+            f"RSS'te hâlâ mevcut olan haberler GÜNCEL kalıp/çeviri "
+            f"mantığıyla yeniden işlenecek."
+        )
 
 # ── Kalıp Yönetimi (v2.0.7.162, Bahri'nin talebi, 19 Ağustos 2026 —
 # "anahtar kelime ön-filtresi ve kalıplara daha sonra ekleme yapılabilir

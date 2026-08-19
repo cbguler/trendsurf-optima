@@ -843,6 +843,47 @@ def haber_akisi_temizle(gun: int = 7):
         print(f"[db] haber_akisi_temizle hata: {e}", file=sys.stderr)
 
 
+def haber_akisi_ve_islenmis_sifirla(gun: int = 2) -> dict:
+    """v2.0.7.163 (Bahri'nin bulgusu, 19 Ağustos 2026 — "Maradona haberi
+    yine filtreye takılan haberler arasına giriyor"): KÖK NEDEN'in
+    kalıcı çözümü. `eslesen_kalip` ve `baslik_tr` bir haberin AKIŞA
+    YAZILDIĞI ANDA hesaplanıp donuyor — filtre/çeviri mantığı sonradan
+    düzelse bile ESKİ satırlar YENİDEN DEĞERLENDİRİLMEZ, çünkü URL zaten
+    `haber_islenmis`te "görüldü" işaretli olduğu için RSS döngüsü bir
+    daha o habere hiç uğramaz.
+
+    Bu fonksiyon Admin Paneli'nden ELLE tetiklenir: son `gun` gün
+    içindeki hem `haber_akisi` hem `haber_islenmis` satırlarını siler -
+    böylece bir SONRAKİ haber_izleme.py turunda, RSS kaynağında HÂLÂ
+    mevcut olan URL'ler "yeni" sayılıp GÜNCEL kod (kelime sınırı filtresi
+    + güncel Admin Paneli kalıpları) ile YENİDEN işlenir/çevrilir.
+
+    SINIRLAMA (Admin Paneli'nde kullanıcıya AÇIKÇA gösterilmeli): her
+    kaynaktan sadece en yeni ~30 haber RSS'te tutulur. Bu pencerenin
+    DIŞINA çıkmış (kaynağın artık listelemediği) eski haberler GERİ
+    GELMEZ - o satırlar yalnızca 7 günlük doğal temizlikle
+    (`haber_akisi_temizle`) kaybolur, YENİDEN İŞLENMEZ.
+
+    Döner: {"akis_silinen": N, "islenmis_silinen": N} - N okunamazsa
+    None (hata değil, sadece rowcount driver'dan gelmemiş olabilir)."""
+    sonuc = {"akis_silinen": None, "islenmis_silinen": None}
+    try:
+        conn = get_conn()
+        c1 = conn.execute(
+            "DELETE FROM haber_akisi WHERE eklenme_zamani > "
+            f"now() - interval '{int(gun)} days'")
+        sonuc["akis_silinen"] = c1.rowcount if c1.rowcount is not None and c1.rowcount >= 0 else None
+        c2 = conn.execute(
+            "DELETE FROM haber_islenmis WHERE islenme_zamani > "
+            f"now() - interval '{int(gun)} days'")
+        sonuc["islenmis_silinen"] = c2.rowcount if c2.rowcount is not None and c2.rowcount >= 0 else None
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] haber_akisi_ve_islenmis_sifirla hata: {e}", file=sys.stderr)
+    return sonuc
+
+
 def ai_cagri_sayisi_bugun() -> int:
     """v2.0.7.160: Bugun kac Gemini cagrisi yapildi? Butce kontrolu icin."""
     try:
