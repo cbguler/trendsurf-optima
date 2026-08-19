@@ -1,4 +1,9 @@
-streamlit>=1.35.0
+streamlit>=1.37.0
+# v2.0.7.159 (19 Agustos 2026): alt sinir 1.35.0 -> 1.37.0. Sebep: onay
+# bekleyen otomatik tespitleri gosteren modal kutu st.dialog kullaniyor,
+# st.dialog 1.37.0'da genel kullanima acildi. app.py yine de hasattr ile
+# koruma yapiyor (eski surumde modal atlanir, coker degil) ama alt sinirin
+# dogru olmasi gerekiyor.
 pandas>=2.0.0
 numpy>=1.24.0
 yfinance>=0.2.60

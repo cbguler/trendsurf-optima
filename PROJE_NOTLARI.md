@@ -389,7 +389,45 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.158 (19 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.159 (19 Ağustos 2026,
+  Bahri'nin talebi — "bir mesaj kutusunun çıkmasını tercih ederim,
+  mobildeki uygulamayı da düşünmek lazım"): Onay bekleyen otomatik
+  tespitler artık MODAL KUTU (`st.dialog`) ile sunuluyor.**
+  - Modal, HANGİ SAYFADA olunursa olsun açılır (sadece Ana Sayfa değil) —
+    son dakika haberi zaman hassasiyetli. Ana Sayfa'daki liste yerinde
+    kalıyor (geçmişe/ertelenene dönmek için).
+  - İçerik: AI'nin ürettiği doğal cümle + "Onaylıyor musunuz?" + ONAYLANIRSA
+    hangi kategoriye kaç puan gideceğinin ÖNİZLEMESİ + kalıp/şiddet/48 saat
+    bilgisi + kaynak bağlantısı + Onayla / Reddet / Daha sonra bak.
+  - **`requirements.txt`: `streamlit>=1.35.0` → `>=1.37.0`.** Sebep:
+    `st.dialog` 1.37.0'da genel kullanıma açıldı. app.py ayrıca
+    `hasattr(st, "dialog")` ile korunuyor — eski bir sürüme düşülürse
+    modal atlanır, uygulama ÇÖKMEZ, Ana Sayfa listesi çalışmaya devam eder.
+  - **Streamlit'in üç kısıtı, tasarım bunlara göre yapıldı:**
+    1. Bir script çalışmasında SADECE TEK dialog açılabilir → tespitler
+       sırayla gösteriliyor (en yenisi ilk, `ORDER BY tespit_zamani DESC`),
+       başlıkta "1 / N" sayacı, Onayla/Reddet sonrası `st.rerun()` ile
+       bir sonraki açılıyor.
+    2. Modal X/ESC/dışarı tıklama ile kapatılabilir, ama bir sonraki
+       rerun'da geri gelir. Uygulamada 5 dakikada bir sessiz autorefresh
+       olduğu için önlem alınmasa modal kullanıcının önüne tekrar tekrar
+       düşerdi → **"Daha sonra bak"** düğmesi `tespit_modal_ertelendi`
+       session key'ini set edip modalı O OTURUM boyunca susturuyor
+       (tespit SİLİNMEZ, üstteki uyarı şeridi ve Ana Sayfa listesi kalır).
+    3. `st.dialog` içinde `st.sidebar` çağrılamaz (kullanılmadı).
+  - **KAYAN NOKTA TUZAĞI (test sırasında yakalandı, bir daha düşme):**
+    Modaldaki puan önizlemesi ile df_uni'ye uygulanan asıl hesap AYNI
+    çarpanları kullanmalı VE AYNI ÇARPIM SIRASINDA olmalı. İlk yazımda
+    önizleme `(puan × şiddet) × risk`, asıl blok `puan × (şiddet × risk)`
+    sırasındaydı — 90 kalıp/şiddet/risk kombinasyonunun **16'sında** bit
+    düzeyinde farklı sonuç veriyordu (ekranda tek ondalıkla yuvarlandığı
+    için görünmezdi ama kullanıcıya gösterilen sayı ile uygulanan sayı
+    teknik olarak farklıydı). Düzeltildi: her iki taraf da önce
+    `carpan = şiddet × risk` hesaplayıp sonra puanla çarpıyor —
+    90/90 kombinasyon birebir aynı. **Bu iki yeri değiştirirken
+    HER ZAMAN ikisini birlikte güncelle.**
+
+
   Bahri'nin kararı — "zaten son dakika haberini alıp istatistiksel verilere
   göre hesaplayıp onaya sunuyoruz, bunlara gerek kalmadı ki"): Sidebar'daki
   "Beklenti Modu" bölümü TAMAMEN KALDIRILDI.**

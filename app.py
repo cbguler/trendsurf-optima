@@ -2507,6 +2507,109 @@ if _bekleyen_tespitler:
         f"bölümüne gidin. Hiçbiri siz onaylamadan Optima Skor'a uygulanmaz."
     )
 
+# v2.0.7.159 (Bahri'nin talebi, 19 Ağustos 2026 — "bir mesaj kutusunun
+# çıkmasını tercih ederim, mobildeki uygulamayı da düşünmek lazım"):
+# Onay bekleyen tespitler artık sadece Ana Sayfa'daki listede değil,
+# HANGİ SAYFADA OLURSA OLSUN bir MODAL KUTU (st.dialog) ile önüne çıkar.
+# Sebep: son dakika haberi zaman hassasiyetli - kullanıcı Portföyüm'deyken
+# de görmeli, Ana Sayfa'ya gitmesini beklememeliyiz.
+# ÜÇ TEKNİK KISIT (Streamlit'in kendi davranışı, tasarım bunlara göre):
+#  1. st.dialog Streamlit 1.37.0'da genel kullanıma açıldı - requirements.txt
+#     bu yüzden >=1.37.0'a yükseltildi. Yine de `hasattr` ile korunuyor:
+#     eski bir sürüme düşülürse modal atlanır, Ana Sayfa listesi çalışmaya
+#     devam eder (çökme YOK).
+#  2. Bir script çalışmasında SADECE TEK dialog açılabilir - bu yüzden
+#     bekleyen tespitler sırayla gösterilir (en yenisi ilk), başlıkta
+#     "1 / N" sayacı var. Onayla/Reddet sonrası rerun ile bir sonraki açılır.
+#  3. Uygulamada 5 dakikada bir sessiz autorefresh var - önlem alınmazsa
+#     modal kullanıcı okurken tekrar tekrar önüne düşer. Bu yüzden
+#     "Daha sonra bak" düğmesi oturum boyunca modalı susturur
+#     (`tespit_modal_ertelendi`); üstteki uyarı şeridi kalmaya devam eder.
+_MODAL_ERTELE_KEY = "tespit_modal_ertelendi"
+
+if (_bekleyen_tespitler and hasattr(st, "dialog")
+        and not st.session_state.get(_MODAL_ERTELE_KEY)):
+
+    def _tespit_puan_onizleme(_kalip_key_o, _siddet_o):
+        """Tespit ONAYLANIRSA hangi kategoriye kaç puan gideceğini önceden
+        hesaplar - aşağıdaki asıl uygulama bloğuyla AYNI çarpanları kullanır
+        (şiddet x risk toleransı). İki yer birbirinden ayrışırsa kullanıcıya
+        gösterilen sayı ile gerçekte uygulanan sayı tutmaz - değiştirirken
+        ikisini birlikte güncelle."""
+        _sc_o = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}.get(_siddet_o, 1.0)
+        _rc_o = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
+                 "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
+        # DİKKAT: çarpım sırası asıl blokla BİREBİR aynı olmalı - önce
+        # (şiddet x risk) çarpanı, SONRA puan ile çarpım. Ters sırada
+        # (puan x şiddet) x risk yazılırsa kayan nokta aritmetiği yüzünden
+        # 90 kombinasyonun 16'sında bit düzeyinde farklı sonuç çıkar.
+        _carpan_o = _sc_o * _rc_o
+        _ad_o = {"MADEN": "Değerli Maden", "DOVIZ": "Döviz",
+                 "BIST": "BIST", "KRIPTO": "Kripto"}
+        return [(_ad_o.get(_k_o, _k_o), _p_o * _carpan_o)
+                for _k_o, _p_o in _KALIP_TABLOSU.get(_kalip_key_o, {}).items()]
+
+    @st.dialog("Otomatik tespit")
+    def _tespit_onay_modali():
+        _tm = _bekleyen_tespitler[0]
+        _tkm = _tm["kalip_key"]
+        _sdm = _tm.get("siddet", "Orta")
+        if len(_bekleyen_tespitler) > 1:
+            st.caption(f"1 / {len(_bekleyen_tespitler)} bekleyen tespit")
+        _cumle_m = _tm.get("ai_gerekce", "") or (
+            f"{_KALIP_ISIM.get(_tkm, _tkm)} kalıbı tespit edildi.")
+        st.markdown(f"{_cumle_m} **Onaylıyor musunuz?**")
+
+        _onizleme = _tespit_puan_onizleme(_tkm, _sdm)
+        if _onizleme:
+            st.caption("Onaylarsanız uygulanacak")
+            for _kat_ad_m, _puan_m in _onizleme:
+                _pc1, _pc2 = st.columns([3, 1])
+                _pc1.markdown(_kat_ad_m)
+                _pc2.markdown(f"**{_puan_m:+.1f}**")
+
+        st.caption(
+            f"Kalıp: {_KALIP_ISIM.get(_tkm, _tkm)} · Şiddet: {_sdm} · "
+            f"Geçerlilik: 48 saat")
+        if _tm.get("haber_url"):
+            st.caption(
+                f"Kaynak: [{_tm.get('haber_kaynak','')} — "
+                f"{_tm.get('haber_basligi','')}]({_tm.get('haber_url')})")
+
+        _mc1, _mc2 = st.columns(2)
+        with _mc1:
+            if st.button("Onayla", key="modal_tespit_onay",
+                         use_container_width=True):
+                try:
+                    from db import tespit_onayla
+                    tespit_onayla(_tm["id"])
+                except Exception as _me1:
+                    st.error(f"Onaylanamadı: {_me1}")
+                else:
+                    st.rerun()
+        with _mc2:
+            if st.button("Reddet", key="modal_tespit_red",
+                         use_container_width=True):
+                try:
+                    from db import tespit_reddet
+                    tespit_reddet(_tm["id"])
+                except Exception as _me2:
+                    st.error(f"Reddedilemedi: {_me2}")
+                else:
+                    st.rerun()
+
+        if st.button("Daha sonra bak", key="modal_tespit_ertele",
+                     use_container_width=True):
+            st.session_state[_MODAL_ERTELE_KEY] = True
+            st.rerun()
+        st.caption(
+            "Kutuyu kapatırsanız sayfa yenilendiğinde tekrar açılır. "
+            "Bu oturumda bir daha çıkmasın isterseniz 'Daha sonra bak' "
+            "düğmesini kullanın - tespit silinmez, Ana Sayfa'daki listede "
+            "durmaya devam eder.")
+
+    _tespit_onay_modali()
+
 # v2.0.7.158 (Bahri'nin kararı, 19 Ağustos 2026): Bu blok ESKİDEN
 # `if st.session_state.get("beklenti_aktif"):` içindeydi - yani sidebar'daki
 # ana anahtar KAPALIYKEN, kullanıcı bir tespiti onaylasa bile Optima Skor'a
