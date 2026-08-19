@@ -138,10 +138,15 @@ def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
     """v2.0.7.155 (Bahri'nin talebi, 18 Ağustos 2026 — "ücretli ise
     kurmayacağım, ücretsiz alternatif bulalım"): Anthropic API yerine
     Google Gemini API kullanıyor - Gemini'nin gerçek, kredi kartı
-    GEREKTİRMEYEN bir ücretsiz katmanı var (doğrulandı: Ağustos 2026,
-    gemini-2.5-flash modeli günde 250-500 istek civarı ücretsiz limit -
-    bizim senaryomuzda [10 dakikada bir tarama, çoğu turda hiç eşleşme
-    yok] bu limite yaklaşmamız bile beklenmez).
+    GEREKTİRMEYEN bir ücretsiz katmanı var.
+
+    v2.0.7.160 DÜZELTMESİ: Buradaki eski "günde 250-500 istek" ifadesi
+    DOĞRULANMAMIŞ bir iddiaydı, kaldırıldı. 19 Ağustos 2026'da yapılan
+    araştırmada üçüncü taraf kaynaklar gemini-2.5-flash için günlük
+    20 / 50 / 250 / 500 / 1500 gibi BİRBİRİYLE ÇELİŞEN rakamlar verdi
+    ve Aralık 2025'te limitin bir kez düşürüldüğü bildirildi. Gerçek
+    limit bilinmiyor - bu yüzden kod artık kotanın cömert olduğunu
+    VARSAYMIYOR, _GUNLUK_AI_BUTCESI ile kendi sayacını tutuyor.
 
     Haberin GERÇEKTEN o kalıbı anlatıp anlatmadığını ve şiddetini
     doğrular. (eşleşme:bool, şiddet:str, gerekçe:str) döner. Hata
@@ -205,13 +210,87 @@ SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
         return False, None, f"AI hatasi: {e}"
 
 
+# ══════════════════════════════════════════════════════════════
+# v2.0.7.160: Toplu ceviri (SADECE Ingilizce kaynaklar)
+# ══════════════════════════════════════════════════════════════
+# Bahri'nin karari (19 Agustos 2026): 5 kaynagin 3'u (AA Ekonomi,
+# Investing.com TR, BloombergHT) ZATEN TURKCE - onlara hic dokunulmaz.
+# Sadece BBC World ve Al Jazeera cevrilir.
+_INGILIZCE_KAYNAKLAR = {"BBC World", "Al Jazeera"}
+
+# GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk
+# limiti BELIRSIZ (ucuncu taraf kaynaklar 20/50/250/500/1500 gibi
+# celiskili rakamlar veriyor, Aralik 2025'te bir kez dusuruldugu
+# bildirildi - bkz. PROJE_NOTLARI.md). Bu yuzden kotanin comert oldugu
+# VARSAYILMIYOR: gunluk toplam cagri bu sayiyi asinca CEVIRI durur
+# (haberler orijinal Ingilizce basligiyla gorunmeye devam eder),
+# ama TESPIT DOGRULAMASI durmaz - o sistemin asil isi, ceviri kozmetik.
+_GUNLUK_AI_BUTCESI = 120
+_CEVIRI_ONCELIK_ESIGI = 100  # bu sayiyi asinca ceviri durur, dogrulama devam
+
+
+def _toplu_ceviri(basliklar):
+    """v2.0.7.160: Bir turdaki TUM yeni Ingilizce baslikleri TEK Gemini
+    istegiyle cevirir (baslik basina ayri istek atmak gunluk kotayi
+    hizla tuketirdi - 10 dakikada bir calisan bir script icin bu fark
+    kritik). Girdi: [(url, baslik), ...] Cikti: {url: turkce_baslik}.
+
+    HATA DURUMUNDA BOS SOZLUK doner - cagiran taraf orijinal basligi
+    kullanmaya devam eder, hicbir sey cokmez."""
+    if not basliklar:
+        return {}
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return {}
+    try:
+        import requests
+        numarali = "\n".join(f"{i+1}. {b}" for i, (_u, b) in enumerate(basliklar))
+        prompt = f"""Aşağıdaki İngilizce haber başlıklarını Türkçeye çevir.
+
+{numarali}
+
+KURALLAR:
+- Sadece çeviri yap, yorum ekleme, başlığa olmayan bilgi EKLEME.
+- Özel isimleri (kurum, kişi, yer) Türkçede yaygın kullanılan haliyle yaz.
+- Haber başlığı üslubunu koru, kısa tut.
+- SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
+{{"ceviriler": {{"1": "birinci başlığın çevirisi", "2": "ikinci başlığın çevirisi"}}}}"""
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               "gemini-2.5-flash:generateContent")
+        resp = requests.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=45,
+        )
+        resp.raise_for_status()
+        metin = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        metin = metin.replace("```json", "").replace("```", "").strip()
+        ceviriler = json.loads(metin).get("ceviriler", {})
+        sonuc = {}
+        for i, (u, _b) in enumerate(basliklar):
+            tr = ceviriler.get(str(i + 1)) or ceviriler.get(i + 1)
+            if tr and str(tr).strip():
+                sonuc[u] = str(tr).strip()[:300]
+        return sonuc
+    except Exception as e:
+        print(f"[haber_izleme] Toplu ceviri hatasi: {type(e).__name__}: {e}")
+        return {}
+
+
 def main():
-    from db import haber_islendi_mi, haber_islendi_isaretle, otomatik_tespit_ekle
+    from db import (haber_islendi_mi, haber_islendi_isaretle, otomatik_tespit_ekle,
+                    haber_akisi_ekle, haber_akisi_ceviri_yaz, haber_akisi_temizle,
+                    ai_cagri_sayisi_bugun, ai_cagri_kaydet)
 
     print(f"[haber_izleme] Baslangic: {datetime.datetime.now().isoformat()}")
     toplam_haber = 0
     on_filtre_gecen = 0
     ai_dogrulanan = 0
+    akisa_eklenen = 0
+    # v2.0.7.160: bu turda cevrilecek Ingilizce basliklar burada birikir,
+    # tur sonunda TEK istekle cevrilir (baslik basina ayri istek DEGIL).
+    ceviri_kuyrugu = []
 
     for kaynak_adi, rss_url in _RSS_KAYNAKLARI:
         try:
@@ -232,7 +311,30 @@ def main():
             baslik = entry.get("title", "")
             ozet = entry.get("summary", "") or entry.get("description", "")
 
+            # v2.0.7.160: yayin zamani RSS'ten alinmaya calisilir - yoksa
+            # None kalir, db tarafi eklenme_zamani'na duser (COALESCE).
+            yayin_zamani = None
+            try:
+                _pp = entry.get("published_parsed") or entry.get("updated_parsed")
+                if _pp:
+                    yayin_zamani = datetime.datetime(*_pp[:6])
+            except Exception:
+                yayin_zamani = None
+
             eslesenler = _on_filtre_eslesen_kaliplar(baslik, ozet)
+
+            # v2.0.7.160 (Bahri'nin talebi - Haberler sayfasi): ESLESSIN
+            # YA DA ESLESMESIN her haber akisa yazilir. Eslesmeyenler
+            # "sistem calisiyor, ortalik sakin" bilgisini tasidigi icin
+            # EN AZ eslesenler kadar degerli - eskiden atiliyorlardi.
+            haber_akisi_ekle(
+                haber_url=url, kaynak=kaynak_adi, baslik=baslik[:300],
+                eslesen_kalip=",".join(eslesenler) if eslesenler else None,
+                yayin_zamani=yayin_zamani)
+            akisa_eklenen += 1
+            if kaynak_adi in _INGILIZCE_KAYNAKLAR:
+                ceviri_kuyrugu.append((url, baslik[:300]))
+
             if not eslesenler:
                 haber_islendi_isaretle(url)  # eslesmeyen haberi de isaretle - tekrar bakma
                 continue
@@ -241,7 +343,11 @@ def main():
             print(f"[haber_izleme] ON-FILTRE ESLESTI ({kaynak_adi}): {baslik[:80]} -> {eslesenler}")
 
             for kalip_key in eslesenler:
+                if ai_cagri_sayisi_bugun() >= _GUNLUK_AI_BUTCESI:
+                    print("[haber_izleme] GUNLUK AI BUTCESI DOLDU - dogrulama atlaniyor.")
+                    break
                 eslesme, siddet, gerekce = _ai_dogrula(kalip_key, baslik, ozet, kaynak_adi)
+                ai_cagri_kaydet(1)
                 if eslesme:
                     otomatik_tespit_ekle(
                         kalip_key=kalip_key, siddet=siddet or "Orta",
@@ -255,8 +361,31 @@ def main():
             haber_islendi_isaretle(url)
             time.sleep(1)  # API rate limit icin kucuk bir bekleme
 
+    # ── v2.0.7.160: TOPLU CEVIRI (tur sonunda, tek istek) ──────────────
+    # Butce esigi asildiysa ceviri HIC yapilmaz - haberler orijinal
+    # Ingilizce basligiyla gorunur. Tespit dogrulamasi bundan etkilenmez
+    # (yukarida ayri butce kontrolu var, esigi daha yuksek).
+    cevrilen = 0
+    if ceviri_kuyrugu:
+        if ai_cagri_sayisi_bugun() >= _CEVIRI_ONCELIK_ESIGI:
+            print(f"[haber_izleme] Ceviri butcesi doldu - {len(ceviri_kuyrugu)} "
+                  f"baslik orijinal haliyle kalacak.")
+        else:
+            # Cok uzun listeyi tek istege sikistirmamak icin 40'lik parcalar
+            for i in range(0, len(ceviri_kuyrugu), 40):
+                parca = ceviri_kuyrugu[i:i + 40]
+                ceviriler = _toplu_ceviri(parca)
+                ai_cagri_kaydet(1)
+                for u, tr in ceviriler.items():
+                    haber_akisi_ceviri_yaz(u, tr)
+                    cevrilen += 1
+
+    haber_akisi_temizle(7)  # 7 gunden eskiyi sil - tablo sinirsiz buyumesin
+
     print(f"[haber_izleme] Bitti: {toplam_haber} haber tarandi, "
-          f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi.")
+          f"{akisa_eklenen} akisa eklendi, {cevrilen} baslik cevrildi, "
+          f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi. "
+          f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}")
 
 
 if __name__ == "__main__":

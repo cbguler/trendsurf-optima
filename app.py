@@ -149,7 +149,11 @@ section.main [data-testid="stRadio"] label span,
 # ══════════════════════════════════════════════════════════════
 CSV_PATH, PORTFOLIO_FILE = "optimized_universe.csv", "portfolio.json"
 EMAIL_CFG_FILE = "email_config.json"
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Yardım"]
+# v2.0.7.160 (Bahri'nin talebi, 19 Agustos 2026): "Haberler" sayfasi
+# eklendi. Menude EN ALTA konuldu - tek istisna El Kitabi, cunku sidebar
+# onu PAGES[:-1] + [el_kitabi_etiketi] seklinde kuruyor (yani PAGES'in
+# SON elemani HER ZAMAN "Yardim" olmak zorunda, yoksa navigasyon bozulur).
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Haberler","Yardım"]
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -6290,6 +6294,92 @@ elif page=="Makro Göstergeler":
         with _col:
             st.metric(_lbl, _val)
     st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
+
+elif page=="Haberler":
+    # v2.0.7.160 (Bahri'nin talebi, 19 Ağustos 2026 — "durumun stabil
+    # olduğunu nasıl görebilirim diye düşünürken haber sayfası fikri
+    # oluşmaya başladı"): Beklenti Modu'nun izlediği haber akışının
+    # kendisi. AMAÇ: "hiçbir şey olmuyor" bilgisini görünür kılmak —
+    # sistem sessizse bunun sebebi sistemin çalışmaması değil, gerçekten
+    # sakin olması. Bahri'nin kararı: TÜM akış gösterilir, ama ön-filtreye
+    # takılan (piyasa etkisi olası) haberler AYRICA ÜSTTE işaretli durur.
+    st.title("Haberler")
+    st.caption("Beklenti Modu'nun 10 dakikada bir taradığı kaynaklar — en yeni haber en üstte")
+
+    try:
+        from db import get_haber_akisi
+        _akis = get_haber_akisi(saat=48, limit=300)
+    except Exception as _hak_err:
+        _akis = []
+        st.error(f"Haber akışı okunamadı: {_hak_err}")
+
+    if not _akis:
+        st.info(
+            "Henüz haber akışı birikmemiş. Haber izleme betiği GitHub "
+            "Actions'ta 10 dakikada bir çalışıyor — ilk tur tamamlandıktan "
+            "sonra buraya haberler düşmeye başlar."
+        )
+    else:
+        _ilgili = [h for h in _akis if h.get("eslesen_kalip")]
+        _digerleri = [h for h in _akis if not h.get("eslesen_kalip")]
+
+        # ── Durum özeti: Bahri'nin asıl sorusuna doğrudan cevap ──────
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("Son 48 saatte taranan", len(_akis))
+        _c2.metric("Piyasa etkisi olası", len(_ilgili))
+        _c3.metric("Onay bekleyen tespit", len(_bekleyen_tespitler))
+        if not _ilgili:
+            st.success(
+                "Son 48 saatte hiçbir haber izlenen 6 kalıptan birine "
+                "takılmadı — piyasa etkisi beklenen bir gelişme görünmüyor."
+            )
+        st.divider()
+
+        def _haber_satiri(_h, _isaretli=False):
+            _bas = _h.get("baslik_tr") or _h.get("baslik") or ""
+            _zaman = _h.get("zaman")
+            try:
+                _zaman_str = _zaman.strftime("%d.%m.%Y %H:%M")
+            except Exception:
+                _zaman_str = str(_zaman or "")
+            _kalip_etiket = ""
+            if _isaretli and _h.get("eslesen_kalip"):
+                _kalip_adlari = [_KALIP_ISIM.get(_k.strip(), _k.strip())
+                                 for _k in str(_h["eslesen_kalip"]).split(",") if _k.strip()]
+                _kalip_etiket = " · Kalıp: " + ", ".join(_kalip_adlari)
+            if _h.get("haber_url"):
+                st.markdown(f"[{_bas}]({_h['haber_url']})")
+            else:
+                st.markdown(_bas)
+            _cev_not = ""
+            if _h.get("baslik_tr"):
+                _cev_not = " · Türkçeye çevrildi"
+            st.caption(f"{_h.get('kaynak','')} · {_zaman_str}{_kalip_etiket}{_cev_not}")
+
+        if _ilgili:
+            st.subheader("Piyasa etkisi olası haberler")
+            st.caption(
+                "Bunlar anahtar kelime ön-filtresine takıldı. Takılmak tek "
+                "başına bir şey ifade etmez — Optima Skor'a etki etmesi için "
+                "AI doğrulamasından da geçip SİZİN onayınızı alması gerekir."
+            )
+            for _h in _ilgili:
+                with st.container(border=True):
+                    _haber_satiri(_h, _isaretli=True)
+            st.divider()
+
+        st.subheader("Tüm akış")
+        for _h in _digerleri:
+            _haber_satiri(_h)
+
+        st.divider()
+        st.caption(
+            "Kaynaklar: AA Ekonomi, BBC World, Al Jazeera, Investing.com TR, "
+            "BloombergHT. BBC ve Al Jazeera başlıkları Türkçeye çevrilir; "
+            "diğer üç kaynak zaten Türkçe yayın yapar. Çeviri günlük bir AI "
+            "bütçesine tabidir — bütçe dolarsa başlık orijinal dilinde kalır, "
+            "haber izleme durmaz. Akış 7 gün saklanır."
+        )
 
 elif page=="Yardım":
     is_admin = _cur_user.get("is_admin", False)

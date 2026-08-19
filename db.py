@@ -18,6 +18,7 @@ Kurulum: Streamlit Secrets'ta su tanimli olmali:
 import os
 import re
 import sys
+import datetime  # v2.0.7.160: ai_cagri_butcesi gunluk sayaci icin
 from typing import Any, Optional
 
 # ============================================================================
@@ -338,6 +339,42 @@ def init_db():
         islenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
 
+    # v2.0.7.160 (Bahri'nin talebi, 19 Ağustos 2026 — "durumun stabil
+    # olduğunu nasıl görebilirim diye düşünürken haber sayfası fikri
+    # oluştu"): Haber AKIŞI artık saklanıyor. Önceden haber_izleme.py
+    # anahtar kelime filtresine takılmayan başlığı ATIYORDU (sadece
+    # haber_islenmis'e URL yazıp geçiyordu) - yani "hiçbir şey olmuyor"
+    # bilgisi hiçbir yerde görünmüyordu. Bu tablo o boşluğu dolduruyor.
+    # eslesen_kalip NULL ise: haber tarandı, hiçbir kalıba uymadı (yani
+    # piyasa açısından sakin bir haber). NULL değilse: ön-filtreye takıldı,
+    # Haberler sayfasında üstte işaretli gösterilir.
+    # baslik_tr NULL ise ya kaynak zaten Türkçedir (AA/Investing TR/
+    # BloombergHT) ya da çeviri bütçesi dolmuştur - iki durumda da
+    # orijinal başlık gösterilir.
+    # SAKLAMA SÜRESİ 7 GÜN (haber_akisi_temizle ile) - sınırsız büyümesin.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS haber_akisi (
+        haber_url      TEXT PRIMARY KEY,
+        kaynak         TEXT NOT NULL,
+        baslik         TEXT NOT NULL,
+        baslik_tr      TEXT,
+        eslesen_kalip  TEXT,
+        yayin_zamani   TIMESTAMP,
+        eklenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
+    # v2.0.7.160: Gemini ücretsiz katman günlük istek limiti BELİRSİZ
+    # (üçüncü taraf kaynaklar 20/50/250/500/1500 gibi çelişkili rakamlar
+    # veriyor, Aralık 2025'te bir kez düşürüldüğü bildirildi). Bu yüzden
+    # kotanın cömert olduğu VARSAYILMIYOR: günlük çağrı sayısı burada
+    # tutuluyor, bütçe dolunca çeviri durur (haberler orijinal başlıkla
+    # görünmeye devam eder), tespit/doğrulama akışı etkilenmez.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS ai_cagri_butcesi (
+        tarih      TEXT PRIMARY KEY,
+        cagri_sayisi INTEGER NOT NULL DEFAULT 0
+    )""")
+
     # sessions tablosu
     c.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
@@ -625,6 +662,107 @@ def haber_islendi_isaretle(url: str):
         conn.close()
     except Exception as e:
         print(f"[db] haber_islendi_isaretle hata: {e}", file=sys.stderr)
+
+
+def haber_akisi_ekle(haber_url: str, kaynak: str, baslik: str,
+                     baslik_tr: str = None, eslesen_kalip: str = None,
+                     yayin_zamani=None):
+    """v2.0.7.160: Taranan HER haberi akisa yazar - eslesen_kalip None ise
+    'tarandi, sakin' demektir. Ayni URL tekrar gelirse hicbir sey yapmaz."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO haber_akisi (haber_url, kaynak, baslik, baslik_tr, "
+            "eslesen_kalip, yayin_zamani) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT (haber_url) DO NOTHING",
+            (haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, yayin_zamani))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] haber_akisi_ekle hata: {e}", file=sys.stderr)
+
+
+def haber_akisi_ceviri_yaz(haber_url: str, baslik_tr: str):
+    """v2.0.7.160: Toplu ceviri sonrasi Turkce basligi geriye yazar."""
+    try:
+        conn = get_conn()
+        conn.execute("UPDATE haber_akisi SET baslik_tr=? WHERE haber_url=?",
+                     (baslik_tr, haber_url))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] haber_akisi_ceviri_yaz hata: {e}", file=sys.stderr)
+
+
+def get_haber_akisi(saat: int = 48, limit: int = 300) -> list:
+    """v2.0.7.160: Haberler sayfasi icin - EN YENI EN USTTE. eslesen_kalip
+    dolu olanlar sayfada ayrica ustte gosterilir, bu fonksiyon ikisini de
+    ayni listede tek sorguda doner."""
+    try:
+        rows = get_conn().execute(
+            "SELECT haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, "
+            "COALESCE(yayin_zamani, eklenme_zamani) AS zaman "
+            "FROM haber_akisi "
+            f"WHERE COALESCE(yayin_zamani, eklenme_zamani) > now() - interval '{int(saat)} hours' "
+            "ORDER BY zaman DESC LIMIT ?", (int(limit),)
+        ).fetchall()
+    except Exception as e:
+        print(f"[db] get_haber_akisi hata: {e}", file=sys.stderr)
+        return []
+    sonuc = []
+    for r in rows:
+        def _hv(k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+        sonuc.append({
+            "haber_url": _hv("haber_url", 0), "kaynak": _hv("kaynak", 1),
+            "baslik": _hv("baslik", 2), "baslik_tr": _hv("baslik_tr", 3),
+            "eslesen_kalip": _hv("eslesen_kalip", 4), "zaman": _hv("zaman", 5),
+        })
+    return sonuc
+
+
+def haber_akisi_temizle(gun: int = 7):
+    """v2.0.7.160: 7 gunden eski haberleri siler - tablo sinirsiz buyumesin.
+    haber_izleme.py her turun sonunda cagirir."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM haber_akisi WHERE eklenme_zamani < "
+                     f"now() - interval '{int(gun)} days'")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] haber_akisi_temizle hata: {e}", file=sys.stderr)
+
+
+def ai_cagri_sayisi_bugun() -> int:
+    """v2.0.7.160: Bugun kac Gemini cagrisi yapildi? Butce kontrolu icin."""
+    try:
+        bugun = datetime.date.today().isoformat()
+        row = get_conn().execute(
+            "SELECT cagri_sayisi FROM ai_cagri_butcesi WHERE tarih=?",
+            (bugun,)).fetchone()
+        if not row:
+            return 0
+        return int(row["cagri_sayisi"] if isinstance(row, dict) else row[0])
+    except Exception as e:
+        print(f"[db] ai_cagri_sayisi_bugun hata: {e}", file=sys.stderr)
+        return 0  # okunamadiysa engelleme - cagri yapilsin
+
+
+def ai_cagri_kaydet(adet: int = 1):
+    """v2.0.7.160: Yapilan Gemini cagrisini gunluk sayaca ekler."""
+    try:
+        bugun = datetime.date.today().isoformat()
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO ai_cagri_butcesi (tarih, cagri_sayisi) VALUES (?,?) "
+            "ON CONFLICT (tarih) DO UPDATE SET "
+            "cagri_sayisi = ai_cagri_butcesi.cagri_sayisi + ?",
+            (bugun, int(adet), int(adet)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] ai_cagri_kaydet hata: {e}", file=sys.stderr)
 
 
 def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,

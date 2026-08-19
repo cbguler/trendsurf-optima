@@ -389,7 +389,57 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.159 (19 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.160 (19 Ağustos 2026,
+  Bahri'nin talebi — "durumun stabil olduğunu nasıl görebilirim diye
+  düşünürken haber sayfası fikri oluşmaya başladı"): HABERLER SAYFASI.**
+  - **MİMARİ DEĞİŞİKLİĞİ:** `haber_izleme.py` önceden ön-filtreye
+    takılmayan haberin BAŞLIĞINI ATIYORDU (sadece `haber_islenmis`e URL
+    yazıp geçiyordu). Artık taranan HER haber yeni `haber_akisi` tablosuna
+    yazılıyor. Sebep: "hiçbir şey olmuyor" bilgisi, "bir şey oldu"
+    bildirimi kadar değerli — sistem sessizse bu, sistemin bozuk olduğu
+    anlamına gelmemeli.
+  - **Bahri'nin üç kararı (19 Ağustos 2026):** (1) sayfa TÜM akışı
+    gösterir ama ön-filtreye takılanlar AYRICA ÜSTTE işaretli durur,
+    (2) SADECE İngilizce kaynaklar (BBC World, Al Jazeera) çevrilir —
+    diğer 3 kaynak (AA Ekonomi, Investing.com TR, BloombergHT) zaten
+    Türkçe, (3) el kitapları bu turda GÜNCELLENMEDİ (Bahri "şimdilik
+    bırak" dedi — **v2.0.7.158/159/160'ın hiçbiri el kitaplarında yok,
+    sonraki bir oturumda eklenmeli**).
+  - Yeni tablolar: `haber_akisi` (7 gün saklama, `haber_akisi_temizle`
+    her turun sonunda çağrılır), `ai_cagri_butcesi` (günlük Gemini
+    çağrı sayacı).
+  - Menüde "Haberler" **Makro Göstergeler ile Yardım arasına** kondu.
+    **DİKKAT:** sidebar navigasyonu `PAGES[:-1] + [el_kitabi_etiketi]`
+    şeklinde kuruluyor — yani `PAGES`'in SON elemanı HER ZAMAN "Yardım"
+    olmak zorunda. Yeni sayfa eklerken sondan bir önceye ekle, sona DEĞİL.
+  - **GEMINI KOTASI ARTIK VARSAYILMIYOR (önemli düzeltme):**
+    `haber_izleme.py`'de "günde 250-500 istek ücretsiz limit" yazıyordu —
+    bu DOĞRULANMAMIŞ bir iddiaydı, kaldırıldı. 19 Ağustos 2026 araştırması:
+    üçüncü taraf kaynaklar `gemini-2.5-flash` için günlük 20 / 50 / 250 /
+    500 / 1500 gibi BİRBİRİYLE ÇELİŞEN rakamlar veriyor ve Aralık 2025'te
+    limitin bir kez düşürüldüğü bildiriliyor. **Gerçek limit bilinmiyor.**
+    Bu yüzden kod kendi sayacını tutuyor: `_GUNLUK_AI_BUTCESI = 120`
+    (doğrulama dahil toplam tavan), `_CEVIRI_ONCELIK_ESIGI = 100`
+    (bu aşılınca ÇEVİRİ durur, DOĞRULAMA devam eder — çeviri kozmetik,
+    tespit sistemin asıl işi). Bütçe dolunca haberler orijinal başlıkla
+    görünür, hiçbir şey çökmez. **Bu iki sayı gerçek limit öğrenilince
+    güncellenmeli.**
+  - **Çeviri TOPLU yapılıyor, başlık başına DEĞİL:** bir turdaki tüm yeni
+    İngilizce başlıklar tek Gemini isteğine numaralı liste olarak gidiyor
+    (40'lık parçalar halinde). Başlık başına ayrı istek atmak 10 dakikada
+    bir çalışan bir script için kotayı hızla tüketirdi.
+    Eşleştirme POZİSYONA değil NUMARAYA göre — AI bazı satırları atlarsa
+    kayma olmaz, çevrilemeyen başlık orijinal haliyle kalır (test edildi).
+  - **BİLİNEN YÜK ARTIŞI (henüz sorun değil, ama izle):** artık her yeni
+    haber için `haber_akisi_ekle` + `haber_islendi_isaretle` = tur başına
+    2 ayrı Supabase bağlantısı/haber. İlk turda ~150 yeni haber olacağı
+    için o tur uzun sürebilir; sonraki turlarda çoğu haber zaten işlenmiş
+    olduğu için yeni kayıt sayısı düşük kalır. **Yavaşlık şikayeti gelirse
+    bağlantı havuzu ÖNERME — v2.0.7.142'de denendi, iki farklı çöküşe yol
+    açtı, geri alındı.** Bunun yerine toplu INSERT (tek çağrıda çok satır)
+    düşünülebilir.
+
+
   Bahri'nin talebi — "bir mesaj kutusunun çıkmasını tercih ederim,
   mobildeki uygulamayı da düşünmek lazım"): Onay bekleyen otomatik
   tespitler artık MODAL KUTU (`st.dialog`) ile sunuluyor.**
