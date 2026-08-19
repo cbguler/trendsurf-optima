@@ -1,11 +1,15 @@
 name: Beklenti Modu Haber Izleme
 
-# v2.0.7.154 (18 Agustos 2026, Bahri'nin talebi): Beklenti Modu'nun
+# v2.0.7.154+155 (18 Agustos 2026, Bahri'nin talebi): Beklenti Modu'nun
 # otomatik haber izleme katmani. RSS kaynaklarini (AA/BBC/Al Jazeera/
 # Investing.com/BloombergHT) 10 dakikada bir tarar, anahtar kelime
-# on-filtresinden gecen haberleri Claude API ile dogrular, dogrulanan
-# tespitleri Supabase'e yazar - app.py bunlari OTOMATIK olarak Optima
-# Skor'a uygular.
+# on-filtresinden gecen haberleri Google Gemini API (ucretsiz katman)
+# ile dogrular, dogrulanan tespitleri Supabase'e yazar - app.py bunlari
+# OTOMATIK olarak Optima Skor'a uygular.
+#
+# v2.0.7.155: Anthropic API'den Google Gemini API'ye gecildi (Bahri:
+# "ucretli ise kurmayacagim, ucretsiz alternatif bulalim") - Gemini'nin
+# kredi karti gerektirmeyen gercek bir ucretsiz katmani var.
 #
 # GitHub'in kendi cron'unun bilinen gecikme/atlama sorunu nedeniyle
 # (bkz. firsat_radari.yml/send_email.yml gecmisi) asagidaki schedule
@@ -39,10 +43,10 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          pip install feedparser anthropic psycopg2-binary --quiet
+          pip install feedparser requests psycopg2-binary --quiet
 
       - name: Haber izleme calistir
         run: python haber_izleme.py
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

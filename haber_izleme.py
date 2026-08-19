@@ -1,21 +1,28 @@
 # -*- coding: utf-8 -*-
 """
 haber_izleme.py — TrendSurf Optima
-Beklenti Modu'nun OTOMATIK haber izleme katmani (v2.0.7.154, Bahri'nin
-talebi, 18 Agustos 2026).
+Beklenti Modu'nun OTOMATIK haber izleme katmani (v2.0.7.154/155,
+Bahri'nin talebi, 18 Agustos 2026).
 
 GitHub Actions uzerinde 10 dakikada bir calisir:
   1) 5 RSS haber kaynagini (Turkiye + kuresel) okur
   2) Her YENI haberi (daha once islenmemis) anahtar kelime on-filtresinden
      gecirir (6 Beklenti Modu kalibi: jeopolitik/petrol/fed/kredi_notu/
      kripto_olay/tcmb_kredibilite)
-  3) On-filtreden gecen haberleri Claude API ile DOGRULAR (gercekten
-     ilgili kalibi mi anlatiyor, hangi siddette)
+  3) On-filtreden gecen haberleri Google Gemini API ile DOGRULAR
+     (gercekten ilgili kalibi mi anlatiyor, hangi siddette)
   4) Dogrulanan tespitleri Supabase'e yazar - app.py bunlari OTOMATIK
      olarak Optima Skor'a uygular (Bahri'nin secimi: "hemen otomatik
      uygula", onay beklemeden)
 
-GUVENLIK: ANTHROPIC_API_KEY GitHub Secrets'tan okunur, koda YAZILMAZ
+v2.0.7.155 (Bahri'nin talebi: "ucretli ise kurmayacagim, ucretsiz
+alternatif bulalim"): Anthropic API'den Google Gemini API'ye gecildi -
+Gemini'nin kredi karti GEREKTIRMEYEN gercek bir ucretsiz katmani var
+(dogrulandi: Agustos 2026, gemini-2.5-flash modeli gunde 250-500 istek
+civari ucretsiz limit - 10 dakikada bir calisan bu script icin fazlasiyla
+yeterli).
+
+GUVENLIK: GEMINI_API_KEY GitHub Secrets'tan okunur, koda YAZILMAZ
 (bu repo public).
 
 Kalip tanimlari (_KALIP_TABLOSU/_KALIP_ISIM) app.py'deki ile AYNI olmali
@@ -101,18 +108,25 @@ def _on_filtre_eslesen_kaliplar(baslik, ozet):
 
 
 def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
-    """Claude API ile haberin GERCEKTEN o kalibi anlatip anlatmadigini
-    ve siddetini dogrular. (eslesme:bool, siddet:str, gerekce:str) doner.
-    Hata durumunda (eslesme=False, ...) - yani BASARISIZ dogrulama
-    OTOMATIK OLARAK REDDEDILIR (guvenli taraf), asla varsayilan olarak
-    kabul edilmez."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    """v2.0.7.155 (Bahri'nin talebi, 18 Ağustos 2026 — "ücretli ise
+    kurmayacağım, ücretsiz alternatif bulalım"): Anthropic API yerine
+    Google Gemini API kullanıyor - Gemini'nin gerçek, kredi kartı
+    GEREKTİRMEYEN bir ücretsiz katmanı var (doğrulandı: Ağustos 2026,
+    gemini-2.5-flash modeli günde 250-500 istek civarı ücretsiz limit -
+    bizim senaryomuzda [10 dakikada bir tarama, çoğu turda hiç eşleşme
+    yok] bu limite yaklaşmamız bile beklenmez).
+
+    Haberin GERÇEKTEN o kalıbı anlatıp anlatmadığını ve şiddetini
+    doğrular. (eşleşme:bool, şiddet:str, gerekçe:str) döner. Hata
+    durumunda (eşleşme=False, ...) - yani BAŞARISIZ doğrulama OTOMATİK
+    OLARAK REDDEDİLİR (güvenli taraf), asla varsayılan olarak kabul
+    edilmez."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        print("[haber_izleme] ANTHROPIC_API_KEY tanimli degil, AI dogrulama atlaniyor.")
+        print("[haber_izleme] GEMINI_API_KEY tanimli degil, AI dogrulama atlaniyor.")
         return False, None, "API anahtari yok"
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        import requests
         kalip_aciklama = _KALIP_ISIM.get(kalip_key, kalip_key)
         prompt = f"""Bir finansal haber izleme sistemisin. Aşağıdaki haberin
 GERÇEKTEN "{kalip_aciklama}" kategorisine ait, PİYASALARI ETKİLEYECEK
@@ -129,12 +143,17 @@ eşleşme=false de. Şüpheye düşersen false de (temkinli ol).
 
 SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
 {{"eslesme": true/false, "siddet": "Düşük"/"Orta"/"Yüksek", "gerekce": "kısa açıklama (max 200 karakter)"}}"""
-        response = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               "gemini-2.5-flash:generateContent")
+        resp = requests.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30,
         )
-        metin = response.content[0].text.strip()
+        resp.raise_for_status()
+        veri_ham = resp.json()
+        metin = veri_ham["candidates"][0]["content"]["parts"][0]["text"].strip()
         metin = metin.replace("```json", "").replace("```", "").strip()
         veri = json.loads(metin)
         return (bool(veri.get("eslesme", False)),

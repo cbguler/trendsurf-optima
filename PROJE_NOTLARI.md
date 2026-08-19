@@ -389,6 +389,32 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ## 5. BEKLEYEN İŞLER / TODO (her oturum başında kontrol et)
 
+- **[UYGULANDI, TEST EDİLMEDİ] v2.0.7.155 (18 Ağustos 2026, Bahri'nin
+  talebi — "ücretli ise kurmayacağım, ücretsiz alternatif bulalım"):
+  AI doğrulama katmanı Anthropic API'den Google Gemini API'ye çevrildi.**
+  Google Gemini API'nin kredi kartı GEREKTİRMEYEN gerçek bir ücretsiz
+  katmanı olduğu doğrulandı (Ağustos 2026 itibarıyla, `gemini-2.5-flash`
+  modeli günde 250-500 istek civarı ücretsiz limit - 10 dakikada bir
+  çalışan, çoğu turda hiç AI çağrısı yapmayan bu script için fazlasıyla
+  yeterli). `haber_izleme.py`'nin `_ai_dogrula()` fonksiyonu artık
+  Anthropic SDK yerine doğrudan `requests` ile Gemini'nin REST
+  endpoint'ini çağırıyor (`generativelanguage.googleapis.com`,
+  `x-goog-api-key` header) - EKSTRA BİR SDK BAĞIMLILIĞI GEREKMİYOR
+  (`requests` zaten projede mevcut). requirements.txt'den `anthropic`
+  kaldırıldı, `.github/workflows/haber_izleme.yml` artık
+  `GEMINI_API_KEY` bekliyor (ANTHROPIC_API_KEY değil).
+  **Canlı test edildi (sahte anahtarla):** endpoint gerçekten yanıt
+  veriyor ("API key not valid" - beklenen, doğru hata), kod bu hatayı
+  güvenli şekilde yakalayıp False döndürüyor (çökme yok).
+  **Bahri'nin push sonrası yapması gereken:** `aistudio.google.com`
+  adresinden (Google hesabıyla, kredi kartsız) bir API anahtarı alıp
+  GitHub Secrets'a `GEMINI_API_KEY` adıyla eklemesi gerekiyor - ESKİ
+  `ANTHROPIC_API_KEY` secret'ı varsa silinebilir (artık kullanılmıyor).
+  **DOĞRULANMAMIŞ** (gerçek bir API anahtarıyla uçtan uca test
+  gerekiyor - bu ortamda gerçek bir Gemini anahtarı yok, sadece
+  istek formatının doğruluğu ve hata yönetiminin güvenli olduğu
+  doğrulandı).
+
 - **[UYGULANDI, TEST EDİLMEDİ, YENİ ALTYAPI GEREKTİRİYOR] v2.0.7.154
   (18 Ağustos 2026, Bahri'nin talebi): Beklenti Modu'nun OTOMATİK haber
   izleme katmanı ilk kez inşa edildi.** Bahri'nin seçimleri: (1) haber
