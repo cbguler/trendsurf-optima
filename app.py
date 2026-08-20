@@ -3330,16 +3330,34 @@ def _kiyaslama_gunluk_serileri(portfolio):
     _sonuc = {"Portföyünüz": _portfoy_getiri}
 
     # 2) BIST 100 endeksi (yfinance, TSO evreninde olmayan tek dış varlık)
-    try:
-        import yfinance as yf
-        _bb = yf.download("XU100.IS", start=_baslangic.isoformat(), progress=False)
-        _bs = _benchmark_close_series(_bb)
-        if _bs is not None and len(_bs) > 1:
-            _bs = _seri_hazirla(_bs)
-            if float(_bs.iloc[0]) > 0:
-                _sonuc["BIST 100"] = (_bs / float(_bs.iloc[0]) - 1) * 100
-    except Exception:
-        pass
+    # v2.0.7.169 (Bahri'nin bulgusu, 20 Ağustos 2026 — "BIST100'ün
+    # buradan çıktığını görüyorum, bir süre bekleyince geri geliyor"):
+    # KÖK NEDEN: yfinance geçici bir ağ/rate-limit hatası verdiğinde
+    # eski kod `except Exception: pass` ile BIST 100'ü SESSİZCE
+    # düşürüyordu. Bu fonksiyon 5 dakika önbellekli olduğu için, tam o
+    # anda oluşan bir hata "BIST 100 yok" durumunu TAM 5 DAKİKA
+    # boyunca dondurup önbelleğe kaydediyordu - "bir süre bekleyince
+    # geri gelmesi" bu yüzdendi (önbellek süresi dolup yeni bir deneme
+    # başarılı olana kadar). Çözüm: 2 KEZ daha dene (kısa bekleme ile)
+    # önce pes et - yfinance'ın bilinen geçici flakiness'ini tolere
+    # etmek için (live_data.py'deki borsapy retry desenleriyle tutarlı).
+    for _bist100_deneme in range(3):
+        try:
+            import yfinance as yf
+            _bb = yf.download("XU100.IS", start=_baslangic.isoformat(), progress=False)
+            _bs = _benchmark_close_series(_bb)
+            if _bs is not None and len(_bs) > 1:
+                _bs = _seri_hazirla(_bs)
+                if float(_bs.iloc[0]) > 0:
+                    _sonuc["BIST 100"] = (_bs / float(_bs.iloc[0]) - 1) * 100
+            break  # basarili (veri bos bile olsa exception yok) - tekrar deneme
+        except Exception:
+            if _bist100_deneme < 2:
+                import time as _time_b100
+                _time_b100.sleep(1.5)
+                continue
+            # 3 denemenin hepsi basarisiz - BIST 100 bu turda YOK,
+            # ama en azindan sebepsiz yere ilk hatada pes edilmedi.
 
     # 3) Altın ve Dolar/TL - TSO'nun kendi kategori verisiyle (sentetik yok)
     for _ad, _tkr, _kat in (("Altın", "ALTIN_TRY", "MADEN"), ("Dolar/TL", "USDTRY", "DOVIZ")):
@@ -3493,6 +3511,13 @@ def _render_karsilastirma(_cur_user, portfolio):
         st.info("Karşılaştırma için geçerli alış tarihi olan pozisyon bulunamadı.")
         return
 
+    if "BIST 100" not in _seriler:
+        st.caption(
+            "⚠ BIST 100 karşılaştırması şu an yüklenemedi (Yahoo Finance "
+            "tarafında geçici bir sorun olabilir) - sayfayı birkaç dakika "
+            "sonra yenilemeyi deneyin."
+        )
+
     import plotly.graph_objects as go
     # v2.0.7.167 (Bahri'nin talebi, 20 Ağustos 2026 — "grafik çok
     # anlaşılmaz bir hal aldı barları kaldır"): v2.0.7.166'da eklenen
@@ -3507,18 +3532,39 @@ def _render_karsilastirma(_cur_user, portfolio):
         "Dolar/TL": "#15803d", "Vadeli Mevduat": "#a21caf",
         "Devlet Tahvili": "#4338ca", "Repo": "#b91c1c",
     }
+    # v2.0.7.169 (Bahri'nin bulgusu, 20 Ağustos 2026 — "çizgi ve etiket
+    # renkleri ile çizgi kalınlıkları ayırt edici değil, anlaşılır hale
+    # getir"): RENK TEK BAŞINA yeterli değildi - her çizgi kendine özgü
+    # bir DESEN de alıyor (düz/kesikli/noktalı/nokta-çizgi). Bu özellikle
+    # Devlet Tahvili/Repo gibi DEĞERLERİ neredeyse aynı çıkıp üst üste
+    # binen çizgilerin birbirini TAMAMEN gizlemesini önlüyor.
+    _desenler = {
+        "Portföyünüz": "solid", "BIST 100": "dash", "Altın": "solid",
+        "Dolar/TL": "dot", "Vadeli Mevduat": "dashdot",
+        "Devlet Tahvili": "longdash", "Repo": "longdashdot",
+    }
     fig = go.Figure()
     for _ad, _seri in _seriler.items():
         fig.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_ad,
             line=dict(width=4 if _ad == "Portföyünüz" else 2.75,
-                      color=_renkler.get(_ad, "#374151")),
+                      color=_renkler.get(_ad, "#374151"),
+                      dash=_desenler.get(_ad, "solid")),
             hovertemplate="<b>" + _ad + "</b>: %{y:.2f}%<extra></extra>",
         ))
+        # v2.0.7.169: çizginin sağ ucuna doğrudan etiket - hover'a gerek
+        # kalmadan hangi çizginin hangi varlık olduğu görülüyor.
+        fig.add_annotation(
+            x=_seri.index[-1], y=float(_seri.iloc[-1]),
+            text=f" {_ad}", showarrow=False, xanchor="left",
+            font=dict(size=11, color=_renkler.get(_ad, "#374151")),
+        )
     fig.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
     fig.update_layout(
         template="plotly_white", height=440,
-        margin=dict(l=10, r=10, t=10, b=10),
+        # v2.0.7.169: sağ uçtaki etiketlerin sığması için sağ kenar
+        # boşluğu artırıldı (10 -> 90).
+        margin=dict(l=10, r=90, t=10, b=10),
         # v2.0.7.143 (Bahri'nin talebi): imleci bir CIZGININ uzerine
         # goturunce SADECE o serinin adi/degeri gorunsun - "x unified"
         # (butun serileri tek kutuda listeler) yerine "closest" (imlecin

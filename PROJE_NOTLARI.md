@@ -1521,6 +1521,51 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.169 (20 Ağustos 2026, Bahri'nin
+  bulguları): GETİRİ KIYASLAMASI GRAFİĞİNDEKİ ÜÇ SORUN.**
+  - **BIST 100'ün kaybolup gelmesi (KÖK NEDEN bulundu, düzeltildi):**
+    `yf.download("XU100.IS", ...)` çağrısı `except Exception: pass` ile
+    sessizce başarısız oluyordu - yfinance'ın bilinen geçici ağ/rate-limit
+    flakiness'i yüzünden bu SIK oluyordu. Fonksiyon 5 dakika önbellekli
+    olduğu için, TAM O ANDA oluşan bir hata "BIST 100 yok" durumunu 5
+    dakika boyunca donduruyordu - "bir süre bekleyince geri gelmesi" bu
+    yüzdendi. Çözüm: 3 deneme (1,5 sn arayla) eklendi; 3'ü de başarısız
+    olursa artık SESSİZCE değil, grafiğin üstünde açık bir uyarı
+    ("BIST 100 şu an yüklenemedi...") gösteriliyor.
+  - **Çizgi ayırt edilebilirliği (Bahri'nin bulgusu: "renkler ve
+    kalınlıklar ayırt edici değil"):** Her çizgiye RENGE EK OLARAK
+    kendine özgü bir ÇİZGİ DESENİ (düz/kesikli/noktalı/nokta-çizgi/uzun
+    kesikli/uzun nokta-çizgi) verildi. Ayrıca her çizginin SAĞ UCUNA
+    doğrudan bir metin etiketi eklendi (`fig.add_annotation`) - artık
+    hover'a gerek kalmadan hangi rengin/deseninin hangi varlık olduğu
+    grafiğin sağında yazıyor. Sağ kenar boşluğu (margin) etiketlerin
+    sığması için 10'dan 90'a çıkarıldı.
+    **BİLİNEN SINIRLAMA:** iki varlığın DEĞERİ neredeyse birebir aynıysa
+    (bkz. aşağıdaki Devlet Tahvili/Repo maddesi), sağ uçtaki metin
+    etiketleri üst üste binip okunması zorlaşabilir - dash deseni yine
+    de ayrı çizgiler olduğunu gösteriyor, tam çakışma çözülmedi.
+  - **[AÇIK - BAHRİ'NİN KARARI BEKLİYOR] "Devlet Tahvili" veri kaynağı
+    muhtemelen YANLIŞ ETİKETLİ:** Bahri'nin "Devlet Tahvili grafikte
+    görünmüyor" bulgusunu araştırırken kesinleşti - `TP.BISTTLREF.ORAN`
+    ("BIST TLREF") aslında bir tahvil getirisi DEĞİL, GECELİK bir repo
+    tabanlı referans faiz oranı - `TP.AOFOBAP` (Repo için kullanılan
+    seri) ile FONKSİYONEL OLARAK ÇOK BENZER. Bu yüzden ikisinin
+    kümülatif getirisi pratikte AYNI çıkıyor (ekran görüntüsünde ikisi
+    de +1,86%) ve çizgileri tam üst üste biniyor - görünmezlik bir
+    render hatası değil, VERİ KAYNAĞI SEÇİMİ hatası.
+    Türkiye'nin gerçek "gösterge tahvili" 2 yıl vadeli, ikincil piyasada
+    işlem gören bir devlet tahvilidir (doviz.com doğrulandı) - ama
+    araştırmamda EVDS'te bunun için GÜVENİLİR, DOĞRULANMIŞ bir seri kodu
+    BULAMADIM (yalnızca investing.com/TradingView gibi piyasa
+    kaynaklarında "Turkey 2Y Bond Yield" olarak görülüyor, TCMB EVDS'ten
+    DEĞİL). **Tahmini bir kod yazıp "düzelttim" DENMEDİ** - bu, Bahri'nin
+    karar vermesi gereken açık bir konu: (a) mevcut TLREF kaynağını
+    "Devlet Tahvili" yerine gerçek adıyla ("TL Gecelik Referans")
+    yeniden etiketleyip Repo ile birlikte tutmak, (b) Repo'yu kaldırıp
+    sadece TLREF'i tutmak, (c) investing.com/TradingView gibi bir
+    kaynaktan gerçek 2 yıllık tahvil getirisini scrape etmek (yeni bir
+    entegrasyon, ayrı bir iş).
+
 - **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.168 (20 Ağustos 2026,
   Bahri'nin bulgusu — "uygulama yeniden çok ağırlaştı"): KÖK NEDEN
   BULUNDU - HER SAYFADA ÇALIŞAN ÖNBELLEKSİZ DB SORGULARI.**
