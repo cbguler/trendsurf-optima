@@ -1521,7 +1521,16 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.171 (20 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.172 (20 Ağustos 2026, Bahri'nin
+  talebi): "Pozisyon Bazlı Getiri Karşılaştırması" grafiği (Portföyüm
+  sayfası, ikinci/deneme grafik) Ana Getiri Kıyaslaması'ndaki
+  (v2.0.7.169) AYNI iki teknikle netleştirildi - her çizgiye renge ek
+  olarak kendine özgü bir DESEN (6 desen x 10 renk = 60 kombinasyon,
+  pozisyon sayısı sabit olmadığı için desen döngüsü renk döngüsünden
+  bağımsız uzunlukta tutuldu) ve her çizginin SAĞ UCUNA doğrudan metin
+  etiketi eklendi. Sağ kenar boşluğu 10'dan 90'a çıkarıldı.
+
+
   bulgusu — "e-posta geldi ama linke tıklayınca localhost çıktı"):
   v2.0.7.170'İN AÇTIĞI E-POSTA BAŞARIYLA GİTTİ, AMA İÇİNDEKİ LİNK YANLIŞ
   ADRESE GİDİYORDU.**

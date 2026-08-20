@@ -3679,17 +3679,38 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
         "#be123c",  # gul/koyu kirmizi
         "#111827",  # neredeyse siyah
     ]
+    # v2.0.7.172 (Bahri'nin talebi, 20 Ağustos 2026 — "ikinci grafiği de
+    # önceki grafiğe benzer yöntemle daha anlaşılır hale getir"): Ana
+    # Getiri Kıyaslaması'nda (v2.0.7.169) kullanılan AYNI iki teknik
+    # burada da uygulandı: (1) her çizgi renge EK OLARAK kendine özgü
+    # bir DESEN alıyor - pozisyon sayısı SABİT DEĞİL (portföye göre
+    # değişir) olduğu için desen döngüsü renk döngüsünden BAĞIMSIZ
+    # uzunlukta (6 desen x 10 renk = 60 farklı kombinasyon, aynı
+    # kombinasyon 60 pozisyondan önce tekrarlanmaz - gerçekçi bir
+    # portföy için fazlasıyla yeterli). (2) Her çizginin SAĞ UCUNA
+    # doğrudan etiket ekleniyor - hover'a gerek kalmadan hangi çizginin
+    # hangi pozisyon olduğu görülüyor.
+    _desen_paleti_pk = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"]
     fig2 = go.Figure()
     for _i, (_etiket, _seri) in enumerate(_pozisyon_serileri.items()):
+        _renk_pk = _renk_paleti_pk[_i % len(_renk_paleti_pk)]
         fig2.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_etiket,
-            line=dict(width=2.75, color=_renk_paleti_pk[_i % len(_renk_paleti_pk)]),
+            line=dict(width=2.75, color=_renk_pk,
+                      dash=_desen_paleti_pk[_i % len(_desen_paleti_pk)]),
             hovertemplate="<b>" + _etiket + "</b>: %{y:.2f}%<extra></extra>",
         ))
+        fig2.add_annotation(
+            x=_seri.index[-1], y=float(_seri.iloc[-1]),
+            text=f" {_etiket}", showarrow=False, xanchor="left",
+            font=dict(size=11, color=_renk_pk),
+        )
     fig2.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
     fig2.update_layout(
         template="plotly_white", height=420,
-        margin=dict(l=10, r=10, t=10, b=10),
+        # v2.0.7.172: sağ uçtaki etiketlerin sığması için sağ kenar
+        # boşluğu artırıldı (10 -> 90) - Ana Getiri Kıyaslaması'yla tutarlı.
+        margin=dict(l=10, r=90, t=10, b=10),
         # v2.0.7.143 (Bahri'nin talebi): imleci bir CIZGININ uzerine
         # goturunce SADECE o serinin adi/degeri gorunsun.
         hovermode="closest",
