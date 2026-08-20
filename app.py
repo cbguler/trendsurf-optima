@@ -2452,8 +2452,24 @@ _beklenti_ayarlar = {}
 # geçersiz - sidebar'daki Beklenti Modu anahtarı tamamen kaldırıldı,
 # artık ONAY/RED kararının kendisi tek kontroldür.
 try:
-    from db import get_bekleyen_tespitler, get_onaylanmis_tespitler
-    _bekleyen_tespitler = get_bekleyen_tespitler()
+    from db import get_bekleyen_tespitler as _gbt_raw
+
+    # v2.0.7.168 (Bahri'nin bulgusu, 20 Ağustos 2026 — "uygulama yeniden
+    # çok ağırlaştı"): KÖK NEDEN bulundu - bu çağrı ÖNBELLEKSİZDİ, yani
+    # sayfa fark etmeksizin HER rerun'da (her tıklama, her widget
+    # etkileşimi, uygulamanın HERHANGİ bir yerinde) Supabase'e YENİ bir
+    # bağlantı açılıyordu (bağlantı havuzu YOK - v2.0.7.142'de denenmiş,
+    # iki farklı çöküşe yol açmıştı, bu yüzden havuza DÖNÜLMEDİ). 20
+    # saniyelik kısa ömürlü önbellek ekleyerek: haber_izleme.py zaten
+    # 2 saatte bir çalıştığı için 20 saniyelik gecikme hiçbir şeyi
+    # geciktirmiyor, ama art arda tıklamalarda (ör. bir sayı kutusuna
+    # yazarken her tuşta rerun tetiklenmesi) gereksiz onlarca bağlantı
+    # açılması engelleniyor.
+    @st.cache_data(ttl=20, show_spinner=False)
+    def _bekleyen_tespitler_onbellekli():
+        return _gbt_raw()
+
+    _bekleyen_tespitler = _bekleyen_tespitler_onbellekli()
 except Exception:
     _bekleyen_tespitler = []
 
@@ -2543,6 +2559,10 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                 except Exception as _me1:
                     st.error(f"Onaylanamadı: {_me1}")
                 else:
+                    # v2.0.7.168: onaylanan tespit hemen listeden dussun
+                    # diye ONBELLEK TEMIZLENIYOR - aksi halde 20 sn'lik
+                    # TTL boyunca ayni tespit tekrar gorunebilirdi.
+                    st.cache_data.clear()
                     st.rerun()
         with _mc2:
             if st.button("Reddet", key="modal_tespit_red",
@@ -2553,6 +2573,7 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                 except Exception as _me2:
                     st.error(f"Reddedilemedi: {_me2}")
                 else:
+                    st.cache_data.clear()  # v2.0.7.168 - yukaridaki notla ayni sebep
                     st.rerun()
 
         if st.button("Daha sonra bak", key="modal_tespit_ertele",
@@ -2577,7 +2598,16 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
 # (2) hiçbir şey yapma - onaylanan tespitler 48 saat sonra `gecerlilik_bitis`
 # ile kendiliğinden düşer (bkz. db.tespit_ekle, gecerlilik_saat=48).
 try:
-    _onaylanmis_tespitler = get_onaylanmis_tespitler()
+    from db import get_onaylanmis_tespitler as _got_raw
+
+    # v2.0.7.168: yukarıdaki _bekleyen_tespitler_onbellekli ile AYNI
+    # sebep/çözüm - bu çağrı da ÖNBELLEKSİZDİ, her rerun'da yeni bir
+    # Supabase bağlantısı açıyordu. 20 saniyelik önbellek eklendi.
+    @st.cache_data(ttl=20, show_spinner=False)
+    def _onaylanmis_tespitler_onbellekli():
+        return _got_raw()
+
+    _onaylanmis_tespitler = _onaylanmis_tespitler_onbellekli()
 except Exception:
     _onaylanmis_tespitler = []
 
@@ -4496,6 +4526,7 @@ if page=="Ana Sayfa":
                             try:
                                 from db import tespit_onayla
                                 tespit_onayla(_tespit["id"])
+                                st.cache_data.clear()  # v2.0.7.168
                                 st.success("Onaylandı, Optima Skor'a uygulanacak.")
                                 st.rerun()
                             except Exception as _onay_err:
@@ -4505,6 +4536,7 @@ if page=="Ana Sayfa":
                             try:
                                 from db import tespit_reddet
                                 tespit_reddet(_tespit["id"])
+                                st.cache_data.clear()  # v2.0.7.168
                                 st.info("Reddedildi, bir daha gösterilmeyecek.")
                                 st.rerun()
                             except Exception as _red_err:
@@ -6266,7 +6298,17 @@ elif page=="Haberler":
 
     try:
         from db import get_haber_akisi
-        _akis = get_haber_akisi(saat=48, limit=300)
+
+        # v2.0.7.168: bu sayfadayken yapılan HER etkileşim (scroll'a bağlı
+        # rerun, başka bir widget tıklaması vb.) öncesinde önbelleksiz
+        # olarak 300 satıra kadar sorgu atılıyordu. 20 saniyelik önbellek
+        # eklendi - haber akışı zaten en hızlı 2 saatte bir tazeleniyor,
+        # 20 saniyelik gecikme hiçbir bilgiyi geciktirmiyor.
+        @st.cache_data(ttl=20, show_spinner=False)
+        def _haber_akisi_onbellekli():
+            return get_haber_akisi(saat=48, limit=300)
+
+        _akis = _haber_akisi_onbellekli()
     except Exception as _hak_err:
         _akis = []
         st.error(f"Haber akışı okunamadı: {_hak_err}")

@@ -1521,7 +1521,42 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.166 (20 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.168 (20 Ağustos 2026,
+  Bahri'nin bulgusu — "uygulama yeniden çok ağırlaştı"): KÖK NEDEN
+  BULUNDU - HER SAYFADA ÇALIŞAN ÖNBELLEKSİZ DB SORGULARI.**
+  - **Kesin kök neden:** `get_bekleyen_tespitler()` ve
+    `get_onaylanmis_tespitler()` (v2.0.7.156'da eklendi) HİÇ önbelleksizdi
+    - sayfa fark etmeksizin HER script rerun'ında (her tıklama, her
+    widget etkileşimi, uygulamanın HERHANGİ bir yerinde) Supabase'e
+    SIFIRDAN bir bağlantı açıyorlardı. Bu, v2.0.7.156'da eklendiğinde
+    zaten vardı ama v2.0.7.159 (modal) ve v2.0.7.160-165 (haber hacminin
+    artması) ile fark edilir hale geldi.
+  - **Bağlantı havuzu ÖNERİLMEDİ** (v2.0.7.142'de denenmiş, iki farklı
+    çöküşe yol açmıştı - PROJE_NOTLARI §6'daki kalıcı karar). Bunun
+    yerine HER İKİ fonksiyon 20 saniyelik `st.cache_data` ile sarmalandı
+    - haber_izleme.py zaten en hızlı 2 saatte bir çalıştığı için 20
+    saniyelik gecikme hiçbir bilgiyi geciktirmiyor, ama art arda
+    tıklamalarda (ör. bir sayı kutusuna yazarken her tuşta rerun
+    tetiklenmesi) gereksiz onlarca bağlantı açılması engelleniyor.
+  - **KRİTİK YAN DÜZELTME - önbellek tutarlılığı:** Onayla/Reddet
+    düğmelerine basıldığında (4 farklı yer: modal + Ana Sayfa listesi)
+    `st.cache_data.clear()` eklendi - EKLENMESEYDİ, onaylanan/reddedilen
+    bir tespit 20 saniye boyunca hâlâ "bekliyor" görünmeye devam ederdi
+    (modal tekrar açılabilirdi). admin.py'de zaten kullanılan aynı
+    "işlemden sonra global cache temizle" deseni burada da uygulandı.
+  - **Bonus (aynı desen, daha küçük etki):** Haberler sayfasındaki
+    `get_haber_akisi(saat=48, limit=300)` çağrısı da SADECE o sayfadayken
+    ama yine önbelleksizdi - aynı 20 saniyelik önbellek eklendi.
+  - **AÇIK KALAN:** Bu düzeltmenin gerçekten hissedilir bir hızlanma
+    sağlayıp sağlamadığı CANLIDA doğrulanmadı - kod incelemesiyle
+    bulunan, güçlü ama kesin ölçülmemiş bir kök neden. Bahri'nin
+    kalıcı olarak tuttuğu "Sistem Tanılama" paneli (bkz. §6, "Sistem
+    Tanılama panelini kaldırmak REDDEDİLDİ" kararı) tam olarak bunun
+    için var - push sonrası hâlâ yavaşlık hissedilirse, önce o panelden
+    hangi adımın (BIST/TEFAS/DOVIZ-MADEN-KRIPTO/Beklenti Modu sorguları)
+    en uzun sürdüğüne bakılmalı.
+
+
   Bahri'nin üç ayrı talebi/bulgusu): KRIPTO GEREKSIZ IMPORT YAN ETKİSİ
   DÜZELTİLDİ + GETİRİ KIYASLAMASI'NA GÜNLÜK DEĞİŞİM BARLARI EKLENDİ.**
   - **Kök neden (kesin, test edilerek doğrulandı):** `worker.py`'de
