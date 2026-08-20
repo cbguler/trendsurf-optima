@@ -186,5 +186,7 @@
   "ARX": "ARXTRY",
   "GRAM": "GRAMTRY",
   "LIT": "LITTRY",
-  "BILL": "BILLTRY"
+  "BILL": "BILLTRY",
+  "RE": "RETRY",
+  "GRVT": "GRVTTRY"
 }
