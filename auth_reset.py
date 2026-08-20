@@ -53,17 +53,48 @@ def generate_reset_token(email: str) -> dict:
 
 
 def _send_reset_email(to_email: str, full_name: str, token: str):
-    """Şifre sıfırlama e-postası gönderir."""
+    """Şifre sıfırlama e-postası gönderir.
+
+    v2.0.7.170 (Bahri'nin bulgusu, 20 Ağustos 2026 — "şifremi unuttuğum
+    için giremiyorum, sıfırlama bağlantısı bir türlü gelmiyor"): KÖK
+    NEDEN BULUNDU - bu fonksiyon SADECE yerel `email_config.json`
+    dosyasına bakıyordu. O dosya `.gitignore`'da ("Hassas konfigürasyon")
+    - yani Streamlit Cloud'a HİÇ YÜKLENMİYOR, orada asla var olmuyor.
+    Dosya yoksa fonksiyon SESSİZCE hiçbir şey yapmadan geri dönüyordu -
+    ama çağıran kod (app.py) buna rağmen HER ZAMAN "E-posta adresinize
+    sıfırlama bağlantısı gönderildi." başarı mesajı gösteriyordu (bu
+    kısım BİLEREK böyle - "kullanıcı yoksa da başarılı mesaj ver"
+    güvenlik prensibiyle aynı, hesabın var olup olmadığını e-posta
+    enumerasyonuyla sızdırmamak için - buna DOKUNULMADI). Sonuç: bu
+    özellik Streamlit Cloud'da MUHTEMELEN HİÇ ÇALIŞMAMIŞTI, sessizce.
+
+    ÇÖZÜM: `emailer.py`'nin ZATEN ÇALIŞAN (Bahri'nin planlı e-posta
+    raporları bu şekilde geliyor) tam olarak aynı deseni buraya
+    taşındı - önce yerel dosya, YOKSA `st.secrets["email"]` fallback.
+    Streamlit Cloud'da bu secrets zaten yapılandırılmış (emailer.py
+    onu kullanıyor) - yani bu düzeltme YENİ bir secrets girişi
+    GEREKTİRMİYOR, sadece auth_reset.py'nin ONA BAKMASINI sağlıyor."""
     import smtplib, json, os
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
+    cfg = {}
     cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "email_config.json")
-    if not os.path.exists(cfg_path):
-        return
+    if os.path.exists(cfg_path):
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
 
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+    # v2.0.7.170: emailer.py ile AYNI fallback - yerel dosya yoksa/boşsa
+    # Streamlit Cloud'un kendi Secrets mekanizmasına düş (Cloud reboots
+    # sonrası da kalıcı, git'e asla yazılmaz).
+    if not cfg.get("smtp_user"):
+        try:
+            import streamlit as st
+            _s = st.secrets.get("email", {})
+            if _s.get("smtp_user"):
+                cfg = dict(_s)
+        except Exception:
+            pass
 
     smtp_host = cfg.get("smtp_host", "smtp.gmail.com")
     smtp_port = int(cfg.get("smtp_port", 587))
@@ -71,6 +102,8 @@ def _send_reset_email(to_email: str, full_name: str, token: str):
     smtp_pass = cfg.get("smtp_pass", "")
 
     if not smtp_user:
+        print("[auth_reset] SMTP ayarları bulunamadı (ne email_config.json "
+              "ne de st.secrets['email']) - sıfırlama e-postası GÖNDERİLEMEDİ.")
         return
 
     # Streamlit Cloud URL

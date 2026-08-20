@@ -1521,7 +1521,50 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.169 (20 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.170 (20 Ağustos 2026, Bahri'nin
+  bulgusu — "şifremi unuttum, sıfırlama bağlantısı bir türlü gelmiyor"):
+  KRİTİK GÜVENLİK/İŞLEVSELLİK HATASI - ŞİFRE SIFIRLAMA E-POSTASI
+  STREAMLIT CLOUD'DA MUHTEMELEN HİÇ ÇALIŞMAMIŞTI.**
+  - **Kök neden:** `auth_reset.py`'nin `_send_reset_email()` fonksiyonu
+    SADECE yerel `email_config.json` dosyasına bakıyordu. Bu dosya
+    `.gitignore`'da ("Hassas konfigürasyon") - Streamlit Cloud'a HİÇ
+    YÜKLENMİYOR. Dosya yoksa fonksiyon `if not os.path.exists(cfg_path):
+    return` ile SESSİZCE hiçbir şey yapmadan çıkıyordu - hata YOK, log
+    YOK, hiçbir iz yok. Buna rağmen `app.py`'deki çağıran kod HER ZAMAN
+    "E-posta adresinize sıfırlama bağlantısı gönderildi." başarı mesajı
+    gösteriyordu (bu kısıtlı bir GÜVENLİK ÖNLEMİ olarak BİLEREK böyle -
+    "kullanıcı yoksa da başarılı mesaj ver", hesap varlığını e-posta
+    enumerasyonuyla sızdırmamak için - BUNA DOKUNULMADI, doğru bir
+    tasarım). Sonuç: kullanıcı arayüzü hep "başarılı" dese de, gerçek
+    dünyada (Streamlit Cloud'da) e-posta muhtemelen İLK GÜNDEN BERİ HİÇ
+    GÖNDERİLMEMİŞTİ.
+  - **Çözüm:** `emailer.py`'de ZATEN ÇALIŞAN (planlı e-posta raporları
+    bu yolla gidiyor, Bahri'ye daha önce ulaştığı doğrulanmış) TAM OLARAK
+    AYNI fallback deseni taşındı: önce yerel `email_config.json`, YOKSA/
+    BOŞSA `st.secrets["email"]`. Streamlit Cloud'da bu secrets ZATEN
+    yapılandırılı (emailer.py onu kullanıyor) - yani **yeni bir secrets
+    girişi GEREKMİYOR**, sadece auth_reset.py artık ona bakıyor.
+  - **Acil unblock önerisi (Bahri'ye sunuldu, henüz kullanılıp
+    kullanılmadığı bilinmiyor):** Supabase SQL Editor'den `pgcrypto`
+    uzantısıyla doğrudan `UPDATE users SET password = crypt(...)`
+    komutu - push/redeploy beklemeden şifre sıfırlamanın bir yolu.
+    Teknik gerekçe güçlü (pgcrypto bcrypt çıktısı, uygulamanın
+    kullandığı Python `bcrypt` ile format uyumlu) ama CANLIDA TEST
+    EDİLMEDİ - Bahri normal push+dene akışını mı yoksa bu kısayolu mu
+    kullandı, takip edilmeli.
+  - **AÇIK MADDE ÇÖZÜLDÜ - aynı hata kontrol edildi, farklı bir sorun
+    bulundu:** `_notify_admin_yeni_kayit` (auth.py) `st.secrets`'a zaten
+    doğru bakıyordu, `_send_reset_email` ile aynı hatayı TAŞIMIYORDU.
+    Ama İNCELERKEN AYRI BİR SORUN BULUNDU: bu fonksiyondaki admin
+    bildirim e-postasındaki link SABİT KODLANMIŞTI
+    ("https://trendsurf-optima.streamlit.app/?go=admin") - Bahri'nin
+    az önce sorduğu "alt alan adını kısaltma" işlemini yaparsa, bu link
+    KIRILIRDI (eski, artık var olmayan adrese giderdi). `st.secrets
+    ["APP_URL"]`'den okuyacak şekilde düzeltildi - `auth_reset.py`'nin
+    zaten kullandığı desenle aynı. Alt alan adı değişse bile artık tek
+    bir yerden (Secrets'taki APP_URL) güncellenmesi yeterli.
+
+
   bulguları): GETİRİ KIYASLAMASI GRAFİĞİNDEKİ ÜÇ SORUN.**
   - **BIST 100'ün kaybolup gelmesi (KÖK NEDEN bulundu, düzeltildi):**
     `yf.download("XU100.IS", ...)` çağrısı `except Exception: pass` ile

@@ -63,7 +63,14 @@ def _notify_admin_yeni_kayit(email: str, full_name: str):
         # tedavi vb.) telefonundan onay verebilsin diye: buyuk dokunma alani,
         # tek sutun, viewport meta, ve Admin Paneli'ne DOGRUDAN goturen link
         # (?go=admin - app.py'de is_admin kontrolüyle otomatik acilir).
-        _app_url = "https://trendsurf-optima.streamlit.app/?go=admin"
+        # v2.0.7.170 (Bahri'nin Streamlit alt alan adını değiştirmesi
+        # vesilesiyle bulundu): eskiden bu URL SABİT KODLANMIŞTI
+        # ("trendsurf-optima.streamlit.app") - alt alan adı her
+        # değiştiğinde bu link BOZULURDU (eski, artık var olmayan
+        # adrese giderdi). Artık `auth_reset.py`'deki AYNI desenle
+        # `st.secrets["APP_URL"]`'den okunuyor - subdomain değişse bile
+        # tek bir yerden (Secrets) güncellenir, koda dokunmaya gerek yok.
+        _app_url = st.secrets.get("APP_URL", "https://trendsurf-optima.streamlit.app") + "/?go=admin"
         _html = f"""
         <div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;
                     max-width:480px;margin:auto;padding:8px;">
