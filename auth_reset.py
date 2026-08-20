@@ -106,12 +106,27 @@ def _send_reset_email(to_email: str, full_name: str, token: str):
               "ne de st.secrets['email']) - sıfırlama e-postası GÖNDERİLEMEDİ.")
         return
 
-    # Streamlit Cloud URL
+    # v2.0.7.171 (Bahri'nin bulgusu, 20 Ağustos 2026 — "e-posta geldi
+    # ama linke tıklayınca localhost çıktı, giremedim"): KÖK NEDEN -
+    # `APP_URL` Streamlit Cloud Secrets'ta HİÇ TANIMLI DEĞİLDİ, kod bu
+    # yüzden "http://localhost:8501" varsayılanına düşüyordu - Bahri'nin
+    # kendi cihazında ASLA çalışmayan bir adres (yerel geliştirme
+    # sunucusu, sadece geliştiricinin kendi bilgisayarında anlamlı).
+    # BU BİR KOD HATASI DEĞİL - eksik bir Secrets girişi. Ama varsayılan
+    # değer DAHA GÜVENLİ hale getirildi: localhost yerine, secret
+    # eksik/yanlış olsa bile en azından GERÇEKTEN VAR OLAN bir adrese
+    # düşsün diye bilinen Streamlit Cloud adresi varsayılan yapıldı
+    # (auth.py'deki v2.0.7.170 düzeltmesiyle AYNI desen).
+    # KALICI ÇÖZÜM (Bahri'nin yapması gereken, kod dışı bir adım):
+    # Streamlit Cloud > Manage app > Settings > Secrets'a
+    # `APP_URL = "https://<güncel-adresin>.streamlit.app"` satırını
+    # ekle - subdomain'i her değiştirdiğinde bu satırı da güncelle.
+    _VARSAYILAN_APP_URL = "https://trendsurf-optima.streamlit.app"
     try:
         import streamlit as st
-        base_url = st.secrets.get("APP_URL", "http://localhost:8501")
+        base_url = st.secrets.get("APP_URL", _VARSAYILAN_APP_URL)
     except Exception:
-        base_url = "http://localhost:8501"
+        base_url = _VARSAYILAN_APP_URL
 
     reset_url = f"{base_url}?reset_token={token}"
 

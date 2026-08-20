@@ -1521,6 +1521,30 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.171 (20 Ağustos 2026, Bahri'nin
+  bulgusu — "e-posta geldi ama linke tıklayınca localhost çıktı"):
+  v2.0.7.170'İN AÇTIĞI E-POSTA BAŞARIYLA GİTTİ, AMA İÇİNDEKİ LİNK YANLIŞ
+  ADRESE GİDİYORDU.**
+  - **Kök neden - KOD HATASI DEĞİL, EKSİK SECRETS GİRİŞİ:** `APP_URL`
+    Streamlit Cloud Secrets'ta hiç tanımlı değildi, kod bu yüzden
+    "http://localhost:8501" varsayılanına düşüyordu - Bahri'nin kendi
+    cihazında asla çalışmayan, sadece bir geliştiricinin kendi
+    bilgisayarında anlamlı olan bir adres.
+  - **Kod tarafında yapılan (savunma amaçlı, ama TEK BAŞINA YETERLİ
+    DEĞİL):** localhost varsayılanı kaldırıldı, bilinen gerçek Streamlit
+    Cloud adresi varsayılan yapıldı (`auth.py`'deki v2.0.7.170
+    düzeltmesiyle aynı desen) - secret hâlâ eksikse en azından GERÇEK
+    bir adrese düşer.
+  - **ASIL/KALICI ÇÖZÜM - BAHRİ'NİN YAPMASI GEREKEN, KOD DIŞI BİR ADIM:**
+    Streamlit Cloud > Manage app > Settings > Secrets'a
+    `APP_URL = "https://<güncel-adresin>.streamlit.app"` satırı
+    eklenmeli. **Bahri'nin subdomain'i değiştirip değiştirmediği
+    BİLİNMİYOR** (bir önceki turda nasıl yapılacağı anlatıldı ama
+    yapıp yapmadığı teyit edilmedi) - hangi adresi kullanması
+    gerektiğini görmek için tarayıcı adres çubuğuna bakması istendi.
+    **Subdomain'i her değiştirdiğinde bu secret satırı da
+    güncellenmeli**, yoksa aynı sorun tekrarlanır.
+
 - **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.170 (20 Ağustos 2026, Bahri'nin
   bulgusu — "şifremi unuttum, sıfırlama bağlantısı bir türlü gelmiyor"):
   KRİTİK GÜVENLİK/İŞLEVSELLİK HATASI - ŞİFRE SIFIRLAMA E-POSTASI
