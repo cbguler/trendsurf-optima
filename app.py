@@ -3464,31 +3464,20 @@ def _render_karsilastirma(_cur_user, portfolio):
         return
 
     import plotly.graph_objects as go
-    # v2.0.7.166 (Bahri'nin talebi, 20 Ağustos 2026 — "günlük artış
-    # grafiğini de aynı grafik içerisinde bar grafik olarak görmek
-    # istiyorum"): Kümülatif çizgilerin YANINA, ikincil bir eksende
-    # (sağda), her varlığın GÜNLÜK değişimini (bir önceki güne göre
-    # puan farkı) bar olarak ekliyoruz. Tüm seriler zaten AYNI tarih
-    # eksenini (_gun_araligi) paylaştığı için ek veri çekmeye gerek yok -
-    # sadece kümülatif serinin ardışık farkı (.diff()) alınıyor. Bu,
-    # "o gün ne kadar hareket etti" sorusuna kümülatif çizginin
-    # veremediği, ileriye dönük karar için daha anlamlı bir cevap verir.
-    # Barlar yarı saydam (opacity 0.55) ve çizgiyle AYNI renkte - 7
-    # varlık üst üste bar olunca görsel kalabalık yaratmaması için.
+    # v2.0.7.167 (Bahri'nin talebi, 20 Ağustos 2026 — "grafik çok
+    # anlaşılmaz bir hal aldı barları kaldır"): v2.0.7.166'da eklenen
+    # günlük değişim barları GERİ ALINDI - 7 varlığın barları üst üste
+    # binince (yarı saydam da olsa) çizgi grafiği okunaksız hale
+    # getirdi. Sadece kümülatif çizgilere geri dönüldü (v2.0.7.143'teki
+    # hal). Günlük hareketi görmek isterse ayrı, daha sade bir çözüm
+    # (ör. tek seçili varlık için ayrı bir bar grafiği) ileride
+    # düşünülebilir - burada TÜMÜNÜ AYNI ANDA basmak yanlış çıktı.
     _renkler = {
         "Portföyünüz": "#1d4ed8", "BIST 100": "#111827", "Altın": "#b45309",
         "Dolar/TL": "#15803d", "Vadeli Mevduat": "#a21caf",
         "Devlet Tahvili": "#4338ca", "Repo": "#b91c1c",
     }
     fig = go.Figure()
-    for _ad, _seri in _seriler.items():
-        _renk = _renkler.get(_ad, "#374151")
-        fig.add_trace(go.Bar(
-            x=_seri.index, y=_seri.diff().values, name=f"{_ad} (günlük)",
-            marker=dict(color=_renk, opacity=0.55),
-            yaxis="y2", legendgroup=_ad, showlegend=False,
-            hovertemplate="<b>" + _ad + " (günlük)</b>: %{y:+.2f} puan<extra></extra>",
-        ))
     for _ad, _seri in _seriler.items():
         fig.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_ad,
@@ -3505,20 +3494,9 @@ def _render_karsilastirma(_cur_user, portfolio):
         # (butun serileri tek kutuda listeler) yerine "closest" (imlecin
         # en yakin oldugu TEK cizgiyi gosterir).
         hovermode="closest",
-        # v2.0.7.166: gunluk degisim barlari AYNI x-ekseninde ust uste
-        # (overlay) - 7 varlik icin "group" kullanilsaydi her cubuk
-        # cok ince/okunmaz olurdu, yari saydamlik (opacity 0.55) bunu
-        # zaten cozuyor.
-        barmode="overlay",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         yaxis=dict(title="Kümülatif Getiri", ticksuffix="%",
                    gridcolor="rgba(120,120,120,0.15)", zeroline=False),
-        # v2.0.7.166: gunluk degisim icin ikincil (sag) eksen - kumulatif
-        # ile FARKLI olcekte (kumulatif haftalarca birikip %10+'a
-        # cikabilirken gunluk degisim genelde +-2 puan civarindadir,
-        # ayni eksende gosterilse gunluk barlar duz cizgi gibi gorunurdu).
-        yaxis2=dict(title="Günlük Değişim (puan)", ticksuffix=" p",
-                   overlaying="y", side="right", showgrid=False, zeroline=False),
         xaxis=dict(gridcolor="rgba(120,120,120,0.08)"),
         plot_bgcolor="white", paper_bgcolor="white",
         font=dict(size=13),
@@ -3530,12 +3508,6 @@ def _render_karsilastirma(_cur_user, portfolio):
         for _ad, _seri in _seriler.items()
     )
     st.caption(f"Bugün itibarıyla — {_ozet}")
-    st.caption(
-        "Şeffaf çubuklar (sağ eksen) her varlığın o günkü değişimini "
-        "gösterir - bir önceki güne göre kaç puan hareket ettiğini, "
-        "kümülatif çizginin (sol eksen) gizlediği günlük dalgalanmayı "
-        "görmek için."
-    )
     st.caption(
         "Vadeli Mevduat, hesapkurdu.com'daki bankaların 32 gün vadeli "
         "tekliflerinden EN YÜKSEK orana göre; Tahvil/Repo, TCMB EVDS'ten "
