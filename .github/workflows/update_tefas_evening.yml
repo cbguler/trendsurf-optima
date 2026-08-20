@@ -8,13 +8,37 @@ name: TEFAS Aksam Guncelle
 # gunceller (update_tefas_evening.py), diger kategorilere dokunmaz -
 # bu yuzden cok daha hizli (worker.py'nin tamami yerine sadece TEFAS).
 #
-# Iki tetikleyici (mevcut update_data.yml'deki yedekli-cron mantigiyla
-# ayni): GitHub Actions'in kendi cron gecikmesi ihtimaline karsi.
+# v2.0.7.165 (Bahri'nin bulgusu, 20 Agustos 2026 - ING hesabindaki
+# gercek degerlerin bizden farkli cikmasi): TEK gunluk cekim (~20:00
+# TRT) YETERSIZ bulundu. Arastirma (caziphesap.com, iyigelir.net ve
+# digerleri): TEFAS'in genel kurali "fiyatlar borsalar kapandiktan
+# sonra GUNDE BIR KEZ hesaplanir, ERTESI IS GUNUNDE ilan edilir" - yani
+# T gununun kapanisiyla hesaplanan NAV, T+1'in KENDISINDE (muhtemelen
+# sabahtan itibaren) yayinlanir, T aksami DEGIL. Bizim tek cekimimiz
+# (~20:00 TRT) o gun zaten SABAHTAN beri hazir olan bir bilgiyi
+# gereksiz yere aksama kadar bekletiyordu - Bahri'nin bankasinda
+# gordugu "guncel" deger, bizim o aksamki cekimimizden SAATLERCE once
+# zaten yayinlanmisti.
+# COZUM: BIST'in peak_check.yml'inde zaten kullanilan "gun icine
+# yayilmis sik kontrol" felsefesi TEFAS'a da uygulandi - artik GUNDE
+# TEK yerine 7 KEZ (TRT 08/10/12/14/16/18/20, 2 saatte bir) kontrol
+# ediliyor. TEFAS ne zaman yayinlarsa yayinlasin en gec birkac saat
+# icinde yakalanir - artik TEK bir "dogru saat" tahmin etmeye gerek
+# yok. update_tefas_evening.py zaten SADECE DEGISIKLIK VARSA commit
+# atiyor (asagida "git diff --cached --quiet" kontrolu) - yani
+# degisiklik olmayan calismalarin maliyeti bir GitHub Actions dakikasi,
+# commit/push YOK.
+#
+# Iki tetikleyici/slot (mevcut update_data.yml'deki yedekli-cron
+# mantigiyla ayni): GitHub Actions'in kendi cron gecikmesi ihtimaline
+# karsi, her slot icin 2 dakika offsetli bir yedek var.
 
 on:
   schedule:
-    - cron: '0 17 * * *'   # UTC 17:00 = TRT 20:00 - Birincil
-    - cron: '30 17 * * *'  # UTC 17:30 = TRT 20:30 - Yedek
+    # TRT 08/10/12/14/16/18/20 = UTC 05/07/09/11/13/15/17 (TR yaz saati
+    # uygulamiyor, yil boyu UTC+3 sabit - "Europe/Istanbul" 2016'dan beri)
+    - cron: '0 5,7,9,11,13,15,17 * * *'   # Birincil
+    - cron: '2 5,7,9,11,13,15,17 * * *'   # Yedek (2 dk offset)
   workflow_dispatch:
 
 jobs:
@@ -56,7 +80,13 @@ jobs:
           if git diff --cached --quiet; then
             echo "Degisiklik yok - commit atlandi"
           else
-            git commit -m "TEFAS aksam guncelleme (otomatik) - $(date +'%Y-%m-%d %H:%M TRT')"
+            # v2.0.7.165 (kucuk kozmetik duzeltme, ayni dosyaya dokunurken
+            # fark edildi): eskiden `date +'%Y-%m-%d %H:%M TRT'` GitHub
+            # runner'inin kendi saatini (UTC) yazip yanlislikla "TRT"
+            # diye etiketliyordu (ornek: gercekte 20:28 TRT olan bir
+            # calisma, commit mesajinda "17:28 TRT" gorunuyordu - 3 saat
+            # yanlis). TZ=Europe/Istanbul ile artik GERCEKTEN TRT yaziyor.
+            git commit -m "TEFAS aksam guncelleme (otomatik) - $(TZ='Europe/Istanbul' date +'%Y-%m-%d %H:%M TRT')"
             # v2.0.7.97 - KRITIK DUZELTME (Bahri'nin bulgusu, 20 Temmuz 2026):
             # update_data.yml'de yasanan "non-fast-forward"/"divergent
             # branches" hatalarinin (v2.0.7.85/97) AYNISI burada da

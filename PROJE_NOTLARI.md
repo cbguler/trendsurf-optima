@@ -1521,7 +1521,49 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[AÇIKLANDI - TEKRAR "BUG" SANILMASIN] TEFAS fon fiyatlarının gündüz
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.165 (20 Ağustos 2026,
+  Bahri'nin bulgusu — ING bankadaki gerçek TEFAS fon fiyatlarının
+  bizden farklı çıkması, "başka kaynaklardan bilgi alacaksam bu
+  uygulamanın ne anlamı var" endişesi): TEFAS ÇEKİM SIKLIĞI ARTIRILDI.**
+  - **Kök neden (araştırmayla doğrulandı, tahmin değil):** TEFAS'ın
+    genel kuralı "fiyatlar borsalar kapandıktan sonra günde bir kez
+    hesaplanır, ERTESİ İŞ GÜNÜNDE ilan edilir" (caziphesap.com,
+    iyigelir.net doğrulandı). Yani T günü kapanışıyla hesaplanan NAV,
+    T+1'in KENDİSİNDE (muhtemelen sabahtan itibaren) yayınlanıyor, T
+    akşamı DEĞİL. Eski tek çekimimiz (~20:00-20:30 TRT) o gün zaten
+    SABAHTAN beri TEFAS'ın API'sinde hazır olan bir bilgiyi gereksiz
+    yere akşama kadar bekletiyordu - bu, "TEFAS günde bir kez
+    fiyatlıyor" gerçeğinden kaynaklanan kaçınılmaz bir gecikme
+    DEĞİLDİ, bizim seçtiğimiz saatin (günün en geç saati) yanlış
+    olmasından kaynaklanan, tamamen düzeltilebilir bir gecikmeydi.
+  - **Çözüm:** `update_tefas_evening.yml` artık günde TEK yerine 7 KEZ
+    çalışıyor (TRT 08/10/12/14/16/18/20, 2 saatte bir) - BIST'in
+    `peak_check.yml`'inde zaten kullanılan "gün içine yayılmış sık
+    kontrol" felsefesi TEFAS'a da uygulandı. TEFAS ne zaman
+    yayınlarsa yayınlasın en geç birkaç saat içinde yakalanır - tek
+    bir "doğru saat" tahmin etmeye gerek kalmadı. Maliyet düşük:
+    `update_tefas_evening.py` zaten SADECE DEĞİŞİKLİK VARSA commit
+    atıyor, değişmeyen çalışmalar sadece birkaç dakikalık Actions
+    süresi tüketiyor, commit/push yok.
+  - **Bahri'nin kararı: zaman damgası (hangi satırın ne zaman
+    çekildiğini gösteren sütun) İSTENMEDİ** - sadece zamanlama
+    düzeltmesi istendi. İleride bu talep tekrar gelirse: CSV'ye
+    `Fiyat_Zamani` sütunu eklenip Portföyüm/TEFAS tablolarında
+    gösterilebilir, ama şu an YOK.
+  - **Yan düzeltme (kozmetik, aynı dosyaya dokunurken bulundu):**
+    Commit mesajı `date +'%Y-%m-%d %H:%M TRT'` ile GitHub runner'ının
+    kendi saatini (UTC) yazıp yanlışlıkla "TRT" diye etiketliyordu
+    (örnek: gerçekte 20:28 TRT olan bir çalışma, commit mesajında
+    "17:28 TRT" görünüyordu - 3 saat yanlış). `TZ='Europe/Istanbul'`
+    eklenerek düzeltildi.
+  - **AÇIK KALAN:** Bu değişiklik ilk kez bu akşam (20 Ağustos, TRT
+    16:00/18:00/20:00 slotlarından biri) canlıda test edilecek. Bahri
+    yarın sabah ING'deki değerle karşılaştırıp doğrulamalı - hâlâ
+    saatlerce gecikme varsa, gecikmenin TEFAS'ın kendi yayın saatinden
+    mi (bizim tahminimiz yanlış: bazı fonlar daha geç yayınlıyor
+    olabilir) yoksa başka bir sebepten mi geldiği araştırılmalı.
+
+
   "eski" görünmesi (20 Ağustos 2026, Bahri'nin bulgusu — CVL/BAG/HTS
   Portföyüm'de yanlış görünüyor, gerçek değerler farklıydı).**
   GitHub commit geçmişiyle doğrulandı: `optimized_universe.csv`'deki
