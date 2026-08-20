@@ -1521,7 +1521,31 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[KARAR - TEKRAR SORULMASIN] Değerli Madenler'de 9 sikke/gram altın
+- **[AÇIKLANDI - TEKRAR "BUG" SANILMASIN] TEFAS fon fiyatlarının gündüz
+  "eski" görünmesi (20 Ağustos 2026, Bahri'nin bulgusu — CVL/BAG/HTS
+  Portföyüm'de yanlış görünüyor, gerçek değerler farklıydı).**
+  GitHub commit geçmişiyle doğrulandı: `optimized_universe.csv`'deki
+  TEFAS satırları SADECE `update_tefas_evening.yml` ile günde BİR KEZ
+  (~20:00-20:30 TRT) güncelleniyor - TEFAS fonları zaten günde bir kez
+  resmi NAV yayınlıyor, gündüz güncelleme YAPILMIYOR (yapılamaz da,
+  yayınlanan bir şey yok). Bahri'nin ekran görüntüsü gündüz, o akşamki
+  güncelleme çalışmadan ÖNCE alınmıştı - gösterilen fiyatlar BİR ÖNCEKİ
+  akşamın (doğru şekilde çekilmiş) NAV'ıydı, arızalı/okunamamış değildi.
+  Sonraki gece worker.py tam çalışmaları (23:2x ve 00:4x TRT) TEFAS
+  satırlarına HİÇ DOKUNMUYOR/AYNI DEĞERİ VERİYOR - bu da normal, akşam
+  güncellemesi zaten günün NAV'ını almış oluyor.
+  **Kalıcı kural: Portföyüm/TEFAS'ta "fiyat eski" şikayeti gelirse ÖNCE
+  saat kaç sorulmalı - akşam ~20:30 TRT'den ÖNCEYSE bu normaldir, bug
+  aramaya gerek yok. Sadece akşam güncellemesi geçtikten SONRA hâlâ eski
+  fiyat duruyorsa gerçek bir arıza olabilir, o zaman
+  update_tefas_evening.yml'in Actions logu incelenmeli.**
+  **Yan bulgu (küçük, kozmetik, DÜZELTİLMEDİ - onay bekliyor):**
+  `update_tefas_evening.py`'nin ürettiği commit mesajı saati "TRT" diye
+  etiketliyor ama aslında UTC yazıyor (ör. "17:28 TRT" denilen commit,
+  gerçekte 17:28 UTC = 20:28 TRT'de atılmış). Yanıltıcı ama zararsız -
+  Bahri isterse düzeltilir.
+
+
   türünün (Gram Has Altın, 14/18 Ayar, Bilezik22, İkibuçuk, Beşli,
   Gremse, Reşat, Hamit Altın) RSI/1A Getiri/Optima Skor boş/0 kalması
   (5 Ağustos 2026'da Bahri'ye tekrar teyit edildi).** Bu bir bug DEĞİL —
