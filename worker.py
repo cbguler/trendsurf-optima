@@ -166,7 +166,7 @@ def _detect_and_register_new_bist_listings(existing_tickers: list) -> list:
         # log'a acikca yazilir - boylece fark edilmeden veri kaybi olmaz.
         other_cat_codes = set()
         try:
-            other_cat_codes |= {t.upper() for t, _ in KRIPTO}
+            other_cat_codes |= {t.upper() for t, _ in _kripto_evren_al()}
             other_cat_codes |= {t.upper() for t, _ in DOVIZ}
             other_cat_codes |= {t.upper() for t, _ in MADEN}
         except Exception:
@@ -295,7 +295,33 @@ def _kripto_evrenini_olustur():
 
 
 _KRIPTO_BP_PARITE_MAP = {}   # ticker -> gercek BtcTurk parite kodu (rename edilenler icin)
-KRIPTO = _kripto_evrenini_olustur()
+# v2.0.7.166 (Bahri'nin bulgusu, 20 Ağustos 2026 — TEFAS akşam
+# güncellemesi logunda beklenmedik bir "[kripto-evren] Canli cekim
+# basarisiz (ModuleNotFoundError: No module named 'borsapy')" satırı
+# görülmesi): KÖK NEDEN: `KRIPTO = _kripto_evrenini_olustur()` MODÜL
+# SEVİYESİNDE (fonksiyon dışında) çağrılıyordu - yani worker.py'nin
+# SADECE `load_tefas()` fonksiyonu için import edildiği yerlerde bile
+# (ör. update_tefas_evening.py) Python bu satırı OTOMATIK OLARAK
+# çalıştırıyor, gereksiz bir canlı BtcTurk/borsapy denemesi yapıyordu.
+# update_tefas_evening.py ortamına borsapy hiç kurulmadığı için bu
+# HER ZAMAN başarısız oluyordu (zararsız - yedek listeye düşüyordu -
+# ama gereksiz zaman/log kirliliği yaratıyordu, artık günde 7 kez
+# tekrarlandığı için daha da göze batar hale geldi).
+# ÇÖZÜM: KRIPTO artık TEMBEL (lazy) - modül import edildiğinde DEĞİL,
+# gerçekten ihtiyaç duyulduğu ANDA (worker.py'nin kendi tam çalışması
+# içinde) hesaplanıyor. `load_tefas()` KRIPTO'ya hiç dokunmadığı için
+# update_tefas_evening.py artık borsapy'yi hiç denemeyecek.
+KRIPTO = None
+
+
+def _kripto_evren_al():
+    """KRIPTO'yu İLK GERÇEK KULLANIMDA hesaplar ve modül değişkenine
+    yazar (bir daha hesaplamaz - sonraki çağrılar önbellekten döner).
+    Bare `KRIPTO` yerine worker.py İÇİNDE HER YERDE bunu çağır."""
+    global KRIPTO
+    if KRIPTO is None:
+        KRIPTO = _kripto_evrenini_olustur()
+    return KRIPTO
 
 # POL yfinance'de cevap vermezse MATIC-USD ile dene
 
@@ -915,7 +941,7 @@ def build():
 
     print("\n" + "=" * 60)
     print("  TrendSurf Optima — Evren Olusturma v7")
-    print(f"  BIST: {len(BIST_TICKERS)} | Kripto: {len(KRIPTO)} | "
+    print(f"  BIST: {len(BIST_TICKERS)} | Kripto: {len(_kripto_evren_al())} | "
           f"Maden: {len(MADEN)} | Doviz: {len(DOVIZ)}")
     print("=" * 60)
     all_rows = []
@@ -1099,7 +1125,7 @@ def build():
         "GRASS": "Grass", "BERA": "Berachain", "LAYER": "Solayer",
         "PARTI": "Particle Network", "OM": "MANTRA",
     }
-    print(f"\n[3/4] {len(KRIPTO)} kripto varlik (toplu download)...")
+    print(f"\n[3/4] {len(_kripto_evren_al())} kripto varlik (toplu download)...")
     from datetime import datetime, timedelta
 
     # v2.0.4.54: KOKTEN DUZELTME - USD fiyati alip ayri bir USD/TRY kuruyla
@@ -1154,14 +1180,14 @@ def build():
                 print(f"    [Kripto/borsapy] {t} hatasi: {type(e).__name__}: {e}")
                 return (t, 0.0, 50.0, 0.0, 30.0, None)
 
-        with ThreadPoolExecutor(max_workers=min(10, len(KRIPTO))) as ex:
-            sonuclar = list(ex.map(_tek_kripto_cek, KRIPTO))
+        with ThreadPoolExecutor(max_workers=min(10, len(_kripto_evren_al()))) as ex:
+            sonuclar = list(ex.map(_tek_kripto_cek, _kripto_evren_al()))
         for t, p, rsi, ret, vol_k, full_skor in sonuclar:
             kripto_results[t] = (p, rsi, ret, vol_k, full_skor)
     except Exception as e:
         print(f"  Kripto borsapy toplu cekim hatasi: {e}")
 
-    for t, yf_s in KRIPTO:
+    for t, yf_s in _kripto_evren_al():
         p, rsi, ret, vol_v, full_skor = kripto_results.get(t, (0.0, 50.0, 0.0, 30.0, None))
         _row_k = {
             "Ticker": t, "Ad": KRIPTO_ADLAR.get(t, t),
@@ -1172,7 +1198,7 @@ def build():
             _row_k["Optima_Skor"] = full_skor
         all_rows.append(_row_k)
     ok_k = sum(1 for r in all_rows if r["Kategori"] == "KRIPTO" and r["Son_Fiyat"] > 0)
-    print(f"  {ok_k}/{len(KRIPTO)} kripto fiyati alindi (dogrudan TL, BtcTurk/borsapy).")
+    print(f"  {ok_k}/{len(_kripto_evren_al())} kripto fiyati alindi (dogrudan TL, BtcTurk/borsapy).")
 
     # ── 4. Maden + Döviz ─────────────────────────────────────
     MADEN_ADLAR = {

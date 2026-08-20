@@ -1521,7 +1521,44 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.165 (20 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.166 (20 Ağustos 2026,
+  Bahri'nin üç ayrı talebi/bulgusu): KRIPTO GEREKSIZ IMPORT YAN ETKİSİ
+  DÜZELTİLDİ + GETİRİ KIYASLAMASI'NA GÜNLÜK DEĞİŞİM BARLARI EKLENDİ.**
+  - **Kök neden (kesin, test edilerek doğrulandı):** `worker.py`'de
+    `KRIPTO = _kripto_evrenini_olustur()` MODÜL SEVİYESİNDE (fonksiyon
+    dışında) çağrılıyordu - yani `worker.py`'yi SADECE `load_tefas()`
+    için import eden `update_tefas_evening.py` bile, Python'ın modül
+    initialize etme mekaniği yüzünden bu satırı OTOMATIK çalıştırıyor,
+    gereksiz bir canlı BtcTurk/borsapy denemesi yapıyordu (`update_tefas_
+    evening.yml` ortamına borsapy hiç kurulmuyor, bu yüzden HER ZAMAN
+    `ModuleNotFoundError` ile başarısız olup yedek listeye düşüyordu -
+    zararsızdı ama gereksizdi, artık günde 7 kez tekrarlandığı için daha
+    da göze batıyordu). **Çözüm: `KRIPTO` artık TEMBEL (lazy)** -
+    `_kripto_evren_al()` adlı bir getter, İLK GERÇEK KULLANIMDA hesaplayıp
+    önbelleğe alıyor; `load_tefas()` hiç KRIPTO'ya dokunmadığı için
+    `update_tefas_evening.py` artık borsapy'yi hiç denemeyecek. 8 kullanım
+    noktası `_kripto_evren_al()` çağrısına çevrildi. İzole test edildi:
+    `worker.py` import edildikten sonra `KRIPTO is None` doğrulandı
+    (borsapy denenmedi).
+  - **Getiri Kıyaslaması grafiğine günlük değişim barları eklendi**
+    (`_render_karsilastirma`, Portföyüm sayfası): kümülatif çizgilerin
+    yanına, İKİNCİL (sağ) eksende, her varlığın günlük (bir önceki güne
+    göre puan) değişimini gösteren yarı saydam (opacity 0.55) bar
+    grafiği eklendi. Veri KAYNAĞI: ek bir çekim YOK - tüm seriler zaten
+    aynı tarih eksenini (`_gun_araligi`) paylaştığı için mevcut kümülatif
+    serinin `.diff()`'i alınıyor. Legend'de sadece çizgiler görünüyor
+    (barlar `showlegend=False` - aksi halde 7 varlık x 2 = 14 legend
+    girdisi olurdu). `barmode="overlay"` seçildi (`"group"` yerine) -
+    7 varlık gruplanınca çubuklar okunamayacak kadar incelirdi, yarı
+    saydamlık üst üste binmeyi zaten okunur kılıyor.
+  - **ING fiyatı sorusuna verilen cevap (kod değişikliği DEĞİL, bilgi
+    amaçlı):** TEFAS'ın tasarım ilkesi gereği, hangi bankadan (ING dahil)
+    işlem yapılırsa yapılsın, GERÇEKLEŞEN işlem fiyatı TEFAS'ın merkezi
+    olarak hesapladığı resmi NAV'dır - ING'nin anlık ekran değeri bir
+    gösterge/tahmini olabilir. Bu, Bahri'nin kendi bankasına sorup
+    kesinleştirebileceği bir konu, biz garantisini veremeyiz.
+
+
   Bahri'nin bulgusu — ING bankadaki gerçek TEFAS fon fiyatlarının
   bizden farklı çıkması, "başka kaynaklardan bilgi alacaksam bu
   uygulamanın ne anlamı var" endişesi): TEFAS ÇEKİM SIKLIĞI ARTIRILDI.**
