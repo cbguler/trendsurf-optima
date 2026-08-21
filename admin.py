@@ -142,6 +142,39 @@ def _render_kalip_yonetimi():
         st.info("Henüz hiç kalıp yok.")
     st.divider()
 
+    # ── Akademik Kaynakça (Bahri'nin talebi, 21 Ağustos 2026 —
+    # "alıntı yaptığımız eserleri de uygulamanın bir yerlerinde
+    # belirtmemiz gerekecek"): Beklenti Modu'ndaki kalıpların
+    # dayandığı akademik literatür. Statik/sabit - kalıplar gibi
+    # veritabanında değil, doğrudan kodda (bu içerik sık değişmez,
+    # yeni bir kalıp eklerken elle güncellenir). ────────────────────
+    with st.expander("Akademik Kaynakça"):
+        st.caption(
+            "Beklenti Modu'ndaki kalıpların dayandığı olay-tepki "
+            "(event study) yaklaşımının akademik kökenleri. Tam "
+            "araştırma notu için: tefas_kalip_arastirmasi.md"
+        )
+        st.markdown("""
+**Temel Metodoloji**
+- MacKinlay, A.C. (1997). "Event Studies in Economics and Finance." *Journal of Economic Literature*, 35(1), 13-39.
+
+**Jeopolitik Risk**
+- Caldara, D., & Iacoviello, M. (2022). "Measuring Geopolitical Risk." *American Economic Review*, 112(4), 1194-1225.
+- Akçayır, Ö. (2023). "Ulusal Riskler, Jeopolitik Riskler ve Küresel Belirsizliklerin Türk Lirasının Değeri Üzerindeki Etkileri." *Alanya Akademik Bakış*, 7(2), 649-669.
+- "Türkiye'nin Jeopolitik Riskinin Borsa İstanbul Endeks Getirileri Üzerine Etkisinin İncelenmesi" (dergipark.org.tr) - jeopolitik risk endeksindeki 1 birimlik artış BIST100 getirilerini ~%4 azaltıyor.
+
+**Petrol Şokları**
+- Kilian, L. (2009). "Not All Oil Price Shocks Are Alike: Disentangling Demand and Supply Shocks in the Crude Oil Market." *American Economic Review*, 99(3), 1053-1069.
+
+**Merkez Bankası Sürprizleri**
+- Kuttner, K.N. (2001). "Monetary Policy Surprises and Interest Rates: Evidence from the Fed Funds Futures Market." *Journal of Monetary Economics*, 47(3), 523-544.
+- Gürkaynak, R.S., Sack, B., & Swanson, E.T. (2005). "Do Actions Speak Louder Than Words?" *International Journal of Central Banking*, 1(1), 55-93.
+
+**Kredi Notu Değişiklikleri**
+- Kaminsky, G., & Schmukler, S.L. (2002). "Emerging Market Instability: Do Sovereign Ratings Affect Country Risk and Stock Returns?" *World Bank Economic Review*, 16(2), 171-195.
+""")
+    st.divider()
+
     # ── Her kalıp için düzenleme paneli ─────────────────────────────
     for k in kaliplar:
         _baslik = k["ad"] + ("  (PASİF)" if not k["aktif"] else "")

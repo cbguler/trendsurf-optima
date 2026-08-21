@@ -1521,7 +1521,41 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.176 (21 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.177 (21 Ağustos 2026, Bahri'nin
+  talebi — "sadece Fed mi piyasaları etkiliyor... literatür taraması
+  yapman gereği idi"): AKADEMİK KAYNAKÇA + BoE/PBoC GENİŞLETMESİ.**
+  - **BoE ve PBoC boşluğu doğrulandı, düzeltme Admin Paneli üzerinden
+    Bahri'ye anlatıldı** (kod değil, veri değişikliği): ECB zaten mevcut
+    "fed" kalıbında kapsanıyordu (lagarde, ecb kelimeleri) - BoE
+    ("bank of england", "boe", "bailey") aynı kalıba eklenmesi, PBoC
+    ise FARKLI bir mekanizma (emtia talebi kanalı, Fed'in fonlama
+    maliyeti kanalından ayrı) olduğu için AYRI bir kalıp
+    ("pboc_tesvik") olarak önerildi - MADEN +4, DOVIZ −3, BIST +5,
+    KRIPTO boş (güven düşük).
+  - **Gerçek akademik literatür taraması yapıldı** (önceki turdaki
+    "araştırma" güncel haber kaynaklarındandı, akademik DEĞİLDİ - Bahri
+    haklı olarak bunu ayırt etti). Doğrulanmış, isim/yıl/dergi tam
+    kaynaklar: MacKinlay (1997, event study metodolojisinin kurucu
+    makalesi), Caldara & Iacoviello (2022, Jeopolitik Risk Endeksi -
+    GPR - metodolojisi bizim anahtar-kelime ön-filtremizle AYNI ailede),
+    Akçayır (2023, TÜRKİYE'YE ÖZEL - TL üzerinde CDS'in baskın, jeopolitik
+    riskin GÖRECELİ ZAYIF olduğu bulgusu - önemli bir denge notu),
+    bir dergipark makalesi (BIST100 - jeopolitik risk endeksi ilişkisi,
+    1 birim artış ~%4 BIST100 düşüşü), Kilian (2009, petrol şoklarının
+    arz/talep ayrımının akademik temeli), Kuttner (2001) + Gürkaynak-
+    Sack-Swanson (2005, Fed "sürpriz" kavramının ölçülebilirliğinin
+    kökeni), Kaminsky & Schmukler (2002, kredi notu indiriminin
+    tahvil+hisse etkisi, ortalama 2 puan spread artışı).
+  - **Kaynakça HEM araştırma belgesine (`tefas_kalip_arastirmasi.md`,
+    Bölüm 4) HEM UYGULAMANIN KENDİSİNE eklendi** - Admin Paneli >
+    Kalıp Yönetimi > "Akademik Kaynakça" genişletilebilir bölümü
+    (`admin.py`). Statik/sabit içerik - kalıplar gibi veritabanında
+    DEĞİL, doğrudan kodda (yeni bir kalıp eklenirken elle güncellenir).
+  - **AÇIK KALAN:** BoE/PBoC değişikliklerinin Bahri tarafından Admin
+    Panelinden fiilen uygulanıp uygulanmadığı TEYİT EDİLMEDİ - bu bir
+    veri girişi, kod push'u değil.
+
+
   iki ayrı talebi): (1) HABERLER İÇİN GENİŞLETİLMİŞ EKONOMETRİK ARAŞTIRMA
   + (2) ÇEVİRİ İÇİN ÜCRETSİZ YEDEK KATMAN.**
   - **Araştırma:** Web araştırmasıyla 5 yeni kalıp önerisi + mevcut "fed"
