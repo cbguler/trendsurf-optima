@@ -1521,7 +1521,47 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.175 (21 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.176 (21 Ağustos 2026, Bahri'nin
+  iki ayrı talebi): (1) HABERLER İÇİN GENİŞLETİLMİŞ EKONOMETRİK ARAŞTIRMA
+  + (2) ÇEVİRİ İÇİN ÜCRETSİZ YEDEK KATMAN.**
+  - **Araştırma:** Web araştırmasıyla 5 yeni kalıp önerisi + mevcut "fed"
+    kalıbına somut bir belgelenmiş örnek (2013 Taper Tantrum) derlendi -
+    `tefas_kalip_arastirmasi.md` dosyası olarak Bahri'ye sunuldu. Yeni
+    önerilen kalıplar: (a) Fed/ECB güvercin sürprizi (beklenmedik faiz
+    indirimi - mevcut "fed"in tersi yönü), (b) Küresel likidite krizi/
+    panik satışı (COVID-Mart-2020 - KARŞI-SEZGİSEL: altın kısa vadede
+    DÜŞER, güvenli liman değil nakit ihtiyacı yüzünden), (c) Petrol arz
+    fazlası/fiyat savaşı (mevcut "petrol arz şoku"nun tersi), (d)
+    Bankacılık krizi/banka iflası (SVB 2023 örneği - KRIPTO yönü
+    belirsiz/tutarsız bulundu, puan ÖNERİLMEDİ). Hepsi gerçek, kaynağı
+    doğrulanabilir tarihsel olaylarla belgelendi (Brookings, Dallas Fed,
+    World Gold Council, Wikipedia, ScienceDirect vb.) - tahmini sayı
+    YOK. **Bahri'nin onayı/düzenlemesi bekleniyor, HENÜZ Admin Panelinden
+    eklenmedi.**
+  - **Çeviri artık İKİ KATMANLI:** Gemini kotasının güvenilmez olduğu
+    (v2.0.7.164'te 429 hataları) zaten biliniyordu. `deep-translator`
+    kütüphanesi eklendi (`requirements.txt`) - Google Translate'in genel
+    web arayüzünü kullanan, API ANAHTARI GEREKTİRMEYEN, ücretsiz bir
+    yedek. Akış: Gemini ÖNCE denenir (daha kaliteli - özel isimleri
+    Türkçe yaygın haliyle yazıyor); Gemini NEYİ ÇEVİREMEZSE (kota doldu/
+    API hatası/anahtar eksik/kısmen başarısız), KALAN başlıklar HER
+    ZAMAN ücretsiz yedeğe düşer - bu katman günlük AI bütçesinden
+    BAĞIMSIZ. Sonuç log satırı artık hangi katmanın kaç başlık
+    çevirdiğini ayrı ayrı gösteriyor ("Gemini: X, ucretsiz yedek: Y").
+  - **Test edildi:** Gerçek başlıklarla `translate_batch` çağrısı
+    (3 başlık, 0,88 saniye, kaliteli çeviri) VE tam uçtan uca senaryo
+    (Gemini kotası dolu/atlanmış gibi davranan sahte `db` modülüyle) -
+    ikisi de doğru çalıştı, ücretsiz yedek Gemini olmadan da başlıkları
+    doğru çevirdi.
+  - **Bilinen sınırlama:** `deep-translator`, Gemini'nin "özel isimleri
+    Türkçe yaygın haliyle yaz" gibi ince ayarlarını yapmıyor - daha
+    "düz" bir çeviri kalitesi, ama HİÇBİR ZAMAN kota yüzünden tamamen
+    durmuyor. Gayri resmi bir sarmalayıcı olduğu için Google'ın kendi
+    arayüzünü değiştirmesi durumunda bozulabilir - bu da try/except ile
+    güvenli şekilde ele alınıyor (hata verirse sessizce boş döner,
+    başlık İngilizce kalır, çökme olmaz).
+
+
   bulgusu — "BIST100'ün grafikte olmaması yine devam eden bir sorun"):
   v2.0.7.169'DAKİ RETRY DÜZELTMESİ KENDİSİ HATALIYDI, DÜZELTİLDİ.**
   - **Kesin kök neden:** v2.0.7.169'da eklenen retry döngüsünde

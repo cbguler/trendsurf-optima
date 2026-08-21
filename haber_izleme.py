@@ -329,6 +329,39 @@ KURALLAR:
         return {}
 
 
+def _ucretsiz_yedek_ceviri(basliklar):
+    """v2.0.7.176 (Bahri'nin talebi, 21 Ağustos 2026 — "haberleri
+    translate edemiyorsan en azından çevir"): Gemini kotası güvenilmez
+    çıktığı için (bkz. PROJE_NOTLARI.md v2.0.7.164 - 429 hataları) API
+    anahtarı GEREKTİRMEYEN, ücretsiz bir yedek katman. `deep-translator`
+    kütüphanesi Google Translate'in genel web arayüzünü kullanıyor -
+    gayri resmi ama yaygın kullanılan, kota/anahtar sorunu YOK.
+
+    Gemini'den DAHA BASİT: tek tek cümle çevirisi yapıyor, Gemini'nin
+    "özel isimleri Türkçe yaygın haliyle yaz" gibi ince ayarları YOK -
+    ama HİÇBİR ZAMAN kota/429 yüzünden tamamen durmuyor. İki katman
+    birlikte: Gemini önce denenir (daha kaliteli), o başarısız/
+    yetersiz kalırsa kalan başlıklar bu fonksiyona düşer.
+
+    Girdi: [(url, baslik), ...] Çıktı: {url: turkce_baslik}.
+    HATA DURUMUNDA BOŞ SÖZLÜK döner - çağıran taraf orijinal başlığı
+    kullanmaya devam eder, hiçbir şey çökmez."""
+    if not basliklar:
+        return {}
+    try:
+        from deep_translator import GoogleTranslator
+        _sadece_basliklar = [b for _u, b in basliklar]
+        _cevrilenler = GoogleTranslator(source="en", target="tr").translate_batch(_sadece_basliklar)
+        sonuc = {}
+        for (u, _b), tr in zip(basliklar, _cevrilenler):
+            if tr and str(tr).strip():
+                sonuc[u] = str(tr).strip()[:300]
+        return sonuc
+    except Exception as e:
+        print(f"[haber_izleme] Ucretsiz yedek ceviri hatasi: {type(e).__name__}: {e}")
+        return {}
+
+
 def main():
     global _ardisik_429_goruldu
     _ardisik_429_goruldu = False  # v2.0.7.164: her tur temiz baslar
@@ -423,36 +456,63 @@ def main():
     # o turda Gemini cagrisi basarisiz olursa haberler SONSUZA KADAR
     # Ingilizce kaliyordu. Artik veritabanindaki cevrilmemis satirlar
     # okunuyor - sorun cozulunce birikmis basliklar kendiliginden cevriliyor.
+    #
+    # v2.0.7.176 (Bahri'nin talebi, 21 Ağustos 2026 — "haberleri translate
+    # edemiyorsan en azından çevir"): ARTIK İKİ KATMANLI. Gemini kotası
+    # güvenilmez çıktı (bkz. v2.0.7.164 - aynı gün içinde bile 429
+    # alınabiliyor). Gemini ÖNCE denenir (daha kaliteli - özel isimleri
+    # Türkçe yaygın haliyle yazıyor), ama Gemini NEYİ ÇEVİREMEZSE
+    # (kota doldu / API hatası / anahtar eksik / kısmen başarısız),
+    # KALAN başlıklar HER ZAMAN `_ucretsiz_yedek_ceviri`ye düşer - bu
+    # katman API anahtarı/kota GEREKTİRMEZ, bizim günlük AI bütçemizden
+    # BAĞIMSIZDIR. Sonuç: çeviri artık HİÇBİR ZAMAN tamamen durmaz.
     cevrilen = 0
+    cevrilen_gemini = 0
+    cevrilen_yedek = 0
     bekleyen_ceviri = get_cevrilmemis_haberler(sorted(_INGILIZCE_KAYNAKLAR), limit=40)
     if bekleyen_ceviri:
+        _cevrilenler_url = set()
         _bugunku = ai_cagri_sayisi_bugun()
         if _bugunku >= _CEVIRI_ONCELIK_ESIGI:
-            print(f"[haber_izleme] CEVIRI ATLANDI - gunluk AI butcesi "
-                  f"({_bugunku}/{_CEVIRI_ONCELIK_ESIGI}) doldu. "
-                  f"{len(bekleyen_ceviri)} baslik orijinal haliyle bekliyor, "
-                  f"yarin tekrar denenecek.")
+            print(f"[haber_izleme] Gemini ceviri ATLANDI - gunluk AI butcesi "
+                  f"({_bugunku}/{_CEVIRI_ONCELIK_ESIGI}) doldu. Ucretsiz yedege gecilecek.")
         elif not os.environ.get("GEMINI_API_KEY", ""):
-            print("[haber_izleme] CEVIRI ATLANDI - GEMINI_API_KEY ortam "
-                  "degiskeni BOS/TANIMSIZ. Workflow secrets ayarini kontrol et.")
+            print("[haber_izleme] Gemini ceviri ATLANDI - GEMINI_API_KEY ortam "
+                  "degiskeni BOS/TANIMSIZ. Ucretsiz yedege gecilecek.")
         else:
-            print(f"[haber_izleme] Ceviri deneniyor: {len(bekleyen_ceviri)} baslik...")
+            print(f"[haber_izleme] Gemini ile ceviri deneniyor: {len(bekleyen_ceviri)} baslik...")
             ceviriler = _toplu_ceviri(bekleyen_ceviri)
             ai_cagri_kaydet(1)
             for u, tr in ceviriler.items():
                 haber_akisi_ceviri_yaz(u, tr)
-                cevrilen += 1
-            if cevrilen == 0:
-                print("[haber_izleme] UYARI: ceviri istegi sonuc dondurmedi - "
-                      "yukaridaki hata satirina bak. Basliklar Ingilizce kalacak, "
-                      "sonraki turda tekrar denenecek.")
-            else:
-                print(f"[haber_izleme] {cevrilen} baslik cevrildi.")
+                _cevrilenler_url.add(u)
+                cevrilen_gemini += 1
+            if cevrilen_gemini:
+                print(f"[haber_izleme] Gemini {cevrilen_gemini} baslik cevirdi.")
+
+        # v2.0.7.176: Gemini'nin CEVİREMEDİĞİ (yukarıda atlandıysa TÜMÜ,
+        # kısmen başarısız olduysa KALANI) her zaman ücretsiz yedeğe düşer.
+        _kalan = [(u, b) for u, b in bekleyen_ceviri if u not in _cevrilenler_url]
+        if _kalan:
+            print(f"[haber_izleme] Ucretsiz yedek ile ceviri deneniyor: {len(_kalan)} baslik...")
+            yedek_ceviriler = _ucretsiz_yedek_ceviri(_kalan)
+            for u, tr in yedek_ceviriler.items():
+                haber_akisi_ceviri_yaz(u, tr)
+                cevrilen_yedek += 1
+            if cevrilen_yedek:
+                print(f"[haber_izleme] Ucretsiz yedek {cevrilen_yedek} baslik cevirdi.")
+
+        cevrilen = cevrilen_gemini + cevrilen_yedek
+        if cevrilen == 0:
+            print("[haber_izleme] UYARI: NE Gemini NE ucretsiz yedek basarili oldu - "
+                  "yukaridaki hata satirlarina bak. Basliklar Ingilizce kalacak, "
+                  "sonraki turda tekrar denenecek.")
 
     haber_akisi_temizle(7)  # 7 gunden eskiyi sil - tablo sinirsiz buyumesin
 
     print(f"[haber_izleme] Bitti: {toplam_haber} haber tarandi, "
-          f"{akisa_eklenen} akisa eklendi, {cevrilen} baslik cevrildi, "
+          f"{akisa_eklenen} akisa eklendi, {cevrilen} baslik cevrildi "
+          f"(Gemini: {cevrilen_gemini}, ucretsiz yedek: {cevrilen_yedek}), "
           f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi. "
           f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}")
 

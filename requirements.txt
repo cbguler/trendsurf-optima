@@ -53,3 +53,8 @@ evds>=0.4.0
 # gerektirmiyor) ile REST uzerinden yapiliyor - ekstra SDK GEREKMIYOR,
 # zaten mevcut olan 'requests' kutuphanesi yeterli (bkz. haber_izleme.py).
 feedparser>=6.0.10
+# v2.0.7.176 (21 Agustos 2026): Gemini ceviri kotasi guvenilmez cikti
+# (bkz. PROJE_NOTLARI.md v2.0.7.164) - API anahtari gerektirmeyen,
+# ucretsiz bir yedek ceviri katmani icin. Google Translate'in genel
+# web arayuzunu kullanan gayri resmi ama yaygin kullanilan bir sarmalayici.
+deep-translator>=1.11.4
