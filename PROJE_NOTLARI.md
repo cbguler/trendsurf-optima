@@ -1521,7 +1521,40 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.177 (21 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.178 (21 Ağustos 2026, Bahri'nin
+  bulgusu — "haber başlıkları Türkçe olsun demiştim, neden olmadı"):
+  v2.0.7.176'DAKİ ÜCRETSİZ YEDEK ÇEVİRİ HİÇ ÇALIŞMIYORDU - PAKET KURULU
+  DEĞİLDİ.**
+  - **Kesin kök neden (log ile doğrulandı):** Mantığın kendisi TAM
+    DOĞRU çalışıyordu - Gemini 429 aldı, doğru şekilde ücretsiz yedeğe
+    düştü, AMA log'da `ModuleNotFoundError: No module named
+    'deep_translator'` çıktı. Sebep: `deep-translator` SADECE
+    `requirements.txt`'e eklenmişti (v2.0.7.176) - ama
+    `haber_izleme.yml` iş akışı `requirements.txt`'e HİÇ BAKMIYOR,
+    kendi ayrı/minimal paket listesini (`feedparser requests
+    psycopg2-binary`) kuruyor. Bu, `worker.py`/`update_data.yml` gibi
+    ağır işlerin TAM `requirements.txt`'i kurmasından FARKLI bir
+    mimari - haber taraması bilerek hafif tutulmuş.
+  - **Çözüm:** `deep-translator`, `haber_izleme.yml`'in KENDİ pip
+    install satırına da eklendi. Tek satırlık, dar bir düzeltme.
+  - **DERS - kalıcı not:** Bu projede YENİ bir Python paketi eklerken
+    SADECE `requirements.txt`'e eklemek YETMEZ - hangi GitHub Actions
+    iş akışının o kodu çalıştıracağını bulup, o iş akışının KENDİ pip
+    install listesine de eklemek gerekiyor (worker.py'yi çalıştıran
+    `update_data.yml` tam `requirements.txt` kullanıyor, ama
+    `haber_izleme.yml`, `update_tefas_evening.yml` gibi "hafif" işler
+    kendi minimal listelerini tutuyor - hangi iş akışının hangi
+    yöntemi kullandığı push öncesi KONTROL EDİLMELİ).
+  - **Yan gözlem (çözülmedi, sadece not edildi):** Bahri'nin ekran
+    görüntüsündeki bazı "jeopolitik" eşleşmeleri (İsveçli bakan
+    tartışması, liman kapanışı, Batı Şeria hukuku sorusu, Alaska uçak
+    kazası) gerçek jeopolitik gerilimden çok Orta Doğu/askeri
+    bağlamdaki genel haberler gibi görünüyor - muhtemelen başlıkta
+    değil özet metninde geçen bir anahtar kelimeye (ör. "military")
+    takılmış olabilirler. Bu ayrı bir kalıp/kelime ince ayarı konusu,
+    bu turda dokunulmadı.
+
+
   talebi — "sadece Fed mi piyasaları etkiliyor... literatür taraması
   yapman gereği idi"): AKADEMİK KAYNAKÇA + BoE/PBoC GENİŞLETMESİ.**
   - **BoE ve PBoC boşluğu doğrulandı, düzeltme Admin Paneli üzerinden

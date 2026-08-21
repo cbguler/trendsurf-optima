@@ -43,7 +43,15 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          pip install feedparser requests psycopg2-binary --quiet
+          # v2.0.7.178 (Bahri'nin bulgusu, 21 Agustos 2026 - "ModuleNotFoundError:
+          # No module named 'deep_translator'"): KOK NEDEN - bu workflow
+          # requirements.txt'e HIC BAKMIYOR, kendi ayri/minimal paket
+          # listesini kuruyor. v2.0.7.176'da deep-translator SADECE
+          # requirements.txt'e eklenmisti - bu workflow'un kendi listesine
+          # eklenmedigi icin ucretsiz yedek ceviri hic calisamiyordu
+          # (Gemini 429 alinca dogru sekilde yedege duesuyordu, ama
+          # yedegin kendisi hic kurulu degildi).
+          pip install feedparser requests psycopg2-binary deep-translator --quiet
 
       - name: Haber izleme calistir
         run: python haber_izleme.py
