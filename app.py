@@ -6435,6 +6435,16 @@ elif page=="Haberler":
                 st.markdown(f"[{_bas}]({_h['haber_url']})")
             else:
                 st.markdown(_bas)
+            # v2.0.7.179 (Bahri'nin talebi, 21 Ağustos 2026 — "başlığı
+            # çevirebiliyorsak özeti de çevirebiliriz"): başlığın hemen
+            # altında, RSS kaynağının kendi kısa özeti (çevrilmişse
+            # Türkçesi, değilse orijinali) gösteriliyor - HABERİN TAMAMI
+            # DEĞİL, sadece kaynağın verdiği 1-3 cümlelik özet (telif
+            # açısından kaynağa link vermeye devam ediyoruz, tam metni
+            # ASLA kazımıyoruz/göstermiyoruz - bkz. PROJE_NOTLARI.md).
+            _ozet_goster = _h.get("ozet_tr") or _h.get("ozet") or ""
+            if _ozet_goster:
+                st.caption(_ozet_goster)
             _cev_not = ""
             if _h.get("baslik_tr"):
                 _cev_not = " · Türkçeye çevrildi"

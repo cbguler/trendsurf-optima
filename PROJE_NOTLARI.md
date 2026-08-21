@@ -1521,7 +1521,45 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.178 (21 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.179 (21 Ağustos 2026, Bahri'nin
+  talebi — "başlıkları çevirebiliyorsak haberin tümünü de çevirebiliriz
+  değil mi?"): KISA RSS ÖZETİ DE ÇEVRİLİYOR - TAM METİN BİLEREK
+  EKLENMEDİ (telif riski).**
+  - **Bahri'ye sunulan ayrım ve onun kararı:** Haberin TAMAMINI
+    çekip/çevirip göstermek için her makalenin kendi web sayfasını
+    ayrıca kazımak (scrape) gerekir - hem kırılgan bir mühendislik işi
+    hem de BBC/Al Jazeera/AA gibi kaynakların TAM metnini kendi
+    uygulamamızda göstermek muhtemelen RSS besleme şartlarını aşan bir
+    TELİF İHLALİ olur (kullanıcı orijinal siteye hiç gitmeden tam
+    haberi okur, kaynağın trafiğini/reklam gelirini biz alırız - "adil
+    kullanım" sayılması zor). Bunun yerine RSS'in ZATEN VERDİĞİ kısa
+    (1-3 cümlelik) özeti çevirip göstermek önerildi - kullanıcı yine
+    kaynağa yönlendiriliyor, standart haber toplayıcı (aggregator)
+    pratiği. **Bahri bu ORTA YOLU onayladı, tam metin İSTENMEDİ.**
+  - **Şema değişikliği:** `haber_akisi` tablosuna `ozet`/`ozet_tr`
+    sütunları eklendi. Tablo CANLIDA ZATEN VAR olduğu için `CREATE
+    TABLE IF NOT EXISTS` yetmez - `ALTER TABLE ADD COLUMN IF NOT
+    EXISTS` ile idempotent migration eklendi (`init_db()` içinde).
+  - **Her iki çeviri katmanı da (Gemini VE ücretsiz yedek) artık HEM
+    başlığı HEM özeti çeviriyor** - tek çağrıda ikisi birlikte (Gemini:
+    tek JSON isteğinde her madde için "baslik"+"ozet" alanı; ücretsiz
+    yedek: iki ayrı `translate_batch` çağrısı, özet bazı haberlerde
+    boş olabildiği için index hizalaması karışmasın diye ayrı tutuldu).
+  - **HTML temizliği eklendi:** `ozet` artık kullanıcıya DOĞRUDAN
+    gösterildiği için (önceden sadece AI prompt'u için perde arkasında
+    kullanılıyordu), bazı RSS kaynaklarının özet alanına gömdüğü HTML
+    etiketleri (`<p>`, `<a>` vb.) regex ile temizlendi - temizlenmeseydi
+    ekranda çıplak etiket görünürdü.
+  - **Test edildi (3 senaryo):** (1) ücretsiz yedek ile gerçek başlık+
+    özet çevirisi (biri özetli, biri özetsiz) - özetsiz haber doğru
+    şekilde `ozet_tr=None` aldı, çökme yok. (2) Gemini JSON ayrıştırma
+    mantığı sahte yanıtla - eksik/boş alanlar güvenli ele alındı,
+    Gemini'nin hiç yanıt vermediği bir madde doğru şekilde atlandı
+    (kayma yok). (3) HTML temizleme regex'i gerçek örnek metinle.
+  - **Haberler sayfası** artık başlığın hemen altında kısa özeti
+    gösteriyor (çevrilmişse Türkçesi, değilse orijinali).
+
+
   bulgusu — "haber başlıkları Türkçe olsun demiştim, neden olmadı"):
   v2.0.7.176'DAKİ ÜCRETSİZ YEDEK ÇEVİRİ HİÇ ÇALIŞMIYORDU - PAKET KURULU
   DEĞİLDİ.**

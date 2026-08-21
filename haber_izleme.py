@@ -281,32 +281,43 @@ _GUNLUK_AI_BUTCESI = 120
 _CEVIRI_ONCELIK_ESIGI = 100  # bu sayiyi asinca ceviri durur, dogrulama devam
 
 
-def _toplu_ceviri(basliklar):
-    """v2.0.7.160: Bir turdaki TUM yeni Ingilizce baslikleri TEK Gemini
+def _toplu_ceviri(haberler):
+    """v2.0.7.160: Bir turdaki TUM yeni Ingilizce basliklari TEK Gemini
     istegiyle cevirir (baslik basina ayri istek atmak gunluk kotayi
     hizla tuketirdi - 10 dakikada bir calisan bir script icin bu fark
-    kritik). Girdi: [(url, baslik), ...] Cikti: {url: turkce_baslik}.
+    kritik).
 
-    HATA DURUMUNDA BOS SOZLUK doner - cagiran taraf orijinal basligi
-    kullanmaya devam eder, hicbir sey cokmez."""
-    if not basliklar:
+    v2.0.7.179 (Bahri'nin talebi - "başlığı çevirebiliyorsak özeti de
+    çevirebiliriz"): Girdi ARTIK 3'lu: [(url, baslik, ozet), ...].
+    Cikti da genisledi: {url: {"baslik_tr": ..., "ozet_tr": ...}}.
+    Ozet BOSSA sadece baslik cevrilir, ozet_tr o url icin None doner.
+
+    HATA DURUMUNDA BOS SOZLUK doner - cagiran taraf orijinal basligi/
+    ozeti kullanmaya devam eder, hicbir sey cokmez."""
+    if not haberler:
         return {}
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return {}
     try:
         import requests
-        numarali = "\n".join(f"{i+1}. {b}" for i, (_u, b) in enumerate(basliklar))
-        prompt = f"""Aşağıdaki İngilizce haber başlıklarını Türkçeye çevir.
+        satirlar = []
+        for i, (_u, b, o) in enumerate(haberler):
+            satirlar.append(f"{i+1}. BAŞLIK: {b}")
+            if o:
+                satirlar.append(f"   ÖZET: {o}")
+        numarali = "\n".join(satirlar)
+        prompt = f"""Aşağıdaki İngilizce haber başlıklarını ve (varsa) özetlerini Türkçeye çevir.
 
 {numarali}
 
 KURALLAR:
-- Sadece çeviri yap, yorum ekleme, başlığa olmayan bilgi EKLEME.
+- Sadece çeviri yap, yorum ekleme, olmayan bilgi EKLEME.
 - Özel isimleri (kurum, kişi, yer) Türkçede yaygın kullanılan haliyle yaz.
-- Haber başlığı üslubunu koru, kısa tut.
+- Başlık üslubunu koru (kısa), özet üslubunu koru (birkaç cümle olabilir).
+- ÖZET verilmeyen maddeler için "ozet" alanını boş bırak ("").
 - SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
-{{"ceviriler": {{"1": "birinci başlığın çevirisi", "2": "ikinci başlığın çevirisi"}}}}"""
+{{"ceviriler": {{"1": {{"baslik": "birinci başlığın çevirisi", "ozet": "birinci özetin çevirisi"}}, "2": {{"baslik": "...", "ozet": "..."}}}}}}"""
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
         resp = _gemini_istek_gonder(
@@ -319,17 +330,24 @@ KURALLAR:
         metin = metin.replace("```json", "").replace("```", "").strip()
         ceviriler = json.loads(metin).get("ceviriler", {})
         sonuc = {}
-        for i, (u, _b) in enumerate(basliklar):
-            tr = ceviriler.get(str(i + 1)) or ceviriler.get(i + 1)
-            if tr and str(tr).strip():
-                sonuc[u] = str(tr).strip()[:300]
+        for i, (u, _b, _o) in enumerate(haberler):
+            c = ceviriler.get(str(i + 1)) or ceviriler.get(i + 1) or {}
+            if not isinstance(c, dict):
+                continue  # beklenmeyen format - bu maddeyi atla, cokme
+            bt = str(c.get("baslik", "")).strip()
+            ot = str(c.get("ozet", "")).strip()
+            if bt or ot:
+                sonuc[u] = {
+                    "baslik_tr": bt[:300] if bt else None,
+                    "ozet_tr": ot[:500] if ot else None,
+                }
         return sonuc
     except Exception as e:
         print(f"[haber_izleme] Toplu ceviri hatasi: {type(e).__name__}: {e}")
         return {}
 
 
-def _ucretsiz_yedek_ceviri(basliklar):
+def _ucretsiz_yedek_ceviri(haberler):
     """v2.0.7.176 (Bahri'nin talebi, 21 Ağustos 2026 — "haberleri
     translate edemiyorsan en azından çevir"): Gemini kotası güvenilmez
     çıktığı için (bkz. PROJE_NOTLARI.md v2.0.7.164 - 429 hataları) API
@@ -341,21 +359,41 @@ def _ucretsiz_yedek_ceviri(basliklar):
     "özel isimleri Türkçe yaygın haliyle yaz" gibi ince ayarları YOK -
     ama HİÇBİR ZAMAN kota/429 yüzünden tamamen durmuyor. İki katman
     birlikte: Gemini önce denenir (daha kaliteli), o başarısız/
-    yetersiz kalırsa kalan başlıklar bu fonksiyona düşer.
+    yetersiz kalırsa kalan haberler bu fonksiyona düşer.
 
-    Girdi: [(url, baslik), ...] Çıktı: {url: turkce_baslik}.
-    HATA DURUMUNDA BOŞ SÖZLÜK döner - çağıran taraf orijinal başlığı
-    kullanmaya devam eder, hiçbir şey çökmez."""
-    if not basliklar:
+    v2.0.7.179 (Bahri'nin talebi - "özeti de çevirebiliriz"): Girdi
+    ARTIK 3'lu: [(url, baslik, ozet), ...]. Çıktı:
+    {url: {"baslik_tr": ..., "ozet_tr": ...}}. Başlık ve özet AYRI İKİ
+    `translate_batch` çağrısıyla çevriliyor (özet bazı haberlerde boş
+    olabildiği için - tek çağrıda index hizalaması karışmasın diye).
+
+    HATA DURUMUNDA BOŞ SÖZLÜK döner - çağıran taraf orijinal başlığı/
+    özeti kullanmaya devam eder, hiçbir şey çökmez."""
+    if not haberler:
         return {}
     try:
         from deep_translator import GoogleTranslator
-        _sadece_basliklar = [b for _u, b in basliklar]
-        _cevrilenler = GoogleTranslator(source="en", target="tr").translate_batch(_sadece_basliklar)
+        _cevirmen = GoogleTranslator(source="en", target="tr")
+
+        _basliklar = [b for _u, b, _o in haberler]
+        _baslik_cevirileri = _cevirmen.translate_batch(_basliklar)
+
+        # Sadece OZETI DOLU olanlari cevir - bos string'i cevirmeye
+        # calismak gereksiz bir istek, bazi cevirmenlerde hata da verebilir.
+        _ozetli = [(u, o) for u, _b, o in haberler if o]
+        _ozet_cevirileri = {}
+        if _ozetli:
+            _cevrilenler = _cevirmen.translate_batch([o for _u, o in _ozetli])
+            for (u, _o), tr in zip(_ozetli, _cevrilenler):
+                if tr and str(tr).strip():
+                    _ozet_cevirileri[u] = str(tr).strip()[:500]
+
         sonuc = {}
-        for (u, _b), tr in zip(basliklar, _cevrilenler):
-            if tr and str(tr).strip():
-                sonuc[u] = str(tr).strip()[:300]
+        for (u, _b, _o), tr in zip(haberler, _baslik_cevirileri):
+            bt = str(tr).strip()[:300] if tr and str(tr).strip() else None
+            ot = _ozet_cevirileri.get(u)
+            if bt or ot:
+                sonuc[u] = {"baslik_tr": bt, "ozet_tr": ot}
         return sonuc
     except Exception as e:
         print(f"[haber_izleme] Ucretsiz yedek ceviri hatasi: {type(e).__name__}: {e}")
@@ -402,6 +440,14 @@ def main():
 
             baslik = entry.get("title", "")
             ozet = entry.get("summary", "") or entry.get("description", "")
+            # v2.0.7.179: ozet artik Haberler sayfasinda KULLANICIYA
+            # DOGRUDAN gosteriliyor (once sadece AI prompt'u icin
+            # perde arkasinda kullaniliyordu). Bazi RSS kaynaklari
+            # ozet alaninda HTML etiketi (<p>, <a> vb.) barindirabiliyor -
+            # temizlenmezse ekranda ciplak etiket olarak gorunurdu.
+            if ozet:
+                ozet = re.sub(r"<[^>]+>", " ", ozet)
+                ozet = re.sub(r"\s+", " ", ozet).strip()
 
             # v2.0.7.160: yayin zamani RSS'ten alinmaya calisilir - yoksa
             # None kalir, db tarafi eklenme_zamani'na duser (COALESCE).
@@ -422,7 +468,7 @@ def main():
             haber_akisi_ekle(
                 haber_url=url, kaynak=kaynak_adi, baslik=baslik[:300],
                 eslesen_kalip=",".join(eslesenler) if eslesenler else None,
-                yayin_zamani=yayin_zamani)
+                yayin_zamani=yayin_zamani, ozet=ozet[:500] if ozet else None)
             akisa_eklenen += 1
 
             if not eslesenler:
@@ -480,27 +526,27 @@ def main():
             print("[haber_izleme] Gemini ceviri ATLANDI - GEMINI_API_KEY ortam "
                   "degiskeni BOS/TANIMSIZ. Ucretsiz yedege gecilecek.")
         else:
-            print(f"[haber_izleme] Gemini ile ceviri deneniyor: {len(bekleyen_ceviri)} baslik...")
+            print(f"[haber_izleme] Gemini ile ceviri deneniyor: {len(bekleyen_ceviri)} haber (baslik+ozet)...")
             ceviriler = _toplu_ceviri(bekleyen_ceviri)
             ai_cagri_kaydet(1)
-            for u, tr in ceviriler.items():
-                haber_akisi_ceviri_yaz(u, tr)
+            for u, c in ceviriler.items():
+                haber_akisi_ceviri_yaz(u, baslik_tr=c.get("baslik_tr"), ozet_tr=c.get("ozet_tr"))
                 _cevrilenler_url.add(u)
                 cevrilen_gemini += 1
             if cevrilen_gemini:
-                print(f"[haber_izleme] Gemini {cevrilen_gemini} baslik cevirdi.")
+                print(f"[haber_izleme] Gemini {cevrilen_gemini} haber cevirdi.")
 
         # v2.0.7.176: Gemini'nin CEVİREMEDİĞİ (yukarıda atlandıysa TÜMÜ,
         # kısmen başarısız olduysa KALANI) her zaman ücretsiz yedeğe düşer.
-        _kalan = [(u, b) for u, b in bekleyen_ceviri if u not in _cevrilenler_url]
+        _kalan = [(u, b, o) for u, b, o in bekleyen_ceviri if u not in _cevrilenler_url]
         if _kalan:
-            print(f"[haber_izleme] Ucretsiz yedek ile ceviri deneniyor: {len(_kalan)} baslik...")
+            print(f"[haber_izleme] Ucretsiz yedek ile ceviri deneniyor: {len(_kalan)} haber (baslik+ozet)...")
             yedek_ceviriler = _ucretsiz_yedek_ceviri(_kalan)
-            for u, tr in yedek_ceviriler.items():
-                haber_akisi_ceviri_yaz(u, tr)
+            for u, c in yedek_ceviriler.items():
+                haber_akisi_ceviri_yaz(u, baslik_tr=c.get("baslik_tr"), ozet_tr=c.get("ozet_tr"))
                 cevrilen_yedek += 1
             if cevrilen_yedek:
-                print(f"[haber_izleme] Ucretsiz yedek {cevrilen_yedek} baslik cevirdi.")
+                print(f"[haber_izleme] Ucretsiz yedek {cevrilen_yedek} haber cevirdi.")
 
         cevrilen = cevrilen_gemini + cevrilen_yedek
         if cevrilen == 0:

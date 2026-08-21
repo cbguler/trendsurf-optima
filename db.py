@@ -360,8 +360,22 @@ def init_db():
         baslik_tr      TEXT,
         eslesen_kalip  TEXT,
         yayin_zamani   TIMESTAMP,
-        eklenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        eklenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        ozet           TEXT,
+        ozet_tr        TEXT
     )""")
+    # v2.0.7.179 (Bahri'nin talebi, 21 Ağustos 2026 — "başlıkları
+    # çevirebiliyorsak kısa özeti de çevirebiliriz"): `ozet`/`ozet_tr`
+    # sütunları CREATE TABLE'a eklendi (yeni kurulumlar için), ama
+    # canlıdaki tablo ZATEN VAR ve bu sütunları içermiyor - CREATE TABLE
+    # IF NOT EXISTS var olan bir tabloyu DEĞİŞTİRMEZ. Bu yüzden mevcut
+    # tabloya ALTER TABLE ile idempotent (defalarca çalıştırılsa da
+    # güvenli) şekilde ekleniyor.
+    try:
+        c.execute("ALTER TABLE haber_akisi ADD COLUMN IF NOT EXISTS ozet TEXT")
+        c.execute("ALTER TABLE haber_akisi ADD COLUMN IF NOT EXISTS ozet_tr TEXT")
+    except Exception as e:
+        print(f"[db] haber_akisi ozet sutunu migration hatasi: {e}", file=sys.stderr)
 
     # v2.0.7.160: Gemini ücretsiz katman günlük istek limiti BELİRSİZ
     # (üçüncü taraf kaynaklar 20/50/250/500/1500 gibi çelişkili rakamlar
@@ -709,13 +723,17 @@ def get_cevrilmemis_haberler(kaynaklar: list, limit: int = 40) -> list:
     Gemini cagrisi herhangi bir sebeple basarisiz olursa (kota, ag, API
     hatasi) o haberler SONSUZA KADAR Ingilizce kaliyordu - bir daha hic
     denenmiyordu. Bu fonksiyonla sistem kendini onariyor: sorun cozulunce
-    birikmis basliklar sonraki turlarda otomatik cevriliyor."""
+    birikmis basliklar sonraki turlarda otomatik cevriliyor.
+
+    v2.0.7.179 (Bahri'nin talebi - "başlığı çevirebiliyorsak özeti de
+    çevirebiliriz"): artik `ozet` de donuyor - ceviri fonksiyonlari HEM
+    basligi HEM ozeti birlikte cevirebilsin diye."""
     if not kaynaklar:
         return []
     try:
         isaretler = ",".join(["?"] * len(kaynaklar))
         rows = get_conn().execute(
-            "SELECT haber_url, baslik FROM haber_akisi "
+            "SELECT haber_url, baslik, ozet FROM haber_akisi "
             "WHERE baslik_tr IS NULL "
             f"AND kaynak IN ({isaretler}) "
             "ORDER BY eklenme_zamani DESC LIMIT ?",
@@ -723,8 +741,10 @@ def get_cevrilmemis_haberler(kaynaklar: list, limit: int = 40) -> list:
     except Exception as e:
         print(f"[db] get_cevrilmemis_haberler hata: {e}", file=sys.stderr)
         return []
-    return [((r["haber_url"] if isinstance(r, dict) else r[0]),
-             (r["baslik"] if isinstance(r, dict) else r[1])) for r in rows]
+    def _cv(r, k, i):
+        return r[k] if isinstance(r, dict) else r[i]
+    return [(_cv(r, "haber_url", 0), _cv(r, "baslik", 1), _cv(r, "ozet", 2) or "")
+            for r in rows]
 
 
 # ══════════════════════════════════════════════════════════════
@@ -775,28 +795,37 @@ def _kaliplar_tohumla(conn):
 
 def haber_akisi_ekle(haber_url: str, kaynak: str, baslik: str,
                      baslik_tr: str = None, eslesen_kalip: str = None,
-                     yayin_zamani=None):
+                     yayin_zamani=None, ozet: str = None):
     """v2.0.7.160: Taranan HER haberi akisa yazar - eslesen_kalip None ise
-    'tarandi, sakin' demektir. Ayni URL tekrar gelirse hicbir sey yapmaz."""
+    'tarandi, sakin' demektir. Ayni URL tekrar gelirse hicbir sey yapmaz.
+    v2.0.7.179: `ozet` (RSS'in kendi kisa ozeti) da saklanir - Haberler
+    sayfasinda baslik ile birlikte gosterilecek."""
     try:
         conn = get_conn()
         conn.execute(
             "INSERT INTO haber_akisi (haber_url, kaynak, baslik, baslik_tr, "
-            "eslesen_kalip, yayin_zamani) VALUES (?,?,?,?,?,?) "
+            "eslesen_kalip, yayin_zamani, ozet) VALUES (?,?,?,?,?,?,?) "
             "ON CONFLICT (haber_url) DO NOTHING",
-            (haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, yayin_zamani))
+            (haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, yayin_zamani, ozet))
         conn.commit()
         conn.close()
     except Exception as e:
         print(f"[db] haber_akisi_ekle hata: {e}", file=sys.stderr)
 
 
-def haber_akisi_ceviri_yaz(haber_url: str, baslik_tr: str):
-    """v2.0.7.160: Toplu ceviri sonrasi Turkce basligi geriye yazar."""
+def haber_akisi_ceviri_yaz(haber_url: str, baslik_tr: str = None, ozet_tr: str = None):
+    """v2.0.7.160: Toplu ceviri sonrasi Turkce basligi geriye yazar.
+    v2.0.7.179: artik ozet_tr da yazabiliyor - biri None ise o alan
+    DOKUNULMADAN kalir (COALESCE ile), boylece sadece baslik cevrilip
+    ozet cevrilemediyse (ya da tam tersi) diger alan bozulmaz."""
     try:
         conn = get_conn()
-        conn.execute("UPDATE haber_akisi SET baslik_tr=? WHERE haber_url=?",
-                     (baslik_tr, haber_url))
+        conn.execute(
+            "UPDATE haber_akisi SET "
+            "baslik_tr = COALESCE(?, baslik_tr), "
+            "ozet_tr = COALESCE(?, ozet_tr) "
+            "WHERE haber_url=?",
+            (baslik_tr, ozet_tr, haber_url))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -806,11 +835,13 @@ def haber_akisi_ceviri_yaz(haber_url: str, baslik_tr: str):
 def get_haber_akisi(saat: int = 48, limit: int = 300) -> list:
     """v2.0.7.160: Haberler sayfasi icin - EN YENI EN USTTE. eslesen_kalip
     dolu olanlar sayfada ayrica ustte gosterilir, bu fonksiyon ikisini de
-    ayni listede tek sorguda doner."""
+    ayni listede tek sorguda doner.
+    v2.0.7.179: ozet/ozet_tr de donuyor - Haberler sayfasi artik basligin
+    altinda kisa (cevrilmis) ozeti de gosterebiliyor."""
     try:
         rows = get_conn().execute(
             "SELECT haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, "
-            "COALESCE(yayin_zamani, eklenme_zamani) AS zaman "
+            "COALESCE(yayin_zamani, eklenme_zamani) AS zaman, ozet, ozet_tr "
             "FROM haber_akisi "
             f"WHERE COALESCE(yayin_zamani, eklenme_zamani) > now() - interval '{int(saat)} hours' "
             "ORDER BY zaman DESC LIMIT ?", (int(limit),)
@@ -826,6 +857,7 @@ def get_haber_akisi(saat: int = 48, limit: int = 300) -> list:
             "haber_url": _hv("haber_url", 0), "kaynak": _hv("kaynak", 1),
             "baslik": _hv("baslik", 2), "baslik_tr": _hv("baslik_tr", 3),
             "eslesen_kalip": _hv("eslesen_kalip", 4), "zaman": _hv("zaman", 5),
+            "ozet": _hv("ozet", 6), "ozet_tr": _hv("ozet_tr", 7),
         })
     return sonuc
 
