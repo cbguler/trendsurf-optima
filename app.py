@@ -3341,6 +3341,17 @@ def _kiyaslama_gunluk_serileri(portfolio):
     # başarılı olana kadar). Çözüm: 2 KEZ daha dene (kısa bekleme ile)
     # önce pes et - yfinance'ın bilinen geçici flakiness'ini tolere
     # etmek için (live_data.py'deki borsapy retry desenleriyle tutarlı).
+    # v2.0.7.175 (Bahri'nin bulgusu, 21 Ağustos 2026 — "BIST100'ün
+    # grafikte olmaması yine devam eden bir sorun"): v2.0.7.169'daki
+    # RETRY MANTIĞINDA BİR HATA VARDI - `break` satırı, exception
+    # FIRLAMADIĞI her durumda ÇALIŞIYORDU, `_bs` GERÇEKTEN BOŞ/YETERSİZ
+    # gelse bile. yfinance'ın EN YAYGIN başarısızlık şekli tam olarak bu:
+    # hata FIRLATMADAN boş bir DataFrame döndürmek (rate-limit'te sık
+    # görülür). Yani eski kod, İLK denemede "boş ama hatasız" bir sonuç
+    # aldığında HİÇ YENİDEN DENEMİYORDU - retry'nin kendisi işlevsizdi.
+    # ÇÖZÜM: `break` artık SADECE gerçekten `_sonuc["BIST 100"]`
+    # ATANDIĞINDA çalışıyor - boş/yetersiz veri de artık normal başarısız
+    # bir deneme sayılıp yeniden deneniyor.
     for _bist100_deneme in range(3):
         try:
             import yfinance as yf
@@ -3350,7 +3361,13 @@ def _kiyaslama_gunluk_serileri(portfolio):
                 _bs = _seri_hazirla(_bs)
                 if float(_bs.iloc[0]) > 0:
                     _sonuc["BIST 100"] = (_bs / float(_bs.iloc[0]) - 1) * 100
-            break  # basarili (veri bos bile olsa exception yok) - tekrar deneme
+                    break  # GERÇEKTEN basarili - veri atandi, artik dur
+            # Buraya dustuyse: exception YOK ama veri bos/yetersizdi -
+            # bu da basarisizlik sayilir, asagidaki ayni bekleme/retry
+            # bloguna duser (exception blogundakiyle AYNI davranis).
+            if _bist100_deneme < 2:
+                import time as _time_b100
+                _time_b100.sleep(1.5)
         except Exception:
             if _bist100_deneme < 2:
                 import time as _time_b100

@@ -1521,7 +1521,30 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, ACİL, CANLI TEST EDİLMEDİ] v2.0.7.174 (21 Ağustos 2026,
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.175 (21 Ağustos 2026, Bahri'nin
+  bulgusu — "BIST100'ün grafikte olmaması yine devam eden bir sorun"):
+  v2.0.7.169'DAKİ RETRY DÜZELTMESİ KENDİSİ HATALIYDI, DÜZELTİLDİ.**
+  - **Kesin kök neden:** v2.0.7.169'da eklenen retry döngüsünde
+    `break` satırı, exception FIRLAMADIĞI HER DURUMDA çalışıyordu -
+    `_bs` (BIST 100 verisi) GERÇEKTEN boş/yetersiz gelse bile. yfinance'ın
+    EN YAYGIN başarısızlık şekli tam olarak bu: hata FIRLATMADAN boş bir
+    DataFrame döndürmek (rate-limit'te sık görülür). Yani "retry"
+    mantığı SADECE sert exception'larda (ağ kopması vb.) devreye
+    giriyordu - yfinance'ın asıl sık karşılaşılan "sessizce boş dön"
+    davranışında HİÇ yeniden denemiyordu, ilk denemede pes ediyordu.
+    Retry'nin kendisi bu en yaygın senaryoda İŞLEVSİZDİ.
+  - **Çözüm:** `break` artık SADECE `_sonuc["BIST 100"]` GERÇEKTEN
+    atandığında çalışıyor - boş/yetersiz veri de artık normal bir
+    başarısızlık sayılıp aynı bekleme/tekrar deneme yoluna düşüyor
+    (exception ile aynı davranış).
+  - **İzole test edildi (3 senaryo):** (A) ilk 2 deneme sessizce boş
+    veri dönüyor, 3. başarılı → ARTIK doğru şekilde 3 kez deneniyor ve
+    başarıyla atanıyor (eski bug'da bu senaryo İLK denemede pes
+    ediyordu). (B) ilk 2 deneme exception atıyor, 3. başarılı → aynı
+    şekilde çalışıyor. (C) 3 deneme de başarısız → sessizce vazgeçiliyor,
+    UI'daki uyarı zaten gösteriliyor. Üçü de doğru sonucu verdi.
+
+
   Bahri'nin bulgusu — "Portföyümdeki rakamlar gerçeği yansıtmıyor, HTS
   güncellendiği halde neden 0?"): KRİTİK VERİ KAYBI HATASI - GEÇERLİ
   FON FİYATLARI SESSİZCE SIFIRLANIYORDU.**
