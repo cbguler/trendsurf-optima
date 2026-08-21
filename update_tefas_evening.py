@@ -59,6 +59,42 @@ def main():
     df_mevcut = pd.read_csv(CSV_PATH, on_bad_lines="skip")
     df_non_tefas = df_mevcut[df_mevcut["Kategori"] != "TEFAS"].copy()
 
+    # v2.0.7.174 (Bahri'nin bulgusu, 21 Ağustos 2026 — "HTS güncel
+    # değeri, güncellendiği halde neden 0?"): KRİTİK VERİ KAYBI HATASI
+    # BULUNDU. KÖK NEDEN: bu turda pytefas 1348 fonun 1230'u için fiyat
+    # getirdi (log: "1230/1348 fon") - GERİ KALAN 118 fon (HTS dahil)
+    # için pytefas BAŞARISIZDI. Bu fonlar BEFAS'ın günlük Excel'inde de
+    # yoksa (HTS gibi bazı "Serbest Fon" türleri için olabiliyor),
+    # `load_excel_all()`'daki taban değer olan Son_Fiyat=0.0 HİÇ
+    # DEĞİŞMEDEN kalıyordu - VE ÖNCEKİ CSV'DEKİ GEÇERLİ FİYAT HİÇ
+    # KONTROL EDİLMEDEN SIFIRLA EZİLİYORDU. Sonuç: HTS'nin gerçek
+    # fiyatı (TEFAS'ın kendi sitesinde doğrulandı: 59,04 TL) bir gecede
+    # 0'a düştü, Portföyüm'de sahte bir "%100 zarar" gösterdi.
+    # ÇÖZÜM: worker.py'nin MADEN döngüsündeki "Kademe 3: Son CSV'den
+    # tamamla" ile AYNI felsefe - bu turda fiyat alınamayan (Son_Fiyat<=0)
+    # her TEFAS satırı için, ÖNCEKİ CSV'de o ticker için GEÇERLİ
+    # (>0) bir fiyat varsa, o SATIRIN TAMAMI (fiyat + RSI/Ret1M/Vol)
+    # AYNEN korunur - sadece fiyatı yamalayıp RSI'yi güncel bırakmak
+    # yerine, tutarlı bir "önceki bilinen durum" satırı taşınır.
+    _onceki_tefas_fiyat = (
+        df_mevcut[df_mevcut["Kategori"] == "TEFAS"]
+        .drop_duplicates(subset=["Ticker"], keep="last")
+        .set_index("Ticker")
+    )
+    _korunan_sayisi = 0
+    for _idx in df_t.index[df_t["Son_Fiyat"].fillna(0) <= 0]:
+        _tkr = df_t.at[_idx, "Ticker"]
+        if _tkr in _onceki_tefas_fiyat.index:
+            _onceki_fiyat = float(_onceki_tefas_fiyat.at[_tkr, "Son_Fiyat"] or 0)
+            if _onceki_fiyat > 0:
+                for _col in df_t.columns:
+                    if _col in _onceki_tefas_fiyat.columns:
+                        df_t.at[_idx, _col] = _onceki_tefas_fiyat.at[_tkr, _col]
+                _korunan_sayisi += 1
+    if _korunan_sayisi:
+        print(f"[tefas-aksam] {_korunan_sayisi} fon bu turda fiyat alamadı - "
+              f"ÖNCEKİ GEÇERLİ FİYATLARI KORUNDU (sıfıra düşürülmedi).")
+
     df_yeni = pd.concat([df_non_tefas, df_t], ignore_index=True, sort=False)
 
     onceki_tefas_sayisi = (df_mevcut["Kategori"] == "TEFAS").sum()

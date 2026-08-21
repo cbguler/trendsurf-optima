@@ -1521,7 +1521,48 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.173 (20 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, ACİL, CANLI TEST EDİLMEDİ] v2.0.7.174 (21 Ağustos 2026,
+  Bahri'nin bulgusu — "Portföyümdeki rakamlar gerçeği yansıtmıyor, HTS
+  güncellendiği halde neden 0?"): KRİTİK VERİ KAYBI HATASI - GEÇERLİ
+  FON FİYATLARI SESSİZCE SIFIRLANIYORDU.**
+  - **Doğrulama:** TEFAS'ın kendi resmi sitesinden HTS'nin gerçek
+    fiyatının 59,042509 TL olduğu teyit edildi (ekran görüntüsüyle).
+    Actions logu incelendi: bu turda pytefas 1348 fonun sadece 1230'u
+    için fiyat getirebilmiş ("1230/1348 fon") - HTS dahil 118 fon
+    BAŞARISIZ kalmış.
+  - **Kesin kök neden:** `update_tefas_evening.py`'de bir "önceki
+    geçerli fiyatı koru" mekanizması HİÇ YOKTU. `load_excel_all()`
+    her fon için taban Son_Fiyat değerini 0.0 olarak başlatıyor,
+    SADECE BEFAS'ın günlük Excel'inde eşleşen fonlara gerçek fiyat
+    atıyor. HTS gibi bazı "Serbest Fon" türleri BEFAS'ın Excel'inde hiç
+    olmayabiliyor. Bu turda pytefas DA HTS için başarısız olunca,
+    Son_Fiyat 0.0 TABAN DEĞERİNDE KALDI - ve script bunu ÖNCEKİ CSV'DEKİ
+    GEÇERLİ FİYATLA (59,04) HİÇ KARŞILAŞTIRMADAN doğrudan üzerine
+    yazdı. Sonuç: gerçek bir fon bir gecede sahte bir "%100 zarar"
+    gösterir hale geldi - portföy verisi GÜVENİLMEZ hale gelmişti.
+  - **Çözüm:** `worker.py`'nin MADEN döngüsündeki "Kademe 3: Son
+    CSV'den tamamla" ile AYNI felsefe eklendi - bu turda fiyat
+    alınamayan (Son_Fiyat<=0) her TEFAS satırı için, önceki CSV'de o
+    ticker için geçerli (>0) bir fiyat varsa, SATIRIN TAMAMI (fiyat +
+    RSI/Ret1M/Vol) AYNEN korunuyor - sadece bugünkü başarısız çekimin
+    üzerine sessizce sıfır yazılmıyor. İzole test edildi: eski geçerli
+    fiyat (HTS senaryosu) korunuyor, YENİ başarılı fiyatlar (MTG
+    senaryosu) hiç etkilenmiyor.
+  - **ACİL - CANLI VERİ HÂLÂ BOZUK, BİR SONRAKİ ÇALIŞMAYA KADAR
+    DÜZELMEYECEK:** Bu düzeltme sadece GELECEKTEKİ çalışmaları
+    etkiler - `optimized_universe.csv`'de HTS'nin fiyatı ŞU AN hâlâ 0
+    yazılı duruyor, kod push edilse bile bir sonraki TEFAS çalışmasına
+    (en geç ~2 saat) kadar kendiliğinden düzelmez. Bahri'ye push
+    sonrası Actions'tan "Run workflow" ile ELLE tetikleyip hemen
+    doğrulaması önerildi.
+  - **AÇIK KALAN - GENİŞ ETKİ İHTİMALİ:** Bu turda pytefas'ın
+    BAŞARISIZ olduğu 118 fonun TAMAMI (sadece HTS değil) bu hatadan
+    aynı şekilde etkilenmiş olabilir - hepsi bu düzeltmeyle otomatik
+    kurtarılacak (önceki geçerli fiyatları varsa), ama Bahri'nin
+    portföyünde HTS dışında başka etkilenen pozisyon olup olmadığı
+    push öncesi/sonrası kontrol edilmeli.
+
+
   sorusu — "gram altın günlerdir artıyor, Optima Skoru neden yükselmiyor?
   Yoksa TEFAS/Bigpara değerlerini okuyamıyor mu?"): KRİTİK BUG - ALTIN/
   GÜMÜŞ İÇİN RSI/RET1M HİÇBİR ZAMAN GERÇEK VERİDEN HESAPLANMIYORDU.**
