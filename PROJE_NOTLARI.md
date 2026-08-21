@@ -1521,7 +1521,61 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.172 (20 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.173 (20 Ağustos 2026, Bahri'nin
+  sorusu — "gram altın günlerdir artıyor, Optima Skoru neden yükselmiyor?
+  Yoksa TEFAS/Bigpara değerlerini okuyamıyor mu?"): KRİTİK BUG - ALTIN/
+  GÜMÜŞ İÇİN RSI/RET1M HİÇBİR ZAMAN GERÇEK VERİDEN HESAPLANMIYORDU.**
+  - **Doğrulama zinciri:** GitHub'dan taze CSV çekildi - `ALTIN_TRY`
+    satırı `RSI=50.0`, `Ret1M=0.0` (ikisi de FLAT VARSAYILAN DEĞER),
+    `_gecmis_veri_yok=True` gösteriyordu - Aug 19 00:50 TRT'den beri
+    (kontrol edilen TÜM commit'lerde, ~1,5 gündür) DEĞİŞMEDEN. Bu,
+    `_MADEN_SENTETIK_CEVRIM_YASAK` listesinde OLMAYAN 9 fiziki
+    sikke/gram türünden (bkz. o zaten bilinen/kararlaştırılmış madde)
+    TAMAMEN AYRI bir sorun - ALTIN_TRY'nin GC=F üzerinden gerçek
+    yfinance geçmişi VAR ve olması gerekirdi.
+  - **Kesin kök neden (worker.py, MADEN döngüsü):** Kademe 2 (yfinance
+    RSI/Ret1M/Vol hesaplama) bloğu `if p == 0.0 or _sentetik_yasak:`
+    şartına bağlıydı - yani Bigpara BAŞARIYLA bir fiyat getirdiğinde
+    (ki her zaman getiriyor, fiyat gerçek ve hareket ediyor: 6692→6955
+    TL) bu blok TAMAMEN ATLANIYORDU. FİYAT KAYNAĞI (Bigpara) İLE TEKNİK
+    GÖSTERGE KAYNAĞI (yfinance) YANLIŞLIKLA TEK BİR KOŞULA
+    BAĞLANMIŞTI - oysa bunlar bağımsız olmalıydı (fiyat gerçek olabilir
+    AMA teknik geçmiş ayrıca çekilmesi gereken farklı bir veri).
+  - **Zincirleme etki:** `_gecmis_veri_var` de hiç `True` olamıyordu
+    (o da bu bloğun içinde set ediliyor) → `_gecmis_veri_yok=True` →
+    Detay sayfasındaki v2.0.7.71/77 kuralı (`if _gecmis_veri_yok==True:
+    disp_score_cat=0.0`) devreye girip **Optima Skor'u SIFIRLIYORDU** -
+    fiyat tamamen gerçek ve güncel olsa bile. Bu turda daha önce (Değerli
+    Madenler RSI mean-reversion tartışmasında) gördüğümüz RSI=75,1/
+    Skor=37,3 değerleri muhtemelen bu bug'ın henüz devreye girmediği/
+    farklı bir kod yolunun (Portföyüm pozisyon detayı, ayrı bir `enrich()`
+    çağrısı) kullanıldığı bir ana aitti - Değerli Madenler KATEGORİ
+    sayfasının kendi Detay paneli, bu bug yüzünden muhtemelen 0,0
+    gösteriyordu.
+  - **Çözüm:** Fiyat ve teknik gösterge kaynakları AYRILDI - Kademe 2
+    artık HER ZAMAN çalışır (yfinance RSI/Ret1M/Vol her zaman denenir),
+    fiyatın (`p`) KENDİSİ ise hâlâ SADECE Bigpara başarısızsa VEYA
+    sentetik çevrim yasaksa (`_sentetik_yasak`) buradan atanır -
+    **Bahri'nin "sentetik fiyat asla gösterilmesin" ilkesi (PLATIN ve 9
+    sikke için) TAMAMEN KORUNUYOR**, sadece RSI/Ret1M artık bu ilkeden
+    BAĞIMSIZ, her zaman gerçek veriden hesaplanıyor.
+  - **İzole test edildi (3 senaryo):** (1) Bigpara+yfinance ikisi de
+    başarılı → fiyat Bigpara'dan KALDI, RSI/Ret1M artık GERÇEK (97,1/
+    4,24 - sabit 50/0 DEĞİL), `_gecmis_veri_var=True`. (2) PLATIN
+    (sentetik yasak), Bigpara başarısız → fiyat 0.0 KALDI (sentetik
+    ASLA atanmadı, Kademe 3'e düşecek) ama RSI yine gerçek hesaplandı.
+    (3) İkisi de başarısız → eski (güvenli) 50/0 varsayılana düşüyor,
+    kayıp yok. Üçü de beklenen sonucu verdi.
+  - **DÖVİZ döngüsü KONTROL EDİLDİ - AYNI BUG YOK, temiz çıktı:** DÖVİZ
+    farklı (doğru) bir yapıda - `_canlidoviz_hesapla()` fiyat VE RSI/
+    Ret1M/Vol'u TEK bir fonksiyonda, aynı gerçek geçmiş seriden BİRLİKTE
+    hesaplıyor (ya hepsi gerçek gelir ya da fonksiyon `None` döner, tek
+    tek "biri geldi diğerini atla" durumu YOK). Sadece EN SON çare
+    (Truncgil, sadece iki üst kademe de başarısız olursa) flat/nötr
+    değer kullanıyor - bu zaten doğru şekilde `_gecmis_veri_var=False`
+    ile işaretleniyor. Bu turda başka bir kod değişikliği GEREKMEDİ.
+
+
   talebi): "Pozisyon Bazlı Getiri Karşılaştırması" grafiği (Portföyüm
   sayfası, ikinci/deneme grafik) Ana Getiri Kıyaslaması'ndaki
   (v2.0.7.169) AYNI iki teknikle netleştirildi - her çizgiye renge ek

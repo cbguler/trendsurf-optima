@@ -1316,48 +1316,63 @@ def build():
             print(f"    [Bigpara] {t}: {p:,.4f} TL (birincil)")
 
         # Kademe 2: yfinance USD fiyatı → TRY dönüşümü
-        # v2.0.4.56: PLATIN icin bu kademe SADECE RSI/Ret1M/Vol
-        # (teknik gösterge) hesaplamak icin kullanilir - Son_Fiyat ASLA
-        # buradan atanmaz (Bahri'nin ilkesi: sentetik USD*kur fiyati asla
-        # goruntulenmez). Bu iki varlik icin Son_Fiyat sadece Kademe 1
-        # (doviz.com, gercek TL) veya Kademe 3'ten (onceki CSV) gelebilir.
         _sentetik_yasak = yf_s in _MADEN_SENTETIK_CEVRIM_YASAK
-        if p == 0.0 or _sentetik_yasak:
-            try:
-                if raw_m.empty:
-                    raise ValueError("bos")
-                if len(maden_syms) == 1:
-                    col = raw_m["Close"].dropna()
+        # v2.0.7.173 (Bahri'nin bulgusu, 20 Ağustos 2026 — "gram altın
+        # günlerdir artıyor ama Optima Skoru değişmiyor"): KÖK NEDEN
+        # BULUNDU - bu blok ESKİDEN `if p == 0.0 or _sentetik_yasak:`
+        # şartına bağlıydı. Yani Bigpara BAŞARILI olduğunda (ki genelde
+        # öyle - Altın/Gümüş fiyatı GERÇEK ve hareket ediyor), bu blok
+        # HİÇ ÇALIŞMIYORDU - fiyat kaynağı (Bigpara) İLE teknik gösterge
+        # kaynağı (yfinance RSI/Ret1M/Vol) YANLIŞLIKLA TEK BİR KOŞULA
+        # bağlanmıştı. Sonuç: ALTIN_TRY/GUMUS_TRY için RSI HER ZAMAN
+        # 50.0 (nötr varsayılan), Ret1M HER ZAMAN 0.0 (düz varsayılan)
+        # SABİT KALIYORDU - gerçek piyasa hareketi (ör. güncel aşırı alım
+        # durumu) ASLA yansımıyordu, `_gecmis_veri_var` da hiç True
+        # olmadığı için Detay sayfasındaki "_gecmis_veri_yok==True ise
+        # skoru 0 yap" kuralı (v2.0.7.71/77) devreye girip Optima Skor'u
+        # SIFIRLIYORDU - fiyat gerçek olsa bile.
+        # ÇÖZÜM: fiyat VE teknik gösterge kaynakları AYRILDI - bu blok
+        # ARTIK HER ZAMAN çalışır (RSI/Ret1M/Vol için yfinance HER ZAMAN
+        # denenir), fiyatın (`p`) KENDİSİ ise hâlâ SADECE Bigpara
+        # başarısızsa VEYA sentetik çevrim yasaksa buradan atanır (aşağıda
+        # değişmedi) - Bahri'nin "sentetik fiyat asla gösterilmesin"
+        # ilkesi KORUNUYOR, sadece RSI/Ret1M artık bu ilkeden BAĞIMSIZ
+        # hesaplanıyor.
+        try:
+            if raw_m.empty:
+                raise ValueError("bos")
+            if len(maden_syms) == 1:
+                col = raw_m["Close"].dropna()
+            else:
+                col = raw_m[yf_s]["Close"].dropna() if yf_s in raw_m.columns.get_level_values(0) else pd.Series()
+            if hasattr(col, "squeeze"):
+                col = col.squeeze()
+            if col.empty or len(col) < 2:
+                raise ValueError("yetersiz")
+            p_usd = round(float(col.iloc[-1]), 4)
+            rsi   = calc_rsi(col)
+            ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
+            rets_m = col.pct_change().dropna()
+            vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
+            _gecmis_veri_var = True
+            # USD → TRY dönüşümü + ons → gram (gerekiyorsa) - SADECE
+            # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
+            # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
+            # icin normalde girmez, ama yedek olarak burada kalir).
+            if p == 0.0 and not _sentetik_yasak:
+                if yf_s in ONS_TO_GRAM:
+                    p = round(p_usd * usdtry_rate / 31.1035, 4)
                 else:
-                    col = raw_m[yf_s]["Close"].dropna() if yf_s in raw_m.columns.get_level_values(0) else pd.Series()
-                if hasattr(col, "squeeze"):
-                    col = col.squeeze()
-                if col.empty or len(col) < 2:
-                    raise ValueError("yetersiz")
-                p_usd = round(float(col.iloc[-1]), 4)
-                rsi   = calc_rsi(col)
-                ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
-                rets_m = col.pct_change().dropna()
-                vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
-                _gecmis_veri_var = True
-                # USD → TRY dönüşümü + ons → gram (gerekiyorsa) - SADECE
-                # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
-                # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
-                # icin normalde girmez, ama yedek olarak burada kalir).
-                if p == 0.0 and not _sentetik_yasak:
+                    p = round(p_usd * usdtry_rate, 4)
+        except Exception:
+            if not _sentetik_yasak:
+                p2, rsi, ret, vol_v = single_full(yf_s, t)
+                if p2 > 0:
+                    _gecmis_veri_var = True
                     if yf_s in ONS_TO_GRAM:
-                        p = round(p_usd * usdtry_rate / 31.1035, 4)
+                        p = round(p2 * usdtry_rate / 31.1035, 4)
                     else:
-                        p = round(p_usd * usdtry_rate, 4)
-            except Exception:
-                if not _sentetik_yasak:
-                    p2, rsi, ret, vol_v = single_full(yf_s, t)
-                    if p2 > 0:
-                        _gecmis_veri_var = True
-                        if yf_s in ONS_TO_GRAM:
-                            p = round(p2 * usdtry_rate / 31.1035, 4)
-                        else:
-                            p = round(p2 * usdtry_rate, 4)
+                        p = round(p2 * usdtry_rate, 4)
 
         # Kademe 3: Son CSV'den tamamla
         if p == 0.0 and os.path.exists(CSV_PATH):
