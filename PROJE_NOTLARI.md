@@ -1521,7 +1521,31 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.179 (21 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.180 (22 Ağustos 2026, Bahri'nin
+  talebi — "başka kaynak bulamıyor muyuz?"): DÜNYA GAZETESİ ALTINCI
+  HABER KAYNAĞI OLARAK EKLENDİ.**
+  - **Araştırma süreci:** Birden fazla aday test edildi (Reuters resmi
+    RSS'i artık genel kullanıma kapalı/üçüncü taraf üretici gerektiriyor,
+    Yahoo Finance'ın genel/tüm-piyasa RSS'i net değil - ticker-özel
+    formatlar bulundu ama genel akış yok, Hürriyet Ekonomi RSS'i CANLI
+    TEST EDİLDİ ve 2021 tarihli eskimiş SEO içeriği ("proforma fatura
+    nedir" gibi) döndürdüğü görüldü - GERÇEK ZAMANLI DEĞİL, EKLENMEDİ,
+    Investing.com TR'nin market_overview/commodities RSS'leri CANLI TEST
+    EDİLDİ ama günlük/haftalık köşe yazısı temposu, gerçek zamanlı haber
+    akışı değil - önerilmedi).
+  - **Dünya Gazetesi CANLI TEST EDİLDİ** (22 Ağustos 14:31 TRT) - gerçekten
+    güncel, akan bir haber kaynağı, Türkiye'nin köklü finans
+    gazetelerinden biri. BBC/Al Jazeera gibi GENEL bir akış (ekonomi
+    dışı içerik de var - spor, sınav haberleri) ama gerçek ekonomi
+    haberleri de içeriyor (test sırasında "ABD'nin 40 trilyon dolarlık
+    borcu Avrupa'yı vurdu" gibi doğrudan "fed" kalıbına girebilecek bir
+    haber görüldü).
+  - **Uygulama:** `_RSS_KAYNAKLARI`'na eklendi. Zaten Türkçe olduğu için
+    `_INGILIZCE_KAYNAKLAR` setine EKLENMEDİ (çeviri gerekmiyor - AA
+    Ekonomi/Investing.com TR/BloombergHT ile aynı kategori). Haberler
+    sayfasındaki kaynak listesi metni güncellendi.
+
+
   talebi — "başlıkları çevirebiliyorsak haberin tümünü de çevirebiliriz
   değil mi?"): KISA RSS ÖZETİ DE ÇEVRİLİYOR - TAM METİN BİLEREK
   EKLENMEDİ (telif riski).**

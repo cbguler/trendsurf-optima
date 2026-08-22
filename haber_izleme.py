@@ -57,6 +57,14 @@ _RSS_KAYNAKLARI = [
     ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
     ("Investing.com TR", "https://tr.investing.com/rss/news_25.rss"),
     ("BloombergHT", "https://www.bloomberght.com/rss"),
+    # v2.0.7.180 (Bahri'nin talebi, 22 Ağustos 2026 — "başka kaynak
+    # bulamıyor muyuz?"): Dünya Gazetesi eklendi. Canlı test edildi
+    # (22 Ağustos 14:31 TRT) - genel bir akış (BBC/Al Jazeera gibi,
+    # ekonomi dışı içerik de var) ama Türkiye'nin köklü finans
+    # gazetelerinden biri, gerçek ekonomi haberleri içeriyor. Zaten
+    # Türkçe - _INGILIZCE_KAYNAKLAR setine EKLENMEDİ (çeviri gerekmiyor,
+    # AA Ekonomi/Investing.com TR/BloombergHT ile aynı kategori).
+    ("Dünya Gazetesi", "https://www.dunya.com/rss"),
 ]
 
 # ══════════════════════════════════════════════════════════════

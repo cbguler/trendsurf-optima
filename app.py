@@ -6472,10 +6472,10 @@ elif page=="Haberler":
         st.divider()
         st.caption(
             "Kaynaklar: AA Ekonomi, BBC World, Al Jazeera, Investing.com TR, "
-            "BloombergHT. BBC ve Al Jazeera başlıkları Türkçeye çevrilir; "
-            "diğer üç kaynak zaten Türkçe yayın yapar. Çeviri günlük bir AI "
-            "bütçesine tabidir — bütçe dolarsa başlık orijinal dilinde kalır, "
-            "haber izleme durmaz. Akış 7 gün saklanır."
+            "BloombergHT, Dünya Gazetesi. BBC ve Al Jazeera başlıkları "
+            "Türkçeye çevrilir; diğer dört kaynak zaten Türkçe yayın yapar. "
+            "Çeviri günlük bir AI bütçesine tabidir — bütçe dolarsa başlık "
+            "orijinal dilinde kalır, haber izleme durmaz. Akış 7 gün saklanır."
         )
 
 elif page=="Yardım":
