@@ -65,6 +65,22 @@ _RSS_KAYNAKLARI = [
     # Türkçe - _INGILIZCE_KAYNAKLAR setine EKLENMEDİ (çeviri gerekmiyor,
     # AA Ekonomi/Investing.com TR/BloombergHT ile aynı kategori).
     ("Dünya Gazetesi", "https://www.dunya.com/rss"),
+    # v2.0.7.181 (Bahri'nin talebi, 22 Ağustos 2026 — "Anka Haber Ajansı,
+    # T24, Euronews, Sözcü, Halk TV, Reuters, Xinhua, AFP - hangilerini
+    # dahil edebiliriz"): 8 aday tek tek canlı test edildi. Kullanılamayan
+    # 5'i (Anka - herkese açık RSS yok/şifreli abonelik, T24 - eski RSS
+    # adresleri 404, Reuters - resmi RSS yıllar önce kapatıldı, Xinhua -
+    # RSS'i 2017'den beri donmuş, AFP - sadece kurumsal/basın bülteni
+    # RSS'i var, haber içeriği yok) eklenmedi. Çalışan 3'ü Bahri'nin
+    # onayıyla eklendi:
+    ("Sözcü Ekonomi", "https://www.sozcu.com.tr/feeds-rss-category-ekonomi"),
+    ("Euronews Türkçe", "https://tr.euronews.com/rss"),
+    # Halk TV: teknik olarak çalışıyor ama akışın büyük kısmı magazin/
+    # asayiş/spor - ekonomi içerik oranı düşük, ayrıca CHP'ye tarihsel
+    # bağı olan muhalif çizgide bir yayın organı (Bahri'ye bu şekilde
+    # bildirildi, kararı onun). Anahtar kelime filtresi zaten alakasız
+    # içeriği eleyecek.
+    ("Halk TV", "https://www.halktv.com.tr/service/rss.php"),
 ]
 
 # ══════════════════════════════════════════════════════════════

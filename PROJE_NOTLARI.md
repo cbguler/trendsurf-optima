@@ -1521,7 +1521,46 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.180 (22 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.181 (22 Ağustos 2026, Bahri'nin
+  talebi — "Anka Haber Ajansı, T24, Euronews, Sözcü, Halk TV, Reuters,
+  Xinhua, AFP - hangilerini sisteme dahil edebiliriz"): 8 ADAY CANLI
+  TEST EDİLDİ, 3'Ü EKLENDİ.**
+  - **Eklenen 3 kaynak (Bahri'nin onayıyla):**
+    - **Sözcü Ekonomi** (`sozcu.com.tr/feeds-rss-category-ekonomi`) -
+      GENEL akış değil, DOĞRUDAN EKONOMİYE ÖZEL besleme. Canlı test
+      edildi (22 Ağustos), yüksek yoğunlukta doğrudan kalıplara giren
+      içerik gözlendi ("Fed Başkanı ve Hazine Bakanı karşı karşıya",
+      "Merkez Bankası'ndan yastık altı altın kararı", "Bitcoin 3 günde
+      %20 yükseldi", "JPMorgan'dan Merkez Bankası analizi: Faiz
+      indirimi için tarih belli oldu").
+    - **Euronews Türkçe** (`tr.euronews.com/rss`) - canlı, güncel,
+      zaten Türkçe, gerçek jeopolitik/makro içerik (ABD-Kanada gümrük
+      anlaşmazlığı, ABD borç krizi, Fed/ECB ilişkili haberler).
+    - **Halk TV** (`halktv.com.tr/service/rss.php`) - teknik olarak
+      çalışıyor, canlı, ama **Bahri'ye açıkça bildirildi**: akışın
+      büyük kısmı magazin/asayiş/spor, ekonomi içerik oranı düşük;
+      CHP'ye tarihsel bağı olan muhalif çizgide bir yayın organı
+      (evenhandedness gereği bu bilgi saklanmadı, Bahri bilerek
+      onayladı).
+  - **Eklenmeyen 5 aday (gerekçeli, canlı test/araştırmayla
+    doğrulandı):**
+    - Anka Haber Ajansı: herkese açık bir RSS'i yok, sadece şifreli/
+      abonelik gerektiren bir servis sunuyor.
+    - T24: eski RSS adresi (`t24.com.tr/rss/haberler`) 404 dönüyor -
+      site yenilenmiş, güncel bir RSS adresi bulunamadı.
+    - Reuters: resmi RSS'i yıllar önce tamamen kapatılmış (geliştirici
+      blog yazısıyla doğrulandı - "Reuters silently killed its RSS
+      feed").
+    - Xinhua: RSS besleme sayfası hâlâ var ama CANLI TEST EDİLDİ - son
+      haber 2017 tarihli, 9 yıldır güncellenmemiş, tamamen donmuş.
+    - AFP: halka açık bir haber RSS'i yok - sadece AFP'nin kendi
+      kurumsal duyurularını (MediaGen lansmanı, fotoğraf festivalleri
+      vb.) yayınlayan ayrı bir RSS'i var, gerçek haber içeriği değil.
+  - **Uygulama:** Üçü de `_RSS_KAYNAKLARI`'na eklendi. Üçü de Türkçe
+    olduğu için `_INGILIZCE_KAYNAKLAR` setine EKLENMEDİ. Haberler
+    sayfasındaki kaynak listesi metni güncellendi (artık 9 kaynak).
+
+
   talebi — "başka kaynak bulamıyor muyuz?"): DÜNYA GAZETESİ ALTINCI
   HABER KAYNAĞI OLARAK EKLENDİ.**
   - **Araştırma süreci:** Birden fazla aday test edildi (Reuters resmi
