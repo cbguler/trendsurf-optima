@@ -1521,7 +1521,34 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, GERÇEK API İLE KANITLANDI] v2.0.7.188 (25 Ağustos 2026,
+- **[UYGULANDI, RESMİ BELGEYLE DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.189
+  (25 Ağustos 2026, Bahri'nin log paylaşımı — Actions çalışması #266):
+  GROQ MODELİ KULLANIMDAN KALDIRILMIŞ - 404 HATASI BUNDAN.**
+  - **İYİ HABER ÖNCE:** Log, Gemini→Groq geçiş mimarisinin (v2.0.7.185/
+    187) ARTIK DOĞRU ÇALIŞTIĞINI kanıtladı - "Gemini AI dogrulama
+    hatasi: 429" hemen ardından "Groq AI dogrulama hatasi: 404" ve
+    "Groq ile ceviri deneniyor" satırları görüldü. Fallback zinciri
+    tam istendiği gibi çalışıyor - sadece Groq'un KENDİSİ 404 veriyordu.
+  - **Kesin kök neden (Groq'un resmi dokümantasyonuyla doğrulandı):**
+    Groq, `llama-3.3-70b-versatile` modelini 17 Haziran 2026'da
+    kullanımdan kaldırmayı duyurmuş ve **16 Ağustos 2026'da TAMAMEN
+    KAPATMIŞ** (bugünden 9 gün önce). Groq'un kendi hata dokümantasyonu
+    da doğruluyor: Groq, model bulunamadığında (OpenAI'nin 400
+    konvansiyonunun aksine) özellikle 404 döndürüyor - "The model
+    `X` does not exist or you do not have access to it."
+  - **Çözüm:** Groq'un kendi önerdiği resmi migrasyon hedefi
+    `openai/gpt-oss-120b`'ye geçildi (iki yerde: `_groq_ai_dogrula` ve
+    `_groq_ceviri`). `response_format: json_object` desteğinin bu
+    modelde de çalıştığı varsayılıyor (standart bir OpenAI-uyumlu
+    özellik) ama GERÇEK bir API anahtarıyla CANLI TEST EDİLMEDİ -
+    bir sonraki çalıştırmada doğrulanmalı.
+  - **Ders:** Groq gibi hızlı gelişen/model kataloğunu sık değiştiren
+    sağlayıcılarda, kod içine gömülen model adları zamanla
+    geçersizleşebilir - bu tür entegrasyonlarda periyodik olarak
+    sağlayıcının "deprecations" sayfasının kontrol edilmesi faydalı
+    olur.
+
+
   Bahri'nin bulgusu — "TEFAS'ın kendi sitesinde bu fonların değerleri
   var, ama bizde hâlâ 0"): GERÇEK KÖK NEDEN BULUNDU - pytefas'IN KENDİSİ
   ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.**

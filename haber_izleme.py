@@ -292,12 +292,14 @@ def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
     metod yok mu"): Gemini kotası güvenilmez çıktığı için (bkz.
     PROJE_NOTLARI.md - defalarca 429, gerçek kota rakamı hiç netleşmedi,
     Bahri faturalandırmayı reddetti) GERÇEK, kart GEREKTİRMEYEN bir
-    ikinci ücretsiz katman: Groq (console.groq.com). OpenAI-uyumlu API,
-    llama-3.3-70b-versatile modeli - birden fazla bağımsız kaynakta
-    "kart istemiyor, cömert, güvenilir" diye doğrulandı (Ağustos 2026
-    araştırması). Groq'un `response_format: json_object` desteği
-    SAYESİNDE Gemini'deki gibi ```json` temizleme triklerine gerek
-    YOK - model DOĞRUDAN geçerli JSON döndürüyor.
+    ikinci ücretsiz katman: Groq (console.groq.com). OpenAI-uyumlu API.
+    v2.0.7.189 (Bahri'nin canlı log bulgusu): Model "llama-3.3-70b-
+    versatile" idi ama Groq bu modeli 17 Haziran 2026'da kullanımdan
+    kaldırmayı duyurmuş ve 16 Ağustos 2026'da TAMAMEN KAPATMIŞ - bu
+    yüzden "404 model not found" alıyorduk. Groq'un kendi önerdiği
+    "openai/gpt-oss-120b"ye geçildi. Groq'un `response_format:
+    json_object` desteği SAYESİNDE Gemini'deki gibi ```json` temizleme
+    triklerine gerek YOK - model DOĞRUDAN geçerli JSON döndürüyor.
 
     AYNI prompt, AYNI dönüş formatı (eşleşme/şiddet/gerekçe) - çağıran
     taraf hangi sağlayıcının cevap verdiğini bilmesine gerek duymuyor."""
@@ -312,7 +314,7 @@ def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
             headers={"Authorization": f"Bearer {api_key}",
                      "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": "openai/gpt-oss-120b",
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
@@ -520,7 +522,7 @@ KURALLAR:
             headers={"Authorization": f"Bearer {api_key}",
                      "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": "openai/gpt-oss-120b",
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
