@@ -78,3 +78,7 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # v2.0.7.183 (25 Agustos 2026): Groq ucretsiz yedek AI dogrulama
+          # icin - Bahri console.groq.com'da hesap acip bu secret'i
+          # eklemeli (Settings > Secrets and variables > Actions).
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

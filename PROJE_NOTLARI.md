@@ -1521,19 +1521,86 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, TEST TETİKLEMESİ BAŞARILI] v2.0.7.182 (25 Ağustos 2026):
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.183 (25 Ağustos 2026, Bahri'nin
+  talebi — "vazgeçtim, ücretsiz başka metod yok mu"): AI DOĞRULAMA İÇİN
+  GROQ İKİNCİ (ÜCRETSİZ) SAĞLAYICI OLARAK EKLENDİ.**
+  - **Araştırma:** Birden fazla bağımsız kaynak (Ağustos 2026) tarandı -
+    kart istemeyen, gerçekten ücretsiz LLM API sağlayıcıları arasında
+    Groq en tutarlı şekilde "cömert, güvenilir" olarak öne çıktı
+    (günlük limit tahminleri kaynağa göre 1.000-14.400 arası değişse de
+    hepsi bizim ihtiyacımızın kat kat üzerinde). GitHub Models
+    değerlendirildi ama bazı modellerin yakın zamanda kaldırıldığına
+    dair işaretler bulundu - otomatik/gözetimsiz bir arka plan işi
+    için daha az güvenli bulundu, seçilmedi.
+  - **Mimari:** Çeviri katmanındaki (v2.0.7.176) İKİ KATMANLI mimariyle
+    AYNI felsefe - `_ai_dogrula` artık ÖNCE Gemini'yi dener
+    (`_gemini_ai_dogrula`), o başarısız/yapılandırılmamışsa Groq'a
+    düşer (`_groq_ai_dogrula`), o da yoksa GÜVENLİ TARAF (eşleşme=False,
+    haber reddedilir - asla varsayılan olarak kabul edilmez). Prompt
+    metni `_ai_dogrula_prompt_olustur` ortak fonksiyonuna çıkarıldı -
+    iki sağlayıcı TAM AYNI prompt'u kullanıyor, elle senkron tutma
+    riski yok.
+  - **Groq'un avantajı:** OpenAI-uyumlu `response_format:json_object`
+    desteği sayesinde Gemini'deki gibi ```json` temizleme triklerine
+    gerek yok - model doğrudan geçerli JSON döndürüyor.
+  - **Test edildi (izole, gerçek network çağrısı OLMADAN):** (1)
+    Groq'un JSON yanıt formatı sahte veriyle ayrıştırıldı - doğru
+    çalıştı. (2) Geçersiz JSON durumunda exception'a düşüp güvenli
+    şekilde reddettiği doğrulandı. (3) Anahtar yokluğu senaryoları -
+    hiçbir anahtar yoksa güvenli red, Gemini anahtarı yokken
+    `_gemini_ai_dogrula`'nın `None` (Groq'a geçişe izin veren özel
+    değer) döndürdüğü doğrulandı.
+  - **AÇIK - BAHRİ'NİN YAPMASI GEREKEN ADIMLAR (kod dışı):**
+    (1) console.groq.com'da ücretsiz hesap aç (kart istemiyor),
+    (2) API anahtarı oluştur, (3) GitHub'da Settings > Secrets and
+    variables > Actions'a `GROQ_API_KEY` adıyla ekle. Bu adımlar
+    ATILMADAN Groq devreye girmez (sessizce `None` döner, sistem
+    eskisi gibi sadece Gemini'yi dener).
+  - **GERÇEK API ÇAĞRISI HENÜZ TEST EDİLMEDİ** - Groq'un tam URL/model
+    adı/response_format davranışı dokümantasyona dayanıyor, canlı bir
+    anahtarla ilk çalıştırmada doğrulanmalı.
+
+
+  belirsizliği (25 Ağustos 2026):** Google AI Studio'nun Rate Limit
+  sayfası incelendi - "Tier 1" etiketi altında görünen rakamlar (RPD
+  163/10.000, RPM 5/1.000, TPM 2,55K/1M - hepsi limitin çok altında)
+  GERÇEK UYGULANAN limitle ÇELİŞİYOR (sürekli 429 alınıyor, bkz.
+  v2.0.7.164/176/178 logları). Kesinleşen açıklama: hesapta
+  faturalandırma ("Set up prepay") HENÜZ AKTİVE EDİLMEMİŞ - panel
+  muhtemelen "faturalandırma aktive edilirse bu limitler geçerli
+  olur" şeklinde iyimser bir önizleme gösteriyor, arka planda hâlâ
+  çok daha kısıtlı bir ücretsiz katman uygulanıyor olabilir.
+  **Bahri'ye ödeme yöntemi eklemesi önerildi (bu tamamen finansal bir
+  karar, tavsiye verilmedi) - Bahri AÇIKÇA REDDETTİ ("hayır, şimdilik
+  eklemek istemiyorum").** Bu kabul edilebilir bir karar - küçük bir
+  arka plan script'i için kart bilgisi paylaşmaya değmez.
+  **SONUÇ: `_GUNLUK_AI_BUTCESI=120` DEĞİŞTİRİLMEDİ** - gerçek limit
+  hâlâ bilinmiyor, artırmak bilinmeyen bir sınıra göre kumar olurdu,
+  azaltmanın faydası yok çünkü sistem zaten 429'a karşı dayanıklı
+  (retry-with-backoff v2.0.7.164, Gemini'den tamamen bağımsız ücretsiz
+  çeviri yedeği v2.0.7.176). **Bu madde artık AÇIK DEĞİL - gelecekte
+  tekrar gündeme getirilmemeli, Bahri karar verdi.**
+
+
   HABER İZLEME ARTIK GÜVENİLİR ŞEKİLDE ÇALIŞIYOR - cron-job.org
   KURULUMU DOĞRULANDI.**
   - Bahri, mevcut "TrendSurf Mail" (send_email.yml için zaten çalışan)
     cron-job.org işini çoğaltarak "TrendSurf Haber Izleme" işini kurdu.
     Test tetiklemesi **"204 No Content"** ile başarılı oldu - GitHub'ın
     dispatches endpoint'i doğru şekilde tetiklendi.
-  - **ÖNEMLİ HATIRLATMA (yanıt başlığından yakalandı):** kullanılan
-    fine-grained PAT'ın geçerlilik süresi **6 Ekim 2026**'da doluyor -
-    o tarihten önce yenilenmesi gerekiyor, yoksa hem bu hem de
-    send_email.yml'in tetiklemesi (aynı PAT kullanıyor olabilir)
-    sessizce 401 hatasıyla başarısız olmaya başlar. **Bahri'ye Ekim
-    başında hatırlatılmalı.**
+  - **[ÇÖZÜLDÜ - 25 Ağustos 2026] Süresiz token'a geçildi:** İlk kurulumda
+    kullanılan fine-grained PAT'ın 6 Ekim 2026'da dolacak bir geçerlilik
+    süresi vardı. Araştırıldı - GitHub, fine-grained PAT'lar için de
+    (2024 sonundan beri) "No expiration" seçeneği sunuyor (tek şart:
+    token en az yılda bir kullanılmalı, aksi halde otomatik silinir -
+    cron işleri günde defalarca kullandığı için bu risk yok). Bahri
+    "cron-job-tetikleyici" adıyla YENİ, süresiz, sadece trendsurf-optima
+    reposuna ve sadece Actions:Read-and-write iznine sahip bir token
+    oluşturdu ve **ÜÇ cron işinin de** (TrendSurf Mail, TrendSurf Haber
+    Izleme, firsat_radari.yml) Authorization başlığını bu yeni token'la
+    güncelledi - üçü de test edildi, üçü de "204 No Content" ile
+    başarılı, üçü de aktif/yeşil durumda. Eski (Ekim'de dolacak olan)
+    token artık kullanılmıyor. **Bir daha hatırlatma gerekmiyor.**
   - **Kod değişikliği:** `haber_izleme.yml`'deki GitHub'ın kendi
     güvenilmez `schedule` tetikleyicisi (`*/10 * * * *`, "best-effort"
     çalışıyordu - bazen 25-40 dk aralıklarla) TAMAMEN KALDIRILDI.

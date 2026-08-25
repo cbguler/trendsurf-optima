@@ -211,37 +211,16 @@ def _gemini_istek_gonder(url, headers, payload, timeout=30, deneme=2, bekleme_sn
             raise
 
 
-def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
-    """v2.0.7.155 (Bahri'nin talebi, 18 Ağustos 2026 — "ücretli ise
-    kurmayacağım, ücretsiz alternatif bulalım"): Anthropic API yerine
-    Google Gemini API kullanıyor - Gemini'nin gerçek, kredi kartı
-    GEREKTİRMEYEN bir ücretsiz katmanı var.
-
-    v2.0.7.160 DÜZELTMESİ: Buradaki eski "günde 250-500 istek" ifadesi
-    DOĞRULANMAMIŞ bir iddiaydı, kaldırıldı. 19 Ağustos 2026'da yapılan
-    araştırmada üçüncü taraf kaynaklar gemini-2.5-flash için günlük
-    20 / 50 / 250 / 500 / 1500 gibi BİRBİRİYLE ÇELİŞEN rakamlar verdi
-    ve Aralık 2025'te limitin bir kez düşürüldüğü bildirildi. Gerçek
-    limit bilinmiyor - bu yüzden kod artık kotanın cömert olduğunu
-    VARSAYMIYOR, _GUNLUK_AI_BUTCESI ile kendi sayacını tutuyor.
-
-    Haberin GERÇEKTEN o kalıbı anlatıp anlatmadığını ve şiddetini
-    doğrular. (eşleşme:bool, şiddet:str, gerekçe:str) döner. Hata
-    durumunda (eşleşme=False, ...) - yani BAŞARISIZ doğrulama OTOMATİK
-    OLARAK REDDEDİLİR (güvenli taraf), asla varsayılan olarak kabul
-    edilmez."""
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        print("[haber_izleme] GEMINI_API_KEY tanimli degil, AI dogrulama atlaniyor.")
-        return False, None, "API anahtari yok"
-    try:
-        import requests
-        kalip_aciklama = _KALIP_ISIM.get(kalip_key, kalip_key)
-        _yon_haritasi = _KALIP_KATEGORI_YONU.get(kalip_key, {})
-        _kategori_aciklama = "; ".join(
-            f"{_KATEGORI_ISIM_TR.get(k, k)} kategorisi {v}"
-            for k, v in _yon_haritasi.items())
-        prompt = f"""Bir finansal haber izleme sistemisin. Aşağıdaki haberin
+def _ai_dogrula_prompt_olustur(kalip_key, baslik, ozet, kaynak):
+    """v2.0.7.183: Gemini VE Groq'un AYNI prompt'u kullanması icin ortak
+    fonksiyona cikarildi - iki saglayici arasinda tutarlilik saglar,
+    ayni metni iki yerde elle senkron tutma riskini ortadan kaldirir."""
+    kalip_aciklama = _KALIP_ISIM.get(kalip_key, kalip_key)
+    _yon_haritasi = _KALIP_KATEGORI_YONU.get(kalip_key, {})
+    _kategori_aciklama = "; ".join(
+        f"{_KATEGORI_ISIM_TR.get(k, k)} kategorisi {v}"
+        for k, v in _yon_haritasi.items())
+    return f"""Bir finansal haber izleme sistemisin. Aşağıdaki haberin
 GERÇEKTEN "{kalip_aciklama}" kategorisine ait, PİYASALARI ETKİLEYECEK
 ÖNEMLİ bir olayı anlatıp anlatmadığını değerlendir.
 
@@ -266,6 +245,19 @@ sadece "artış/azalış" yönünü belirt.
 
 SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
 {{"eslesme": true/false, "siddet": "Düşük"/"Orta"/"Yüksek", "gerekce": "yukarıdaki kalıpta doğal cümle (max 400 karakter)"}}"""
+
+
+def _gemini_ai_dogrula(kalip_key, baslik, ozet, kaynak):
+    """v2.0.7.155/160: Google Gemini API ile dogrulama (bkz. asagidaki
+    _ai_dogrula'nin genel aciklamasi). v2.0.7.183'te bu fonksiyon
+    _ai_dogrula'dan bu isimle ayrildi - artik SADECE Gemini'yi dener,
+    yedeklemeyi cagiran taraf (_ai_dogrula) yapiyor."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return None  # None = "bu saglayici hic denenmedi", False DEGIL
+    try:
+        import requests
+        prompt = _ai_dogrula_prompt_olustur(kalip_key, baslik, ozet, kaynak)
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
         resp = _gemini_istek_gonder(
@@ -282,8 +274,93 @@ SADECE şu JSON formatında cevap ver, başka hiçbir metin ekleme:
                 veri.get("siddet", "Orta"),
                 str(veri.get("gerekce", ""))[:400])
     except Exception as e:
-        print(f"[haber_izleme] AI dogrulama hatasi: {type(e).__name__}: {e}")
-        return False, None, f"AI hatasi: {e}"
+        print(f"[haber_izleme] Gemini AI dogrulama hatasi: {type(e).__name__}: {e}")
+        return False, None, f"Gemini hatasi: {e}"
+
+
+def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
+    """v2.0.7.183 (Bahri'nin talebi, 25 Ağustos 2026 — "ücretsiz başka
+    metod yok mu"): Gemini kotası güvenilmez çıktığı için (bkz.
+    PROJE_NOTLARI.md - defalarca 429, gerçek kota rakamı hiç netleşmedi,
+    Bahri faturalandırmayı reddetti) GERÇEK, kart GEREKTİRMEYEN bir
+    ikinci ücretsiz katman: Groq (console.groq.com). OpenAI-uyumlu API,
+    llama-3.3-70b-versatile modeli - birden fazla bağımsız kaynakta
+    "kart istemiyor, cömert, güvenilir" diye doğrulandı (Ağustos 2026
+    araştırması). Groq'un `response_format: json_object` desteği
+    SAYESİNDE Gemini'deki gibi ```json` temizleme triklerine gerek
+    YOK - model DOĞRUDAN geçerli JSON döndürüyor.
+
+    AYNI prompt, AYNI dönüş formatı (eşleşme/şiddet/gerekçe) - çağıran
+    taraf hangi sağlayıcının cevap verdiğini bilmesine gerek duymuyor."""
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        return None  # None = "bu saglayici hic denenmedi"
+    try:
+        import requests
+        prompt = _ai_dogrula_prompt_olustur(kalip_key, baslik, ozet, kaynak)
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        metin = resp.json()["choices"][0]["message"]["content"].strip()
+        veri = json.loads(metin)
+        return (bool(veri.get("eslesme", False)),
+                veri.get("siddet", "Orta"),
+                str(veri.get("gerekce", ""))[:400])
+    except Exception as e:
+        print(f"[haber_izleme] Groq AI dogrulama hatasi: {type(e).__name__}: {e}")
+        return False, None, f"Groq hatasi: {e}"
+
+
+def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
+    """v2.0.7.155 (Bahri'nin talebi, 18 Ağustos 2026 — "ücretli ise
+    kurmayacağım, ücretsiz alternatif bulalım"): Anthropic API yerine
+    Google Gemini API kullanıyor - Gemini'nin gerçek, kredi kartı
+    GEREKTİRMEYEN bir ücretsiz katmanı var.
+
+    v2.0.7.160 DÜZELTMESİ: Buradaki eski "günde 250-500 istek" ifadesi
+    DOĞRULANMAMIŞ bir iddiaydı, kaldırıldı. 19 Ağustos 2026'da yapılan
+    araştırmada üçüncü taraf kaynaklar gemini-2.5-flash için günlük
+    20 / 50 / 250 / 500 / 1500 gibi BİRBİRİYLE ÇELİŞEN rakamlar verdi
+    ve Aralık 2025'te limitin bir kez düşürüldüğü bildirildi. Gerçek
+    limit bilinmiyor - bu yüzden kod artık kotanın cömert olduğunu
+    VARSAYMIYOR, _GUNLUK_AI_BUTCESI ile kendi sayacını tutuyor.
+
+    v2.0.7.183 (Bahri'nin talebi - "ücretsiz başka metod yok mu"):
+    Google AI Studio'nun Rate Limit sayfası incelendi - "Tier 1"
+    etiketi altında görünen cömert rakamlar (RPD 163/10.000 vb.)
+    GERÇEK UYGULANAN limitle ÇELİŞİYORDU çünkü faturalandırma
+    ("Set up prepay") aktive edilmemişti. Bahri kart eklemeyi
+    AÇIKÇA REDDETTİ (finansal karar, saygı duyuldu). ÇÖZÜM: Gemini
+    ARTIK TEK BAŞINA DEĞİL - ÖNCE Gemini denenir, BAŞARISIZ olursa
+    (kota/hata/anahtar eksik) Groq'a (ikinci, tamamen ücretsiz,
+    kart istemeyen bir sağlayıcı) düşülür. Çeviri katmanındaki
+    (v2.0.7.176) İKİ KATMANLI mimariyle AYNI felsefe.
+
+    Haberin GERÇEKTEN o kalıbı anlatıp anlatmadığını ve şiddetini
+    doğrular. (eşleşme:bool, şiddet:str, gerekçe:str) döner. Hata
+    durumunda (eşleşme=False, ...) - yani BAŞARISIZ doğrulama OTOMATİK
+    OLARAK REDDEDİLİR (güvenli taraf), asla varsayılan olarak kabul
+    edilmez."""
+    sonuc = _gemini_ai_dogrula(kalip_key, baslik, ozet, kaynak)
+    if sonuc is not None:
+        return sonuc
+    sonuc = _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak)
+    if sonuc is not None:
+        return sonuc
+    print("[haber_izleme] AI dogrulama ATLANDI - ne GEMINI_API_KEY ne "
+          "GROQ_API_KEY tanimli. Bu haber icin varsayilan olarak REDDEDILDI "
+          "(guvenli taraf).")
+    return False, None, "Hicbir AI saglayicisi yapilandirilmamis"
 
 
 # ══════════════════════════════════════════════════════════════
