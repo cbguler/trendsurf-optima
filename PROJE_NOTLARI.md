@@ -1521,7 +1521,44 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.184 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.185 (25 Ağustos 2026, Bahri'nin
+  ikinci canlı log paylaşımı — Actions çalışması #264): KRİTİK BUG -
+  GROQ HİÇ DENENMİYORDU, KENDİ v2.0.7.183 EKLEMEM HATALIYDI.**
+  - **Log'daki kesin kanıt:** "petrol" kalıbı bir habere eşleşti, ama
+    log şunu gösterdi: "Gemini AI dogrulama hatasi: 429..." hemen
+    ardından "AI REDDETTI (petrol): Gemini hatasi: 429..." - Groq'un
+    denendiğine dair TEK BİR satır bile yok. Groq'un devreye HİÇ
+    girmediği kesinleşti.
+  - **Kesin kök neden:** `_gemini_ai_dogrula`'nın `except` bloğu,
+    exception oluştuğunda `return None` (Groq'a geçişe izin veren
+    özel değer) DEĞİL, `return False, None, f"Gemini hatasi: {e}"`
+    (GERÇEK BİR SONUÇ TUPLE'I) döndürüyordu. `_ai_dogrula`'daki
+    `if sonuc is not None: return sonuc` kontrolü bu tuple'ı GEÇERLİ
+    BİR CEVAP sayıp hemen döndürüyordu - Groq'a HİÇ sıra gelmiyordu.
+    Yani "anahtar yok" (None) ile "anahtar var ama İSTEK BAŞARISIZ
+    OLDU" (yanlışlıkla gerçek bir sonuç) durumları birbirine
+    karıştırılmıştı - tam da v2.0.7.169'daki retry bug'ıyla AYNI
+    ailede bir "ne zaman durmalı/ne zaman devam etmeli" hatası.
+  - **Çözüm:** Hem `_gemini_ai_dogrula` HEM `_groq_ai_dogrula`'nın
+    `except` blokları artık `None` döndürüyor - "bu sağlayıcı KESİN
+    BİR CEVAP vermedi" anlamında, ister anahtar eksikliğinden ister
+    çalışma zamanı hatasından olsun. `_ai_dogrula`'daki nihai red
+    mesajı da güncellendi - artık "anahtar eksik" ile "ikisi de
+    denendi ama başarısız oldu" durumlarının ikisini de doğru
+    yansıtıyor.
+  - **İzole test edildi (2 senaryo):** (1) Gemini 429 atıyor, Groq
+    başarılı → ARTIK DOĞRU şekilde Groq'un sonucu kullanılıyor (eski
+    bug'da bu noktada Gemini'nin 429'u "kesin red" sayılıp Groq'a hiç
+    geçilmiyordu). (2) İkisi de başarısız → hâlâ güvenli tarafta
+    (red) kalıyor, mesaj ikisinin de denendiğini doğru yansıtıyor.
+  - **Ders:** Bu oturumda ikinci kez aynı hata ailesine düşüldü
+    (v2.0.7.169: "break" bir başarıyı mı yoksa herhangi bir sonucu mu
+    işaretliyor karıştırılmıştı; şimdi: `None` "denenmedi" mi yoksa
+    "denendi başarısız oldu" mu karıştırıldı). Fallback zincirleri
+    yazarken "bu adımda KESİN bir cevap mı var, yoksa sadece BİR
+    DENEME mi başarısız oldu" ayrımı özellikle dikkat gerektiriyor.
+
+
   canlı log paylaşımı — Actions çalışması #263): ÜCRETSİZ ÇEVİRİ
   YEDEĞİNDE KRİTİK BİR HATA BULUNDU - TEK SORUNLU BAŞLIK, TÜM 40
   HABERLİK TURU ÇÖKERTİYORDU.**

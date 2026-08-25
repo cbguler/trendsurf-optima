@@ -275,7 +275,16 @@ def _gemini_ai_dogrula(kalip_key, baslik, ozet, kaynak):
                 str(veri.get("gerekce", ""))[:400])
     except Exception as e:
         print(f"[haber_izleme] Gemini AI dogrulama hatasi: {type(e).__name__}: {e}")
-        return False, None, f"Gemini hatasi: {e}"
+        # v2.0.7.185 (Bahri'nin bulgusu, 25 Ağustos 2026 — canlı log):
+        # KRİTİK HATA - eskiden burada `return False, None, ...` vardı,
+        # yani Gemini 429/hata aldığında bu SONUÇ "Gemini'nin KESİN
+        # CEVABI" (red) sayılıyordu ve _ai_dogrula HİÇ GROQ'A
+        # DÜŞMÜYORDU - "AI REDDETTI" mesajı gerçekte Groq'a hiç şans
+        # verilmeden yazılıyordu. ÇÖZÜM: artık None dönüyor - tıpkı
+        # "anahtar yok" durumu gibi "bu sağlayıcı denenemedi" anlamına
+        # geliyor, _ai_dogrula bunun üzerine Groq'u dener. Sadece HER
+        # İKİ sağlayıcı da başarısız olursa gerçek bir red verilir.
+        return None
 
 
 def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
@@ -318,7 +327,15 @@ def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
                 str(veri.get("gerekce", ""))[:400])
     except Exception as e:
         print(f"[haber_izleme] Groq AI dogrulama hatasi: {type(e).__name__}: {e}")
-        return False, None, f"Groq hatasi: {e}"
+        # v2.0.7.185: Gemini ile AYNI tutarlilik - None doner, cunku
+        # _ai_dogrula zaten Groq'tan SONRA gelen kod bloğunda bunu
+        # dogru sekilde "hicbir saglayici basarili olmadi" diye
+        # yorumluyor. Groq zincirin SON halkasi oldugu icin sonuc
+        # pratikte ayni (haber reddedilir), ama tutarli semantik
+        # ("None = bu saglayici kesin bir cevap vermedi") ileride
+        # ucuncu bir saglayici eklenirse ayni hatanin tekrarlanmasini
+        # onler.
+        return None
 
 
 def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
@@ -357,10 +374,15 @@ def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
     sonuc = _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak)
     if sonuc is not None:
         return sonuc
-    print("[haber_izleme] AI dogrulama ATLANDI - ne GEMINI_API_KEY ne "
-          "GROQ_API_KEY tanimli. Bu haber icin varsayilan olarak REDDEDILDI "
-          "(guvenli taraf).")
-    return False, None, "Hicbir AI saglayicisi yapilandirilmamis"
+    # v2.0.7.185: Bu satira iki farkli sebepten dusulebilir - (a) ne
+    # GEMINI_API_KEY ne GROQ_API_KEY tanimli, VEYA (b) ikisi de
+    # tanimli ama IKISI DE basarisiz oldu (ag hatasi, 429, gecersiz
+    # yanit vb.) - mesaj artik ikisini de dogru yansitiyor.
+    print("[haber_izleme] AI dogrulama BASARISIZ - ne Gemini ne Groq "
+          "gecerli bir sonuc dondurdu (anahtar eksik VEYA ikisi de "
+          "hata verdi - yukaridaki satirlara bak). Bu haber icin "
+          "varsayilan olarak REDDEDILDI (guvenli taraf).")
+    return False, None, "Ne Gemini ne Groq gecerli bir sonuc dondurdu"
 
 
 # ══════════════════════════════════════════════════════════════
