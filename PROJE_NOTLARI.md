@@ -1521,7 +1521,39 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.183 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.184 (25 Ağustos 2026, Bahri'nin
+  canlı log paylaşımı — Actions çalışması #263): ÜCRETSİZ ÇEVİRİ
+  YEDEĞİNDE KRİTİK BİR HATA BULUNDU - TEK SORUNLU BAŞLIK, TÜM 40
+  HABERLİK TURU ÇÖKERTİYORDU.**
+  - **Log'daki kesin kanıt:** `[haber_izleme] Ucretsiz yedek ceviri
+    hatasi: TranslationNotFound: Songs created by AI banned from
+    Australia's music charts --> No translation was found using the
+    current translator.` - Gemini 429 aldıktan sonra ücretsiz yedeğe
+    düşüldü, ama bu turda TESADÜFEN Google Translate'in çeviremediği
+    TEK bir başlık ("Songs created by AI banned...") vardı - ve bu TEK
+    madde `translate_batch()`'in TÜM 40 HABERLİK LİSTE İÇİN TEK BİR
+    exception fırlatmasına sebep oldu. Sonuç: "0 baslik cevrildi
+    (Gemini: 0, ucretsiz yedek: 0)" - 39 tanesi gayet çevrilebilir
+    olsa bile HİÇBİRİ çevrilmedi.
+  - **Çözüm:** `translate_batch()` (toplu, tek-hata-hepsini-çökertir)
+    yerine HER başlık/özet ARTIK TEK TEK, KENDİ try/except'i İÇİNDE
+    çevriliyor - hatta başlık ve özet bile BİRBİRİNDEN BAĞIMSIZ (biri
+    başarısız olsa diğeri etkilenmiyor). Sadece sorunlu madde/alan
+    atlanıyor, diğer TÜM haberler normal şekilde çevriliyor.
+  - **İzole test edildi:** 3 haberlik sahte bir liste - biri
+    (başlığında tetikleyici kelime olan) hata fırlatan bir sahte
+    çevirmenle - doğrulandı: sorunlu haberin SADECE başarısız olan
+    alanı (başlık) `None` kaldı, AYNI HABERİN özeti bağımsız olarak
+    başarıyla çevrildi, DİĞER İKİ HABER TAMAMEN ETKİLENMEDİ. Eski
+    kodda bu 3 haberin ÜÇÜ DE kaybolurdu.
+  - **AÇIK KALAN - Groq henüz test edilmedi:** Bu turda hiçbir haber
+    ön-filtreden geçmediği için ("0 on-filtreden gecti, 0 AI ile
+    dogrulandi") AI doğrulama adımı (Gemini/Groq) hiç ÇAĞRILMADI.
+    Groq'un gerçek bir API çağrısıyla çalışıp çalışmadığı HÂLÂ
+    doğrulanmadı - bir haber gerçekten bir kalıba uyduğunda tekrar
+    kontrol edilmeli.
+
+
   talebi — "vazgeçtim, ücretsiz başka metod yok mu"): AI DOĞRULAMA İÇİN
   GROQ İKİNCİ (ÜCRETSİZ) SAĞLAYICI OLARAK EKLENDİ.**
   - **Araştırma:** Birden fazla bağımsız kaynak (Ağustos 2026) tarandı -

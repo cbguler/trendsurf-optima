@@ -464,41 +464,59 @@ def _ucretsiz_yedek_ceviri(haberler):
 
     v2.0.7.179 (Bahri'nin talebi - "özeti de çevirebiliriz"): Girdi
     ARTIK 3'lu: [(url, baslik, ozet), ...]. Çıktı:
-    {url: {"baslik_tr": ..., "ozet_tr": ...}}. Başlık ve özet AYRI İKİ
-    `translate_batch` çağrısıyla çevriliyor (özet bazı haberlerde boş
-    olabildiği için - tek çağrıda index hizalaması karışmasın diye).
+    {url: {"baslik_tr": ..., "ozet_tr": ...}}.
 
-    HATA DURUMUNDA BOŞ SÖZLÜK döner - çağıran taraf orijinal başlığı/
-    özeti kullanmaya devam eder, hiçbir şey çökmez."""
+    v2.0.7.184 (Bahri'nin bulgusu, 25 Ağustos 2026 — canlı log):
+    KRİTİK HATA BULUNDU VE DÜZELTİLDİ. Eskiden `translate_batch` TEK
+    BİR çağrıyla TÜM başlıkları/özetleri çeviriyordu - ama
+    `translate_batch` TÜM LİSTE İÇİN TEK BİR exception fırlatıyor,
+    YANİ TEK BİR SORUNLU MADDE (ör. Google'ın çeviremediği bir başlık
+    - canlıda görülen: "TranslationNotFound... No translation was
+    found") TÜM 40 HABERLİK TURU ÇÖKERTIYORDU - 39 tanesi gayet
+    çevrilebilir olsa bile. ÇÖZÜM: artık HER başlık/özet TEK TEK,
+    KENDİ try/except'i İÇİNDE çevriliyor - biri başarısız olursa
+    SADECE O ATLANIR, diğerleri ETKİLENMEZ.
+
+    HATA DURUMUNDA (bir maddede) o maddenin çevirisi atlanır - çağıran
+    taraf orijinal başlığı/özeti kullanmaya devam eder, hiçbir şey
+    çökmez."""
     if not haberler:
         return {}
     try:
         from deep_translator import GoogleTranslator
         _cevirmen = GoogleTranslator(source="en", target="tr")
-
-        _basliklar = [b for _u, b, _o in haberler]
-        _baslik_cevirileri = _cevirmen.translate_batch(_basliklar)
-
-        # Sadece OZETI DOLU olanlari cevir - bos string'i cevirmeye
-        # calismak gereksiz bir istek, bazi cevirmenlerde hata da verebilir.
-        _ozetli = [(u, o) for u, _b, o in haberler if o]
-        _ozet_cevirileri = {}
-        if _ozetli:
-            _cevrilenler = _cevirmen.translate_batch([o for _u, o in _ozetli])
-            for (u, _o), tr in zip(_ozetli, _cevrilenler):
-                if tr and str(tr).strip():
-                    _ozet_cevirileri[u] = str(tr).strip()[:500]
-
-        sonuc = {}
-        for (u, _b, _o), tr in zip(haberler, _baslik_cevirileri):
-            bt = str(tr).strip()[:300] if tr and str(tr).strip() else None
-            ot = _ozet_cevirileri.get(u)
-            if bt or ot:
-                sonuc[u] = {"baslik_tr": bt, "ozet_tr": ot}
-        return sonuc
     except Exception as e:
-        print(f"[haber_izleme] Ucretsiz yedek ceviri hatasi: {type(e).__name__}: {e}")
+        print(f"[haber_izleme] Ucretsiz yedek ceviri - kutuphane yuklenemedi: "
+              f"{type(e).__name__}: {e}")
         return {}
+
+    sonuc = {}
+    _basarisiz_sayisi = 0
+    for u, b, o in haberler:
+        bt, ot = None, None
+        try:
+            tr = _cevirmen.translate(b)
+            if tr and str(tr).strip():
+                bt = str(tr).strip()[:300]
+        except Exception as e:
+            _basarisiz_sayisi += 1
+            print(f"[haber_izleme] Ucretsiz yedek - baslik cevrilemedi "
+                  f"(atlaniyor, diger haberler etkilenmez): {type(e).__name__}: {e}")
+        if o:
+            try:
+                tr = _cevirmen.translate(o)
+                if tr and str(tr).strip():
+                    ot = str(tr).strip()[:500]
+            except Exception as e:
+                print(f"[haber_izleme] Ucretsiz yedek - ozet cevrilemedi "
+                      f"(atlaniyor): {type(e).__name__}: {e}")
+        if bt or ot:
+            sonuc[u] = {"baslik_tr": bt, "ozet_tr": ot}
+    if _basarisiz_sayisi:
+        print(f"[haber_izleme] Ucretsiz yedek: {_basarisiz_sayisi}/{len(haberler)} "
+              f"basliğin cevirisi basarisiz oldu (tek tek denendigi icin "
+              f"diger {len(haberler) - _basarisiz_sayisi} basarili oldu).")
+    return sonuc
 
 
 def main():
