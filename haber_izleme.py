@@ -470,6 +470,84 @@ KURALLAR:
         return {}
 
 
+def _groq_ceviri(haberler):
+    """v2.0.7.187 (Bahri'nin canlı log paylaşımı, 25 Ağustos 2026):
+    KRİTİK BULGU - `_ucretsiz_yedek_ceviri` (deep-translator) canlıda
+    HER SEFERİNDE 40/40 başlık için "TranslationNotFound" hatası
+    veriyordu. Bu istatistiksel olarak imkansıza yakın (ör. "US
+    Supreme Court sides with Trump administration on mail voting"
+    gibi sıradan bir cümlenin çevrilemez olması mantıksız). Araştırma
+    (Ağustos 2026) doğruladı: bu, deep-translator'ın altında yatan
+    Google Translate kazıma (scraping) mekanizmasının, GitHub
+    Actions'ın PAYLAŞILAN sunucu IP'lerinde SIK KARŞILAŞILAN bir
+    "olağandışı trafik" ENGELLEMESİ - birden fazla GitHub issue'sunda
+    "~40-50 çeviri isteğinden sonra Google engelliyor" doğrulandı,
+    tam bizim istek sayımıza denk geliyor. `TranslationNotFound`
+    hatası aslında "bu metin çevrilemedi" DEĞİL, "Google bize normal
+    sayfa yerine bir engelleme sayfası döndürdü, kütüphane bunu
+    ayrıştıramadı" anlamına geliyor - SİSTEMİK bir sorun, tek tek
+    başlıkların sorunu değil.
+
+    ÇÖZÜM: Groq (resmi, sanctioned bir API - kazıma değil) çeviri
+    için de kullanılıyor. Google'ın bot-engelleme sistemine hiç maruz
+    kalmıyor. Girdi/çıktı formatı `_ucretsiz_yedek_ceviri` ile AYNI -
+    çağıran taraf hangi katmanın çalıştığını bilmesine gerek duymuyor.
+
+    Tek bir Groq isteğinde TÜM başlık+özetleri birlikte çeviriyor
+    (JSON formatında) - hem hızlı hem az istek sayısı."""
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key or not haberler:
+        return {}
+    try:
+        import requests
+        satirlar = []
+        for i, (_u, b, o) in enumerate(haberler):
+            satirlar.append(f"{i+1}. BAŞLIK: {b}")
+            if o:
+                satirlar.append(f"   ÖZET: {o}")
+        numarali = "\n".join(satirlar)
+        prompt = f"""Aşağıdaki İngilizce haber başlıklarını ve (varsa) özetlerini Türkçeye çevir.
+
+{numarali}
+
+KURALLAR:
+- Sadece çeviri yap, yorum ekleme.
+- ÖZET verilmeyen maddeler için "ozet" alanını boş bırak ("").
+- SADECE şu JSON formatında cevap ver:
+{{"ceviriler": {{"1": {{"baslik": "...", "ozet": "..."}}, "2": {{"baslik": "...", "ozet": "..."}}}}}}"""
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        metin = resp.json()["choices"][0]["message"]["content"].strip()
+        ceviriler = json.loads(metin).get("ceviriler", {})
+        sonuc = {}
+        for i, (u, _b, _o) in enumerate(haberler):
+            c = ceviriler.get(str(i + 1)) or ceviriler.get(i + 1) or {}
+            if not isinstance(c, dict):
+                continue
+            bt = str(c.get("baslik", "")).strip()
+            ot = str(c.get("ozet", "")).strip()
+            if bt or ot:
+                sonuc[u] = {
+                    "baslik_tr": bt[:300] if bt else None,
+                    "ozet_tr": ot[:500] if ot else None,
+                }
+        return sonuc
+    except Exception as e:
+        print(f"[haber_izleme] Groq ceviri hatasi: {type(e).__name__}: {e}")
+        return {}
+
+
 def _ucretsiz_yedek_ceviri(haberler):
     """v2.0.7.176 (Bahri'nin talebi, 21 Ağustos 2026 — "haberleri
     translate edemiyorsan en azından çevir"): Gemini kotası güvenilmez
@@ -655,6 +733,7 @@ def main():
     # BAĞIMSIZDIR. Sonuç: çeviri artık HİÇBİR ZAMAN tamamen durmaz.
     cevrilen = 0
     cevrilen_gemini = 0
+    cevrilen_groq = 0
     cevrilen_yedek = 0
     bekleyen_ceviri = get_cevrilmemis_haberler(sorted(_INGILIZCE_KAYNAKLAR), limit=40)
     if bekleyen_ceviri:
@@ -662,10 +741,10 @@ def main():
         _bugunku = ai_cagri_sayisi_bugun()
         if _bugunku >= _CEVIRI_ONCELIK_ESIGI:
             print(f"[haber_izleme] Gemini ceviri ATLANDI - gunluk AI butcesi "
-                  f"({_bugunku}/{_CEVIRI_ONCELIK_ESIGI}) doldu. Ucretsiz yedege gecilecek.")
+                  f"({_bugunku}/{_CEVIRI_ONCELIK_ESIGI}) doldu. Groq/ucretsiz yedege gecilecek.")
         elif not os.environ.get("GEMINI_API_KEY", ""):
             print("[haber_izleme] Gemini ceviri ATLANDI - GEMINI_API_KEY ortam "
-                  "degiskeni BOS/TANIMSIZ. Ucretsiz yedege gecilecek.")
+                  "degiskeni BOS/TANIMSIZ. Groq/ucretsiz yedege gecilecek.")
         else:
             print(f"[haber_izleme] Gemini ile ceviri deneniyor: {len(bekleyen_ceviri)} haber (baslik+ozet)...")
             ceviriler = _toplu_ceviri(bekleyen_ceviri)
@@ -677,8 +756,28 @@ def main():
             if cevrilen_gemini:
                 print(f"[haber_izleme] Gemini {cevrilen_gemini} haber cevirdi.")
 
-        # v2.0.7.176: Gemini'nin CEVİREMEDİĞİ (yukarıda atlandıysa TÜMÜ,
-        # kısmen başarısız olduysa KALANI) her zaman ücretsiz yedeğe düşer.
+        # v2.0.7.187 (Bahri'nin canlı log bulgusu - "TranslationNotFound"
+        # HER SEFERİNDE 40/40): deep-translator'ın Google Translate
+        # kazıması, GitHub Actions'ın paylaşılan IP'lerinde SİSTEMİK
+        # olarak engelleniyor (Google'ın bot-tespit sistemi). Groq
+        # (resmi API, kazıma DEĞİL) artık deep-translator'DAN ÖNCE
+        # denenir - Google'ın engellemesine hiç maruz kalmadığı için
+        # çok daha güvenilir.
+        _kalan = [(u, b, o) for u, b, o in bekleyen_ceviri if u not in _cevrilenler_url]
+        if _kalan and os.environ.get("GROQ_API_KEY", ""):
+            print(f"[haber_izleme] Groq ile ceviri deneniyor: {len(_kalan)} haber (baslik+ozet)...")
+            groq_ceviriler = _groq_ceviri(_kalan)
+            for u, c in groq_ceviriler.items():
+                haber_akisi_ceviri_yaz(u, baslik_tr=c.get("baslik_tr"), ozet_tr=c.get("ozet_tr"))
+                _cevrilenler_url.add(u)
+                cevrilen_groq += 1
+            if cevrilen_groq:
+                print(f"[haber_izleme] Groq {cevrilen_groq} haber cevirdi.")
+
+        # v2.0.7.176: Gemini VE Groq'un CEVİREMEDİĞİ (ikisi de atlandıysa/
+        # başarısız olduysa TÜMÜ, kısmen başarılıysa KALANI) en son
+        # deep-translator'a düşer - GitHub Actions IP'si engellenmemişse
+        # (her zaman engelli olmayabilir) hâlâ bir şans.
         _kalan = [(u, b, o) for u, b, o in bekleyen_ceviri if u not in _cevrilenler_url]
         if _kalan:
             print(f"[haber_izleme] Ucretsiz yedek ile ceviri deneniyor: {len(_kalan)} haber (baslik+ozet)...")
@@ -689,9 +788,9 @@ def main():
             if cevrilen_yedek:
                 print(f"[haber_izleme] Ucretsiz yedek {cevrilen_yedek} haber cevirdi.")
 
-        cevrilen = cevrilen_gemini + cevrilen_yedek
+        cevrilen = cevrilen_gemini + cevrilen_groq + cevrilen_yedek
         if cevrilen == 0:
-            print("[haber_izleme] UYARI: NE Gemini NE ucretsiz yedek basarili oldu - "
+            print("[haber_izleme] UYARI: NE Gemini NE Groq NE ucretsiz yedek basarili oldu - "
                   "yukaridaki hata satirlarina bak. Basliklar Ingilizce kalacak, "
                   "sonraki turda tekrar denenecek.")
 
@@ -699,7 +798,7 @@ def main():
 
     print(f"[haber_izleme] Bitti: {toplam_haber} haber tarandi, "
           f"{akisa_eklenen} akisa eklendi, {cevrilen} baslik cevrildi "
-          f"(Gemini: {cevrilen_gemini}, ucretsiz yedek: {cevrilen_yedek}), "
+          f"(Gemini: {cevrilen_gemini}, Groq: {cevrilen_groq}, ucretsiz yedek: {cevrilen_yedek}), "
           f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi. "
           f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}")
 
