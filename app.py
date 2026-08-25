@@ -2555,26 +2555,68 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                          use_container_width=True):
                 try:
                     from db import tespit_onayla
-                    tespit_onayla(_tm["id"])
+                    # v2.0.7.192 (Bahri'nin bulgusu, 25 Ağustos 2026 —
+                    # "onay butonunu tıklıyorum ama hiçbir buton
+                    # çalışmıyor"): KESİN KÖK NEDEN - `tespit_onayla`
+                    # HATA FIRLATMIYOR, veritabanı yazması başarısız
+                    # olsa bile SADECE `False` döndürüyor (arka planda
+                    # print ediyor, kullanıcıya hiç yansımıyor). Buradaki
+                    # eski kod bu dönüş değerini HİÇ KONTROL ETMİYORDU -
+                    # "except" bloğu hiçbir zaman tetiklenmiyordu (çünkü
+                    # exception hiç fırlamıyordu), kod her zaman "else"
+                    # dalına düşüp SESSİZCE cache temizleyip rerun
+                    # ediyordu. Gerçek bir yazma hatası olduğunda,
+                    # veritabanındaki satır GÜNCELLENMEMİŞ haliyle
+                    # kalıyordu - rerun sonrası AYNI tespit AYNI pop-up'ta
+                    # tekrar görünüyordu, hiçbir hata mesajı olmadan -
+                    # tam da Bahri'nin tarif ettiği "hiçbir şey olmuyor"
+                    # deneyimi.
+                    _basarili = tespit_onayla(_tm["id"])
                 except Exception as _me1:
                     st.error(f"Onaylanamadı: {_me1}")
                 else:
-                    # v2.0.7.168: onaylanan tespit hemen listeden dussun
-                    # diye ONBELLEK TEMIZLENIYOR - aksi halde 20 sn'lik
-                    # TTL boyunca ayni tespit tekrar gorunebilirdi.
-                    st.cache_data.clear()
-                    st.rerun()
+                    if _basarili:
+                        # v2.0.7.193 (Bahri'nin bulgusu, 25 Ağustos 2026 —
+                        # "onay butonu çok geç çalıştı"): `st.cache_data.
+                        # clear()` (GENEL temizleme) yerine SADECE bu iki
+                        # küçük tespit önbelleğini temizliyoruz. Eski kod
+                        # UYGULAMADAKİ HER önbellekli fonksiyonu (tüm evren
+                        # CSV'si, BIST/TEFAS verileri, her şey) tek seferde
+                        # siliyordu - onay sonrası rerun bu yüzden HER ŞEYİ
+                        # sıfırdan yeniden hesaplamak zorunda kalıyor,
+                        # "çok geç çalıştı" hissi buradan geliyordu.
+                        try:
+                            _bekleyen_tespitler_onbellekli.clear()
+                            _onaylanmis_tespitler_onbellekli.clear()
+                        except Exception:
+                            st.cache_data.clear()  # guvenli yedek - fonksiyonlar hic tanimlanmamissa
+                        st.rerun()
+                    else:
+                        st.error(
+                            "Onaylanamadı - veritabanı yazması başarısız "
+                            "oldu (sunucu loglarına bakılmalı). Tekrar "
+                            "deneyin, sürerse Bahri'ye bildirin.")
         with _mc2:
             if st.button("Reddet", key="modal_tespit_red",
                          use_container_width=True):
                 try:
                     from db import tespit_reddet
-                    tespit_reddet(_tm["id"])
+                    _basarili = tespit_reddet(_tm["id"])
                 except Exception as _me2:
                     st.error(f"Reddedilemedi: {_me2}")
                 else:
-                    st.cache_data.clear()  # v2.0.7.168 - yukaridaki notla ayni sebep
-                    st.rerun()
+                    if _basarili:
+                        try:
+                            _bekleyen_tespitler_onbellekli.clear()
+                            _onaylanmis_tespitler_onbellekli.clear()
+                        except Exception:
+                            st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error(
+                            "Reddedilemedi - veritabanı yazması başarısız "
+                            "oldu (sunucu loglarına bakılmalı). Tekrar "
+                            "deneyin, sürerse Bahri'ye bildirin.")
 
         if st.button("Daha sonra bak", key="modal_tespit_ertele",
                      use_container_width=True):
@@ -4609,22 +4651,47 @@ if page=="Ana Sayfa":
                         if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
                             try:
                                 from db import tespit_onayla
-                                tespit_onayla(_tespit["id"])
-                                st.cache_data.clear()  # v2.0.7.168
-                                st.success("Onaylandı, Optima Skor'a uygulanacak.")
-                                st.rerun()
+                                _basarili_ah = tespit_onayla(_tespit["id"])
                             except Exception as _onay_err:
                                 st.error(f"Onaylanamadı: {_onay_err}")
+                            else:
+                                if _basarili_ah:
+                                    # v2.0.7.193: GENEL st.cache_data.clear()
+                                    # yerine SADECE bu iki kucuk tespit
+                                    # onbellegi temizleniyor - modal
+                                    # dialogdaki v2.0.7.193 duzeltmesiyle
+                                    # AYNI sebep/cozum (bkz. o yorum).
+                                    try:
+                                        _bekleyen_tespitler_onbellekli.clear()
+                                        _onaylanmis_tespitler_onbellekli.clear()
+                                    except Exception:
+                                        st.cache_data.clear()
+                                    st.success("Onaylandı, Optima Skor'a uygulanacak.")
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        "Onaylanamadı - veritabanı yazması "
+                                        "başarısız oldu. Tekrar deneyin.")
                     with _oc2:
                         if st.button("Reddet", key=f"tespit_red_{_tespit['id']}"):
                             try:
                                 from db import tespit_reddet
-                                tespit_reddet(_tespit["id"])
-                                st.cache_data.clear()  # v2.0.7.168
-                                st.info("Reddedildi, bir daha gösterilmeyecek.")
-                                st.rerun()
+                                _basarili_rh = tespit_reddet(_tespit["id"])
                             except Exception as _red_err:
                                 st.error(f"Reddedilemedi: {_red_err}")
+                            else:
+                                if _basarili_rh:
+                                    try:
+                                        _bekleyen_tespitler_onbellekli.clear()
+                                        _onaylanmis_tespitler_onbellekli.clear()
+                                    except Exception:
+                                        st.cache_data.clear()
+                                    st.info("Reddedildi, bir daha gösterilmeyecek.")
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        "Reddedilemedi - veritabanı yazması "
+                                        "başarısız oldu. Tekrar deneyin.")
 
         if _beklenti_ayarlar:
             st.divider()

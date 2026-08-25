@@ -1521,10 +1521,14 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, MANTIK DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.191
+- **[CANLIDA DOĞRULANDI - TAM BAŞARILI] v2.0.7.191
   (25 Ağustos 2026, Bahri'nin üçüncü log paylaşımı — Actions çalışması
-  #268): GROQ'UN GERÇEK HATA GÖVDESİ ARTIK GÖRÜNÜYOR - KESİN KÖK NEDEN
-  BULUNDU.**
+  #268, doğrulama #269): GROQ'UN GERÇEK HATA GÖVDESİ ARTIK GÖRÜNÜYOR -
+  KESİN KÖK NEDEN BULUNDU VE ÇÖZÜLDÜ.**
+  - **CANLI SONUÇ (Actions #269):** `"Groq ile ceviri deneniyor: 32
+    haber (baslik+ozet)..." → "Groq 32 haber cevirdi."` - 32/32 TAM
+    BAŞARILI, hiç eksik yok. `max_completion_tokens` düzeltmesi
+    beklendiği gibi çalıştı - hipotez doğru çıktı.
   - **v2.0.7.190'daki teşhis iyileştirmesi işe yaradı** - log'da artık
     Groq'un TAM hata gövdesi görüldü: `{"error":{"message":"Failed to
     validate JSON. Please adjust your prompt. See 'failed_generation'
@@ -1615,7 +1619,10 @@ tamam, canlı doğrulama BEKLİYOR):**
 
   Bahri'nin bulgusu — "TEFAS'ın kendi sitesinde bu fonların değerleri
   var, ama bizde hâlâ 0"): GERÇEK KÖK NEDEN BULUNDU - pytefas'IN KENDİSİ
-  ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.**
+  ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.
+  **[CANLIDA DOĞRULANDI - 25 Ağustos, sonraki gün]:** HTS ve HOY
+  Portföyüm sayfasında artık GERÇEK fiyat gösteriyor (59,066274 ve
+  0,365252) - retry düzeltmesi canlıda işe yaradı.**
   - **Bu, v2.0.7.174/186'nın çözdüğü sorundan TAMAMEN FARKLI, DAHA
     DERİN bir kök neden.** Önceki iki düzeltme "önceki geçerli fiyatı
     koru" mantığıydı - ama korunacak geçerli bir önceki fiyat hiç
