@@ -1521,7 +1521,80 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, ACİL, CANLI TEST EDİLMEDİ] v2.0.7.186 (25 Ağustos 2026,
+- **[UYGULANDI, GERÇEK API İLE KANITLANDI] v2.0.7.188 (25 Ağustos 2026,
+  Bahri'nin bulgusu — "TEFAS'ın kendi sitesinde bu fonların değerleri
+  var, ama bizde hâlâ 0"): GERÇEK KÖK NEDEN BULUNDU - pytefas'IN KENDİSİ
+  ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.**
+  - **Bu, v2.0.7.174/186'nın çözdüğü sorundan TAMAMEN FARKLI, DAHA
+    DERİN bir kök neden.** Önceki iki düzeltme "önceki geçerli fiyatı
+    koru" mantığıydı - ama korunacak geçerli bir önceki fiyat hiç
+    oluşmuyorsa (pytefas HTS/HOY için hiç başarılı olmuyorsa) o
+    korumaların işe yaramayacağı zaten not edilmişti. Bu turda GERÇEK
+    SEBEP bulundu.
+  - **Canlı API testiyle KANITLANDI (tahmin değil):** `pytefas`
+    kütüphanesi gerçek ağ erişimiyle test edildi -
+    `c.fetch(kind="YAT")` 1. denemede `503 Server Error: Service
+    Unavailable` ile başarısız oldu, AYNI parametrelerle 2. deneme
+    (birkaç saniye sonra, yeni bir Crawler ile) **6112 satırla
+    BAŞARILI** oldu. Bu, TEFAS'ın kendi API'sinin ARA SIRA geçici
+    503 verdiğini kesin olarak kanıtlıyor - HTS/HOY'a özgü bir sorun
+    DEĞİL, TEFAS'ın genel güvenilirlik durumu.
+  - **Kesin kod hatası:** `tefas_client.py`'nin `fetch_all_current_prices()`
+    fonksiyonunda `c.fetch()` çağrısının HİÇ retry'si yoktu - bir kez
+    503 alınca o KIND (YAT - HTS/HOY'un kategorisi) o tur için
+    TAMAMEN atlanıyordu, bir daha denenmiyordu.
+  - **Çözüm:** `c.fetch()` çağrısı artık 3 deneme yapıyor (aralarda 3
+    saniye bekleme) - ilk deneme 503 alsa bile ikinci/üçüncü denemede
+    kurtarma şansı var.
+  - **İzole test edildi (2 senaryo, sahte Crawler ile):** (1) ilk 2
+    deneme 503, 3. başarılı → retry sayesinde HTS/HOY'un fiyatı
+    kurtarıldı. (2) 3 deneme de başarısız → düzgün şekilde `None`
+    dönüp o tur için atlanıyor, çökme yok.
+  - **Beklenti:** Bu, hem HTS/HOY'u hem muhtemelen "1230/1348"
+    rakamındaki diğer başarısız fonların bir kısmını da düzeltecek -
+    TEFAS'ın genel geçici güvenilmezliği tüm fonları etkiliyor olabilir,
+    sadece bu ikisini değil.
+
+
+  üçüncü canlı log paylaşımı — Actions çalışması #265): KRİTİK BULGU -
+  ÜCRETSİZ ÇEVİRİ YEDEĞİ (deep-translator) GITHUB ACTIONS'TA SİSTEMİK
+  OLARAK ENGELLENİYOR.**
+  - **Kesin gözlem:** İki ayrı çalışmada da (25 Ağustos, sabah ve
+    öğlen) 40/40 başlığın TAMAMI "TranslationNotFound" hatası verdi -
+    "US Supreme Court sides with Trump administration on mail voting"
+    gibi sıradan cümlelerin bile çevrilemez olması istatistiksel
+    olarak imkansıza yakın.
+  - **Araştırmayla doğrulanan kesin kök neden:** `deep-translator`'ın
+    Google Translate kazıma mekanizması, GitHub Actions'ın PAYLAŞILAN
+    sunucu IP'lerinde Google'ın "olağandışı trafik" bot-engellemesine
+    takılıyor. Birden fazla bağımsız GitHub issue'sunda "~40-50 çeviri
+    isteğinden sonra Google engelliyor" doğrulandı - tam bizim istek
+    sayımıza denk geliyor. `TranslationNotFound` hatası "bu metin
+    çevrilemedi" DEĞİL, "Google bize normal sayfa yerine bir engelleme
+    sayfası döndürdü, kütüphane bunu ayrıştıramadı" anlamına geliyor -
+    SİSTEMİK bir IP-engeli, tek tek başlıkların sorunu değil. v2.0.7.184
+    (tek tek çevirme) bu yüzden yardımcı olamadı - izolasyon sorunu
+    çözer, ama engelleme TÜM istekleri aynı anda etkiliyor.
+  - **Çözüm:** Groq (resmi, sanctioned bir API - kazıma DEĞİL) çeviri
+    zincirine EKLENDİ - artık sıra: Gemini → Groq → deep-translator
+    (deep-translator en sona alındı, GitHub'ın IP'si her zaman engelli
+    olmayabilir diye tamamen çıkarılmadı ama artık son çare).
+  - **İzole test edildi:** Groq'un JSON yanıt formatı sahte veriyle
+    ayrıştırıldı - başlık+özet doğru şekilde eşleşti, boş özet
+    doğru şekilde `None` olarak işlendi.
+  - **AYRI BULGU - v2.0.7.185 HENÜZ CANLIDA DEĞİLDİ:** Bahri'nin
+    paylaştığı log'da hâlâ eski "Gemini hatasi: 429..." mesajı
+    görülüyordu (v2.0.7.185'in düzelttiği mesaj). Terminal ekran
+    görüntüsü incelendi - `git commit` "no changes added to commit"
+    demişti, yani güncellenmiş `haber_izleme.py` dosyası proje
+    klasörüne hiç KOPYALANMAMIŞTI, git'e eklenecek fark yoktu. Push
+    hiç gerçekleşmemişti. Bahri'ye dosyayı yeniden indirip doğru
+    klasöre kopyalaması, `git status` ile değişikliği DOĞRULAMASI
+    söylendi - bu, gelecekte benzer "düzeltme push edildi ama canlıda
+    hâlâ eski davranış görülüyor" karışıklıklarında ilk kontrol
+    edilmesi gereken şey olarak not edildi.
+
+
   Bahri'nin bulgusu — "HTS ve HOY yine 0 gösteriyor"): v2.0.7.174'ÜN
   KAPSAM EKSİĞİ BULUNDU - KORUMA SADECE YARIM UYGULANMIŞTI.**
   - **Zaman çizelgesiyle doğrulanan kesin kök neden:** Git geçmişi

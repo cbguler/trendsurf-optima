@@ -370,9 +370,33 @@ def fetch_all_current_prices(fund_list: list, **kw) -> dict:
         c = Crawler()
         prices = {}
         for kind in ["YAT", "EMK", "BYF"]:
+            df = None
+            # v2.0.7.188 (Bahri'nin bulgusu, 25 Ağustos 2026 — "HTS/HOY
+            # hâlâ 0, ama TEFAS'ın kendi sitesinde gerçek fiyatları var"):
+            # KÖK NEDEN CANLI TESTLE KANITLANDI - `c.fetch()` çağrısı
+            # TEFAS'ın kendi API'sinden ARA SIRA 503 (geçici sunucu
+            # hatası) alıyor - CANLI TEST: 1. deneme 503 ile başarısız,
+            # 2. deneme (hemen ardından, yeni bir Crawler ile) 6112
+            # satırla BAŞARILI oldu. Bu fonksiyonda HİÇ retry YOKTU -
+            # bir kez 503 alınınca o KIND (YAT dahil - HTS/HOY'un
+            # kategorisi) o tur için TAMAMEN atlanıyordu. Bu, HTS/HOY'a
+            # özgü bir sorun DEĞİL - TEFAS'ın API'sinin genel, geçici
+            # güvenilmezliği. Çözüm: 3 deneme, aralarda kısa bekleme.
+            for _deneme in range(3):
+                try:
+                    print(f"  [pytefas] {kind} fiyatlari cekiliyor (deneme {_deneme+1}/3)...")
+                    df = c.fetch(start=start, end=end, kind=kind)
+                    break  # basarili (bos bile olsa exception yok) - dur
+                except Exception as e:
+                    print(f"  [pytefas {kind}] deneme {_deneme+1}/3 basarisiz: "
+                          f"{type(e).__name__}: {e}")
+                    if _deneme < 2:
+                        import time as _time_pytefas
+                        _time_pytefas.sleep(3)
+            if df is None:
+                print(f"  [pytefas {kind}] 3 deneme de basarisiz - bu tur icin atlaniyor.")
+                continue
             try:
-                print(f"  [pytefas] {kind} fiyatlari cekiliyor...")
-                df = c.fetch(start=start, end=end, kind=kind)
                 if df.empty:
                     print(f"  [pytefas] {kind}: bos dondu")
                     continue
