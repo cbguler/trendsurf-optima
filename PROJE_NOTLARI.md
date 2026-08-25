@@ -1521,7 +1521,37 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, RESMİ BELGEYLE DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.189
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.190 (25 Ağustos 2026, Bahri'nin
+  ikinci log paylaşımı — Actions çalışması #267): BÜYÜK İLERLEME - AI
+  DOĞRULAMA GROQ İLE GERÇEKTEN ÇALIŞTI, ÇEVİRİDE YENİ (FARKLI) BİR HATA
+  BULUNDU.**
+  - **BAŞARI:** Log'da `"AI DOGRULADI: jeopolitik (Orta) - Euronews
+    Türkçe kaynağından alınan habere göre, AB, Ukrayna'ya 6,1 milyar
+    euroluk yeni savunma paketini onayladı..."` görüldü - Gemini 429
+    aldıktan hemen sonra, hiçbir "Groq AI dogrulama hatasi" satırı
+    olmadan bu doğrulama geldi - yani **Groq'un AI doğrulama tarafı
+    artık gerçekten, uçtan uca çalışıyor** (v2.0.7.189'daki model
+    düzeltmesi işe yaradı).
+  - **Çeviri tarafında YENİ bir hata:** `Groq ceviri hatasi: HTTPError:
+    400 Client Error: Bad Request` (artık 404 DEĞİL - model doğru,
+    başka bir sorun). Model context penceresi araştırıldı
+    (openai/gpt-oss-120b: 131K token) - 40 haberlik toplu istek bu
+    limitin ÇOK altında, boyut sorunu değil.
+  - **Kök neden HENÜZ KESİNLEŞMEDİ - eski kod yetersiz teşhis
+    veriyordu:** `raise_for_status()`'un fırlattığı `HTTPError` sadece
+    "400 Bad Request" diye yazdırılıyordu, Groq'un GERÇEK hata gövdesini
+    (JSON içindeki "message"/"code" alanı, ör. "context_length_exceeded"
+    veya "json_validate_failed" gibi) HİÇ göstermiyordu.
+  - **Çözüm (bu turda sadece TEŞHİS iyileştirmesi, KÖK NEDEN
+    ÇÖZÜLMEDİ):** Hem `_groq_ai_dogrula` hem `_groq_ceviri`'nin hata
+    yakalama blokları artık `e.response.text`'i de yazdırıyor - bir
+    sonraki log'da Groq'un TAM OLARAK neden reddettiğini göreceğiz.
+    İzole test edildi (sahte HTTPError ile) - doğru çalışıyor.
+  - **AÇIK KALAN:** Bir sonraki çalışmanın log'u paylaşıldığında, artık
+    "| Govde: {...}" kısmında gerçek sebep görünecek - o zaman asıl
+    düzeltme yapılabilir.
+
+
   (25 Ağustos 2026, Bahri'nin log paylaşımı — Actions çalışması #266):
   GROQ MODELİ KULLANIMDAN KALDIRILMIŞ - 404 HATASI BUNDAN.**
   - **İYİ HABER ÖNCE:** Log, Gemini→Groq geçiş mimarisinin (v2.0.7.185/

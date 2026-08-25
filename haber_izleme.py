@@ -328,7 +328,18 @@ def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
                 veri.get("siddet", "Orta"),
                 str(veri.get("gerekce", ""))[:400])
     except Exception as e:
-        print(f"[haber_izleme] Groq AI dogrulama hatasi: {type(e).__name__}: {e}")
+        # v2.0.7.190 (Bahri'nin canlı log bulgusu - "400 Bad Request" ama
+        # gerçek sebep hiç görünmüyordu): HTTPError'lar için Groq'un
+        # GERÇEK hata gövdesini (JSON içindeki "message"/"code" alanı)
+        # de yazdır - eskiden sadece "400 Bad Request" görünüyordu, hangi
+        # alanın/neyin sorunlu olduğu HİÇ belli olmuyordu.
+        _detay = ""
+        if hasattr(e, "response") and e.response is not None:
+            try:
+                _detay = f" | Govde: {e.response.text[:500]}"
+            except Exception:
+                pass
+        print(f"[haber_izleme] Groq AI dogrulama hatasi: {type(e).__name__}: {e}{_detay}")
         # v2.0.7.185: Gemini ile AYNI tutarlilik - None doner, cunku
         # _ai_dogrula zaten Groq'tan SONRA gelen kod bloğunda bunu
         # dogru sekilde "hicbir saglayici basarili olmadi" diye
@@ -546,7 +557,16 @@ KURALLAR:
                 }
         return sonuc
     except Exception as e:
-        print(f"[haber_izleme] Groq ceviri hatasi: {type(e).__name__}: {e}")
+        # v2.0.7.190: AYNI iyilestirme - Groq'un gercek hata govdesi de
+        # yazdiriliyor, "400 Bad Request" tek basina yeterli teshis
+        # bilgisi vermiyordu.
+        _detay = ""
+        if hasattr(e, "response") and e.response is not None:
+            try:
+                _detay = f" | Govde: {e.response.text[:500]}"
+            except Exception:
+                pass
+        print(f"[haber_izleme] Groq ceviri hatasi: {type(e).__name__}: {e}{_detay}")
         return {}
 
 
