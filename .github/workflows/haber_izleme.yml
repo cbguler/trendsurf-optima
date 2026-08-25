@@ -11,15 +11,35 @@ name: Beklenti Modu Haber Izleme
 # "ucretli ise kurmayacagim, ucretsiz alternatif bulalim") - Gemini'nin
 # kredi karti gerektirmeyen gercek bir ucretsiz katmani var.
 #
-# GitHub'in kendi cron'unun bilinen gecikme/atlama sorunu nedeniyle
-# (bkz. firsat_radari.yml/send_email.yml gecmisi) asagidaki schedule
-# YEDEK olarak durur - guvenilir 10 dakikalik tetikleme icin
-# cron-job.org (harici, ucretsiz) + workflow_dispatch kurulmasi onerilir
-# (mevcut projede firsat_radari icin zaten kullanilan AYNI yontem).
+# v2.0.7.182 (25 Agustos 2026, Bahri'nin cron-job.org kurulumu
+# dogrulandi - test tetiklemesi "204 No Content" ile basarili oldu,
+# gercek deger: github-authentication-token-expiration: 2026-10-06):
+# GitHub'in kendi schedule bloğu TAMAMEN KALDIRILDI. Bunun yerine
+# cron-job.org (harici, ucretsiz cron servisi) 10 dakikada bir
+# GitHub REST API'sine POST istegi atip bu workflow'u workflow_dispatch
+# ile tetikliyor - send_email.yml'de (v2.0.3.8) zaten kanitlanmis olan
+# AYNI yontem:
+#   POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/haber_izleme.yml/dispatches
+#   Body: {"ref":"main"}
+#   Auth: fine-grained PAT (sadece bu repo, sadece Actions:write yetkisi -
+#         send_email.yml ile AYNI token, "TrendSurf Mail" isinden cogaltildi)
+#
+# GitHub'in kendi schedule cron'u free/public tier'da TAM ZAMANDA
+# calismiyordu (yukarida artik silinen 10 dakikalik schedule, "best-effort"
+# calisiyordu - bazen 25-40 dk araliklarla). cron-job.org disaridan API ile
+# zorlanmis tetikleme yaptigi icin bu throttling sorununu tamamen by-pass
+# ediyor.
+#
+# ONEMLI HATIRLATMA: kullanilan PAT'in gecerlilik suresi 6 Ekim 2026'da
+# doluyor - o tarihten once yenilenmesi (ya da suresiz bir token ile
+# degistirilmesi) gerekiyor, yoksa bu tetikleme sessizce 401 hatasiyla
+# basarisiz olmaya baslar.
+#
+# workflow_dispatch: asagida kaliyor - hem cron-job.org'un disaridan
+# tetiklemesi hem de GitHub arayuzunden manuel "Run workflow" ile
+# calistirilabilir.
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'   # Yedek: 10 dk'da bir (GitHub best-effort)
   workflow_dispatch:
 
 concurrency:

@@ -1521,7 +1521,29 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.181 (22 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, TEST TETİKLEMESİ BAŞARILI] v2.0.7.182 (25 Ağustos 2026):
+  HABER İZLEME ARTIK GÜVENİLİR ŞEKİLDE ÇALIŞIYOR - cron-job.org
+  KURULUMU DOĞRULANDI.**
+  - Bahri, mevcut "TrendSurf Mail" (send_email.yml için zaten çalışan)
+    cron-job.org işini çoğaltarak "TrendSurf Haber Izleme" işini kurdu.
+    Test tetiklemesi **"204 No Content"** ile başarılı oldu - GitHub'ın
+    dispatches endpoint'i doğru şekilde tetiklendi.
+  - **ÖNEMLİ HATIRLATMA (yanıt başlığından yakalandı):** kullanılan
+    fine-grained PAT'ın geçerlilik süresi **6 Ekim 2026**'da doluyor -
+    o tarihten önce yenilenmesi gerekiyor, yoksa hem bu hem de
+    send_email.yml'in tetiklemesi (aynı PAT kullanıyor olabilir)
+    sessizce 401 hatasıyla başarısız olmaya başlar. **Bahri'ye Ekim
+    başında hatırlatılmalı.**
+  - **Kod değişikliği:** `haber_izleme.yml`'deki GitHub'ın kendi
+    güvenilmez `schedule` tetikleyicisi (`*/10 * * * *`, "best-effort"
+    çalışıyordu - bazen 25-40 dk aralıklarla) TAMAMEN KALDIRILDI.
+    Artık `send_email.yml` (v2.0.3.8) ile AYNI mimari: sadece
+    `workflow_dispatch`, harici tetikleme cron-job.org'dan geliyor.
+    Bu değişiklik SADECE test başarılı olduğu İÇİN yapıldı - aksi
+    halde hem GitHub'ın schedule'ı hem cron-job.org devre dışı kalıp
+    haber izleme tamamen dururdu.
+
+
   talebi — "Anka Haber Ajansı, T24, Euronews, Sözcü, Halk TV, Reuters,
   Xinhua, AFP - hangilerini sisteme dahil edebiliriz"): 8 ADAY CANLI
   TEST EDİLDİ, 3'Ü EKLENDİ.**
