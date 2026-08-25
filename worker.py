@@ -961,6 +961,47 @@ def build():
                 print(f"  pytefas fiyat guncellendi: {ok}/{len(df_t)} fon")
         except Exception as e:
             print(f"  pytefas fiyat guncelleme atlandi: {e}")
+
+        # v2.0.7.186 (Bahri'nin bulgusu, 25 Ağustos 2026 — "HTS ve HOY
+        # yine 0 gösteriyor"): KRİTİK KAPSAM EKSİĞİ BULUNDU. v2.0.7.174'te
+        # "önceki geçerli fiyatı koru" koruması SADECE
+        # `update_tefas_evening.py`'ye (günde 7 kez çalışan kısmi
+        # güncelleme) eklenmişti - bu TAM/gece çalışması olan
+        # `worker.py`'nin KENDİ TEFAS yükleme adımında AYNI koruma HİÇ
+        # YOKTU. Log kanıtı: 21-24 Ağustos arası HTS/HOY fiyatları
+        # sabit ve doğruydu (kısmi güncellemenin koruması işliyordu),
+        # ama 24 Ağustos'taki GECE (tam) çalışmasında HTS/HOY için
+        # pytefas/BEFAS ikisi de başarısız olunca fiyat SESSİZCE 0'a
+        # düştü - bu koruma olmadığı için. Sonrasında kısmi güncelleme
+        # koruması "önceki fiyata" bakmaya devam etti ama önceki fiyat
+        # ARTIK KENDİSİ 0'dı - kurtaracak bir şey kalmamıştı.
+        # ÇÖZÜM: AYNI koruma (önceki CSV'de geçerli fiyat varsa satırın
+        # TAMAMINI koru) burada da uygulanıyor - iki script artık
+        # TUTARLI şekilde davranıyor.
+        try:
+            if os.path.exists(CSV_PATH):
+                _df_onceki = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+                _onceki_tefas = (
+                    _df_onceki[_df_onceki["Kategori"] == "TEFAS"]
+                    .drop_duplicates(subset=["Ticker"], keep="last")
+                    .set_index("Ticker")
+                )
+                _korunan = 0
+                for _idx in df_t.index[df_t["Son_Fiyat"].fillna(0) <= 0]:
+                    _tkr = df_t.at[_idx, "Ticker"]
+                    if _tkr in _onceki_tefas.index:
+                        _onceki_fiyat = float(_onceki_tefas.at[_tkr, "Son_Fiyat"] or 0)
+                        if _onceki_fiyat > 0:
+                            for _col in df_t.columns:
+                                if _col in _onceki_tefas.columns:
+                                    df_t.at[_idx, _col] = _onceki_tefas.at[_tkr, _col]
+                            _korunan += 1
+                if _korunan:
+                    print(f"  {_korunan} TEFAS fonu bu turda fiyat alamadı - "
+                          f"onceki gecerli fiyatlar korundu (worker.py tam calismasi).")
+        except Exception as e:
+            print(f"  Onceki fiyat koruma kontrolu atlandi: {e}")
+
         all_rows += df_t.to_dict("records")
         fiyatli = (df_t["Son_Fiyat"] > 0).sum()
         print(f"  {len(df_t)} TEFAS fonu eklendi | Fiyatli: {fiyatli}")

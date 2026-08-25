@@ -1521,7 +1521,42 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.185 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, ACİL, CANLI TEST EDİLMEDİ] v2.0.7.186 (25 Ağustos 2026,
+  Bahri'nin bulgusu — "HTS ve HOY yine 0 gösteriyor"): v2.0.7.174'ÜN
+  KAPSAM EKSİĞİ BULUNDU - KORUMA SADECE YARIM UYGULANMIŞTI.**
+  - **Zaman çizelgesiyle doğrulanan kesin kök neden:** Git geçmişi
+    satır satır izlendi - 21-24 Ağustos arası (3 gün, hem tam hem
+    kısmi çalışmalar) HTS/HOY fiyatları SABİT ve DOĞRUYDU - v2.0.7.174
+    koruması ÇALIŞIYORDU. Ama **24 Ağustos 23:23'teki "Veri guncelleme"
+    (TAM/gece çalışması)** sırasında HTS/HOY için pytefas/BEFAS ikisi
+    de başarısız olunca fiyat SESSİZCE 0'a düştü - o zamandan beri
+    HİÇ düzelmedi. Sebep: v2.0.7.174 koruması SADECE
+    `update_tefas_evening.py`'ye (günde 7 kez çalışan KISMİ güncelleme)
+    eklenmişti - `worker.py`'nin KENDİ TEFAS yükleme adımında (günde 1
+    kez çalışan TAM/gece güncellemesi) AYNI koruma HİÇ YOKTU. Tam
+    çalışma fiyatı sıfırlayınca, kısmi çalışmanın koruması "önceki
+    fiyata" bakmaya devam etti ama önceki fiyat ARTIK KENDİSİ 0'dı -
+    kurtaracak bir şey kalmamıştı.
+  - **Çözüm:** AYNI "önceki CSV'de geçerli fiyat varsa satırın
+    TAMAMINI koru" mantığı `worker.py`'nin TEFAS yükleme bloğuna da
+    (pytefas overlay'inden hemen sonra) eklendi - artık iki script
+    TUTARLI şekilde davranıyor, ikisi de aynı korumaya sahip.
+  - **İzole test edildi:** Gerçek senaryo simüle edildi (HTS/HOY
+    önceki CSV'de geçerli fiyata sahip, bu turda ikisi de 0 dönüyor,
+    MTG ise başarılı) - doğrulandı: HTS/HOY'un önceki geçerli
+    fiyatları korundu, MTG'nin YENİ başarılı fiyatı hiç etkilenmedi.
+  - **ACİL - CANLI VERİ HÂLÂ BOZUK, KENDİLİĞİNDEN DÜZELMEYECEK:** Bu
+    düzeltme sadece GELECEKTEKİ "önceki fiyat zaten 0 iken tekrar 0
+    gelirse" senaryosunu önler - ŞU AN HTS/HOY'un CSV'deki fiyatı
+    ZATEN 0, yani korunacak geçerli bir "önceki fiyat" da yok. Bu iki
+    fonun fiyatının gerçekten düzelmesi için pytefas veya BEFAS'ın
+    bunlar için en az BİR KEZ DAHA gerçek bir fiyat getirmesi
+    gerekiyor - 21-24 Ağustos arası günlerce sorunsuz çalıştığına göre
+    bunun yakında tekrar olması muhtemel, ama garanti edilemez.
+    Bahri'ye push sonrası birkaç çalışma boyunca takip etmesi
+    önerildi.
+
+
   ikinci canlı log paylaşımı — Actions çalışması #264): KRİTİK BUG -
   GROQ HİÇ DENENMİYORDU, KENDİ v2.0.7.183 EKLEMEM HATALIYDI.**
   - **Log'daki kesin kanıt:** "petrol" kalıbı bir habere eşleşti, ama
