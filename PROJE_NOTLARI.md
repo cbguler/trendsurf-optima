@@ -1521,7 +1521,41 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.190 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, MANTIK DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.191
+  (25 Ağustos 2026, Bahri'nin üçüncü log paylaşımı — Actions çalışması
+  #268): GROQ'UN GERÇEK HATA GÖVDESİ ARTIK GÖRÜNÜYOR - KESİN KÖK NEDEN
+  BULUNDU.**
+  - **v2.0.7.190'daki teşhis iyileştirmesi işe yaradı** - log'da artık
+    Groq'un TAM hata gövdesi görüldü: `{"error":{"message":"Failed to
+    validate JSON. Please adjust your prompt. See 'failed_generation'
+    for more details.","type":"invalid_request_error","code":
+    "json_validate_failed","failed_generation":""}}` - **`failed_generation`
+    ALANI BOŞTU** - bu, modelin JSON üretmeye başladığını ama
+    TAMAMLAYAMADAN kesildiğini gösteren güçlü bir işaret.
+  - **Kesin kök neden (hipotez, izole test edildi):** `_groq_ceviri`
+    ve `_groq_ai_dogrula`'nın istek gövdesinde `max_completion_tokens`
+    HİÇ belirtilmemişti - API'nin varsayılan (muhtemelen düşük, ör.
+    1024) limiti, 32-40 haberlik BÜYÜK bir JSON üretirken çıktıyı
+    yarıda kesiyor, bu da GEÇERSİZ JSON'a (`json_validate_failed`)
+    yol açıyordu. Tek maddelik `_groq_ai_dogrula` bu sorunu ÇOĞUNLUKLA
+    yaşamıyordu (küçük JSON, muhtemelen limitin altında kalıyordu) -
+    bu yüzden AI doğrulama başarılıyken çeviri başarısız oluyordu.
+  - **Çözüm:** İkisine de açık `max_completion_tokens` eklendi -
+    `_groq_ai_dogrula` için 2000 (tek madde, zaten büyük ihtimalle
+    yeterliydi ama garantiye alındı), `_groq_ceviri` için 6000 (40
+    madde x ~50-80 token/madde ~2000-3200 token eder, 6000 cömert bir
+    pay bırakır).
+  - **İzole test edildi:** Düşük token limitiyle JSON'ın yarıda
+    kesilip geçersiz hale geldiği (Groq'un tam olarak bildirdiği
+    hatayla birebir eşleşen "Unterminated string" hatası) ve yüksek
+    limitle geçerli JSON üretildiği doğrulandı.
+  - **AÇIK KALAN:** Bu, güçlü bir hipotez ve mantık testiyle
+    doğrulandı, ama gerçek bir Groq API çağrısıyla CANLI TEST
+    EDİLMEDİ - eğer bu turda da hata devam ederse (aynı ya da farklı
+    bir hatayla), muhtemelen sonraki adım 40 haberi daha küçük
+    gruplara (ör. 10'arlı) bölmek olacak.
+
+
   ikinci log paylaşımı — Actions çalışması #267): BÜYÜK İLERLEME - AI
   DOĞRULAMA GROQ İLE GERÇEKTEN ÇALIŞTI, ÇEVİRİDE YENİ (FARKLI) BİR HATA
   BULUNDU.**

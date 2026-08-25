@@ -318,6 +318,13 @@ def _groq_ai_dogrula(kalip_key, baslik, ozet, kaynak):
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
+                # v2.0.7.191 (Bahri'nin log bulgusu - "json_validate_failed",
+                # failed_generation BOŞ): max_completion_tokens hiç
+                # belirtilmemişti - varsayılan (muhtemelen düşük) limit
+                # JSON'ı yarıda kesip gecersiz hale getiriyor olabilir.
+                # Tek maddelik bu fonksiyon için bile cömert bir pay
+                # bırakıyoruz.
+                "max_completion_tokens": 2000,
             },
             timeout=30,
         )
@@ -537,6 +544,15 @@ KURALLAR:
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
+                # v2.0.7.191 (Bahri'nin log bulgusu - "json_validate_failed",
+                # failed_generation BOŞ): max_completion_tokens hiç
+                # belirtilmemişti. 32-40 haberlik BÜYÜK bir JSON üretirken
+                # varsayılan (muhtemelen düşük, ör. 1024) limit JSON'ı
+                # yarıda kesip GEÇERSİZ hale getiriyordu - Groq bunu
+                # sunucu tarafında doğruluyor ve "json_validate_failed"
+                # ile reddediyor. 40 madde x ~50-80 token/madde ~2000-3200
+                # token eder - 6000 cömert bir pay bırakıyor.
+                "max_completion_tokens": 6000,
             },
             timeout=45,
         )
