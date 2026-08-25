@@ -209,7 +209,8 @@ def _render_kalip_yonetimi():
 
 def _render_kalip_detay(k):
     from db import (kalip_kelime_ekle, kalip_kelime_sil, kalip_etki_kaydet,
-                    kalip_aktif_durum_degistir, kalip_sil)
+                    kalip_aktif_durum_degistir, kalip_sil,
+                    kalip_istatistiksel_dayanak_ayarla)
     kk = k["kalip_key"]
 
     _c1, _c2 = st.columns([3, 1])
@@ -218,6 +219,30 @@ def _render_kalip_detay(k):
         kalip_aktif_durum_degistir(kk, _yeni_aktif)
         st.cache_data.clear()
         st.rerun()
+
+    # v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026 — "her haberin
+    # optima skoruna etki etmesi söz konusu olamaz, bazı kriterler
+    # belirlemeliyiz"): bu kalıbın GERÇEK akademik/tarihsel dayanağı
+    # olup olmadığı - SADECE bu işaretli kalıpların tespitleri "Tümünü
+    # Onayla (kriterleri karşılayanlar)" ile toplu onaylanabilir.
+    # Şu an gerçek araştırmayla desteklenen kalıplar: jeopolitik,
+    # petrol, fed, kredi_notu, tcmb_kredibilite (Akademik Kaynakça'da
+    # gerçek kaynaklar var). Henüz aynı titizlikte araştırılmamış
+    # olanlar: kripto_olay, pboc_tesvik - bunlar bilerek işaretsiz
+    # bırakılmalı, Bahri araştırma yapıp onaylayana kadar.
+    _yeni_dayanak = st.toggle(
+        "İstatistiksel/akademik dayanağı var (toplu onaya uygun)",
+        value=k.get("istatistiksel_dayanak", False),
+        key=f"dayanak_{kk}",
+        help="Sadece bu işaretli kalıpların tespitleri 'Tümünü Onayla "
+             "(kriterleri karşılayanlar)' ile toplu onaylanabilir. "
+             "Sadece gerçek bir akademik makale/tarihsel örnekle "
+             "desteklenen kalıpları işaretleyin - bkz. Akademik Kaynakça.")
+    if _yeni_dayanak != k.get("istatistiksel_dayanak", False):
+        kalip_istatistiksel_dayanak_ayarla(kk, _yeni_dayanak)
+        st.cache_data.clear()
+        st.rerun()
+
     st.caption(k["aciklama"] or "(açıklama yok)")
 
     st.markdown("**Anahtar kelimeler**")

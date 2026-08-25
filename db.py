@@ -404,8 +404,17 @@ def init_db():
         ad          TEXT NOT NULL,
         aciklama    TEXT,
         aktif       BOOLEAN NOT NULL DEFAULT TRUE,
-        olusturma_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        olusturma_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        istatistiksel_dayanak BOOLEAN NOT NULL DEFAULT FALSE
     )""")
+    # v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026 — "her haberin
+    # optima skoruna etki etmesi söz konusu olamaz"): mevcut tabloya
+    # sütunu ekle (idempotent) - canlıdaki tablo zaten var.
+    try:
+        c.execute("ALTER TABLE haber_kaliplari ADD COLUMN IF NOT EXISTS "
+                  "istatistiksel_dayanak BOOLEAN NOT NULL DEFAULT FALSE")
+    except Exception as e:
+        print(f"[db] haber_kaliplari istatistiksel_dayanak migration hatasi: {e}", file=sys.stderr)
     c.execute("""
     CREATE TABLE IF NOT EXISTS haber_kalip_kelime (
         id        SERIAL PRIMARY KEY,
@@ -962,7 +971,8 @@ def get_kaliplar(sadece_aktif: bool = False) -> list:
         conn = get_conn()
         where = "WHERE aktif = TRUE" if sadece_aktif else ""
         kaliplar = conn.execute(
-            f"SELECT kalip_key, ad, aciklama, aktif FROM haber_kaliplari "
+            f"SELECT kalip_key, ad, aciklama, aktif, istatistiksel_dayanak "
+            f"FROM haber_kaliplari "
             f"{where} ORDER BY olusturma_zamani").fetchall()
         kelimeler = conn.execute(
             "SELECT kalip_key, dil, kelime FROM haber_kalip_kelime "
@@ -984,6 +994,11 @@ def get_kaliplar(sadece_aktif: bool = False) -> list:
         sonuc[kk] = {
             "kalip_key": kk, "ad": _v(r, "ad", 1),
             "aciklama": _v(r, "aciklama", 2), "aktif": bool(_v(r, "aktif", 3)),
+            # v2.0.7.194 (Bahri'nin talebi - "her haberin optima skoruna
+            # etki etmesi söz konusu olamaz"): kalıbın gerçek akademik/
+            # tarihsel dayanağı olup olmadığı - "Tümünü Onayla (kriterleri
+            # karşılayanlar)" toplu onay özelliği bu bayrağı kontrol eder.
+            "istatistiksel_dayanak": bool(_v(r, "istatistiksel_dayanak", 4)),
             "kelimeler": {"tr": [], "en": []}, "etkiler": {},
         }
     for r in kelimeler:
@@ -995,6 +1010,52 @@ def get_kaliplar(sadece_aktif: bool = False) -> list:
         if kk in sonuc:
             sonuc[kk]["etkiler"][_v(r, "kategori", 1)] = float(_v(r, "puan", 2))
     return list(sonuc.values())
+
+
+def kalip_istatistiksel_dayanak_ayarla(kalip_key: str, deger: bool) -> bool:
+    """v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026): Admin Paneli'nden
+    bir kalıbın gerçek akademik/tarihsel dayanağı olup olmadığını
+    işaretlemek için. Sadece bu bayrak TRUE olan kalıpların tespitleri
+    "Tümünü Onayla (kriterleri karşılayanlar)" ile toplu onaylanabilir."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE haber_kaliplari SET istatistiksel_dayanak=? WHERE kalip_key=?",
+            (bool(deger), kalip_key))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] kalip_istatistiksel_dayanak_ayarla hata: {e}", file=sys.stderr)
+        return False
+
+
+def coklu_kaynak_teyidi(kalip_key: str, kendi_haber_kaynak: str, saat: int = 24) -> bool:
+    """v2.0.7.194 (Bahri'nin talebi — "birden fazla haber kaynağında
+    aynı haber olduğu teyid edilmeli"): Aynı kalıp için, KENDİSİNDEN
+    FARKLI bir haber_kaynak'a (ör. AA Ekonomi/BBC/Al Jazeera - aynı
+    kaynağın farklı bir URL'i DEĞİL, gerçekten FARKLI bir kaynak) sahip
+    başka bir tespit, son `saat` saat içinde var mı diye kontrol eder.
+
+    NOT: Bu kaba bir vekildir (proxy) - "aynı OLAYIN farklı kaynaklarca
+    haber yapılması" ile "aynı kalıba uyan FARKLI bir olayın aynı gün
+    olması" arasında ayrım yapmaz (ikisi de bu sorguda "teyit edilmiş"
+    görünür). Daha kesin bir eşleştirme (başlık benzerliği/aynı olay
+    tespiti) ileride eklenebilir - şimdilik "aynı kalıpta yakın zamanda
+    birden fazla FARKLI kaynaktan tetikleme" makul bir ilk yaklaşım."""
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT COUNT(*) as adet FROM beklenti_otomatik_tespit "
+            "WHERE kalip_key=? AND haber_kaynak != ? "
+            "AND tespit_zamani > now() - interval '%s hours'" % int(saat),
+            (kalip_key, kendi_haber_kaynak)).fetchone()
+        conn.close()
+        adet = (row["adet"] if isinstance(row, dict) else row[0]) if row else 0
+        return int(adet or 0) > 0
+    except Exception as e:
+        print(f"[db] coklu_kaynak_teyidi hata: {e}", file=sys.stderr)
+        return False
 
 
 def kalip_ekle(kalip_key: str, ad: str, aciklama: str = "") -> bool:

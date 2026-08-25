@@ -1521,14 +1521,114 @@ tamam, canlı doğrulama BEKLİYOR):**
     `TRY=X`) beklendiği gibi geriye dönük veri döndürüp döndürmediğini,
     ve tabloların doğru göründüğünü kontrol et.
 
-- **[CANLIDA DOĞRULANDI - TAM BAŞARILI] v2.0.7.191
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.194 (25 Ağustos 2026, Bahri'nin
+  talebi — "her haberin optima skoruna etki etmesi söz konusu olamaz,
+  bazı kriterler belirlemeliyiz"): TOPLU ONAY EKLENDİ, AMA SADECE ÜÇ
+  KRİTERİ DE KARŞILAYAN TESPİTLER İÇİN.**
+  - **Bahri'nin 3 kriteri somut kurallara çevrildi (onun onayıyla):**
+    (1) Şiddet="Yüksek" olmalı. (2) Aynı kalıpta, FARKLI bir kaynaktan,
+    son 24 SAAT içinde başka bir tespit olmalı (çoklu kaynak teyidi -
+    Bahri'nin seçimiyle 24 saat, 48 değil). (3) Kalıbın gerçek akademik/
+    tarihsel dayanağı olduğu Admin Panel'den işaretlenmiş olmalı.
+  - **Kriterleri KARŞILAMAYAN tespitlere ne olur (Bahri'nin seçimi):**
+    OTOMATİK REDDEDİLİR - skoru etkilemez, listeden çıkar. Bekleyen
+    listede bırakılmaz.
+  - **Yeni DB şeması:** `haber_kaliplari` tablosuna `istatistiksel_dayanak`
+    BOOLEAN sütunu eklendi (idempotent ALTER TABLE - canlı tablo zaten
+    var). Yeni fonksiyonlar: `kalip_istatistiksel_dayanak_ayarla()`,
+    `coklu_kaynak_teyidi()` (kaba bir vekil/proxy - "aynı kalıpta farklı
+    kaynaktan yakın zamanlı tetikleme" kontrol ediyor, "aynı OLAYIN
+    farklı kaynaklarca haberleştirilmesi" ile "aynı kalıba uyan FARKLI
+    bir olayın aynı gün olması" arasında ayrım YAPMIYOR - ileride daha
+    kesin bir eşleştirme, ör. başlık benzerliği, eklenebilir).
+  - **Admin Panel:** Kalıp Yönetimi'ne "İstatistiksel/akademik dayanağı
+    var (toplu onaya uygun)" anahtarı eklendi. **AÇIK - Bahri'nin
+    yapması gereken adım:** Akademik Kaynakça'da gerçek kaynağı olan
+    kalıplar (jeopolitik, petrol, fed, kredi_notu, tcmb_kredibilite) bu
+    anahtarla işaretlenmeli - henüz araştırılmamış olanlar (kripto_olay,
+    pboc_tesvik) işaretsiz bırakılmalı. Bu işaretleme YAPILMADAN hiçbir
+    kalıp toplu onaya uygun olmaz (varsayılan FALSE).
+  - **UI:** Ana Sayfa'daki "Onay Bekleyen Otomatik Tespitler" listesinin
+    üstüne "Tümünü Onayla (kriterleri karşılayanlar)" düğmesi ve
+    kriterleri açıklayan bir not eklendi.
+  - **İzole test edildi (6 senaryo):** tüm kriterleri karşılayan →
+    onaylanır; şiddet Orta → reddedilir; dayanaksız kalıp → reddedilir;
+    teyit yok → reddedilir; AYNI kaynaktan "teyit" → GEÇERSİZ SAYILIR
+    (doğru); 24 saatten eski teyit → geçersiz. Hepsi doğru sonuç verdi.
+
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.195 (25 Ağustos 2026, Bahri'nin
+  talebi — "Kalıp/Şiddet/Geçerlilik yazısının daha çok görünürlüğünü
+  sağla"): sade gri `st.caption` yerine, şiddete göre renklenen (Yüksek=
+  kırmızı, Orta=turuncu, Düşük=gri) sol kenarlıklı bir rozet kutusu -
+  hem modal dialogda hem Ana Sayfa listesinde (tutarlılık için ikisinde
+  de aynı stil).
+
+
+  bulgusu — "onay butonunu tıklıyorum ama hiçbir buton çalışmıyor"):
+  ONAY/RED DÜĞMELERİ VERİTABANI YAZMA HATASINI SESSİZCE YUTUYORDU.**
+  - **Kesin kök neden:** `db.py`'deki `tespit_onayla`/`tespit_reddet`
+    fonksiyonları veritabanı yazması başarısız olsa bile HATA
+    FIRLATMIYOR - sadece arka planda `print` edip `False` döndürüyor.
+    `app.py`'deki düğme kodu bu dönüş değerini HİÇ KONTROL ETMİYORDU -
+    "except" bloğu bu yüzden hiçbir zaman tetiklenmiyordu, kod her
+    zaman "başarılı" varsayıp cache temizleyip rerun ediyordu. Gerçek
+    bir yazma hatası olduğunda kullanıcı ne bir hata mesajı görüyordu
+    ne de bir ilerleme - sadece aynı pop-up tekrar tekrar açılıyordu.
+  - **Çözüm:** Hem modal dialogdaki hem Ana Sayfa listesindeki (4 yer
+    toplam) Onayla/Reddet düğmeleri artık dönüş değerini kontrol
+    ediyor - başarısızsa AÇIK bir hata mesajı gösteriliyor.
+
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.193 (25 Ağustos 2026, Bahri'nin
+  takip bulgusu — "gerçekte çalıştı ama çok geç çalıştı"): ONAY SONRASI
+  YAVAŞLIK - GEREKSİZ GENEL CACHE TEMİZLEME BULUNDU.**
+  - **Kesin kök neden:** Onay/Red sonrası `st.cache_data.clear()`
+    (GENEL/global temizleme) çağrılıyordu - bu, SADECE ilgili iki küçük
+    tespit önbelleğini değil, UYGULAMADAKİ HER ÖNBELLEKLİ FONKSİYONU
+    (tüm evren CSV'si, BIST/TEFAS verileri, her şey) tek seferde
+    siliyordu. Onay sonrası rerun bu yüzden HER ŞEYİ sıfırdan yeniden
+    hesaplamak zorunda kalıyordu - "çok geç çalıştı" hissi buradan
+    geliyordu.
+  - **Çözüm:** 4 konumun tümünde `st.cache_data.clear()` yerine SADECE
+    `_bekleyen_tespitler_onbellekli.clear()` ve
+    `_onaylanmis_tespitler_onbellekli.clear()` çağrılıyor - genel
+    temizleme sadece bu iki fonksiyon hiç tanımlanmamışsa (try bloğu
+    daha ileri gitmeden başarısız olduysa) güvenli yedek olarak kalıyor.
+  - **Test EDİLMEDİ (performans iyileştirmesi, canlıda gözlemlenmeli)** -
+    bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
+    olması bekleniyor.
+
+- **[KALICI KARAR - BİLEREK BÖYLE, BİR DAHA SORGULANMASIN] 25 Ağustos
+  2026 — "Otomatik tespit" onay pop-up'ı BİLEREK paylaşımlı/global:**
+  Bahri'nin sorusu üzerine kod incelendi - `beklenti_otomatik_tespit`
+  tablosunda hiçbir kullanıcı/abone sütunu yok, pop-up `is_admin`
+  kontrolüne bağlı değil, GİRİŞ YAPAN HERKESE (admin veya herhangi bir
+  Premium abone) aynı şekilde görünüyor - kim önce Onayla/Reddet derse
+  o, TÜM sistem için (paylaşımlı Optima Skor) geçerli oluyor. **Bahri'ye
+  bu netleştirildi ve "sadece admin görsün" seçeneği sunuldu - Bahri
+  AÇIKÇA REDDETTİ, mevcut paylaşımlı davranışın BİLEREK böyle
+  kalmasını istedi.** Kod DEĞİŞTİRİLMEDİ. Bu madde artık kapalı -
+  gelecekte bir "bug" gibi tekrar gündeme getirilmemeli.
+  **Geçerlilik süresi de netleştirildi:** 48 saat (tespit anından
+  itibaren, onay anından değil) - süre dolunca puan etkisi otomatik
+  olarak, manuel müdahale gerekmeden sessizce ortadan kalkıyor (canlı
+  sorgu `gecerlilik_bitis > now()` filtresi kullanıyor, kalıcı bir
+  veritabanı yazması değil).
+
+
+  GERÇEKTEN ÇALIŞTI:** v2.0.7.155'te başlayan (18 Ağustos) bu özelliğin,
+  onlarca hata/düzeltme turundan sonra (Gemini kota sorunları, Groq
+  entegrasyonu, model değişiklikleri, JSON kesilme hatası vb.) sistemin
+  TAMAMI ilk kez sorunsuz işledi: RSS taraması → anahtar kelime
+  filtresi ("jeopolitik") → AI doğrulama (Groq, gpt-oss-120b) →
+  Supabase'e yazma → Portföyüm sayfasında "Otomatik tespit" pop-up'ı →
+  Bahri'nin onayı. Haber: "AB, Ukrayna'ya 6,1 milyar euroluk savunma
+  paketi onayladı" - uygulanan puanlar: Değerli Maden +8.0, Döviz +6.0,
+  BIST -6.0. Bahri onayladı.
+
+
   (25 Ağustos 2026, Bahri'nin üçüncü log paylaşımı — Actions çalışması
-  #268, doğrulama #269): GROQ'UN GERÇEK HATA GÖVDESİ ARTIK GÖRÜNÜYOR -
-  KESİN KÖK NEDEN BULUNDU VE ÇÖZÜLDÜ.**
-  - **CANLI SONUÇ (Actions #269):** `"Groq ile ceviri deneniyor: 32
-    haber (baslik+ozet)..." → "Groq 32 haber cevirdi."` - 32/32 TAM
-    BAŞARILI, hiç eksik yok. `max_completion_tokens` düzeltmesi
-    beklendiği gibi çalıştı - hipotez doğru çıktı.
+  #268): GROQ'UN GERÇEK HATA GÖVDESİ ARTIK GÖRÜNÜYOR - KESİN KÖK NEDEN
+  BULUNDU.**
   - **v2.0.7.190'daki teşhis iyileştirmesi işe yaradı** - log'da artık
     Groq'un TAM hata gövdesi görüldü: `{"error":{"message":"Failed to
     validate JSON. Please adjust your prompt. See 'failed_generation'
@@ -1619,10 +1719,7 @@ tamam, canlı doğrulama BEKLİYOR):**
 
   Bahri'nin bulgusu — "TEFAS'ın kendi sitesinde bu fonların değerleri
   var, ama bizde hâlâ 0"): GERÇEK KÖK NEDEN BULUNDU - pytefas'IN KENDİSİ
-  ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.
-  **[CANLIDA DOĞRULANDI - 25 Ağustos, sonraki gün]:** HTS ve HOY
-  Portföyüm sayfasında artık GERÇEK fiyat gösteriyor (59,066274 ve
-  0,365252) - retry düzeltmesi canlıda işe yaradı.**
+  ARA SIRA 503 VERİYOR, RETRY HİÇ YOKTU.**
   - **Bu, v2.0.7.174/186'nın çözdüğü sorundan TAMAMEN FARKLI, DAHA
     DERİN bir kök neden.** Önceki iki düzeltme "önceki geçerli fiyatı
     koru" mantığıydı - ama korunacak geçerli bir önceki fiyat hiç

@@ -2541,9 +2541,18 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                 _pc1.markdown(_kat_ad_m)
                 _pc2.markdown(f"**{_puan_m:+.1f}**")
 
-        st.caption(
-            f"Kalıp: {_KALIP_ISIM.get(_tkm, _tkm)} · Şiddet: {_sdm} · "
-            f"Geçerlilik: 48 saat")
+        # v2.0.7.195 (Bahri'nin talebi, 25 Ağustos 2026 — "Kalıp/Şiddet/
+        # Geçerlilik yazısının daha çok görünürlüğünü sağla"): sade,
+        # gri bir st.caption yerine, şiddete göre renklenen (Yüksek=
+        # kırmızı, Orta=turuncu, Düşük=gri), daha büyük/kalın bir rozet.
+        _siddet_renk = {"Yüksek": "#b91c1c", "Orta": "#b45309", "Düşük": "#6b7280"}.get(_sdm, "#6b7280")
+        st.markdown(
+            f"""<div style="background:#f3f4f6;border-left:4px solid {_siddet_renk};
+                 border-radius:6px;padding:10px 14px;margin:6px 0;font-size:15px;">
+                 <b>Kalıp:</b> {_KALIP_ISIM.get(_tkm, _tkm)} &nbsp;·&nbsp;
+                 <b>Şiddet:</b> <span style="color:{_siddet_renk};font-weight:700;">{_sdm}</span>
+                 &nbsp;·&nbsp; <b>Geçerlilik:</b> 48 saat</div>""",
+            unsafe_allow_html=True)
         if _tm.get("haber_url"):
             st.caption(
                 f"Kaynak: [{_tm.get('haber_kaynak','')} — "
@@ -4629,6 +4638,67 @@ if page=="Ana Sayfa":
                 "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece onayladığınız "
                 "tespitler uygulanır."
             )
+
+            # v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026 — "her
+            # haberin optima skoruna etki etmesi söz konusu olamaz,
+            # bazı kriterler belirlemeliyiz"): TOPLU ONAY - ama SADECE
+            # ÜÇ KRİTERİ DE karşılayan tespitler onaylanır, geri kalanı
+            # OTOMATİK REDDEDİLİR (skor etkilemez, listeden çıkar).
+            # Kriterler: (1) Şiddet="Yüksek", (2) aynı kalıpta FARKLI
+            # bir kaynaktan son 24 saatte başka bir tespit var (çoklu
+            # kaynak teyidi), (3) kalıbın "istatistiksel_dayanak"
+            # bayrağı işaretli (Admin Panel > Kalıp Yönetimi'nden
+            # ayarlanır - gerçek akademik/tarihsel dayanağı olan
+            # kalıplar: jeopolitik, petrol, fed, kredi_notu,
+            # tcmb_kredibilite).
+            try:
+                from db import get_kaliplar as _gk_toplu, coklu_kaynak_teyidi as _ckt
+                _kalip_dayanak_haritasi = {
+                    k["kalip_key"]: k.get("istatistiksel_dayanak", False)
+                    for k in _gk_toplu()
+                }
+            except Exception:
+                _kalip_dayanak_haritasi = {}
+
+            def _tespit_kriterleri_karsiliyor_mu(_t):
+                if (_t.get("siddet") or "").strip() != "Yüksek":
+                    return False
+                if not _kalip_dayanak_haritasi.get(_t.get("kalip_key"), False):
+                    return False
+                try:
+                    if not _ckt(_t.get("kalip_key"), _t.get("haber_kaynak", ""), saat=24):
+                        return False
+                except Exception:
+                    return False
+                return True
+
+            if st.button("Tümünü Onayla (kriterleri karşılayanlar)",
+                         key="tumunu_onayla_kriterli"):
+                from db import tespit_onayla as _to_toplu, tespit_reddet as _tr_toplu
+                _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
+                for _t_toplu in _bekleyen_tespitler:
+                    if _tespit_kriterleri_karsiliyor_mu(_t_toplu):
+                        if _to_toplu(_t_toplu["id"]):
+                            _onaylanan_sayisi += 1
+                    else:
+                        if _tr_toplu(_t_toplu["id"]):
+                            _reddedilen_sayisi += 1
+                try:
+                    _bekleyen_tespitler_onbellekli.clear()
+                    _onaylanmis_tespitler_onbellekli.clear()
+                except Exception:
+                    st.cache_data.clear()
+                st.success(
+                    f"{_onaylanan_sayisi} tespit kriterleri karşıladığı için "
+                    f"onaylandı, {_reddedilen_sayisi} tespit kriterleri "
+                    f"karşılamadığı için otomatik reddedildi.")
+                st.rerun()
+            st.caption(
+                "Kriterler: Şiddet=Yüksek + son 24 saatte farklı bir "
+                "kaynaktan teyit + kalıbın istatistiksel dayanağı olması "
+                "(Admin Panel'den ayarlanır). Karşılamayanlar otomatik "
+                "reddedilir, skoru etkilemez.")
+
             for _tespit in _bekleyen_tespitler:
                 _tk2 = _tespit["kalip_key"]
                 _kalip_adi_gosterim = _KALIP_ISIM.get(_tk2, _tk2)
@@ -4641,10 +4711,18 @@ if page=="Ana Sayfa":
                     _dogal_cumle = _tespit.get('ai_gerekce', '') or (
                         f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
                     st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
+                    # v2.0.7.195: modal dialogdaki AYNI rozet stili -
+                    # tutarlılık için (bkz. o yorum).
+                    _sdt2 = _tespit.get('siddet', 'Orta')
+                    _sr2 = {"Yüksek": "#b91c1c", "Orta": "#b45309", "Düşük": "#6b7280"}.get(_sdt2, "#6b7280")
+                    st.markdown(
+                        f"""<div style="background:#f3f4f6;border-left:4px solid {_sr2};
+                             border-radius:6px;padding:8px 12px;margin:4px 0;font-size:14px;">
+                             <b>Kalıp:</b> {_kalip_adi_gosterim} &nbsp;·&nbsp;
+                             <b>Önerilen şiddet:</b> <span style="color:{_sr2};font-weight:700;">{_sdt2}</span></div>""",
+                        unsafe_allow_html=True)
                     st.caption(
-                        f"Kalıp: {_kalip_adi_gosterim} · Önerilen şiddet: "
-                        f"{_tespit.get('siddet','Orta')} · Kaynak: "
-                        f"[{_tespit.get('haber_kaynak','')} — "
+                        f"Kaynak: [{_tespit.get('haber_kaynak','')} — "
                         f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
                     _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
                     with _oc1:
