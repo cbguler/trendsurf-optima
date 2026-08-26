@@ -1186,13 +1186,38 @@ def get_bekleyen_tespitler() -> list:
     bunu her sayfa yuklemesinde cagirir - suresi gecmemis VE HENUZ
     ONAY/RED VERİLMEMİŞ tespitleri doner. Bunlar Optima Skor'a HENUZ
     UYGULANMAMIŞTIR - sadece kullanıcıya "onaylar mısınız?" diye
-    gösterilecek adaylardır."""
+    gösterilecek adaylardır.
+
+    v2.0.7.199 (Bahri'nin talebi, 25 Ağustos 2026 — "birden fazla
+    kaynak tarafından da aynı haberin alınması, bir başka kriter olarak
+    eklenebilir"): ARTIK SADECE ÇOKLU KAYNAK TEYİDİ OLAN tespitler
+    döner - aynı kalıp için, FARKLI bir kaynaktan, son 24 SAAT içinde
+    başka bir tespit (herhangi bir onay durumunda) yoksa, bu tespit
+    KULLANICIYA HİÇ GÖSTERİLMEZ (pop-up çıkmaz) - sessizce veritabanında
+    "bekliyor" durumunda kalır. Eğer/ne zaman ikinci bir kaynaktan
+    aynı kalıba uyan bir haber gelirse, İKİSİ DE (aynı anda birbirini
+    teyit ettikleri için) görünür hale gelir. Bu, v2.0.7.194'teki
+    `coklu_kaynak_teyidi()` fonksiyonuyla AYNI mantık/eşik (24 saat) -
+    ama o fonksiyon SADECE toplu onay için kullanılıyordu, bu artık
+    HERHANGİ bir gösterim (tekil pop-up dahil) için de geçerli.
+
+    BİLİNEN SINIRLAMA (coklu_kaynak_teyidi ile aynı): kaba bir vekil -
+    "aynı OLAYIN farklı kaynaklarca haberleştirilmesi" ile "aynı kalıba
+    uyan FARKLI bir olayın aynı gün olması" arasında ayrım yapmaz."""
     try:
         rows = get_conn().execute(
-            "SELECT id, kalip_key, siddet, haber_basligi, haber_url, "
-            "haber_kaynak, ai_gerekce, tespit_zamani FROM beklenti_otomatik_tespit "
-            "WHERE gecerlilik_bitis > now() AND onay_durumu = 'bekliyor' "
-            "ORDER BY tespit_zamani DESC"
+            "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
+            "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
+            "FROM beklenti_otomatik_tespit t1 "
+            "WHERE t1.gecerlilik_bitis > now() AND t1.onay_durumu = 'bekliyor' "
+            "AND EXISTS ("
+            "  SELECT 1 FROM beklenti_otomatik_tespit t2 "
+            "  WHERE t2.kalip_key = t1.kalip_key "
+            "  AND t2.haber_kaynak != t1.haber_kaynak "
+            "  AND t2.tespit_zamani > now() - interval '24 hours' "
+            "  AND t2.id != t1.id"
+            ") "
+            "ORDER BY t1.tespit_zamani DESC"
         ).fetchall()
     except Exception:
         return []
