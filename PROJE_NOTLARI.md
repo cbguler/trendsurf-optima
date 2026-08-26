@@ -1597,7 +1597,37 @@ tamam, canlı doğrulama BEKLİYOR):**
     bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
     olması bekleniyor.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.198 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.199 (25 Ağustos 2026, Bahri'nin
+  talebi — "birden fazla kaynak tarafından aynı haberin alınması bir
+  başka kriter olarak eklenebilir"): ÇOKLU KAYNAK TEYİDİ ARTIK
+  POP-UP/GÖSTERİM AŞAMASINA DA UYGULANIYOR - SADECE TOPLU ONAY İÇİN
+  DEĞİL.**
+  - **Önceki durum:** v2.0.7.194'teki "çoklu kaynak teyidi" (24 saat
+    içinde farklı bir kaynaktan aynı kalıp) SADECE toplu onay
+    ("Tümünü Onayla") için bir kriterdi - tekil pop-up/liste gösterimi
+    bundan etkilenmiyordu, tek kaynaktan gelen her şey görünüyordu.
+  - **Değişiklik:** `get_bekleyen_tespitler()` artık SADECE çoklu
+    kaynak teyidi olan tespitleri döndürüyor - SQL'e bir `EXISTS`
+    alt sorgusu eklendi (aynı `kalip_key`, farklı `haber_kaynak`, son
+    24 saat - `coklu_kaynak_teyidi()` ile AYNI mantık/eşik). Tek
+    kaynaktan gelen bir tespit artık HİÇ POP-UP OLARAK ÇIKMIYOR -
+    veritabanında sessizce "bekliyor" durumunda kalıyor, ikinci bir
+    kaynaktan teyit gelene kadar.
+  - **ÖNEMLİ DAVRANIŞ DEĞİŞİKLİĞİ - Bahri'ye açıkça bildirildi:** Bu
+    değişiklik canlıya alındığında, o an bekleyen tespitlerin ÇOĞU
+    (tek kaynaklı olanlar) "Onay Bekleyen Otomatik Tespitler"
+    listesinden/pop-up'tan ANİDEN KAYBOLACAK - bu bir hata DEĞİL,
+    tam olarak istenen davranış. Sayı büyük ölçüde düşerse şaşırmamalı.
+  - **BİLİNEN SINIRLAMA (coklu_kaynak_teyidi ile aynı, miras alındı):**
+    kaba bir vekil - "aynı OLAYIN farklı kaynaklarca haberleştirilmesi"
+    ile "aynı kalıba uyan FARKLI bir olayın aynı gün olması" arasında
+    ayrım yapmıyor. Ayrıca iki kaynak birbirini teyit ettiğinde İKİSİ
+    DE ayrı ayrı görünür/onaylanabilir hale geliyor - ikisi de
+    onaylanırsa AYNI olayın etkisi TEORİK OLARAK iki kez uygulanabilir
+    (bu, v2.0.7.194'teki toplu onayın da zaten taşıdığı bir
+    karakteristik, yeni bir sorun değil).
+
+
   bulgusu — "risk orta/yüksek denildiği halde Türkiye piyasalarını pek
   etkilemeyecek haberler geliyor, sistemi ağırlaştırıyor"): AI
   DOĞRULAMA İSTEMİ KÖKTEN SIKILAŞTIRILDI - SADECE TÜRKİYE PİYASALARINI
