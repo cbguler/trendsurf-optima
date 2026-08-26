@@ -1597,7 +1597,33 @@ tamam, canlı doğrulama BEKLİYOR):**
     bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
     olması bekleniyor.
 
-- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.197 (25 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.198 (25 Ağustos 2026, Bahri'nin
+  bulgusu — "risk orta/yüksek denildiği halde Türkiye piyasalarını pek
+  etkilemeyecek haberler geliyor, sistemi ağırlaştırıyor"): AI
+  DOĞRULAMA İSTEMİ KÖKTEN SIKILAŞTIRILDI - SADECE TÜRKİYE PİYASALARINI
+  GERÇEKTEN ETKİLEYECEK HABERLER GEÇSİN.**
+  - **Kök neden:** Eski istem sadece genel "piyasa etkisi olası mı"
+    diye soruyordu - "HANGİ piyasa" belirtilmediği için AI, dünyanın
+    herhangi bir yerindeki bir olayı (Türkiye ile zayıf/dolaylı bir
+    bağı olsa bile) "eşleşme=true" işaretleyebiliyordu.
+  - **Çözüm (`_ai_dogrula_prompt_olustur` - hem Gemini hem Groq için
+    ORTAK, tek kaynak):** Artık İKİ ŞART DA sağlanmalı: (1) olay
+    GERÇEKTEN büyük/önemli ölçekte (rutin/küçük/zaten fiyatlanmış
+    DEĞİL), (2) Türkiye piyasaları (TL/BIST/Türk tahvilleri-CDS)
+    üzerinde DOĞRUDAN VE ANLAMLI bir etki mekanizması açıkça var -
+    "dünyada bir yerde bir şey oldu" YETMEZ. Açık RED örnekleri
+    eklendi: genel yorum/analiz makaleleri, geçmiş olay hatırlatmaları,
+    Türkiye'ye sadece dolaylı/teorik/uzak bağı olan haberler, zaten
+    fiyatlanmış rutin açıklamalar. "Şüpheye düşersen KESİNLİKLE
+    eşleşme=false" vurgusu güçlendirildi.
+  - **Test edildi:** Yeni istemin doğru oluştuğu (tüm yeni katı
+    kriterlerin metinde yer aldığı) izole test edildi.
+  - **Beklenti:** Bu, "bekleyen tespit" sayısını önemli ölçüde
+    azaltmalı - Bahri'nin bir sonraki birkaç haber taramasında
+    gözlemleyip geri bildirmesi gerekiyor, gerekirse istem daha da
+    ayarlanabilir.
+
+
   talebi — "uygulama ilk açıldığında 25.000 TL bütçe default olarak
   girilmiş olsun"): Bütçe (TL) kutusunun varsayılanı 0'dan (boş)
   25.000 TL'ye çevrildi - `_DEFAULT_BUTCE` sabitinden okunuyor, tek
@@ -1609,18 +1635,33 @@ tamam, canlı doğrulama BEKLİYOR):**
   sorununun bir daha hiç tetiklenmemesini de garantiliyor (varsayılan
   artık asla 0 değil).
 
-- **[AÇIK - Bahri'den bilgi bekleniyor] 25 Ağustos 2026 — Supabase
-  güvenlik uyarısı (KRİTİK):** Supabase'den "Table publicly accessible
-  - Row-Level Security etkin değil" e-postası geldi (proje:
-  trendsurf-optima, kod: rls_disabled_in_public). E-postada HANGİ
-  TABLO olduğu belirtilmiyor - Bahri'ye Supabase Dashboard > Advisors
-  sekmesinden tam tablo adını kontrol etmesi istendi. **Tablo adı
-  öğrenilene kadar düzeltme yapılamaz** - RLS'i körü körüne açmak,
-  eğer uygulama o tabloya Supabase'in REST API'si + anon key üzerinden
-  erişiyorsa (get_conn()'un doğrudan Postgres bağlantısı kullandığı
-  biliniyor, ama bu tam olarak doğrulanmadı) uygulamanın kendi erişimini
-  de kesebilir - önce hangi tablo ve hangi erişim yöntemi olduğu
-  netleşmeli.
+- **[SUPABASE TARAFI ÇÖZÜLDÜ - UYGULAMA TESTİ BEKLENİYOR] 25 Ağustos
+  2026 — Supabase güvenlik uyarısı (KRİTİK): 7 TABLODA RLS KAPALI
+  BULUNDU.** Security Advisor'da tam liste doğrulandı - hepsi bu
+  oturumda/önceki oturumlarda kurulan "Beklenti Modu" (haber izleme)
+  sistemine ait, hiçbiri genel kullanıcıya açık olması gereken bir
+  tablo değil: `haber_islenmis`, `beklenti_otomatik_tespit`,
+  `ai_cagri_butcesi`, `haber_akisi`, `haber_kalip_kelime`,
+  `haber_kaliplari`, `haber_kalip_etki`. Sebep: bunlar önceki RLS
+  denetiminden (hafızada "8 kritik uyarı çözüldü" notu) SONRA
+  oluşturulan yeni tablolar, o denetime hiç girmemişler.
+  **Çözüm:** Uygulama Supabase'e `SUPABASE_DB_URL` ile DOĞRUDAN Postgres
+  bağlantısı kullanıyor (muhtemelen `postgres` rolüyle, ki bu rol RLS'i
+  HER ZAMAN atlar) - bu yüzden bu 7 tabloda RLS'i (hiç policy eklemeden)
+  açmak GÜVENLİ: uygulamanın kendi erişimi etkilenmez, sadece dışarıdan
+  (anon key/REST API üzerinden) herkese açık erişim kapanır. Bahri'ye
+  7 tablo için `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;` komutları
+  ve push sonrası hemen uygulamayı test etme adımları verildi.
+  **CANLIDA DOĞRULANDI:** Bahri SQL'i çalıştırdı, Security Advisor'ı
+  yeniden çalıştırdı - "0 errors / No errors detected" (7 hatanın
+  tamamı temizlendi). **AÇIK KALAN:** uygulamanın kendi erişiminin
+  (haber taraması, tespit oluşturma) hâlâ sorunsuz çalıştığı canlıda
+  doğrulanmalı - beklenti öyle (postgres rolü RLS'i atlar) ama gerçek
+  bir test henüz yapılmadı.
+  **KALICI KURAL - GELECEKTE HATIRLANMALI:** Bundan sonra `db.py`'de
+  YENİ bir tablo (`CREATE TABLE IF NOT EXISTS ...`) eklenirken, AYNI
+  migration'da hemen `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;`
+  satırı da eklenmeli - bu sorunun bir daha birikmesini önler.
   Ayrıca gelen GitHub Codespaces silinme uyarısı ("improved orbit"
   codespace'i) - Bahri'nin gerçek iş akışında (Claude'dan dosya indirip
   yerel git push) Codespaces hiç kullanılmıyor, kod/veriyi etkilemez,

@@ -214,15 +214,25 @@ def _gemini_istek_gonder(url, headers, payload, timeout=30, deneme=2, bekleme_sn
 def _ai_dogrula_prompt_olustur(kalip_key, baslik, ozet, kaynak):
     """v2.0.7.183: Gemini VE Groq'un AYNI prompt'u kullanması icin ortak
     fonksiyona cikarildi - iki saglayici arasinda tutarlilik saglar,
-    ayni metni iki yerde elle senkron tutma riskini ortadan kaldirir."""
+    ayni metni iki yerde elle senkron tutma riskini ortadan kaldirir.
+
+    v2.0.7.198 (Bahri'nin bulgusu, 25 Ağustos 2026 — "risk orta/yüksek
+    denildiği halde Türkiye piyasalarını pek etkilemeyecek haberler
+    geliyor, bu sistemi ağırlaştırıyor"): İstem KÖKTEN sıkılaştırıldı.
+    Eski istem sadece genel "piyasa etkisi olası mı" diye soruyordu -
+    "HANGİ piyasa" belirtilmediği için AI, dünyanın herhangi bir
+    yerindeki bir olayı (Türkiye ile zayıf/dolaylı bir bağı olsa bile)
+    "eşleşme=true" olarak işaretleyebiliyordu. Artık TÜRKİYE PİYASALARI
+    ÜZERİNDEKİ GERÇEK, DOĞRUDAN ETKİ AÇIKÇA VE ZORUNLU bir kriter."""
     kalip_aciklama = _KALIP_ISIM.get(kalip_key, kalip_key)
     _yon_haritasi = _KALIP_KATEGORI_YONU.get(kalip_key, {})
     _kategori_aciklama = "; ".join(
         f"{_KATEGORI_ISIM_TR.get(k, k)} kategorisi {v}"
         for k, v in _yon_haritasi.items())
     return f"""Bir finansal haber izleme sistemisin. Aşağıdaki haberin
-GERÇEKTEN "{kalip_aciklama}" kategorisine ait, PİYASALARI ETKİLEYECEK
-ÖNEMLİ bir olayı anlatıp anlatmadığını değerlendir.
+GERÇEKTEN "{kalip_aciklama}" kategorisine ait, TÜRKİYE PİYASALARINI
+(TL, BIST, Türk tahvilleri/CDS'i, Türkiye ekonomisi) ÖNEMLİ ÖLÇÜDE
+ETKİLEYECEK bir olayı anlatıp anlatmadığını değerlendir.
 
 Haber başlığı: {baslik}
 Haber özeti: {ozet}
@@ -230,10 +240,30 @@ Kaynak: {kaynak}
 
 Bu kalıp eşleşirse, normalde şu yönde etki beklenir: {_kategori_aciklama}
 
-ÖNEMLİ: Sadece GERÇEKTEN önemli, taze, piyasa etkisi olası bir olaysa
-eşleşme=true de. Genel yorum/analiz makaleleri, geçmiş olayların tekrar
-anılması, veya kategoriye YÜZEYSEL benzeyen ama önemsiz haberler için
-eşleşme=false de. Şüpheye düşersen false de (temkinli ol).
+ÇOK ÖNEMLİ - ÇITA YÜKSEK TUTULMALI: Bu sistem şu an ÇOK FAZLA ilgisiz
+haberi onaya sunuyor ve kullanıcıyı yoruyor. Sadece AŞAĞIDAKİ İKİ ŞART
+DA sağlanıyorsa eşleşme=true de:
+1. Olay GERÇEKTEN büyük/önemli ölçekte (rutin bir gelişme, küçük bir
+   bölgesel olay, ya da zaten beklenen/fiyatlanmış bir şey DEĞİL).
+2. Türkiye piyasaları üzerinde DOĞRUDAN VE ANLAMLI bir etki mekanizması
+   var - "dünyada bir yerde bir şey oldu" YETMEZ, bunun TL/BIST/Türk
+   tahvillerini/CDS'ini NEDEN ve NASIL etkileyeceği açık ve güçlü
+   olmalı (ör. büyük bir petrol arz şoku enerji ithalatçısı Türkiye'yi
+   doğrudan etkiler, ama İsrail-Filistin bölgesinde küçük çaplı bir
+   çatışma haberi -aksi belirtilmedikçe- Türkiye piyasalarını anlamlı
+   ölçüde etkilemez).
+
+AŞAĞIDAKİ DURUMLAR İÇİN eşleşme=false de (sık yapılan hatalar):
+- Genel yorum/analiz/köşe yazısı makaleleri (haber DEĞİL).
+- Geçmiş bir olayın tekrar anılması/hatırlatılması.
+- Kategoriye YÜZEYSEL benzeyen ama küçük ölçekli/rutin haberler.
+- Türkiye'ye sadece "dolaylı", "teorik" ya da "uzak" bir bağı olan
+  uluslararası haberler (ör. iki ülke arasında Türkiye'yi doğrudan
+  ilgilendirmeyen bir diplomatik gerginlik).
+- Zaten piyasalarca beklenen/fiyatlanmış rutin açıklamalar.
+
+Şüpheye düşersen KESİNLİKLE eşleşme=false de (temkinli ol - amaç
+kullanıcıya SADECE gerçekten dikkate değer haberleri göstermek).
 
 Eşleşirse, kullanıcıya sunulacak DOĞAL, AKICI BİR TÜRKÇE CÜMLE yaz -
 TAM OLARAK şu kalıpta: "[Kaynak] kaynağından alınan habere göre,
