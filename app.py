@@ -2013,9 +2013,18 @@ with st.sidebar:
     st.divider()
 
     st.markdown("**Bütçe (TL)**")
+    # v2.0.7.197 (Bahri'nin talebi, 25 Ağustos 2026 — "uygulama ilk
+    # açıldığında 25.000 TL bütçe default olarak girilmiş olsun"):
+    # eskiden varsayılan 0'dı (kutucuk boş açılıyordu) - bu da hem
+    # kullanıcı için "önce bir şey yazmam lazım" sürtünmesi yaratıyordu
+    # hem de v2.0.7.196'da düzelttiğimiz "bütçe boşsa sayfa
+    # st.stop() ile duruyor" sorununu YENİDEN tetikleyebiliyordu. Artık
+    # ilk açılışta 25.000 TL varsayılan - _DEFAULT_BUTCE sabitinden
+    # okunuyor, tek yerden değiştirilebilir.
+    _DEFAULT_BUTCE = 25000
     butce_str = st.text_input(
         "Butce",
-        value="" if st.session_state.get("butce_val", 0) == 0 else str(int(st.session_state.get("butce_val", 0))),
+        value=str(int(st.session_state.get("butce_val", _DEFAULT_BUTCE))),
         label_visibility="collapsed",
         placeholder="Tutar girin, örnek: 100000",
         key="butce_input"
@@ -2026,9 +2035,16 @@ with st.sidebar:
             budget = 0
         st.session_state["butce_val"] = budget
     except ValueError:
-        budget = int(st.session_state.get("butce_val", 0))
+        budget = int(st.session_state.get("butce_val", _DEFAULT_BUTCE))
     if budget > 0:
-        st.caption(f"Secilen: {budget:,} TL".replace(",", "."))
+        st.caption(f"Seçilen: {budget:,} TL".replace(",", "."))
+        # Deger hala varsayilanla AYNIYSA (kullanici degistirmemis
+        # olabilir) hatirlatma notu goster - "ilk acilis" takibi yerine
+        # bu daha saglam: herhangi bir yeniden calisma (rerun) notu
+        # erken kaybetmez, kullanici GERCEKTEN farkli bir deger
+        # yazana kadar goruntude kalir.
+        if budget == _DEFAULT_BUTCE:
+            st.caption("Bu bir varsayılan değerdir, dilediğiniz gibi değiştirebilirsiniz.")
     risk=st.select_slider("Risk Toleransı",
                            options=["Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"],value="Orta")
     max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,value=10,step=1,

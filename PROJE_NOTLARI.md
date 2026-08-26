@@ -1597,7 +1597,36 @@ tamam, canlı doğrulama BEKLİYOR):**
     bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
     olması bekleniyor.
 
-- **[UYGULANDI, MANTIK+DERLEME DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.196
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.197 (25 Ağustos 2026, Bahri'nin
+  talebi — "uygulama ilk açıldığında 25.000 TL bütçe default olarak
+  girilmiş olsun"): Bütçe (TL) kutusunun varsayılanı 0'dan (boş)
+  25.000 TL'ye çevrildi - `_DEFAULT_BUTCE` sabitinden okunuyor, tek
+  yerden değiştirilebilir. Değer hâlâ varsayılanla aynıysa (kullanıcı
+  henüz değiştirmemiş olabilir) "Bu bir varsayılan değerdir,
+  dilediğiniz gibi değiştirebilirsiniz." notu gösteriliyor - kullanıcı
+  gerçekten farklı bir değer yazana kadar görünür kalır. Bonus: bu
+  değişiklik v2.0.7.196'nın çözdüğü "bütçe boşsa sayfa duruyor"
+  sorununun bir daha hiç tetiklenmemesini de garantiliyor (varsayılan
+  artık asla 0 değil).
+
+- **[AÇIK - Bahri'den bilgi bekleniyor] 25 Ağustos 2026 — Supabase
+  güvenlik uyarısı (KRİTİK):** Supabase'den "Table publicly accessible
+  - Row-Level Security etkin değil" e-postası geldi (proje:
+  trendsurf-optima, kod: rls_disabled_in_public). E-postada HANGİ
+  TABLO olduğu belirtilmiyor - Bahri'ye Supabase Dashboard > Advisors
+  sekmesinden tam tablo adını kontrol etmesi istendi. **Tablo adı
+  öğrenilene kadar düzeltme yapılamaz** - RLS'i körü körüne açmak,
+  eğer uygulama o tabloya Supabase'in REST API'si + anon key üzerinden
+  erişiyorsa (get_conn()'un doğrudan Postgres bağlantısı kullandığı
+  biliniyor, ama bu tam olarak doğrulanmadı) uygulamanın kendi erişimini
+  de kesebilir - önce hangi tablo ve hangi erişim yöntemi olduğu
+  netleşmeli.
+  Ayrıca gelen GitHub Codespaces silinme uyarısı ("improved orbit"
+  codespace'i) - Bahri'nin gerçek iş akışında (Claude'dan dosya indirip
+  yerel git push) Codespaces hiç kullanılmıyor, kod/veriyi etkilemez,
+  aciliyeti yok, kendiliğinden silinmesine izin verilebilir.
+
+
   (25 Ağustos 2026, Bahri'nin bulgusu — "sayfanın devamı yok burada
   bitiyor zaten"): KRİTİK YERLEŞİM HATASI - "ONAY BEKLEYEN OTOMATİK
   TESPİTLER" BÖLÜMÜ BÜTÇE GİRİLMEDİĞİNDE HİÇ ÇALIŞMIYORDU.**
