@@ -3813,6 +3813,179 @@ if page=="Ana Sayfa":
     c5.metric("Döviz",fmt_tr(cats.get('DOVIZ',0),0))
     c6.metric("Maden",fmt_tr(cats.get('MADEN',0),0))
 
+
+    # v2.0.7.196 (Bahri'nin bulgusu, 25 Ağustos 2026 — "sayfanın
+    # devamı yok burada bitiyor zaten"): KRİTİK YERLEŞİM HATASI
+    # BULUNDU VE DÜZELTİLDİ. Bu blok (Onay Bekleyen Otomatik
+    # Tespitler + Onaylanan Tespitler) ESKİDEN aşağıda, "if
+    # budget<=0: st.stop()" kontrolünden SONRA duruyordu - bütçe
+    # girilmemişse (Bahri'nin durumu tam buydu) `st.stop()` TÜM
+    # SAYFAYI orada durduruyordu, bu blok DAHİL hiçbir şey
+    # çalışmıyordu. Tespit onay/red işlemi bütçe girilip
+    # girilmemesinden TAMAMEN BAĞIMSIZ olması gerektiği için, blok
+    # bütçe kontrolünden ÖNCEYE taşındı - artık bütçe girilmese bile
+    # her zaman görünür.
+    if _bekleyen_tespitler:
+        st.divider()
+        st.markdown("**Onay Bekleyen Otomatik Tespitler**")
+        st.caption(
+            "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece onayladığınız "
+            "tespitler uygulanır."
+        )
+
+        # v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026 — "her
+        # haberin optima skoruna etki etmesi söz konusu olamaz,
+        # bazı kriterler belirlemeliyiz"): TOPLU ONAY - ama SADECE
+        # ÜÇ KRİTERİ DE karşılayan tespitler onaylanır, geri kalanı
+        # OTOMATİK REDDEDİLİR (skor etkilemez, listeden çıkar).
+        # Kriterler: (1) Şiddet="Yüksek", (2) aynı kalıpta FARKLI
+        # bir kaynaktan son 24 saatte başka bir tespit var (çoklu
+        # kaynak teyidi), (3) kalıbın "istatistiksel_dayanak"
+        # bayrağı işaretli (Admin Panel > Kalıp Yönetimi'nden
+        # ayarlanır - gerçek akademik/tarihsel dayanağı olan
+        # kalıplar: jeopolitik, petrol, fed, kredi_notu,
+        # tcmb_kredibilite).
+        try:
+            from db import get_kaliplar as _gk_toplu, coklu_kaynak_teyidi as _ckt
+            _kalip_dayanak_haritasi = {
+                k["kalip_key"]: k.get("istatistiksel_dayanak", False)
+                for k in _gk_toplu()
+            }
+        except Exception:
+            _kalip_dayanak_haritasi = {}
+
+        def _tespit_kriterleri_karsiliyor_mu(_t):
+            if (_t.get("siddet") or "").strip() != "Yüksek":
+                return False
+            if not _kalip_dayanak_haritasi.get(_t.get("kalip_key"), False):
+                return False
+            try:
+                if not _ckt(_t.get("kalip_key"), _t.get("haber_kaynak", ""), saat=24):
+                    return False
+            except Exception:
+                return False
+            return True
+
+        if st.button("Tümünü Onayla (kriterleri karşılayanlar)",
+                     key="tumunu_onayla_kriterli"):
+            from db import tespit_onayla as _to_toplu, tespit_reddet as _tr_toplu
+            _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
+            for _t_toplu in _bekleyen_tespitler:
+                if _tespit_kriterleri_karsiliyor_mu(_t_toplu):
+                    if _to_toplu(_t_toplu["id"]):
+                        _onaylanan_sayisi += 1
+                else:
+                    if _tr_toplu(_t_toplu["id"]):
+                        _reddedilen_sayisi += 1
+            try:
+                _bekleyen_tespitler_onbellekli.clear()
+                _onaylanmis_tespitler_onbellekli.clear()
+            except Exception:
+                st.cache_data.clear()
+            st.success(
+                f"{_onaylanan_sayisi} tespit kriterleri karşıladığı için "
+                f"onaylandı, {_reddedilen_sayisi} tespit kriterleri "
+                f"karşılamadığı için otomatik reddedildi.")
+            st.rerun()
+        st.caption(
+            "Kriterler: Şiddet=Yüksek + son 24 saatte farklı bir "
+            "kaynaktan teyit + kalıbın istatistiksel dayanağı olması "
+            "(Admin Panel'den ayarlanır). Karşılamayanlar otomatik "
+            "reddedilir, skoru etkilemez.")
+
+        for _tespit in _bekleyen_tespitler:
+            _tk2 = _tespit["kalip_key"]
+            _kalip_adi_gosterim = _KALIP_ISIM.get(_tk2, _tk2)
+            with st.container(border=True):
+                # v2.0.7.157 (Bahri'nin talebi): AI'nin ürettiği doğal
+                # cümle ("[Kaynak]'a göre, ... bu durumda ... Optima
+                # Skorlarını artırmamız/azaltmamız gerekir") artık
+                # ANA MESAJ olarak, teknik bir "AI gerekçesi:" etiketi
+                # ARKASINDA gizlenmeden, doğrudan gösteriliyor.
+                _dogal_cumle = _tespit.get('ai_gerekce', '') or (
+                    f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
+                st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
+                # v2.0.7.195: modal dialogdaki AYNI rozet stili -
+                # tutarlılık için (bkz. o yorum).
+                _sdt2 = _tespit.get('siddet', 'Orta')
+                _sr2 = {"Yüksek": "#b91c1c", "Orta": "#b45309", "Düşük": "#6b7280"}.get(_sdt2, "#6b7280")
+                st.markdown(
+                    f"""<div style="background:#f3f4f6;border-left:4px solid {_sr2};
+                         border-radius:6px;padding:8px 12px;margin:4px 0;font-size:14px;">
+                         <b>Kalıp:</b> {_kalip_adi_gosterim} &nbsp;·&nbsp;
+                         <b>Önerilen şiddet:</b> <span style="color:{_sr2};font-weight:700;">{_sdt2}</span></div>""",
+                    unsafe_allow_html=True)
+                st.caption(
+                    f"Kaynak: [{_tespit.get('haber_kaynak','')} — "
+                    f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
+                _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
+                with _oc1:
+                    if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
+                        try:
+                            from db import tespit_onayla
+                            _basarili_ah = tespit_onayla(_tespit["id"])
+                        except Exception as _onay_err:
+                            st.error(f"Onaylanamadı: {_onay_err}")
+                        else:
+                            if _basarili_ah:
+                                # v2.0.7.193: GENEL st.cache_data.clear()
+                                # yerine SADECE bu iki kucuk tespit
+                                # onbellegi temizleniyor - modal
+                                # dialogdaki v2.0.7.193 duzeltmesiyle
+                                # AYNI sebep/cozum (bkz. o yorum).
+                                try:
+                                    _bekleyen_tespitler_onbellekli.clear()
+                                    _onaylanmis_tespitler_onbellekli.clear()
+                                except Exception:
+                                    st.cache_data.clear()
+                                st.success("Onaylandı, Optima Skor'a uygulanacak.")
+                                st.rerun()
+                            else:
+                                st.error(
+                                    "Onaylanamadı - veritabanı yazması "
+                                    "başarısız oldu. Tekrar deneyin.")
+                with _oc2:
+                    if st.button("Reddet", key=f"tespit_red_{_tespit['id']}"):
+                        try:
+                            from db import tespit_reddet
+                            _basarili_rh = tespit_reddet(_tespit["id"])
+                        except Exception as _red_err:
+                            st.error(f"Reddedilemedi: {_red_err}")
+                        else:
+                            if _basarili_rh:
+                                try:
+                                    _bekleyen_tespitler_onbellekli.clear()
+                                    _onaylanmis_tespitler_onbellekli.clear()
+                                except Exception:
+                                    st.cache_data.clear()
+                                st.info("Reddedildi, bir daha gösterilmeyecek.")
+                                st.rerun()
+                            else:
+                                st.error(
+                                    "Reddedilemedi - veritabanı yazması "
+                                    "başarısız oldu. Tekrar deneyin.")
+
+    if _beklenti_ayarlar:
+        st.divider()
+        # v2.0.7.158: manuel işaretleme kaldırıldığı için kaynak ayrımı
+        # (elle/otomatik) da anlamsızlaştı - buradaki her satır artık
+        # kullanıcının ONAYLADIĞI bir otomatik tespittir.
+        st.markdown("**Onayladığınız Tespitler ve Gerekçeleri**")
+        for _kalip_key, _siddet in _beklenti_ayarlar.items():
+            st.markdown(
+                f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
+                f"{_KALIP_ACIKLAMA[_kalip_key]}"
+            )
+        st.caption(
+            "Yukarıdaki yön ve büyüklük ilişkileri, tek bir olaya değil, "
+            "onlarca yıl ve çok sayıda olayı kapsayan akademik panel/olay "
+            "çalışmalarına (event study) dayanır — ama gelecekteki her "
+            "olay öncekilerle birebir aynı büyüklükte gerçekleşmez, bu "
+            "istatistiksel bir eğilimdir, kesin bir tahmin değildir. "
+            "Otomatik tespitler SİZ ONAYLAMADAN asla uygulanmaz. "
+            "Yatırım tavsiyesi değildir."
+        )
+
     if budget<=0:
         st.info("Sol panelden **Bütçe** girerek optimize edilmiş öneri listesini görün.")
         st.stop()
@@ -4617,180 +4790,6 @@ if page=="Ana Sayfa":
                            unsafe_allow_html=True)
             else:
                 st.caption("Skor bileşimi için yeterli veri yok.")
-
-        # v2.0.7.148 (Bahri'nin talebi): Beklenti Modu aktifse, pasta
-        # grafiklerinin ALTINDA hangi varsayımların işaretlendiğini ve
-        # neden bu yönde bir ayarlama yapıldığını açıklayan bir bölüm.
-        # v2.0.7.152: tekil tarihli olay referansı kaldırıldı (Bahri:
-        # "13 sene önceki bir olayı bugüne örnek göstermek anlamsız") -
-        # _KALIP_ACIKLAMA zaten çok-olaylı akademik çalışmalara atıfta
-        # bulunan istatistiksel ifadeyi içeriyor, ayrı bir satıra gerek yok.
-        # v2.0.7.156 (Bahri'nin talebi, KRİTİK tasarım düzeltmesi):
-        # "hemen otomatik uygula" YANLIŞ anlaşılmıştı - Bahri'nin gerçekte
-        # istediği: sistem tespit eder, KULLANICIYA gösterir, kullanıcı
-        # UYGUN BULURSA onaylar, ANCAK O ZAMAN uygulanır. Aşağıda ÖNCE
-        # onay bekleyen tespitler (Onayla/Reddet düğmeleriyle), SONRA
-        # (varsa) zaten onaylanmış/manuel aktif varsayımlar gösteriliyor.
-        if _bekleyen_tespitler:
-            st.divider()
-            st.markdown("**Onay Bekleyen Otomatik Tespitler**")
-            st.caption(
-                "Bunlar HENÜZ Optima Skor'a uygulanmadı - sadece onayladığınız "
-                "tespitler uygulanır."
-            )
-
-            # v2.0.7.194 (Bahri'nin talebi, 25 Ağustos 2026 — "her
-            # haberin optima skoruna etki etmesi söz konusu olamaz,
-            # bazı kriterler belirlemeliyiz"): TOPLU ONAY - ama SADECE
-            # ÜÇ KRİTERİ DE karşılayan tespitler onaylanır, geri kalanı
-            # OTOMATİK REDDEDİLİR (skor etkilemez, listeden çıkar).
-            # Kriterler: (1) Şiddet="Yüksek", (2) aynı kalıpta FARKLI
-            # bir kaynaktan son 24 saatte başka bir tespit var (çoklu
-            # kaynak teyidi), (3) kalıbın "istatistiksel_dayanak"
-            # bayrağı işaretli (Admin Panel > Kalıp Yönetimi'nden
-            # ayarlanır - gerçek akademik/tarihsel dayanağı olan
-            # kalıplar: jeopolitik, petrol, fed, kredi_notu,
-            # tcmb_kredibilite).
-            try:
-                from db import get_kaliplar as _gk_toplu, coklu_kaynak_teyidi as _ckt
-                _kalip_dayanak_haritasi = {
-                    k["kalip_key"]: k.get("istatistiksel_dayanak", False)
-                    for k in _gk_toplu()
-                }
-            except Exception:
-                _kalip_dayanak_haritasi = {}
-
-            def _tespit_kriterleri_karsiliyor_mu(_t):
-                if (_t.get("siddet") or "").strip() != "Yüksek":
-                    return False
-                if not _kalip_dayanak_haritasi.get(_t.get("kalip_key"), False):
-                    return False
-                try:
-                    if not _ckt(_t.get("kalip_key"), _t.get("haber_kaynak", ""), saat=24):
-                        return False
-                except Exception:
-                    return False
-                return True
-
-            if st.button("Tümünü Onayla (kriterleri karşılayanlar)",
-                         key="tumunu_onayla_kriterli"):
-                from db import tespit_onayla as _to_toplu, tespit_reddet as _tr_toplu
-                _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
-                for _t_toplu in _bekleyen_tespitler:
-                    if _tespit_kriterleri_karsiliyor_mu(_t_toplu):
-                        if _to_toplu(_t_toplu["id"]):
-                            _onaylanan_sayisi += 1
-                    else:
-                        if _tr_toplu(_t_toplu["id"]):
-                            _reddedilen_sayisi += 1
-                try:
-                    _bekleyen_tespitler_onbellekli.clear()
-                    _onaylanmis_tespitler_onbellekli.clear()
-                except Exception:
-                    st.cache_data.clear()
-                st.success(
-                    f"{_onaylanan_sayisi} tespit kriterleri karşıladığı için "
-                    f"onaylandı, {_reddedilen_sayisi} tespit kriterleri "
-                    f"karşılamadığı için otomatik reddedildi.")
-                st.rerun()
-            st.caption(
-                "Kriterler: Şiddet=Yüksek + son 24 saatte farklı bir "
-                "kaynaktan teyit + kalıbın istatistiksel dayanağı olması "
-                "(Admin Panel'den ayarlanır). Karşılamayanlar otomatik "
-                "reddedilir, skoru etkilemez.")
-
-            for _tespit in _bekleyen_tespitler:
-                _tk2 = _tespit["kalip_key"]
-                _kalip_adi_gosterim = _KALIP_ISIM.get(_tk2, _tk2)
-                with st.container(border=True):
-                    # v2.0.7.157 (Bahri'nin talebi): AI'nin ürettiği doğal
-                    # cümle ("[Kaynak]'a göre, ... bu durumda ... Optima
-                    # Skorlarını artırmamız/azaltmamız gerekir") artık
-                    # ANA MESAJ olarak, teknik bir "AI gerekçesi:" etiketi
-                    # ARKASINDA gizlenmeden, doğrudan gösteriliyor.
-                    _dogal_cumle = _tespit.get('ai_gerekce', '') or (
-                        f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
-                    st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
-                    # v2.0.7.195: modal dialogdaki AYNI rozet stili -
-                    # tutarlılık için (bkz. o yorum).
-                    _sdt2 = _tespit.get('siddet', 'Orta')
-                    _sr2 = {"Yüksek": "#b91c1c", "Orta": "#b45309", "Düşük": "#6b7280"}.get(_sdt2, "#6b7280")
-                    st.markdown(
-                        f"""<div style="background:#f3f4f6;border-left:4px solid {_sr2};
-                             border-radius:6px;padding:8px 12px;margin:4px 0;font-size:14px;">
-                             <b>Kalıp:</b> {_kalip_adi_gosterim} &nbsp;·&nbsp;
-                             <b>Önerilen şiddet:</b> <span style="color:{_sr2};font-weight:700;">{_sdt2}</span></div>""",
-                        unsafe_allow_html=True)
-                    st.caption(
-                        f"Kaynak: [{_tespit.get('haber_kaynak','')} — "
-                        f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
-                    _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
-                    with _oc1:
-                        if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
-                            try:
-                                from db import tespit_onayla
-                                _basarili_ah = tespit_onayla(_tespit["id"])
-                            except Exception as _onay_err:
-                                st.error(f"Onaylanamadı: {_onay_err}")
-                            else:
-                                if _basarili_ah:
-                                    # v2.0.7.193: GENEL st.cache_data.clear()
-                                    # yerine SADECE bu iki kucuk tespit
-                                    # onbellegi temizleniyor - modal
-                                    # dialogdaki v2.0.7.193 duzeltmesiyle
-                                    # AYNI sebep/cozum (bkz. o yorum).
-                                    try:
-                                        _bekleyen_tespitler_onbellekli.clear()
-                                        _onaylanmis_tespitler_onbellekli.clear()
-                                    except Exception:
-                                        st.cache_data.clear()
-                                    st.success("Onaylandı, Optima Skor'a uygulanacak.")
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        "Onaylanamadı - veritabanı yazması "
-                                        "başarısız oldu. Tekrar deneyin.")
-                    with _oc2:
-                        if st.button("Reddet", key=f"tespit_red_{_tespit['id']}"):
-                            try:
-                                from db import tespit_reddet
-                                _basarili_rh = tespit_reddet(_tespit["id"])
-                            except Exception as _red_err:
-                                st.error(f"Reddedilemedi: {_red_err}")
-                            else:
-                                if _basarili_rh:
-                                    try:
-                                        _bekleyen_tespitler_onbellekli.clear()
-                                        _onaylanmis_tespitler_onbellekli.clear()
-                                    except Exception:
-                                        st.cache_data.clear()
-                                    st.info("Reddedildi, bir daha gösterilmeyecek.")
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        "Reddedilemedi - veritabanı yazması "
-                                        "başarısız oldu. Tekrar deneyin.")
-
-        if _beklenti_ayarlar:
-            st.divider()
-            # v2.0.7.158: manuel işaretleme kaldırıldığı için kaynak ayrımı
-            # (elle/otomatik) da anlamsızlaştı - buradaki her satır artık
-            # kullanıcının ONAYLADIĞI bir otomatik tespittir.
-            st.markdown("**Onayladığınız Tespitler ve Gerekçeleri**")
-            for _kalip_key, _siddet in _beklenti_ayarlar.items():
-                st.markdown(
-                    f"**{_KALIP_ISIM[_kalip_key]}** ({_siddet} şiddet): "
-                    f"{_KALIP_ACIKLAMA[_kalip_key]}"
-                )
-            st.caption(
-                "Yukarıdaki yön ve büyüklük ilişkileri, tek bir olaya değil, "
-                "onlarca yıl ve çok sayıda olayı kapsayan akademik panel/olay "
-                "çalışmalarına (event study) dayanır — ama gelecekteki her "
-                "olay öncekilerle birebir aynı büyüklükte gerçekleşmez, bu "
-                "istatistiksel bir eğilimdir, kesin bir tahmin değildir. "
-                "Otomatik tespitler SİZ ONAYLAMADAN asla uygulanmaz. "
-                "Yatırım tavsiyesi değildir."
-            )
 
 # ══════════════════════════════════════════════════════════════
 # PORTFÖYÜM

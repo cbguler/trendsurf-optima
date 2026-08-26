@@ -1597,7 +1597,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
     olması bekleniyor.
 
-- **[KALICI KARAR - BİLEREK BÖYLE, BİR DAHA SORGULANMASIN] 25 Ağustos
+- **[UYGULANDI, MANTIK+DERLEME DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.196
+  (25 Ağustos 2026, Bahri'nin bulgusu — "sayfanın devamı yok burada
+  bitiyor zaten"): KRİTİK YERLEŞİM HATASI - "ONAY BEKLEYEN OTOMATİK
+  TESPİTLER" BÖLÜMÜ BÜTÇE GİRİLMEDİĞİNDE HİÇ ÇALIŞMIYORDU.**
+  - **Kesin kök neden:** v2.0.7.194'te eklenen "Tümünü Onayla" bölümü,
+    dosyada `if budget<=0: ... st.stop()` kontrolünden SONRA
+    konumlanmıştı. Bahri'nin "Bütçe (TL)" kutusu boştu (0 veya boş) -
+    bu durumda `st.stop()` TÜM SAYFAYI o noktada durduruyordu, benim
+    eklediğim bölüm DAHİL ondan sonraki hiçbir şey hiç çalışmıyordu.
+    Kod GitHub'da doğru şekilde push edilmişti (bu doğrulanmıştı) -
+    sorun kodun VARLIĞI değil, dosya içindeki YANLIŞ KONUMUYDU.
+  - **Çözüm:** "Onay Bekleyen Otomatik Tespitler" + "Onaylanan
+    Tespitler" bölümlerinin TAMAMI (164 satır), bütçe kontrolünden
+    ÖNCEYE (6 metrik kutusunun hemen altına) taşındı - artık bütçe
+    girilmese bile her zaman görünür. Bu mantıken doğru: tespit onay/
+    red işlemi, portföy bütçe optimizasyonundan TAMAMEN BAĞIMSIZ bir
+    özellik, aynı sayfada olmaları bunları birbirine bağımlı kılmamalı.
+  - **Taşıma işlemi Python betiğiyle hassas şekilde yapıldı** (elle
+    kopyala-yapıştır yerine) - girinti seviyesi (8 boşluk → 4 boşluk)
+    doğru şekilde ayarlandı, "# PORTFÖYÜM" bölüm ayırıcısı ve bir
+    yetim kalan açıklama yorumu doğru şekilde temizlendi/yeniden
+    yerleştirildi. Hem `py_compile` hem tam `ast.parse()` ile
+    doğrulandı - sözdizimi tamamen geçerli.
+  - **ACİL - Bahri'nin geçici çözümü hâlâ geçerli:** Push'tan önce bile,
+    sol panelden "Bütçe (TL)" kutusuna herhangi bir değer (ör. 100000)
+    girmek aynı sorunu anında çözer - bu kalıcı düzeltme, o geçici
+    çözüme ihtiyaç duymadan her durumda çalışmasını sağlıyor.
+
+
   2026 — "Otomatik tespit" onay pop-up'ı BİLEREK paylaşımlı/global:**
   Bahri'nin sorusu üzerine kod incelendi - `beklenti_otomatik_tespit`
   tablosunda hiçbir kullanıcı/abone sütunu yok, pop-up `is_admin`
