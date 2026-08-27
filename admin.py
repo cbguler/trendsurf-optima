@@ -66,7 +66,7 @@ def render_admin_panel():
 # eslesen_kalip/baslik_tr taşır - filtre/çeviri mantığı sonradan düzelse
 # bile bu satırlar KENDİLİĞİNDEN yeniden değerlendirilmez. ─────────────
 def _render_haber_akisi_bakim():
-    from db import haber_akisi_ve_islenmis_sifirla
+    from db import haber_akisi_ve_islenmis_sifirla, tum_onaylanan_etkileri_sifirla
 
     st.subheader("Haber Akışı Bakımı")
     st.caption(
@@ -86,18 +86,43 @@ def _render_haber_akisi_bakim():
         "sonra doğal olarak silinir. Bu yüzden büyük sayı seçmenin "
         "faydası sınırlıdır - 1-2 gün genelde yeterlidir."
     )
-    if st.button("Son Günleri Sıfırla ve Yeniden İşlenmeye Aç", key="haber_sifirla_btn"):
-        _sonuc = haber_akisi_ve_islenmis_sifirla(int(_gun))
-        _a = _sonuc.get("akis_silinen")
-        _i = _sonuc.get("islenmis_silinen")
-        st.success(
-            f"Sıfırlandı - akıştan {_a if _a is not None else '?'} satır, "
-            f"işlenmiş listesinden {_i if _i is not None else '?'} satır "
-            f"silindi. Bir sonraki haber_izleme.py turunda (en geç 10 "
-            f"dakika, ya da Actions sekmesinden 'Run workflow' ile hemen) "
-            f"RSS'te hâlâ mevcut olan haberler GÜNCEL kalıp/çeviri "
-            f"mantığıyla yeniden işlenecek."
-        )
+    # v2.0.7.201 (Bahri'nin talebi, 26 Ağustos 2026 — "buton adı çok
+    # uzun, sadece Geçmişi Sil olsun, yanına bir düğme daha istiyorum"):
+    # İki düğme yan yana - biri haber akışını sıfırlıyor (eskisi, artık
+    # kısa isimli), diğeri (YENİ) onaylanmış tespit etkilerini
+    # varsayılana döndürüyor.
+    _hb1, _hb2 = st.columns(2)
+    with _hb1:
+        if st.button("Geçmişi Sil", key="haber_sifirla_btn"):
+            _sonuc = haber_akisi_ve_islenmis_sifirla(int(_gun))
+            _a = _sonuc.get("akis_silinen")
+            _i = _sonuc.get("islenmis_silinen")
+            st.success(
+                f"Sıfırlandı - akıştan {_a if _a is not None else '?'} satır, "
+                f"işlenmiş listesinden {_i if _i is not None else '?'} satır "
+                f"silindi. Bir sonraki haber_izleme.py turunda (en geç 10 "
+                f"dakika, ya da Actions sekmesinden 'Run workflow' ile hemen) "
+                f"RSS'te hâlâ mevcut olan haberler GÜNCEL kalıp/çeviri "
+                f"mantığıyla yeniden işlenecek."
+            )
+    with _hb2:
+        if st.button("Varsayılan Skor", key="tespit_etki_sifirla_btn",
+                      help="Şu an aktif (onaylanmış, süresi dolmamış) tüm "
+                           "haber tespiti etkilerini HEMEN kapatır - Optima "
+                           "Skor, herhangi bir haber onayı olmamış gibi "
+                           "varsayılan haline döner. Geçmiş kayıtlar "
+                           "SİLİNMEZ, sadece etkisi durdurulur."):
+            _etkilenen = tum_onaylanan_etkileri_sifirla()
+            if _etkilenen < 0:
+                st.error("Sıfırlanamadı - veritabanı hatası (sunucu loglarına bakılmalı).")
+            elif _etkilenen == 0:
+                st.info("Zaten aktif bir tespit etkisi yoktu - değişiklik yapılmadı.")
+            else:
+                st.cache_data.clear()
+                st.success(
+                    f"{_etkilenen} aktif tespit etkisi kapatıldı - Optima "
+                    f"Skor artık varsayılan (haber etkisi olmayan) haline "
+                    f"döndü. Geçmiş kayıtlar silinmedi, sadece etkileri durdu.")
 
 # ── Kalıp Yönetimi (v2.0.7.162, Bahri'nin talebi, 19 Ağustos 2026 —
 # "anahtar kelime ön-filtresi ve kalıplara daha sonra ekleme yapılabilir

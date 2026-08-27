@@ -1597,6 +1597,46 @@ tamam, canlı doğrulama BEKLİYOR):**
     bir sonraki onay/red işleminin gözle görülür şekilde daha hızlı
     olması bekleniyor.
 
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.200 (26 Ağustos 2026, Bahri'nin
+  bulgusu — tek kaynaklı bir petrol haberi yine de pop-up olarak çıktı):
+  v2.0.7.199'UN KENDİ BELGELEDİĞİ SINIRLAMA GERÇEKLEŞTİ - BAŞLIK
+  BENZERLİĞİ KONTROLÜ EKLENDİ.**
+  - **Doğrulama:** v2.0.7.199'un GERÇEKTEN canlıda olduğu GitHub'dan
+    doğrudan kontrol edildi (kod doğruydu) - sorun v2.0.7.199'un kendi
+    dokümantasyonunda ZATEN FLAGLENMIŞ bir sınırlamaydı: kaba kontrol
+    "aynı kalıp, farklı kaynak, 24 saat" bakıyordu, "GERÇEKTEN AYNI
+    OLAY mı" bakmıyordu - muhtemelen aynı gün "jeopolitik" kalıbına
+    uyan ama TAMAMEN FARKLI bir haber kontrolü yanlışlıkla geçirdi.
+  - **Çözüm:** `get_bekleyen_tespitler()` artık iki aşamalı - önce SQL
+    ile KABA aday listesi çıkarılıyor (aynı kalıp, farklı kaynak, 24
+    saat), sonra Python'da `difflib.SequenceMatcher` ile başlıklar
+    arasında GERÇEK bir metin benzerliği aranıyor (eşik: 0.35).
+  - **İzole test edildi (2 senaryo):** Bahri'nin gördüğü TAM senaryo
+    (petrol haberi vs. tamamen farklı bir jeopolitik haber) - benzerlik
+    0.189, doğru şekilde REDDEDİLDİ. Gerçek aynı-olay-farklı-ifade
+    senaryosu (iki kaynağın aynı petrol haberini farklı kelimelerle
+    anlatması) - benzerlik 0.714, doğru şekilde KABUL EDİLDİ.
+  - **BİLİNEN SINIRLAMA (hâlâ tam çözülmedi):** düz metin benzerliği
+    mükemmel değil - AI'ya iki başlığı karşılaştırtmak daha kesin
+    olurdu ama maliyet/karmaşıklık nedeniyle bu turda yapılmadı.
+
+- **[UYGULANDI, MANTIK DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.201
+  (26 Ağustos 2026, Bahri'nin talebi — "buton adı çok uzun, sadece
+  Geçmişi Sil olsun, yanına bir düğme daha istiyorum"): ADMIN PANEL
+  DÜĞMELERİ GÜNCELLENDİ.**
+  - "Son Günleri Sıfırla ve Yeniden İşlenmeye Aç" → **"Geçmişi Sil"**
+    olarak kısaltıldı (işlevi DEĞİŞMEDİ).
+  - **YENİ düğme: "Varsayılan Skor"** - yeni `tum_onaylanan_etkileri_
+    sifirla()` fonksiyonunu çağırıyor. Şu an aktif (onaylanmış, süresi
+    dolmamış) TÜM haber tespiti etkilerinin `gecerlilik_bitis`'ini
+    ANINDA `now()`'a çekiyor - bir sonraki okumada artık "aktif"
+    sayılmıyorlar, Optima Skor varsayılan (haber etkisi olmayan)
+    haline dönüyor. **Geçmiş kayıtlar SİLİNMİYOR** - sadece etkileri
+    kapatılıyor, denetim izi korunuyor.
+  - **İzole test edildi:** karışık durumdaki (aktif onaylı / süresi
+    zaten dolmuş / bekleyen / reddedilmiş) 5 sahte kayıt üzerinde -
+    sadece GERÇEKTEN aktif olan 2 kayıt doğru şekilde etkilendi.
+
 - **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.199 (25 Ağustos 2026, Bahri'nin
   talebi — "birden fazla kaynak tarafından aynı haberin alınması bir
   başka kriter olarak eklenebilir"): ÇOKLU KAYNAK TEYİDİ ARTIK

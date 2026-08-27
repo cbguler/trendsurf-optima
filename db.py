@@ -1192,36 +1192,86 @@ def get_bekleyen_tespitler() -> list:
     kaynak tarafından da aynı haberin alınması, bir başka kriter olarak
     eklenebilir"): ARTIK SADECE ÇOKLU KAYNAK TEYİDİ OLAN tespitler
     döner - aynı kalıp için, FARKLI bir kaynaktan, son 24 SAAT içinde
-    başka bir tespit (herhangi bir onay durumunda) yoksa, bu tespit
-    KULLANICIYA HİÇ GÖSTERİLMEZ (pop-up çıkmaz) - sessizce veritabanında
-    "bekliyor" durumunda kalır. Eğer/ne zaman ikinci bir kaynaktan
-    aynı kalıba uyan bir haber gelirse, İKİSİ DE (aynı anda birbirini
-    teyit ettikleri için) görünür hale gelir. Bu, v2.0.7.194'teki
-    `coklu_kaynak_teyidi()` fonksiyonuyla AYNI mantık/eşik (24 saat) -
-    ama o fonksiyon SADECE toplu onay için kullanılıyordu, bu artık
-    HERHANGİ bir gösterim (tekil pop-up dahil) için de geçerli.
+    başka bir tespit yoksa, bu tespit KULLANICIYA HİÇ GÖSTERİLMEZ.
 
-    BİLİNEN SINIRLAMA (coklu_kaynak_teyidi ile aynı): kaba bir vekil -
-    "aynı OLAYIN farklı kaynaklarca haberleştirilmesi" ile "aynı kalıba
-    uyan FARKLI bir olayın aynı gün olması" arasında ayrım yapmaz."""
+    v2.0.7.200 (Bahri'nin bulgusu, 26 Ağustos 2026 — tek kaynaklı bir
+    petrol haberi yine de pop-up olarak çıktı): v2.0.7.199'un
+    kendi belgelediği SINIRLAMA gerçekleşti - kaba kontrol SADECE
+    "aynı kalıp, farklı kaynak, 24 saat" bakıyordu, "GERÇEKTEN AYNI
+    OLAY mı" bakmıyordu. Muhtemelen aynı gün "jeopolitik" kalıbına
+    uyan ama TAMAMEN FARKLI bir haber, kontrolü yanlışlıkla geçirdi.
+    ÇÖZÜM: SQL'deki kaba EXISTS kontrolü artık sadece ADAY listesi
+    çıkarıyor - Python tarafında `difflib` ile başlıklar arasında
+    GERÇEK BİR METİN BENZERLİĞİ de aranıyor (eşik: 0.35 - iki başlığın
+    ortak kelime/karakter dizisi oranı). Bu MÜKEMMEL bir "aynı olay"
+    tespiti DEĞİL (o, başlık ötesi bir anlam analizi gerektirir) ama
+    saf kategori-eşleşmesinden ÇOK daha isabetli bir ikinci filtre.
+
+    BİLİNEN SINIRLAMA (hâlâ tam çözülmedi): iki kaynağın AYNI olayı
+    çok farklı kelimelerle anlatması hâlâ "benzer değil" sayılabilir
+    (yanlış negatif) - ya da tesadüfen benzer kelimeler kullanan
+    FARKLI iki olay hâlâ "benzer" sayılabilir (yanlış pozitif, ama
+    v2.0.7.199'dan daha nadir). Gerçek bir "aynı olay" tespiti için
+    AI'ya iki başlığı karşılaştırtmak gerekir - bu, maliyet/karmaşıklık
+    nedeniyle bu turda YAPILMADI."""
+    import difflib
+
+    def _baslik_benzer_mi(b1, b2, esik=0.35):
+        if not b1 or not b2:
+            return False
+        oran = difflib.SequenceMatcher(None, b1.lower(), b2.lower()).ratio()
+        return oran >= esik
+
     try:
+        # Once KABA adaylari cek (eski v2.0.7.199 SQL'i - kategori+
+        # kaynak+zaman filtresi), sonra Python'da baslik benzerligiyle
+        # SIKILAŞTIR.
         rows = get_conn().execute(
             "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
             "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
             "FROM beklenti_otomatik_tespit t1 "
-            "WHERE t1.gecerlilik_bitis > now() AND t1.onay_durumu = 'bekliyor' "
-            "AND EXISTS ("
-            "  SELECT 1 FROM beklenti_otomatik_tespit t2 "
-            "  WHERE t2.kalip_key = t1.kalip_key "
-            "  AND t2.haber_kaynak != t1.haber_kaynak "
-            "  AND t2.tespit_zamani > now() - interval '24 hours' "
-            "  AND t2.id != t1.id"
-            ") "
-            "ORDER BY t1.tespit_zamani DESC"
+            "WHERE t1.gecerlilik_bitis > now() AND t1.onay_durumu = 'bekliyor'"
         ).fetchall()
+        if not rows:
+            return []
+
+        def _v(r, k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+
+        # Ayni kalipteki TUM son-24-saat tespitleri (herhangi bir onay
+        # durumunda) tek seferde cek - her aday icin ayri sorgu atmamak
+        # icin (performans).
+        tum_yakin = get_conn().execute(
+            "SELECT id, kalip_key, haber_basligi, haber_kaynak "
+            "FROM beklenti_otomatik_tespit "
+            "WHERE tespit_zamani > now() - interval '24 hours'"
+        ).fetchall()
+
+        onaylanan_id_listesi = []
+        for r in rows:
+            _id = _v(r, "id", 0)
+            _kalip = _v(r, "kalip_key", 1)
+            _baslik = _v(r, "haber_basligi", 3)
+            _kaynak = _v(r, "haber_kaynak", 5)
+            for r2 in tum_yakin:
+                _id2 = _v(r2, "id", 0)
+                if _id2 == _id:
+                    continue
+                if _v(r2, "kalip_key", 1) != _kalip:
+                    continue
+                if _v(r2, "haber_kaynak", 3) == _kaynak:
+                    continue  # ayni kaynak - teyit sayilmaz
+                if _baslik_benzer_mi(_baslik, _v(r2, "haber_basligi", 2)):
+                    onaylanan_id_listesi.append(_id)
+                    break
+
+        onaylanan_satirlar = [r for r in rows if _v(r, "id", 0) in onaylanan_id_listesi]
+        # v2.0.7.200: Python tarafinda filtreleme SQL'in ORDER BY'ini
+        # kaybettirdi - en yeni once sirasi burada geri saglaniyor.
+        onaylanan_satirlar.sort(key=lambda r: _v(r, "tespit_zamani", 6), reverse=True)
     except Exception:
         return []
-    return _tespit_satirlarini_donustur(rows)
+    return _tespit_satirlarini_donustur(onaylanan_satirlar)
 
 
 def get_onaylanmis_tespitler() -> list:
@@ -1283,6 +1333,33 @@ def tespit_reddet(tespit_id: int):
     except Exception as e:
         print(f"[db] tespit_reddet hata: {e}", file=sys.stderr)
         return False
+
+
+def tum_onaylanan_etkileri_sifirla() -> int:
+    """v2.0.7.201 (Bahri'nin talebi, 26 Ağustos 2026 — Admin Panel'e
+    "Varsayılan Skor" düğmesi): Optima Skor hesaplaması, HÂLÂ GEÇERLİLİK
+    SÜRESİ DOLMAMIŞ ('gecerlilik_bitis > now()') onaylı tespitleri canlı
+    olarak sayıyor (bkz. `get_onaylanmis_tespitler()`). Normalde bu süre
+    (48 saat) dolunca etki kendiliğinden kalkıyor - ama Bahri'nin
+    beklemeden, HEMEN "temiz sayfa"ya dönebilmesi için bu fonksiyon
+    TÜM aktif (süresi dolmamış, onaylanmış) tespitlerin
+    `gecerlilik_bitis`'ini ŞİMDİYE çekiyor - böylece bir sonraki
+    okumada artık "aktif" sayılmıyorlar, Optima Skor varsayılan
+    (tespit etkisi olmayan) haline dönüyor. Geçmiş KAYIT SİLİNMİYOR -
+    sadece etkisi kapatılıyor, denetim izi (audit trail) korunuyor.
+    Etkilenen satır sayısını döner (0 = zaten etkin bir şey yoktu)."""
+    try:
+        conn = get_conn()
+        cur = conn.execute(
+            "UPDATE beklenti_otomatik_tespit SET gecerlilik_bitis=now() "
+            "WHERE onay_durumu='onaylandi' AND gecerlilik_bitis > now()")
+        etkilenen = cur.rowcount if hasattr(cur, "rowcount") else None
+        conn.commit()
+        conn.close()
+        return int(etkilenen or 0)
+    except Exception as e:
+        print(f"[db] tum_onaylanan_etkileri_sifirla hata: {e}", file=sys.stderr)
+        return -1
 
 
 if __name__ == "__main__":
