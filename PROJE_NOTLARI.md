@@ -1620,7 +1620,74 @@ tamam, canlı doğrulama BEKLİYOR):**
     mükemmel değil - AI'ya iki başlığı karşılaştırtmak daha kesin
     olurdu ama maliyet/karmaşıklık nedeniyle bu turda yapılmadı.
 
-- **[UYGULANDI, MANTIK DOĞRULANDI, CANLI TEST EDİLMEDİ] v2.0.7.201
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.202 (26 Ağustos 2026, Bahri'nin
+  bulgusu — "iki düğme aynı renk/formatta olmalı"): "Varsayılan Skor"
+  düğmesindeki `help=` parametresi, Streamlit'in düğmeyi farklı
+  sarmalamasına yol açıp uygulamanın genel buton CSS'ini (`app.py`'deki
+  `.stButton>button{...}`) eşleştirmesini engelliyordu - `help=`
+  kaldırıldı, açıklama düğmelerin altına `st.caption()` olarak taşındı.
+  İki düğme artık birebir aynı stille render oluyor.
+  **Ayrıca aynı turda:** "Haberler" sayfası "SonDakika Haberleri" olarak
+  yeniden adlandırıldı (PAGES listesi, routing koşulu, st.title() -
+  3 yer tutarlı şekilde güncellendi).
+
+- **[UYGULANDI, MANTIK DOĞRULANDI (izole simülasyon), CANLI TEST
+  EDİLMEDİ] v2.0.7.203 (26 Ağustos 2026, Bahri'nin talebi — "her abone
+  kendi tespitlerini görsün/onaylasın, Optima Skor kişiye özel olsun"):
+  KRİTİK MİMARİ DEĞİŞİKLİK - TESPİT ONAYI VE OPTIMA SKOR ARTIK KİŞİYE
+  ÖZEL, PAYLAŞIMLI DEĞİL.**
+  - **ÖNEMLİ - ÖNCEKİ KARARIN TERSİNE ÇEVRİLMESİ:** 25 Ağustos'ta Bahri
+    açıkça "tüm abonelerin görebilmesi/onaylayabilmesi bilerek böyle"
+    demiş, paylaşımlı/global davranışı BİLEREK onaylamıştı. 26
+    Ağustos'ta bu karar TERS ÇEVRİLDİ - Bahri'ye bu çelişki AÇIKÇA
+    belirtildi, "büyük bir değişiklik" olduğu vurgulandı, Bahri
+    AÇIKÇA "evet, kişiye özel olsun" diye onayladı. Bu madde
+    gelecekte tekrar "hangisiydi?" diye sorgulanırsa: KİŞİYE ÖZEL
+    olan GÜNCEL karar, 25 Ağustos'taki paylaşımlı karar ARTIK GEÇERSİZ.
+  - **Yeni DB şeması:** `kullanici_tespit_karari` tablosu eklendi
+    (kullanici_id, tespit_id, karar, karar_zamani -
+    UNIQUE(kullanici_id, tespit_id)). `beklenti_otomatik_tespit`
+    tablosu DEĞİŞMEDİ ama artık SADECE paylaşımlı/objektif tespit
+    kaydını tutuyor (hangi haber, hangi kalıp) - `onay_durumu` sütunu
+    ARTIK YENİ KODDA KULLANILMIYOR (silinmedi, geriye dönük uyumluluk
+    için duruyor, vestigial).
+  - **Değişen fonksiyonlar (hepsi artık `kullanici_id` ZORUNLU alıyor):**
+    `get_bekleyen_tespitler(kullanici_id)` - artık "bu kullanıcının
+    HENÜZ kararı olmayan" tespitleri döner (eskiden global
+    onay_durumu='bekliyor' kontrolü vardı). `get_onaylanmis_tespitler
+    (kullanici_id)` - SADECE bu kullanıcının onayladıkları.
+    `tespit_onayla(kullanici_id, tespit_id)` / `tespit_reddet(...)` -
+    artık `kullanici_tespit_karari`'na UPSERT yapıyor (paylaşımlı
+    tabloya UPDATE değil). `tum_onaylanan_etkileri_sifirla
+    (kullanici_id)` - SADECE bu kullanıcının onaylarını siliyor.
+  - **Davranış:** Aynı habere Kullanıcı A onay verip Kullanıcı B
+    vermemiş olabilir - Optima Skor ikisi için FARKLI görünür.
+    Biri onaylasa/reddetse bile DİĞER kullanıcılar için tespit HÂLÂ
+    "bekliyor" olarak görünmeye devam eder - herkes kendi kararını
+    vermek zorunda.
+  - **app.py'deki TÜM çağrı noktaları güncellendi** (modal dialog,
+    Ana Sayfa listesi - tekil VE toplu onay/red, önbellek
+    fonksiyonları) - `_cur_user["id"]` (mevcut oturum kullanıcısı,
+    `get_current_user()`'dan) her çağrıya geçiriliyor. Önbellekleme
+    (`st.cache_data`) da kullanıcı ID'sini parametre olarak aldığı
+    için OTOMATİK OLARAK kullanıcı bazlı ayrışıyor - ekstra bir şey
+    yapmaya gerek kalmadı.
+  - **admin.py'deki "Varsayılan Skor" düğmesi** artık `get_current_user()`
+    ile admin'in KENDİ id'sini alıp sadece KENDİ onaylarını sıfırlıyor
+    - diğer abonelerin onayları hiç etkilenmiyor.
+  - **İzole simülasyonla uçtan uca test edildi:** İki farklı kullanıcı
+    (A, B) - aynı tespit ikisine de "bekliyor" görünüyor; A onaylayınca
+    A'nın listesinden düşüyor ama B'ninkinde hâlâ bekliyor olarak
+    kalıyor; SADECE A'nın onaylanan listesinde görünüyor, B'ninkinde
+    yok. Tüm senaryolar beklenen sonucu verdi.
+  - **AÇIK - CANLI TEST EDİLMEDİ:** Bu, gerçek bir veritabanı şeması
+    değişikliği (yeni tablo) içerdiği için ilk canlı çalıştırmada
+    dikkatle izlenmeli - özellikle `users(id)` sütununun gerçekten bu
+    isimle var olduğu (auth.py'den çıkarım yapıldı, doğrudan
+    doğrulanmadı) ve mevcut foreign key referanslarının sorunsuz
+    kurulduğu kontrol edilmeli.
+
+
   (26 Ağustos 2026, Bahri'nin talebi — "buton adı çok uzun, sadece
   Geçmişi Sil olsun, yanına bir düğme daha istiyorum"): ADMIN PANEL
   DÜĞMELERİ GÜNCELLENDİ.**

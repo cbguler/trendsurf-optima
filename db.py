@@ -333,6 +333,26 @@ def init_db():
         onay_durumu       TEXT NOT NULL DEFAULT 'bekliyor',
         onay_zamani       TIMESTAMP
     )""")
+    # v2.0.7.203 (Bahri'nin talebi, 26 Ağustos 2026 — "her abone kendi
+    # tespitlerini görsün/onaylasın, Optima Skor kişiye özel olsun"):
+    # KRİTİK MİMARİ DEĞİŞİKLİK. `beklenti_otomatik_tespit` (yukarıda)
+    # ARTIK SADECE PAYLAŞIMLI/OBJEKTİF tespit kaydını tutuyor (hangi
+    # haber, hangi kalıp, ne zaman tespit edildi) - `onay_durumu`
+    # sütunu ARTIK KULLANICI KARARI İÇİN KULLANILMIYOR (geriye dönük
+    # uyumluluk için siliniyor değil, sadece yeni kodda yazılmıyor).
+    # Her kullanıcının KENDİ kararı (onayladı/reddetti) bu YENİ ayrı
+    # tabloda tutuluyor - UNIQUE(kullanici_id, tespit_id) ile bir
+    # kullanıcı aynı tespite sadece TEK bir karar verebilir (fikrini
+    # değiştirirse UPSERT ile güncellenir).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS kullanici_tespit_karari (
+        id            SERIAL PRIMARY KEY,
+        kullanici_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tespit_id     INTEGER NOT NULL REFERENCES beklenti_otomatik_tespit(id) ON DELETE CASCADE,
+        karar         TEXT NOT NULL,
+        karar_zamani  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, tespit_id)
+    )""")
     c.execute("""
     CREATE TABLE IF NOT EXISTS haber_islenmis (
         haber_url    TEXT PRIMARY KEY,
@@ -1181,39 +1201,26 @@ def otomatik_tespit_ekle(kalip_key: str, siddet: str, haber_basligi: str,
         return False
 
 
-def get_bekleyen_tespitler() -> list:
+def get_bekleyen_tespitler(kullanici_id) -> list:
     """v2.0.7.156 (Bahri'nin talebi, KRİTİK tasarım düzeltmesi): app.py
     bunu her sayfa yuklemesinde cagirir - suresi gecmemis VE HENUZ
     ONAY/RED VERİLMEMİŞ tespitleri doner. Bunlar Optima Skor'a HENUZ
     UYGULANMAMIŞTIR - sadece kullanıcıya "onaylar mısınız?" diye
     gösterilecek adaylardır.
 
-    v2.0.7.199 (Bahri'nin talebi, 25 Ağustos 2026 — "birden fazla
-    kaynak tarafından da aynı haberin alınması, bir başka kriter olarak
-    eklenebilir"): ARTIK SADECE ÇOKLU KAYNAK TEYİDİ OLAN tespitler
-    döner - aynı kalıp için, FARKLI bir kaynaktan, son 24 SAAT içinde
-    başka bir tespit yoksa, bu tespit KULLANICIYA HİÇ GÖSTERİLMEZ.
+    v2.0.7.199/200: Çoklu kaynak teyidi (aynı kalıp, farklı kaynak,
+    24 saat içinde + başlık benzerliği) - bkz. PROJE_NOTLARI.md.
 
-    v2.0.7.200 (Bahri'nin bulgusu, 26 Ağustos 2026 — tek kaynaklı bir
-    petrol haberi yine de pop-up olarak çıktı): v2.0.7.199'un
-    kendi belgelediği SINIRLAMA gerçekleşti - kaba kontrol SADECE
-    "aynı kalıp, farklı kaynak, 24 saat" bakıyordu, "GERÇEKTEN AYNI
-    OLAY mı" bakmıyordu. Muhtemelen aynı gün "jeopolitik" kalıbına
-    uyan ama TAMAMEN FARKLI bir haber, kontrolü yanlışlıkla geçirdi.
-    ÇÖZÜM: SQL'deki kaba EXISTS kontrolü artık sadece ADAY listesi
-    çıkarıyor - Python tarafında `difflib` ile başlıklar arasında
-    GERÇEK BİR METİN BENZERLİĞİ de aranıyor (eşik: 0.35 - iki başlığın
-    ortak kelime/karakter dizisi oranı). Bu MÜKEMMEL bir "aynı olay"
-    tespiti DEĞİL (o, başlık ötesi bir anlam analizi gerektirir) ama
-    saf kategori-eşleşmesinden ÇOK daha isabetli bir ikinci filtre.
-
-    BİLİNEN SINIRLAMA (hâlâ tam çözülmedi): iki kaynağın AYNI olayı
-    çok farklı kelimelerle anlatması hâlâ "benzer değil" sayılabilir
-    (yanlış negatif) - ya da tesadüfen benzer kelimeler kullanan
-    FARKLI iki olay hâlâ "benzer" sayılabilir (yanlış pozitif, ama
-    v2.0.7.199'dan daha nadir). Gerçek bir "aynı olay" tespiti için
-    AI'ya iki başlığı karşılaştırtmak gerekir - bu, maliyet/karmaşıklık
-    nedeniyle bu turda YAPILMADI."""
+    v2.0.7.203 (Bahri'nin talebi, 26 Ağustos 2026 — "her abone kendi
+    tespitlerini görsün/onaylasın, Optima Skor kişiye özel olsun"):
+    KRİTİK MİMARİ DEĞİŞİKLİK - artık `kullanici_id` ZORUNLU parametre.
+    `beklenti_otomatik_tespit.onay_durumu` sütunu ARTIK KULLANILMIYOR
+    (paylaşımlı/global karar kavramı KALKTI) - bunun yerine SADECE bu
+    KULLANICININ `kullanici_tespit_karari` tablosunda HENÜZ bir kararı
+    olmayan tespitler döner. Aynı tespit, HENÜZ karar vermemiş HER
+    kullanıcıya AYNI ANDA "bekliyor" olarak görünebilir - biri
+    onaylasa/reddetse bile DİĞER kullanıcılar için hâlâ "bekliyor"
+    kalır (çünkü artık her kullanıcının kendi kararı var)."""
     import difflib
 
     def _baslik_benzer_mi(b1, b2, esik=0.35):
@@ -1222,15 +1229,23 @@ def get_bekleyen_tespitler() -> list:
         oran = difflib.SequenceMatcher(None, b1.lower(), b2.lower()).ratio()
         return oran >= esik
 
+    if not kullanici_id:
+        return []
+
     try:
-        # Once KABA adaylari cek (eski v2.0.7.199 SQL'i - kategori+
-        # kaynak+zaman filtresi), sonra Python'da baslik benzerligiyle
-        # SIKILAŞTIR.
+        # v2.0.7.203: "onay_durumu='bekliyor'" filtresi KALDIRILDI -
+        # artik SADECE "bu kullanicinin HENUZ karari yok mu" bakiyoruz
+        # (NOT EXISTS ile kullanici_tespit_karari'nda).
         rows = get_conn().execute(
             "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
             "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
             "FROM beklenti_otomatik_tespit t1 "
-            "WHERE t1.gecerlilik_bitis > now() AND t1.onay_durumu = 'bekliyor'"
+            "WHERE t1.gecerlilik_bitis > now() "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM kullanici_tespit_karari k "
+            "  WHERE k.tespit_id = t1.id AND k.kullanici_id = ?"
+            ")",
+            (kullanici_id,)
         ).fetchall()
         if not rows:
             return []
@@ -1238,9 +1253,9 @@ def get_bekleyen_tespitler() -> list:
         def _v(r, k, i):
             return r[k] if isinstance(r, dict) else r[i]
 
-        # Ayni kalipteki TUM son-24-saat tespitleri (herhangi bir onay
-        # durumunda) tek seferde cek - her aday icin ayri sorgu atmamak
-        # icin (performans).
+        # Ayni kalipteki TUM son-24-saat tespitleri (paylasimli havuzdan,
+        # kullanicidan BAGIMSIZ) tek seferde cek - her aday icin ayri
+        # sorgu atmamak icin (performans).
         tum_yakin = get_conn().execute(
             "SELECT id, kalip_key, haber_basligi, haber_kaynak "
             "FROM beklenti_otomatik_tespit "
@@ -1274,15 +1289,29 @@ def get_bekleyen_tespitler() -> list:
     return _tespit_satirlarini_donustur(onaylanan_satirlar)
 
 
-def get_onaylanmis_tespitler() -> list:
+def get_onaylanmis_tespitler(kullanici_id) -> list:
     """v2.0.7.156: kullanıcının AÇIKÇA onayladığı, hâlâ geçerlilik
-    süresi dolmamış tespitler - SADECE BUNLAR Optima Skor'a uygulanır."""
+    süresi dolmamış tespitler - SADECE BUNLAR Optima Skor'a uygulanır.
+
+    v2.0.7.203 (Bahri'nin talebi — "Optima Skor kişiye özel olsun"):
+    ARTIK `kullanici_id` ZORUNLU - SADECE BU KULLANICININ
+    `kullanici_tespit_karari` tablosundaki 'onaylandi' kararları
+    sayılıyor. AYNI habere Kullanıcı A onay verip Kullanıcı B
+    vermemiş olabilir - bu durumda Optima Skor ikisi için FARKLI
+    görünür (Kullanıcı A'nınki habere göre ayarlanmış, B'ninki
+    varsayılan kalır)."""
+    if not kullanici_id:
+        return []
     try:
         rows = get_conn().execute(
-            "SELECT id, kalip_key, siddet, haber_basligi, haber_url, "
-            "haber_kaynak, ai_gerekce, tespit_zamani FROM beklenti_otomatik_tespit "
-            "WHERE gecerlilik_bitis > now() AND onay_durumu = 'onaylandi' "
-            "ORDER BY tespit_zamani DESC"
+            "SELECT t.id, t.kalip_key, t.siddet, t.haber_basligi, t.haber_url, "
+            "t.haber_kaynak, t.ai_gerekce, t.tespit_zamani "
+            "FROM beklenti_otomatik_tespit t "
+            "JOIN kullanici_tespit_karari k ON k.tespit_id = t.id "
+            "WHERE k.kullanici_id = ? AND k.karar = 'onaylandi' "
+            "AND t.gecerlilik_bitis > now() "
+            "ORDER BY t.tespit_zamani DESC",
+            (kullanici_id,)
         ).fetchall()
     except Exception:
         return []
@@ -1303,14 +1332,24 @@ def _tespit_satirlarini_donustur(rows) -> list:
     return sonuc
 
 
-def tespit_onayla(tespit_id: int):
+def tespit_onayla(kullanici_id, tespit_id: int):
     """Kullanıcı (Ana Sayfa'daki "Onayla" butonu) bir tespiti uygun
-    bulursa - BUNDAN SONRA Optima Skor'a uygulanır."""
+    bulursa - BUNDAN SONRA SADECE O KULLANICININ Optima Skor'una
+    uygulanır.
+
+    v2.0.7.203 (Bahri'nin talebi — kişiye özel skor): ARTIK
+    `kullanici_id` ZORUNLU parametre - karar, paylaşımlı tabloya
+    DEĞİL, o kullanıcıya özel `kullanici_tespit_karari` satırına
+    yazılıyor (UPSERT - fikrini değiştirirse güncellenir)."""
+    if not kullanici_id:
+        return False
     try:
         conn = get_conn()
         conn.execute(
-            "UPDATE beklenti_otomatik_tespit SET onay_durumu='onaylandi', "
-            "onay_zamani=now() WHERE id=?", (tespit_id,))
+            "INSERT INTO kullanici_tespit_karari (kullanici_id, tespit_id, karar, karar_zamani) "
+            "VALUES (?, ?, 'onaylandi', now()) "
+            "ON CONFLICT (kullanici_id, tespit_id) DO UPDATE SET karar='onaylandi', karar_zamani=now()",
+            (kullanici_id, tespit_id))
         conn.commit()
         conn.close()
         return True
@@ -1319,14 +1358,23 @@ def tespit_onayla(tespit_id: int):
         return False
 
 
-def tespit_reddet(tespit_id: int):
-    """Kullanıcı bir tespiti uygun bulmazsa - bir daha gösterilmez,
-    Optima Skor'a HİÇ uygulanmaz."""
+def tespit_reddet(kullanici_id, tespit_id: int):
+    """Kullanıcı bir tespiti uygun bulmazsa - SADECE O KULLANICIYA bir
+    daha gösterilmez, SADECE O KULLANICININ Optima Skor'una uygulanmaz
+    (diğer kullanıcılar bu tespiti hâlâ görüp kendi kararlarını
+    verebilir).
+
+    v2.0.7.203 (Bahri'nin talebi — kişiye özel skor): ARTIK
+    `kullanici_id` ZORUNLU parametre."""
+    if not kullanici_id:
+        return False
     try:
         conn = get_conn()
         conn.execute(
-            "UPDATE beklenti_otomatik_tespit SET onay_durumu='reddedildi', "
-            "onay_zamani=now() WHERE id=?", (tespit_id,))
+            "INSERT INTO kullanici_tespit_karari (kullanici_id, tespit_id, karar, karar_zamani) "
+            "VALUES (?, ?, 'reddedildi', now()) "
+            "ON CONFLICT (kullanici_id, tespit_id) DO UPDATE SET karar='reddedildi', karar_zamani=now()",
+            (kullanici_id, tespit_id))
         conn.commit()
         conn.close()
         return True
@@ -1335,24 +1383,27 @@ def tespit_reddet(tespit_id: int):
         return False
 
 
-def tum_onaylanan_etkileri_sifirla() -> int:
+def tum_onaylanan_etkileri_sifirla(kullanici_id) -> int:
     """v2.0.7.201 (Bahri'nin talebi, 26 Ağustos 2026 — Admin Panel'e
-    "Varsayılan Skor" düğmesi): Optima Skor hesaplaması, HÂLÂ GEÇERLİLİK
-    SÜRESİ DOLMAMIŞ ('gecerlilik_bitis > now()') onaylı tespitleri canlı
-    olarak sayıyor (bkz. `get_onaylanmis_tespitler()`). Normalde bu süre
-    (48 saat) dolunca etki kendiliğinden kalkıyor - ama Bahri'nin
-    beklemeden, HEMEN "temiz sayfa"ya dönebilmesi için bu fonksiyon
-    TÜM aktif (süresi dolmamış, onaylanmış) tespitlerin
-    `gecerlilik_bitis`'ini ŞİMDİYE çekiyor - böylece bir sonraki
-    okumada artık "aktif" sayılmıyorlar, Optima Skor varsayılan
-    (tespit etkisi olmayan) haline dönüyor. Geçmiş KAYIT SİLİNMİYOR -
-    sadece etkisi kapatılıyor, denetim izi (audit trail) korunuyor.
+    "Varsayılan Skor" düğmesi).
+
+    v2.0.7.203 (Bahri'nin talebi — kişiye özel skor): ARTIK
+    `kullanici_id` ZORUNLU - SADECE BU KULLANICININ onayladığı
+    kararlar siliniyor (`kullanici_tespit_karari`'dan) - diğer
+    kullanıcıların kendi onayları HİÇ ETKİLENMİYOR. Silinen kararlar
+    o tespiti "henüz karar verilmemiş" durumuna döndürür - kullanıcı
+    isterse pop-up'ta tekrar görüp yeniden karar verebilir. Paylaşımlı
+    `beklenti_otomatik_tespit` kaydı HİÇ DEĞİŞMİYOR/SİLİNMİYOR - sadece
+    bu kullanıcının o kayıtlara verdiği karar kaldırılıyor.
     Etkilenen satır sayısını döner (0 = zaten etkin bir şey yoktu)."""
+    if not kullanici_id:
+        return -1
     try:
         conn = get_conn()
         cur = conn.execute(
-            "UPDATE beklenti_otomatik_tespit SET gecerlilik_bitis=now() "
-            "WHERE onay_durumu='onaylandi' AND gecerlilik_bitis > now()")
+            "DELETE FROM kullanici_tespit_karari "
+            "WHERE kullanici_id=? AND karar='onaylandi'",
+            (kullanici_id,))
         etkilenen = cur.rowcount if hasattr(cur, "rowcount") else None
         conn.commit()
         conn.close()

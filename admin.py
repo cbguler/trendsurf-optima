@@ -106,13 +106,15 @@ def _render_haber_akisi_bakim():
                 f"mantığıyla yeniden işlenecek."
             )
     with _hb2:
-        if st.button("Varsayılan Skor", key="tespit_etki_sifirla_btn",
-                      help="Şu an aktif (onaylanmış, süresi dolmamış) tüm "
-                           "haber tespiti etkilerini HEMEN kapatır - Optima "
-                           "Skor, herhangi bir haber onayı olmamış gibi "
-                           "varsayılan haline döner. Geçmiş kayıtlar "
-                           "SİLİNMEZ, sadece etkisi durdurulur."):
-            _etkilenen = tum_onaylanan_etkileri_sifirla()
+        # v2.0.7.202 (Bahri'nin bulgusu, 26 Ağustos 2026 — "iki düğme
+        # aynı renk/formatta olmalı"): `help=` parametresi Streamlit'in
+        # düğmeyi farklı sarmalamasına yol açıp uygulamanın genel buton
+        # CSS'ini (app.py'deki `.stButton>button{...}`) eşleştirmesini
+        # engelliyordu - açıklama artık help yerine altındaki caption'da.
+        if st.button("Varsayılan Skor", key="tespit_etki_sifirla_btn"):
+            _admin_user = get_current_user()
+            _etkilenen = tum_onaylanan_etkileri_sifirla(
+                _admin_user["id"] if _admin_user else None)
             if _etkilenen < 0:
                 st.error("Sıfırlanamadı - veritabanı hatası (sunucu loglarına bakılmalı).")
             elif _etkilenen == 0:
@@ -123,6 +125,11 @@ def _render_haber_akisi_bakim():
                     f"{_etkilenen} aktif tespit etkisi kapatıldı - Optima "
                     f"Skor artık varsayılan (haber etkisi olmayan) haline "
                     f"döndü. Geçmiş kayıtlar silinmedi, sadece etkileri durdu.")
+    st.caption(
+        "Varsayılan Skor: şu an aktif (onaylanmış, süresi dolmamış) tüm "
+        "haber tespiti etkilerini HEMEN kapatır - geçmiş kayıtlar silinmez, "
+        "sadece etkileri durdurulur."
+    )
 
 # ── Kalıp Yönetimi (v2.0.7.162, Bahri'nin talebi, 19 Ağustos 2026 —
 # "anahtar kelime ön-filtresi ve kalıplara daha sonra ekleme yapılabilir

@@ -153,7 +153,7 @@ EMAIL_CFG_FILE = "email_config.json"
 # eklendi. Menude EN ALTA konuldu - tek istisna El Kitabi, cunku sidebar
 # onu PAGES[:-1] + [el_kitabi_etiketi] seklinde kuruyor (yani PAGES'in
 # SON elemani HER ZAMAN "Yardim" olmak zorunda, yoksa navigasyon bozulur).
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","Haberler","Yardım"]
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","SonDakika Haberleri","Yardım"]
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -2481,11 +2481,17 @@ try:
     # geciktirmiyor, ama art arda tıklamalarda (ör. bir sayı kutusuna
     # yazarken her tuşta rerun tetiklenmesi) gereksiz onlarca bağlantı
     # açılması engelleniyor.
+    # v2.0.7.203 (Bahri'nin talebi — "Optima Skor kişiye özel olsun"):
+    # kullanici_id artık PARAMETRE - st.cache_data zaten argüman
+    # DEĞERİNE göre ayrı önbellek tutuyor, bu yüzden bu tek değişiklik
+    # otomatik olarak KULLANICI BAZLI önbellekleme de sağlıyor (bir
+    # kullanıcının önbelleği başka bir kullanıcıya asla karışmaz).
     @st.cache_data(ttl=20, show_spinner=False)
-    def _bekleyen_tespitler_onbellekli():
-        return _gbt_raw()
+    def _bekleyen_tespitler_onbellekli(_kid):
+        return _gbt_raw(_kid)
 
-    _bekleyen_tespitler = _bekleyen_tespitler_onbellekli()
+    _bekleyen_tespitler = (
+        _bekleyen_tespitler_onbellekli(_cur_user["id"]) if _cur_user else [])
 except Exception:
     _bekleyen_tespitler = []
 
@@ -2596,7 +2602,7 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                     # tekrar görünüyordu, hiçbir hata mesajı olmadan -
                     # tam da Bahri'nin tarif ettiği "hiçbir şey olmuyor"
                     # deneyimi.
-                    _basarili = tespit_onayla(_tm["id"])
+                    _basarili = tespit_onayla(_cur_user["id"] if _cur_user else None, _tm["id"])
                 except Exception as _me1:
                     st.error(f"Onaylanamadı: {_me1}")
                 else:
@@ -2626,7 +2632,7 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                          use_container_width=True):
                 try:
                     from db import tespit_reddet
-                    _basarili = tespit_reddet(_tm["id"])
+                    _basarili = tespit_reddet(_cur_user["id"] if _cur_user else None, _tm["id"])
                 except Exception as _me2:
                     st.error(f"Reddedilemedi: {_me2}")
                 else:
@@ -2670,11 +2676,16 @@ try:
     # v2.0.7.168: yukarıdaki _bekleyen_tespitler_onbellekli ile AYNI
     # sebep/çözüm - bu çağrı da ÖNBELLEKSİZDİ, her rerun'da yeni bir
     # Supabase bağlantısı açıyordu. 20 saniyelik önbellek eklendi.
+    # v2.0.7.203 (Bahri'nin talebi — "Optima Skor kişiye özel olsun"):
+    # kullanici_id artık PARAMETRE - önbellek de otomatik olarak
+    # kullanıcı bazlı ayrışıyor (bkz. yukarıdaki _bekleyen_tespitler_
+    # onbellekli'deki AYNI açıklama).
     @st.cache_data(ttl=20, show_spinner=False)
-    def _onaylanmis_tespitler_onbellekli():
-        return _got_raw()
+    def _onaylanmis_tespitler_onbellekli(_kid):
+        return _got_raw(_kid)
 
-    _onaylanmis_tespitler = _onaylanmis_tespitler_onbellekli()
+    _onaylanmis_tespitler = (
+        _onaylanmis_tespitler_onbellekli(_cur_user["id"]) if _cur_user else [])
 except Exception:
     _onaylanmis_tespitler = []
 
@@ -3888,10 +3899,10 @@ if page=="Ana Sayfa":
             _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
             for _t_toplu in _bekleyen_tespitler:
                 if _tespit_kriterleri_karsiliyor_mu(_t_toplu):
-                    if _to_toplu(_t_toplu["id"]):
+                    if _to_toplu(_cur_user["id"] if _cur_user else None, _t_toplu["id"]):
                         _onaylanan_sayisi += 1
                 else:
-                    if _tr_toplu(_t_toplu["id"]):
+                    if _tr_toplu(_cur_user["id"] if _cur_user else None, _t_toplu["id"]):
                         _reddedilen_sayisi += 1
             try:
                 _bekleyen_tespitler_onbellekli.clear()
@@ -3939,7 +3950,7 @@ if page=="Ana Sayfa":
                     if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
                         try:
                             from db import tespit_onayla
-                            _basarili_ah = tespit_onayla(_tespit["id"])
+                            _basarili_ah = tespit_onayla(_cur_user["id"] if _cur_user else None, _tespit["id"])
                         except Exception as _onay_err:
                             st.error(f"Onaylanamadı: {_onay_err}")
                         else:
@@ -3964,7 +3975,7 @@ if page=="Ana Sayfa":
                     if st.button("Reddet", key=f"tespit_red_{_tespit['id']}"):
                         try:
                             from db import tespit_reddet
-                            _basarili_rh = tespit_reddet(_tespit["id"])
+                            _basarili_rh = tespit_reddet(_cur_user["id"] if _cur_user else None, _tespit["id"])
                         except Exception as _red_err:
                             st.error(f"Reddedilemedi: {_red_err}")
                         else:
@@ -6529,7 +6540,7 @@ elif page=="Makro Göstergeler":
             st.metric(_lbl, _val)
     st.caption("Kaynak: vap.org.tr | MKK Merkezi Kayıt Kuruluşu. Veriler haftalık güncellenmektedir.")
 
-elif page=="Haberler":
+elif page=="SonDakika Haberleri":
     # v2.0.7.160 (Bahri'nin talebi, 19 Ağustos 2026 — "durumun stabil
     # olduğunu nasıl görebilirim diye düşünürken haber sayfası fikri
     # oluşmaya başladı"): Beklenti Modu'nun izlediği haber akışının
@@ -6537,7 +6548,7 @@ elif page=="Haberler":
     # sistem sessizse bunun sebebi sistemin çalışmaması değil, gerçekten
     # sakin olması. Bahri'nin kararı: TÜM akış gösterilir, ama ön-filtreye
     # takılan (piyasa etkisi olası) haberler AYRICA ÜSTTE işaretli durur.
-    st.title("Haberler")
+    st.title("SonDakika Haberleri")
     st.caption("Beklenti Modu'nun 10 dakikada bir taradığı kaynaklar — en yeni haber en üstte")
 
     try:
