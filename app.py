@@ -6644,10 +6644,12 @@ elif page=="SonDakika Haberleri":
         st.caption(
             "Kaynaklar: AA Ekonomi, BBC World, Al Jazeera, Investing.com TR, "
             "BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, "
-            "Halk TV. BBC ve Al Jazeera başlıkları Türkçeye çevrilir; diğer "
-            "yedi kaynak zaten Türkçe yayın yapar. Çeviri günlük bir AI "
-            "bütçesine tabidir — bütçe dolarsa başlık orijinal dilinde kalır, "
-            "haber izleme durmaz. Akış 7 gün saklanır."
+            "Halk TV, NPR Business (ABD), Handelsblatt Finanzen (Almanya), "
+            "Sky News, BBC Business, Sky News Business (İngiltere), ABC News "
+            "Australia (Avustralya). Türkçe olmayan kaynaklar (İngilizce ve "
+            "Almanca) Türkçeye çevrilir; diğerleri zaten Türkçe yayın yapar. "
+            "Çeviri günlük bir AI bütçesine tabidir — bütçe dolarsa başlık "
+            "orijinal dilinde kalır, haber izleme durmaz. Akış 7 gün saklanır."
         )
 
 elif page=="Yardım":

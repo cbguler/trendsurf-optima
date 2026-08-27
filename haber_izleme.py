@@ -81,6 +81,27 @@ _RSS_KAYNAKLARI = [
     # bildirildi, kararı onun). Anahtar kelime filtresi zaten alakasız
     # içeriği eleyecek.
     ("Halk TV", "https://www.halktv.com.tr/service/rss.php"),
+    # v2.0.7.204 (Bahri'nin talebi, 27 Ağustos 2026 — "haber kaynaklarımızı
+    # özellikle yurtdışı ABD, Almanya, İngiltere, Fransa, Japonya,
+    # Avustralya gibi ülkelerdeki güvenilir haber kaynakları ile
+    # çoğaltmayı deneyelim"): 6 ülke araştırıldı, adaylar canlı test
+    # edildi. Fransa ve Japonya için TÜM adaylar (France24, Nikkei Asia,
+    # Le Monde, Les Echos, Japan Times, DW) robots.txt engeli/ücretli
+    # abonelik/bot tespiti nedeniyle KULLANILAMADI - eklenmedi. Diğer
+    # 4 ülke için Bahri'nin onayladığı 6 kaynak:
+    ("NPR Business", "https://feeds.npr.org/1006/rss.xml"),  # ABD
+    # Handelsblatt Finanzen: Almanya'nın önde gelen finans gazetesi,
+    # ALMANCA - _CEVIRI_GEREKEN_KAYNAKLAR setine eklendi (bkz. asagida).
+    ("Handelsblatt Finanzen", "https://feeds.cms.handelsblatt.com/finanzen"),  # Almanya
+    ("Sky News", "http://feeds.skynews.com/feeds/rss/home.xml"),  # Ingiltere, genel
+    # BBC Business ve Sky News Business: kendi test ortamimda domain
+    # kisitlamasi nedeniyle DOGRUDAN test edilemedi, ama BBC World ve
+    # Sky News (yukarida) AYNI domain'lerden zaten calisir durumda -
+    # calisma ihtimali yuksek. Bahri'nin bilerek onayladigi, dogrulanmamis
+    # risk.
+    ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),  # Ingiltere
+    ("Sky News Business", "https://feeds.skynews.com/feeds/rss/business.xml"),  # Ingiltere
+    ("ABC News Australia", "http://www.abc.net.au/news/feed/45910/rss.xml"),  # Avustralya, genel
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -436,12 +457,25 @@ def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
 
 
 # ══════════════════════════════════════════════════════════════
-# v2.0.7.160: Toplu ceviri (SADECE Ingilizce kaynaklar)
+# v2.0.7.160: Toplu ceviri (Turkce OLMAYAN kaynaklar)
 # ══════════════════════════════════════════════════════════════
 # Bahri'nin karari (19 Agustos 2026): 5 kaynagin 3'u (AA Ekonomi,
 # Investing.com TR, BloombergHT) ZATEN TURKCE - onlara hic dokunulmaz.
 # Sadece BBC World ve Al Jazeera cevrilir.
-_INGILIZCE_KAYNAKLAR = {"BBC World", "Al Jazeera"}
+#
+# v2.0.7.204 (Bahri'nin talebi, 27 Ağustos 2026 — "yurtdışı kaynaklarla
+# çoğaltalım"): Bu set ARTIK SADECE İNGİLİZCE kaynaklarla sınırlı DEĞİL -
+# Handelsblatt Finanzen (ALMANCA) eklendi. İsim buna göre genelleştirildi
+# (_INGILIZCE_KAYNAKLAR → _CEVIRI_GEREKEN_KAYNAKLAR). Gemini/Groq'un
+# çeviri istemi zaten kaynak dilini AÇIKÇA belirtmiyordu (modele
+# otomatik algılatıyordu) - bu yüzden kod tarafında BAŞKA HİÇBİR
+# DEĞİŞİKLİK gerekmedi, sadece isim ve içerik güncellendi.
+_CEVIRI_GEREKEN_KAYNAKLAR = {
+    "BBC World", "Al Jazeera",  # Ingilizce
+    "NPR Business", "Sky News", "BBC Business", "Sky News Business",
+    "ABC News Australia",  # Ingilizce (v2.0.7.204)
+    "Handelsblatt Finanzen",  # Almanca (v2.0.7.204)
+}
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk
 # limiti BELIRSIZ (ucuncu taraf kaynaklar 20/50/250/500/1500 gibi
@@ -803,7 +837,7 @@ def main():
     cevrilen_gemini = 0
     cevrilen_groq = 0
     cevrilen_yedek = 0
-    bekleyen_ceviri = get_cevrilmemis_haberler(sorted(_INGILIZCE_KAYNAKLAR), limit=40)
+    bekleyen_ceviri = get_cevrilmemis_haberler(sorted(_CEVIRI_GEREKEN_KAYNAKLAR), limit=40)
     if bekleyen_ceviri:
         _cevrilenler_url = set()
         _bugunku = ai_cagri_sayisi_bugun()

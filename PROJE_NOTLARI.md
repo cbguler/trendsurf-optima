@@ -1631,6 +1631,52 @@ tamam, canlı doğrulama BEKLİYOR):**
   yeniden adlandırıldı (PAGES listesi, routing koşulu, st.title() -
   3 yer tutarlı şekilde güncellendi).
 
+- **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.204 (27 Ağustos 2026, Bahri'nin
+  talebi — "haber kaynaklarımızı özellikle yurtdışı ABD, Almanya,
+  İngiltere, Fransa, Japonya, Avustralya gibi ülkelerdeki güvenilir
+  kaynaklarla çoğaltalım"): 6 ÜLKE ARAŞTIRILDI, 6 YENİ KAYNAK EKLENDİ
+  (15 TOPLAM KAYNAK).**
+  - **Eklenen 6 kaynak (Bahri'nin onayıyla):**
+    - **NPR Business** (ABD) - `feeds.npr.org/1006/rss.xml` - canlı
+      test edildi, güncel, doğrudan tarife/Fed/ticaret içeriği.
+    - **Handelsblatt Finanzen** (Almanya) - `feeds.cms.handelsblatt.com/
+      finanzen` - Almanya'nın önde gelen finans gazetesi, canlı test
+      edildi, çok güçlü içerik (DAX, Fed, Deutsche Bank, tahvil
+      getirileri). **ALMANCA** - ilk kez İngilizce olmayan bir yabancı
+      kaynak eklendi.
+    - **Sky News** (İngiltere, genel) - `feeds.skynews.com/feeds/rss/
+      home.xml` - canlı test edildi, çalışıyor.
+    - **ABC News Australia** (Avustralya, genel) - `abc.net.au/news/
+      feed/45910/rss.xml` - canlı test edildi, çalışıyor.
+    - **BBC Business** ve **Sky News Business** (İngiltere) - kendi
+      test ortamında domain kısıtlaması nedeniyle DOĞRUDAN test
+      edilemedi (BBC/Sky domain'leri özel engelli) - ama BBC World ve
+      Sky News (genel) AYNI domain'lerden zaten çalışır durumda,
+      çalışma ihtimali yüksek. **Bahri'ye bu risk açıkça bildirildi,
+      bilerek onayladı.**
+  - **Eklenmeyen adaylar (gerekçeli, hiçbiri Fransa/Japonya için
+    bulunamadı):** CNBC, MarketWatch, The Guardian, Le Monde, Les
+    Echos, DW - bot tespiti/erişim engeli. AP News - resmi RSS'i
+    artık yok. **France24 ve Nikkei Asia** - robots.txt ile otomatik
+    erişimi AÇIKÇA yasaklıyor (saygı gösterildi, atlandı; Nikkei ayrıca
+    ticari kullanımı da sözleşmeyle yasaklıyor). Japan Times - artık
+    ücretli abonelik gerektiriyor (402 hatası). **Sonuç: Fransa ve
+    Japonya için hiçbir kaynak eklenemedi.**
+  - **Kod değişikliği - önemli genelleme:** `_INGILIZCE_KAYNAKLAR`
+    değişkeni `_CEVIRI_GEREKEN_KAYNAKLAR` olarak yeniden adlandırıldı
+    ve genelleştirildi - artık sadece İngilizce değil, Almanca
+    (Handelsblatt) dahil TÜRKÇE OLMAYAN her kaynağı kapsıyor. Çeviri
+    istemi zaten kaynak dilini açıkça belirtmiyordu (modele otomatik
+    algılatıyordu) - bu yüzden isim/küme değişikliği dışında BAŞKA
+    HİÇBİR KOD DEĞİŞİKLİĞİ gerekmedi.
+  - **İzole test edildi:** 15 kaynağın tümünün doğru yapılandırıldığı,
+    6 yeni kaynağın hepsinin hem `_RSS_KAYNAKLARI` hem
+    `_CEVIRI_GEREKEN_KAYNAKLAR`'da olduğu, Türkçe kaynakların hiçbirinin
+    yanlışlıkla çeviri setinde olmadığı doğrulandı.
+  - **AÇIK - canlı doğrulama bekleniyor:** BBC Business ve Sky News
+    Business'ın gerçekten çalışıp çalışmadığı bir sonraki haber
+    taramasının log'unda görülmeli.
+
 - **[UYGULANDI, MANTIK DOĞRULANDI (izole simülasyon), CANLI TEST
   EDİLMEDİ] v2.0.7.203 (26 Ağustos 2026, Bahri'nin talebi — "her abone
   kendi tespitlerini görsün/onaylasın, Optima Skor kişiye özel olsun"):
