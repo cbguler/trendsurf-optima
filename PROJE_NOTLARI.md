@@ -1671,7 +1671,32 @@ tamam, canlı doğrulama BEKLİYOR):**
   sesi olmaksızın") doğrudan çelişiyordu. `_RSS_KAYNAKLARI`'ndan
   kaldırıldı, `app.py`'deki kaynak listesi metni de güncellendi.
 
-- **[UYGULANDI, TEST EDİLDİ] v2.0.7.211 (28-29 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.212 (29 Ağustos 2026, Bahri'nin
+  sorusu — "Al Jazeera'yı hep duyuyorum ama bizim kriterlerimize uyan
+  güvenilir bir kaynak mıdır bilmiyorum"): AL JAZEERA KALDIRILDI -
+  AA EKONOMİ'DEN BİLE DAHA NET BİR DEVLET KONTROLÜ ÖRNEĞİ.**
+  - **Araştırma sonucu:** Al Jazeera Media Network doğrudan **Katar
+    Emiri Şeyh Tamim bin Hamad Al Thani'ye ait** (kişisel mülkiyetinde).
+    Yönetim Kurulu Başkanı hükümdar ailesi Al Thani'nin kıdemli bir
+    üyesi. Kurul atamaları Bakanlar Kurulu tarafından yapılıp **Emir
+    tarafından onaylanıyor**. ABD Adalet Bakanlığı ağın "Katar hükümeti
+    tarafından kontrol edildiği ve finanse edildiği"ni resmi olarak
+    tespit etmiş. Wikipedia Al Jazeera Arabic'i doğrudan "state-funded"
+    olarak sınıflandırıyor. Bu, BBC'nin bağımsız denetimli lisans
+    ücreti modelinden ÇOK FARKLI - fonlama VE yönetim doğrudan hükümdar
+    aileye bağlı, yapısal olarak AA Ekonomi'den bile daha net bir
+    devlet kontrolü örneği.
+  - **Önemli bağlam:** Al Jazeera bu projenin EN BAŞINDAN BERİ (18
+    Ağustos 2026, tarafsızlık ilkesi belirlenmeden ÇOK ÖNCE) kaynak
+    listesindeydi - bu bulguyla ilk kez gözden geçirildi.
+  - **Kod değişikliği:** `_RSS_KAYNAKLARI`'ndan ve
+    `_CEVIRI_GEREKEN_KAYNAKLAR`'dan kaldırıldı. `app.py`'deki kaynak
+    listesi metni güncellendi.
+  - **İzole test edildi:** 19 kaynağın tümü doğru yapılandırılmış, Al
+    Jazeera hem RSS listesinde hem çeviri kümesinde tamamen yok, AA
+    Ekonomi yanlışlıkla geri gelmemiş, hiçbir tekrar yok.
+
+
   talebi — çok dilli tarafsız kaynak araştırmasının İKİNCİ (kalan
   diller) turu): 4 YENİ KAYNAK EKLENDİ (20 TOPLAM KAYNAK).**
   - **Kapsamlı araştırma yapıldı** (Yunanistan, İspanya, Japonya, Çin,

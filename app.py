@@ -6660,7 +6660,7 @@ elif page=="SonDakika Haberleri":
 
         st.divider()
         st.caption(
-            "Kaynaklar: BBC World, Al Jazeera, Investing.com TR, "
+            "Kaynaklar: BBC World, Investing.com TR, "
             "BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, "
             "Halk TV, NPR Business (ABD), Handelsblatt Finanzen (Almanya), "
             "Sky News, BBC Business, Sky News Business (İngiltere), ABC News "

@@ -57,9 +57,18 @@ import feedparser
 # KALDIRILDI. Anadolu Ajansı (AA) Türkiye'nin resmi devlet haber
 # ajansıdır - Bahri'nin standing tarafsızlık ilkesiyle ("hiçbir ülkenin
 # veya hükümetinin sesi olmaksızın") doğrudan çelişiyordu.
+# v2.0.7.212 (Bahri'nin talebi, 29 Ağustos 2026 — "Al Jazeera'yı hep
+# duyuyorum ama bizim kriterlerimize uyan güvenilir bir kaynak mıdır
+# bilmiyorum"): AL JAZEERA KALDIRILDI. Araştırma: Al Jazeera Media
+# Network doğrudan Katar Emiri Şeyh Tamim bin Hamad Al Thani'ye ait,
+# Yönetim Kurulu Başkanı hükümdar ailesinin kıdemli bir üyesi, kurul
+# atamaları Bakanlar Kurulu'nca yapılıp Emir tarafından onaylanıyor.
+# ABD Adalet Bakanlığı ağın "Katar hükümeti tarafından kontrol edildiği
+# ve finanse edildiği"ni resmi olarak tespit etmiş. AA Ekonomi'den
+# BİLE daha doğrudan bir devlet kontrolü örneği - aynı gerekçeyle
+# kaldırıldı.
 _RSS_KAYNAKLARI = [
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
-    ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
     ("Investing.com TR", "https://tr.investing.com/rss/news_25.rss"),
     ("BloombergHT", "https://www.bloomberght.com/rss"),
     # v2.0.7.180 (Bahri'nin talebi, 22 Ağustos 2026 — "başka kaynak
@@ -520,7 +529,7 @@ def _ai_dogrula(kalip_key, baslik, ozet, kaynak):
 # otomatik algılatıyordu) - bu yüzden kod tarafında BAŞKA HİÇBİR
 # DEĞİŞİKLİK gerekmedi, sadece isim ve içerik güncellendi.
 _CEVIRI_GEREKEN_KAYNAKLAR = {
-    "BBC World", "Al Jazeera",  # Ingilizce
+    "BBC World",  # Ingilizce (v2.0.7.212: Al Jazeera kaldirildi)
     "NPR Business", "Sky News", "BBC Business", "Sky News Business",
     "ABC News Australia",  # Ingilizce (v2.0.7.204)
     "Handelsblatt Finanzen",  # Almanca (v2.0.7.204)
