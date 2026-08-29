@@ -122,6 +122,35 @@ _RSS_KAYNAKLARI = [
     # desteği alsa da editoryal olarak bağımsız kabul ediliyor. Canlı
     # test edildi, çalışıyor. İtalyanca - çeviri gerekiyor.
     ("ANSA", "https://www.ansa.it/sito/ansait_rss.xml"),
+    # v2.0.7.211 (Bahri'nin talebi, 28-29 Ağustos 2026 — çok dilli
+    # tarafsız kaynak araştırmasının İKİNCİ turu, kalan diller): 4 yeni
+    # kaynak eklendi.
+    # Meduza: Rusça - CANLI TEST EDİLDİ, çalışıyor. Rus devleti
+    # tarafından TAMAMEN YASAKLANMIŞ, Riga'dan (Letonya) sürgünde
+    # yayın yapıyor - bağımsızlığı şüphe götürmez (RT/TASS gibi devlet
+    # medyasının tam tersi). DÜRÜSTLÜK NOTU: içerik güçlü Kremlin-karşıtı
+    # bir editoryal duruş taşıyor (anlaşılır, kendisi zulüm görüp
+    # sürgüne gitmiş bir ekip) - bu "hükümetin sesi olmama" testini
+    # kesinlikle geçiyor ama "taraf tutmama" anlamında tek yönlü.
+    ("Meduza", "https://meduza.io/rss/all"),
+    # Kathimerini: Yunanca - kendi test ortamımda domain kısıtlaması
+    # nedeniyle DOĞRUDAN test edilemedi (BBC/Sky gibi). Özel aile
+    # şirketi (Alafouzos ailesi) sahipliğinde, Yunanistan'ın en saygın
+    # "kayıt gazetesi" - devlet ajansı değil. Wikipedia "merkez-sağ"
+    # olarak tanımlıyor (hafif bir siyasi eğilim, ama devlet kontrolü
+    # değil).
+    ("Kathimerini", "https://www.ekathimerini.com/infeeds/rss/nx-rss-feed.xml"),
+    # El País: İspanyolca - aynı araç kısıtlaması, doğrudan test
+    # edilemedi. Özel medya grubu (PRISA) sahipliğinde - EFE (İspanyol
+    # devletine tam bağlı) YERİNE seçildi. Wikipedia "merkez-sol"
+    # olarak tanımlıyor.
+    ("El País", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"),
+    # Kyodo News: Japonca - aynı araç kısıtlaması. Kâr amacı gütmeyen
+    # kooperatif (56 Japon gazetesi + 111 yayın kuruluşunun üye
+    # aidatlarıyla finanse ediliyor) - eski devlet ajansı Dōmei'nin
+    # YERİNE 1945'te kurulmuş, devletten ve ticari etkiden bağımsız
+    # olması özellikle tasarlanmış.
+    ("Kyodo News", "https://english.kyodonews.net/rss/all.xml"),
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -497,6 +526,10 @@ _CEVIRI_GEREKEN_KAYNAKLAR = {
     "Handelsblatt Finanzen",  # Almanca (v2.0.7.204)
     "Euronews",  # Ingilizce (v2.0.7.208)
     "ANSA",  # Italyanca (v2.0.7.208)
+    "Meduza",  # Rusca (v2.0.7.211)
+    "Kathimerini",  # Yunanca (v2.0.7.211)
+    "El País",  # Ispanyolca (v2.0.7.211)
+    "Kyodo News",  # Japonca (v2.0.7.211)
 }
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk

@@ -1671,7 +1671,53 @@ tamam, canlı doğrulama BEKLİYOR):**
   sesi olmaksızın") doğrudan çelişiyordu. `_RSS_KAYNAKLARI`'ndan
   kaldırıldı, `app.py`'deki kaynak listesi metni de güncellendi.
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ, CANLI TEST EDİLMEDİ] v2.0.7.209
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.211 (28-29 Ağustos 2026, Bahri'nin
+  talebi — çok dilli tarafsız kaynak araştırmasının İKİNCİ (kalan
+  diller) turu): 4 YENİ KAYNAK EKLENDİ (20 TOPLAM KAYNAK).**
+  - **Kapsamlı araştırma yapıldı** (Yunanistan, İspanya, Japonya, Çin,
+    Arap dünyası, Rusya) - her aday için sahiplik yapısı özellikle
+    araştırıldı. **Reddedilenler:** EFE (İspanyol devletine tam bağlı,
+    AA Ekonomi ile aynı profil), Al Jazeera Arabic (Katar devlet
+    fonlu - Wikipedia'da açıkça "state-funded" yazıyor), Middle East
+    Eye (şeffaf olmayan finansman + çok kaynaklı, güvenilir gizli
+    Katar/Hamas bağlantısı iddiaları - açık bir devlet ajansından
+    bile daha sorunlu), Focus Taiwan (Tayvan hükümetine/Executive
+    Yuan'a ait). **Çince için temiz bir aday bulunamadı** - SCMP
+    (Alibaba sahipliğinde, İngilizce) en az sorunlu alternatif ama
+    Çince değil, eklenmedi.
+  - **Eklenen 4 kaynak (Bahri'nin onayıyla):**
+    - **Meduza** (Rusça) - `meduza.io/rss/all` - **CANLI TEST EDİLDİ,
+      ÇALIŞIYOR**. Rus devleti tarafından TAMAMEN YASAKLANMIŞ,
+      Riga'dan (Letonya) sürgünde yayın yapıyor - bağımsızlığı şüphe
+      götürmez. Dürüstlük notu: içerik güçlü Kremlin-karşıtı bir
+      editoryal duruş taşıyor (anlaşılır, kendisi zulüm görmüş) -
+      "hükümetin sesi olmama" testini kesinlikle geçiyor ama "taraf
+      tutmama" anlamında tek yönlü.
+    - **Kathimerini** (Yunanca) - `ekathimerini.com/infeeds/rss/
+      nx-rss-feed.xml` - kendi test ortamında domain kısıtlaması
+      nedeniyle DOĞRUDAN test edilemedi (BBC/Sky gibi). Özel aile
+      şirketi (Alafouzos) sahipliğinde, Yunanistan'ın en saygın
+      "kayıt gazetesi" - Wikipedia "merkez-sağ" olarak tanımlıyor.
+    - **El País** (İspanyolca) - `feeds.elpais.com/mrss-s/pages/ep/
+      site/elpais.com/portada` - aynı araç kısıtlaması, doğrudan
+      test edilemedi. Özel medya grubu (PRISA) sahipliğinde - EFE
+      YERİNE seçildi. Wikipedia "merkez-sol" olarak tanımlıyor.
+    - **Kyodo News** (Japonca) - `english.kyodonews.net/rss/all.xml` -
+      aynı araç kısıtlaması. Kâr amacı gütmeyen kooperatif (56 Japon
+      gazetesi + 111 yayın kuruluşunun üye aidatlarıyla finanse
+      ediliyor) - eski devlet ajansı Dōmei'nin YERİNE 1945'te
+      kurulmuş, devletten bağımsız olması özellikle tasarlanmış.
+  - **Kod değişikliği:** 4 kaynak da `_CEVIRI_GEREKEN_KAYNAKLAR`'a
+    eklendi (hepsi Türkçe değil). `app.py`'deki kaynak listesi metni
+    güncellendi.
+  - **İzole test edildi:** 20 kaynağın tümü doğru yapılandırılmış,
+    hepsi benzersiz (tekrar yok), 4 yeni kaynağın hepsi hem RSS
+    listesinde hem çeviri kümesinde.
+  - **AÇIK - canlı doğrulama bekleniyor:** Kathimerini, El País, Kyodo
+    News'ün gerçekten çalışıp çalışmadığı bir sonraki haber
+    taramasının log'unda görülmeli (Meduza zaten doğrudan doğrulandı).
+
+
   (29 Ağustos 2026, Bahri'nin bulgusu — "pop-up'ın en az iki kaynaktan
   doğrulanmış olması VE yüksek şiddette olması kuralıydı, gelen
   pop-up'larda bu kuralların uygulanmadığını görüyorum"): İKİ GERÇEK
