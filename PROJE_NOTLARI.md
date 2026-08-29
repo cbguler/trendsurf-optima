@@ -1671,7 +1671,56 @@ tamam, canlı doğrulama BEKLİYOR):**
   sesi olmaksızın") doğrudan çelişiyordu. `_RSS_KAYNAKLARI`'ndan
   kaldırıldı, `app.py`'deki kaynak listesi metni de güncellendi.
 
-- **[UYGULANDI, TEST EDİLDİ] v2.0.7.212 (29 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.213 (29 Ağustos 2026, Bahri'nin
+  talebi — "öncelik ABD, İngiltere ve Fransa olmak üzere birkaç sağlam
+  kaynak bul"): 2 YENİ KAYNAK EKLENDİ (21 TOPLAM KAYNAK).**
+  - **PBS NewsHour** (ABD, Ekonomi akışı) - `pbs.org/newshour/feeds/
+    rss/economy` - WETA'nın (kamu yayıncısı) kâr amacı gütmeyen yan
+    kuruluşu, saygın vakıflarca (Carnegie, Ford, MacArthur, Hewlett)
+    fonlanıyor - doğrudan hükümet ataması/kontrolü yok.
+  - **Ouest-France** (Fransa) - `ouest-france.fr/rss/une` - Fransa'nın
+    en çok okunan gazetesi (günlük 2,5 milyon okuyucu), bir vakıf/
+    dernek yapısı aracılığıyla editoryal bağımsızlığı korunuyor.
+    **Fransa için ÇOK SAYIDA başarısız denemeden (France24, Le Monde,
+    Les Echos, RFI, Mediapart) sonra bulunan İLK çalışan aday.**
+  - İkisi de `_CEVIRI_GEREKEN_KAYNAKLAR`'a eklendi, `app.py`'deki
+    kaynak listesi metni güncellendi. İzole test edildi - 21 benzersiz
+    kaynak doğrulandı.
+  - **AÇIK - canlı doğrulama bekleniyor:** ikisi de kendi test
+    ortamında domain kısıtlaması nedeniyle doğrudan test edilemedi
+    (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
+    log'unda görülmeli.
+
+- **[UYGULANDI, İZOLE TEST EDİLDİ] v2.0.7.214 (29 Ağustos 2026, Bahri'nin
+  talebi — "Abonelik Ayarları'na profil bilgileri, iletişim bilgileri,
+  şifre değişikliği eklensin, kalıp ayarları eskisi gibi admin
+  panelinde kalsın"): ABONELİK SAYFASINA HESAP YÖNETİMİ EKLENDİ.**
+  - **ÖNEMLİ NETLEŞME (Bahri'nin kendi düzeltmesi):** İlk istekte
+    Kalıp Yönetimi/Haber Akışı Bakımı gibi TÜM admin ayarlarının
+    Abonelik Ayarları'na taşınması istenmiş gibi görünüyordu - Bahri'ye
+    bunun iki çok farklı anlama gelebileceği (A: sadece admin görsün
+    tek sayfada, B: her abone tam düzenleme yetkisi kazansın)
+    AÇIKÇA soruldu. Bahri NETLEŞTİRDİ: Kalıp Yönetimi ESKİSİ GİBİ
+    admin panelinde kalacak, DEĞİŞMEYECEK - Abonelik Ayarları'na
+    SADECE hesaba özel ayarlar (profil/iletişim/şifre) eklenecek.
+  - **Yeni DB sütunu:** `users` tablosuna `phone_number` eklendi
+    (idempotent migration).
+  - **Yeni auth.py fonksiyonları:** `kullanici_profil_guncelle
+    (kullanici_id, full_name, phone_number)` ve `kullanici_sifre_
+    degistir(kullanici_id, eski_sifre, yeni_sifre)` - ikincisi ÖNCE
+    mevcut şifrenin doğru olduğunu `verify_password()` ile doğruluyor,
+    sonra `hash_password()` ile yeni şifreyi kaydediyor.
+  - **Abonelik sayfasına 3 yeni bölüm:** Profil Bilgileri (ad-soyad +
+    telefon, form), İletişim Bilgileri (e-posta SADECE GÖRÜNTÜLENİYOR
+    - güvenlik nedeniyle bu sayfadan değiştirilemiyor, admin ile
+    iletişime geçilmesi gerekiyor), Şifre Değiştir (mevcut+yeni+tekrar,
+    form). Her kullanıcı SADECE KENDİ hesabını yönetiyor.
+  - **İzole test edildi:** şifre doğrulama mantığı - doğru eski şifre
+    kabul, yanlış eski şifre red, değişim sonrası eski şifre geçersiz/
+    yeni şifre geçerli. Tüm dosyalar (`app.py`, `auth.py`, `db.py`,
+    `haber_izleme.py`) `py_compile` ile doğrulandı.
+
+
   sorusu — "Al Jazeera'yı hep duyuyorum ama bizim kriterlerimize uyan
   güvenilir bir kaynak mıdır bilmiyorum"): AL JAZEERA KALDIRILDI -
   AA EKONOMİ'DEN BİLE DAHA NET BİR DEVLET KONTROLÜ ÖRNEĞİ.**

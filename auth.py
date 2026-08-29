@@ -1,7 +1,7 @@
 """
 TrendSurf Optima — Kimlik Dogrulama Modulu (auth.py)
 """
-import sqlite3, secrets, hashlib
+import sqlite3, secrets, hashlib, sys
 from datetime import datetime, timedelta
 import streamlit as st
 from db import get_conn, init_db, IntegrityError
@@ -199,6 +199,54 @@ def logout():
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
         conn.close()
+
+# v2.0.7.214 (Bahri'nin talebi, 29 Ağustos 2026 — "Abonelik Ayarları'na
+# profil bilgileri, iletişim bilgileri, şifre değişikliği eklensin"):
+# HER KULLANICININ KENDİ hesabını yönetebilmesi için üç fonksiyon.
+def kullanici_profil_guncelle(kullanici_id, full_name: str, phone_number: str) -> bool:
+    """Profil (ad-soyad) ve iletişim (telefon) bilgilerini günceller.
+    E-posta adresi BURADAN değiştirilmiyor - o, hesabın kimlik
+    doğrulama anahtarı, ayrı bir doğrulama akışı gerektirir (bu turda
+    kapsam dışı bırakıldı)."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE users SET full_name=?, phone_number=? WHERE id=?",
+            (full_name.strip(), (phone_number or "").strip(), kullanici_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[auth] kullanici_profil_guncelle hata: {e}", file=sys.stderr)
+        return False
+
+
+def kullanici_sifre_degistir(kullanici_id, eski_sifre: str, yeni_sifre: str) -> tuple:
+    """Şifre değiştirme - ÖNCE eski şifrenin doğru olduğu doğrulanıyor
+    (kimliği doğrulanmış bir oturumda bile, başkasının bilgisayarında
+    unutulmuş bir oturumun şifreyi değiştirmesini zorlaştırmak için).
+    Dönüş: (basarili: bool, mesaj: str)."""
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT password FROM users WHERE id=?", (kullanici_id,)).fetchone()
+        if not row:
+            conn.close()
+            return False, "Kullanıcı bulunamadı."
+        _mevcut_hash = row["password"] if isinstance(row, dict) else row[0]
+        if not verify_password(eski_sifre, _mevcut_hash):
+            conn.close()
+            return False, "Mevcut şifre yanlış."
+        if len(yeni_sifre) < 6:
+            conn.close()
+            return False, "Yeni şifre en az 6 karakter olmalı."
+        conn.execute("UPDATE users SET password=? WHERE id=?",
+                     (hash_password(yeni_sifre), kullanici_id))
+        conn.commit()
+        conn.close()
+        return True, "Şifre başarıyla değiştirildi."
+    except Exception as e:
+        print(f"[auth] kullanici_sifre_degistir hata: {e}", file=sys.stderr)
+        return False, f"Hata: {e}"
 
 # ── Plan Yetki Kontrolu ──────────────────────────────────────────────────────
 PLAN_LEVELS = {"free": 0, "pro": 1, "premium": 2}

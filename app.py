@@ -6662,15 +6662,17 @@ elif page=="SonDakika Haberleri":
         st.caption(
             "Kaynaklar: BBC World, Investing.com TR, "
             "BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, "
-            "Halk TV, NPR Business (ABD), Handelsblatt Finanzen (Almanya), "
-            "Sky News, BBC Business, Sky News Business (İngiltere), ABC News "
-            "Australia (Avustralya), Euronews (pan-Avrupa), ANSA (İtalya), "
-            "Meduza (Rusya), Kathimerini (Yunanistan), El País (İspanya), "
-            "Kyodo News (Japonya). Türkçe olmayan kaynaklar (İngilizce, "
-            "Almanca, İtalyanca, Rusça, Yunanca, İspanyolca, Japonca) "
-            "Türkçeye çevrilir; diğerleri zaten Türkçe yayın yapar. "
-            "Çeviri günlük bir AI bütçesine tabidir — bütçe dolarsa başlık "
-            "orijinal dilinde kalır, haber izleme durmaz. Akış 7 gün saklanır."
+            "Halk TV, NPR Business, PBS NewsHour (ABD), Handelsblatt "
+            "Finanzen (Almanya), Sky News, BBC Business, Sky News Business "
+            "(İngiltere), ABC News Australia (Avustralya), Euronews "
+            "(pan-Avrupa), ANSA (İtalya), Meduza (Rusya), Kathimerini "
+            "(Yunanistan), El País (İspanya), Kyodo News (Japonya), "
+            "Ouest-France (Fransa). Türkçe olmayan kaynaklar (İngilizce, "
+            "Almanca, İtalyanca, Rusça, Yunanca, İspanyolca, Japonca, "
+            "Fransızca) Türkçeye çevrilir; diğerleri zaten Türkçe yayın "
+            "yapar. Çeviri günlük bir AI bütçesine tabidir — bütçe "
+            "dolarsa başlık orijinal dilinde kalır, haber izleme durmaz. "
+            "Akış 7 gün saklanır."
         )
 
 # ══════════════════════════════════════════════════════════════
@@ -6689,6 +6691,59 @@ elif page=="SonDakika Haberleri":
 elif page=="Abonelik":
     st.title("Abonelik")
     st.caption(f"{_cur_user['full_name']} — {plan_badge.get(_cur_user['plan'], _cur_user['plan'])}")
+
+    # v2.0.7.214 (Bahri'nin talebi, 29 Ağustos 2026 — "Abonelik
+    # Ayarları'na profil bilgileri, iletişim bilgileri, şifre
+    # değişikliği eklensin, kalıp ayarları eskisi gibi admin panelinde
+    # kalsın"): Kalıp Yönetimi/Haber Akışı Bakımı BİLEREK buraya
+    # taşınmadı - admin.py'de kalmaya devam ediyor. Bu sayfaya sadece
+    # HER kullanıcının (admin dahil) kendi hesabına yönelik ayarlar
+    # eklendi.
+    st.divider()
+    st.markdown("**Profil Bilgileri**")
+    from auth import kullanici_profil_guncelle, kullanici_sifre_degistir
+    with st.form("abonelik_profil_form"):
+        _yeni_ad = st.text_input("Ad Soyad", value=_cur_user.get("full_name", ""))
+        _yeni_tel = st.text_input("Telefon (opsiyonel)", value=_cur_user.get("phone_number") or "",
+                                   placeholder="ör. 0555 123 45 67")
+        _profil_kaydet = st.form_submit_button("Profili Kaydet")
+    if _profil_kaydet:
+        if not _yeni_ad.strip():
+            st.error("Ad Soyad boş bırakılamaz.")
+        elif kullanici_profil_guncelle(_cur_user["id"], _yeni_ad, _yeni_tel):
+            st.cache_data.clear()
+            st.success("Profil bilgileri güncellendi.")
+        else:
+            st.error("Güncellenemedi - sunucu hatası (loglara bakılmalı).")
+
+    st.divider()
+    st.markdown("**İletişim Bilgileri**")
+    st.text_input("E-posta", value=_cur_user.get("email", ""), disabled=True,
+                   help="E-posta adresi güvenlik nedeniyle bu sayfadan değiştirilemez.")
+    st.caption(
+        "E-posta adresiniz giriş kimliğinizdir ve buradan değiştirilemez "
+        "- değiştirmeniz gerekiyorsa admin ile iletişime geçin."
+    )
+
+    st.divider()
+    st.markdown("**Şifre Değiştir**")
+    with st.form("abonelik_sifre_form"):
+        _eski_sifre = st.text_input("Mevcut Şifre", type="password")
+        _yeni_sifre = st.text_input("Yeni Şifre (en az 6 karakter)", type="password")
+        _yeni_sifre_tekrar = st.text_input("Yeni Şifre (tekrar)", type="password")
+        _sifre_kaydet = st.form_submit_button("Şifreyi Değiştir")
+    if _sifre_kaydet:
+        if not _eski_sifre or not _yeni_sifre:
+            st.error("Tüm alanları doldurun.")
+        elif _yeni_sifre != _yeni_sifre_tekrar:
+            st.error("Yeni şifreler eşleşmiyor.")
+        else:
+            _basarili_sifre, _mesaj_sifre = kullanici_sifre_degistir(
+                _cur_user["id"], _eski_sifre, _yeni_sifre)
+            if _basarili_sifre:
+                st.success(_mesaj_sifre)
+            else:
+                st.error(_mesaj_sifre)
 
     st.divider()
     st.markdown("**Otomatik Haber Tespiti ve Optima Skor**")

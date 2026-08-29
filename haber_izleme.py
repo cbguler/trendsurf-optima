@@ -160,6 +160,19 @@ _RSS_KAYNAKLARI = [
     # YERİNE 1945'te kurulmuş, devletten ve ticari etkiden bağımsız
     # olması özellikle tasarlanmış.
     ("Kyodo News", "https://english.kyodonews.net/rss/all.xml"),
+    # v2.0.7.213 (Bahri'nin talebi, 29 Ağustos 2026 — "öncelik ABD,
+    # İngiltere ve Fransa olmak üzere birkaç sağlam kaynak bul"):
+    # PBS NewsHour: ABD - WETA'nın (kamu yayıncısı) kâr amacı gütmeyen
+    # yan kuruluşu, saygın vakıflarca (Carnegie, Ford, MacArthur,
+    # Hewlett) fonlanıyor - doğrudan hükümet ataması/kontrolü YOK.
+    # Ekonomiye özel akışı kullanılıyor.
+    ("PBS NewsHour", "https://www.pbs.org/newshour/feeds/rss/economy"),
+    # Ouest-France: Fransa'nın en çok okunan gazetesi (günlük 2,5
+    # milyon okuyucu) - bir vakıf/dernek yapısı aracılığıyla editoryal
+    # bağımsızlığı korunuyor, hükümete/partiye bağlı değil. Fransa
+    # için ÇOK SAYIDA başarısız denemeden (France24, Le Monde, Les
+    # Echos, RFI, Mediapart) sonra bulunan İLK çalışan aday.
+    ("Ouest-France", "https://www.ouest-france.fr/rss/une"),
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -539,6 +552,8 @@ _CEVIRI_GEREKEN_KAYNAKLAR = {
     "Kathimerini",  # Yunanca (v2.0.7.211)
     "El País",  # Ispanyolca (v2.0.7.211)
     "Kyodo News",  # Japonca (v2.0.7.211)
+    "PBS NewsHour",  # Ingilizce (v2.0.7.213)
+    "Ouest-France",  # Fransizca (v2.0.7.213)
 }
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk

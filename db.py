@@ -292,8 +292,17 @@ def init_db():
         is_active   INTEGER NOT NULL DEFAULT 0,
         is_admin    INTEGER NOT NULL DEFAULT 0,
         created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at  TIMESTAMP
+        expires_at  TIMESTAMP,
+        phone_number TEXT
     )""")
+    # v2.0.7.214 (Bahri'nin talebi, 29 Ağustos 2026 — "Abonelik
+    # Ayarları'na profil bilgileri, iletişim bilgileri, şifre
+    # değişikliği eklensin"): mevcut tabloya sütunu ekle (idempotent) -
+    # canlıdaki tablo zaten var.
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT")
+    except Exception as e:
+        print(f"[db] users phone_number migration hatasi: {e}", file=sys.stderr)
 
     # portfolio tablosu (ek sutunlar dahil)
     c.execute("""
