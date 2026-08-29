@@ -1631,6 +1631,132 @@ tamam, canlı doğrulama BEKLİYOR):**
   yeniden adlandırıldı (PAGES listesi, routing koşulu, st.title() -
   3 yer tutarlı şekilde güncellendi).
 
+- **[KALICI GERÇEK - DÜZELTME, 27 Ağustos 2026] TrendSurf Optima TİCARİ
+  BİR ÜRÜN DEĞİLDİR.** Bahri bunu açıkça belirtti ve gelecekte
+  hatırlanmasını istedi: uygulama halka açılmayacak, hiçbir zaman
+  ticari bir SaaS ürünü olarak sunulmayacak. Aboneleri sadece Bahri'nin
+  akrabaları, yakın dostları ve arkadaşlarından oluşacak/oluşmaya
+  devam edecek. Bu notun öncesinde bazı kayıtlarda "ticari ürün"/
+  "abonelik modeli" gibi ifadeler geçmiş olabilir - bunlar YANLIŞ,
+  bundan sonra düzeltilmeli. Bu düzeltme Claude'un kalıcı hafızasına
+  da (memory_user_edits) işlendi.
+  **Pratik etkisi:** Daha önce bazı haber kaynağı adayları (ör. Fox
+  Business, Nikkei Asia) "kişisel/ticari olmayan kullanım" şartı
+  ticari kullanımla çeliştiği için reddedilmişti - bu netleşmeyle o
+  değerlendirme YENİDEN GÖZDEN GEÇİRİLEBİLİR (ama otomatik olarak
+  eklenmiş değiller, Bahri isterse tekrar sorulmalı).
+
+- **[KALICI TERCİH - 27 Ağustos 2026] Haber kaynağı seçim ilkesi:**
+  Bahri'nin standing tercihi: yeni kaynak eklerken, hiçbir ülkenin veya
+  hükümetin "sesi" olmayan, gerçekten tarafsız/bağımsız habercilik
+  yapan yayın organları tercih edilmeli - devlet güdümlü/devlet sesi
+  olan kaynaklardan kaçınılmalı. Bu ilke gelecekteki TÜM kaynak
+  araştırmalarında uygulanmalı. Bu tercih Claude'un kalıcı hafızasına
+  da işlendi.
+  **AÇIK GERİYE DÖNÜK GERİLİM (henüz ele alınmadı, Bahri'ye
+  sorulmalı):** Mevcut kaynaklardan **AA Ekonomi** Türkiye'nin resmi
+  devlet haber ajansı (Anadolu Ajansı) - bu yeni ilkeyle en net
+  çelişen mevcut kaynak. Al Jazeera (Katar devlet fonlu) ve BBC/ABC
+  Australia (kamu yayıncıları, ama genelde editoryal bağımsızlığı
+  daha güçlü kabul edilir) daha gri alanda. Bahri şimdilik SADECE
+  "ileriye dönük" uygulanmasını istedi, mevcut kaynakları hemen
+  gözden geçirmedi - bu, ayrı bir gündem maddesi olarak açık kalıyor.
+
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.207 (27 Ağustos 2026, Bahri'nin
+  talebi — "AA Ekonomi konusunda kesinlikle haklısın, hükümet yanlısı
+  haberler ürettiği için bu kaynağı devre dışı bırakmak daha doğru
+  olacaktır"): AA EKONOMİ KALDIRILDI - TARAFSIZLIK İLKESİYLE.**
+  Anadolu Ajansı (AA), Türkiye'nin resmi devlet haber ajansı - Bahri'nin
+  standing tarafsızlık ilkesiyle ("hiçbir ülkenin veya hükümetinin
+  sesi olmaksızın") doğrudan çelişiyordu. `_RSS_KAYNAKLARI`'ndan
+  kaldırıldı, `app.py`'deki kaynak listesi metni de güncellendi.
+
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.208 (27-28 Ağustos 2026, Bahri'nin
+  talebi — çok dilli, tarafsız kaynak araştırmasının İLK SONUÇLARI):
+  2 YENİ KAYNAK EKLENDİ (16 TOPLAM KAYNAK) - KALAN DİLLER SONRAKİ
+  TURA BIRAKILDI.**
+  - **Kapsamlı araştırma yapıldı** (Fransa, Yunanistan, İtalya,
+    İspanya) - her aday için SAHİPLİK YAPISI özellikle araştırıldı
+    (Bahri'nin "hiçbir ülkenin/hükümetin sesi olmaksızın" ilkesi
+    gereği). **Reddedilenler:** RFI (Fransa hükümetine ait), EFE
+    (İspanya - SEPI/İspanyol hükümetine tam bağlı, başkanını hükümet
+    atıyor - AA Ekonomi ile AYNI profil), Mediapart (bağımsız ama
+    "sol eğilimli" olarak biliniyor + erişim engelli + büyük ölçüde
+    ücretli).
+  - **Eklenen 2 kaynak (canlı test edildi, çalışıyor):**
+    - **Euronews** (`euronews.com/rss`, İngilizce, pan-Avrupa genel
+      akış) - özel yatırım fonu (Alpac Capital) sahipliğinde, HİÇBİR
+      TEK HÜKÜMETE ait değil. Güçlü finans içeriği doğrulandı (Fed
+      başkanı Jackson Hole konuşması, Almanya gaz depolama krizi,
+      İspanya yakıt vergisi indirimi).
+    - **ANSA** (`ansa.it/sito/ansait_rss.xml`, İtalyanca, genel akış) -
+      İtalya'nın 36 BAĞIMSIZ gazete yayıncısının ortak sahipliğindeki
+      kooperatifi (AP'ye benzer yapı) - devlet ajansı DEĞİL, hafif
+      kamu desteği alsa da editoryal bağımsızlığı olan bir yapı.
+      "FOR PERSONAL USE ONLY" şartı var - v2.0.7.206'daki "TrendSurf
+      Optima ticari değil" netleşmesiyle bu şart artık karşılanıyor.
+  - **Kod değişikliği:** `_CEVIRI_GEREKEN_KAYNAKLAR`'a ikisi de eklendi
+    (Euronews İngilizce, ANSA İtalyanca - ikisi de çeviri gerektiriyor).
+    `app.py`'deki kaynak listesi metni güncellendi.
+  - **İzole test edildi:** 16 kaynağın tümü doğru yapılandırılmış,
+    AA Ekonomi'nin tamamen kaldırıldığı, Euronews+ANSA'nın hem RSS
+    listesinde hem çeviri kümesinde olduğu, "Euronews Türkçe" (zaten
+    Türkçe, farklı bir kaynak) ile yeni "Euronews"un (İngilizce)
+    karışmadığı doğrulandı.
+  - **AÇIK - SONRAKİ TURA BIRAKILDI (Bahri'nin kararı):** Yunanca
+    (Kathimerini - bulundu ama canlı test edilemedi, araç kısıtlaması),
+    İspanyolca (El País - tam RSS URL'si bulunamadı), Japonca, Çince,
+    Arapça, Rusça için araştırma HENÜZ YAPILMADI/TAMAMLANMADI.
+
+
+  (27 Ağustos 2026, Bahri'nin talebi — "diğer aboneler kendi optima
+  skorlarını nasıl oluşturabilecekler, ayrı bir abonelik menüsü
+  oluşturalım mı"): YENİ "ABONELİK" SAYFASI EKLENDİ.**
+  - **Sebep:** v2.0.7.203'te tespit onayı/Optima Skor kişiye özel
+    hale getirilmişti ama "Varsayılan Skor" sıfırlama düğmesi SADECE
+    Admin Panel'de vardı - admin OLMAYAN aboneler kendi onaylarını
+    yönetebilecekleri bir arayüze hiç sahip değildi.
+  - **Uygulama:** PAGES listesine "Abonelik" eklendi ("Yardım"dan
+    hemen önce, sidebar'daki dinamik etiket değişim mantığı
+    bozulmadı). Yeni sayfa TÜM kullanıcılara (admin dahil) açık -
+    herkes SADECE KENDİ onaylarını görür/yönetir: (1) şu an aktif
+    onay sayısı (metrik), (2) aktif onayların listesi (genişletilebilir
+    bölüm), (3) "Varsayılan Skor" düğmesi - admin.py'deki AYNI
+    `tum_onaylanan_etkileri_sifirla(kullanici_id)` fonksiyonunu
+    kullanıyor, ama HER KULLANICI kendi `_cur_user["id"]`'si ile
+    çağırıyor - başka bir kullanıcının onayına asla dokunulamaz.
+  - **Doğrulama:** `plan_badge` değişkeninin (sidebar'da `with
+    st.sidebar:` bloğu içinde tanımlı) yeni sayfada erişilebilir
+    olduğu doğrulandı - Python'da `with` blokları yeni bir kapsam
+    OLUŞTURMAZ, bu yüzden sorun yok. Tam dosya hem `py_compile` hem
+    `ast.parse()` ile doğrulandı.
+
+
+  (27 Ağustos 2026, Bahri'nin log paylaşımı — "413 Request too large...
+  TPM Limit 8000, Requested 8225"): GROQ ÇEVİRİSİ ARTIK KÜÇÜK GRUPLAR
+  HÂLİNDE GÖNDERİLİYOR - TPM (DAKİKA BAŞINA TOKEN) LİMİTİ AŞILMASIN
+  DİYE.**
+  - **Kesin kök neden:** Groq'un `openai/gpt-oss-120b` modeli
+    "on_demand" katmanında dakika başına 8000 token sınırı koyuyor.
+    40 haberi TEK istekte çevirmek (girdi + 6000 max_completion_tokens
+    rezervasyonu) bu sınırı hafifçe (8225) aşıyordu.
+  - **Çözüm:** `_groq_ceviri` artık bir SARMALAYICI - içeride
+    `_groq_ceviri_tek_parti`'yi 12'şerli gruplar hâlinde çağırıyor,
+    gruplar arasına 15 saniyelik bekleme koyuyor (TPM dakika bazlı
+    olduğu için art arda küçük istekler bile toplamda sınırı
+    aşabilir). Sonuçlar birleştirilip tek bir sözlük olarak
+    döndürülüyor - `main()` bu detaydan habersiz, eski arayüzle aynı
+    şekilde kullanmaya devam ediyor.
+  - **İzole test edildi:** 40 haber → 4 grup (12+12+12+4), hiçbir
+    haber kaybolmuyor; 5 haberlik küçük liste tek grupta kalıyor; boş
+    liste doğru şekilde ele alınıyor.
+  - **Bonus gözlem:** Aynı log'da `_ucretsiz_yedek_ceviri` (deep-
+    translator) bu kez 40/40 başlığı BAŞARIYLA çevirdi - önceki
+    oturumlarda sistemik olarak engellendiği gözlemlenmişti (bkz.
+    v2.0.7.187). Bu, Google'ın engellemesinin KALICI değil ARALIKLI
+    olduğunu gösteriyor - iyi haber, ama Groq hâlâ birincil/güvenilir
+    yol olarak kalmalı.
+
 - **[UYGULANDI, CANLI TEST EDİLMEDİ] v2.0.7.204 (27 Ağustos 2026, Bahri'nin
   talebi — "haber kaynaklarımızı özellikle yurtdışı ABD, Almanya,
   İngiltere, Fransa, Japonya, Avustralya gibi ülkelerdeki güvenilir

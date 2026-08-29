@@ -153,7 +153,7 @@ EMAIL_CFG_FILE = "email_config.json"
 # eklendi. Menude EN ALTA konuldu - tek istisna El Kitabi, cunku sidebar
 # onu PAGES[:-1] + [el_kitabi_etiketi] seklinde kuruyor (yani PAGES'in
 # SON elemani HER ZAMAN "Yardim" olmak zorunda, yoksa navigasyon bozulur).
-PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","SonDakika Haberleri","Yardım"]
+PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","SonDakika Haberleri","Abonelik","Yardım"]
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -6642,15 +6642,78 @@ elif page=="SonDakika Haberleri":
 
         st.divider()
         st.caption(
-            "Kaynaklar: AA Ekonomi, BBC World, Al Jazeera, Investing.com TR, "
+            "Kaynaklar: BBC World, Al Jazeera, Investing.com TR, "
             "BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, "
             "Halk TV, NPR Business (ABD), Handelsblatt Finanzen (Almanya), "
             "Sky News, BBC Business, Sky News Business (İngiltere), ABC News "
-            "Australia (Avustralya). Türkçe olmayan kaynaklar (İngilizce ve "
-            "Almanca) Türkçeye çevrilir; diğerleri zaten Türkçe yayın yapar. "
+            "Australia (Avustralya), Euronews (pan-Avrupa), ANSA (İtalya). "
+            "Türkçe olmayan kaynaklar (İngilizce, Almanca, İtalyanca) "
+            "Türkçeye çevrilir; diğerleri zaten Türkçe yayın yapar. "
             "Çeviri günlük bir AI bütçesine tabidir — bütçe dolarsa başlık "
             "orijinal dilinde kalır, haber izleme durmaz. Akış 7 gün saklanır."
         )
+
+# ══════════════════════════════════════════════════════════════
+# ABONELİK
+# ══════════════════════════════════════════════════════════════
+# v2.0.7.206 (Bahri'nin talebi, 27 Ağustos 2026 — "diğer aboneler
+# artık kendi optima skorlarını son dakika haberlerine göre nasıl
+# oluşturabilecekler? ... ayrı bir 'abonelik' menüsü oluştursak mı"):
+# v2.0.7.203'te tespit onayı/Optima Skor kişiye özel hale getirilmişti
+# ama "Varsayılan Skor" sıfırlama düğmesi SADECE Admin Panel'de
+# (admin.py) vardı - admin OLMAYAN aboneler kendi onaylarını
+# yönetebilecekleri bir arayüze hiç sahip değildi. Bu sayfa TÜM
+# kullanıcılara (admin dahil) açık - herkes SADECE KENDİ onaylarını
+# görür/yönetir, admin.py'deki gibi başka bir kullanıcının onayına
+# dokunulamaz.
+elif page=="Abonelik":
+    st.title("Abonelik")
+    st.caption(f"{_cur_user['full_name']} — {plan_badge.get(_cur_user['plan'], _cur_user['plan'])}")
+
+    st.divider()
+    st.markdown("**Otomatik Haber Tespiti ve Optima Skor**")
+    st.caption(
+        "TrendSurf Optima, önemli haberleri tespit edip size onay için "
+        "sunar (bkz. Ana Sayfa'daki pop-up ve 'Onay Bekleyen Otomatik "
+        "Tespitler' bölümü). Bu tamamen KİŞİSELDİR: bir haberi "
+        "onaylamanız SADECE SİZİN Optima Skorunuzu etkiler - diğer "
+        "abonelerin skorunu değiştirmez, onlar da aynı haberi kendi "
+        "başlarına görüp kendi kararlarını vermek zorundadır."
+    )
+
+    try:
+        from db import get_onaylanmis_tespitler as _got_abonelik, tum_onaylanan_etkileri_sifirla as _tos_abonelik
+        _benim_onaylarim = _got_abonelik(_cur_user["id"]) if _cur_user else []
+    except Exception:
+        _benim_onaylarim = []
+
+    _ac1, _ac2 = st.columns(2)
+    _ac1.metric("Şu an aktif onayınız", len(_benim_onaylarim))
+
+    if _benim_onaylarim:
+        with st.expander(f"Aktif onaylarınızın listesi ({len(_benim_onaylarim)})"):
+            for _t in _benim_onaylarim:
+                st.caption(f"- {_t.get('kalip_key', '')}: {_t.get('haber_basligi', '')}")
+
+    st.divider()
+    if st.button("Varsayılan Skor", key="abonelik_varsayilan_skor_btn"):
+        _etkilenen_ab = _tos_abonelik(_cur_user["id"] if _cur_user else None)
+        if _etkilenen_ab < 0:
+            st.error("Sıfırlanamadı - veritabanı hatası (sunucu loglarına bakılmalı).")
+        elif _etkilenen_ab == 0:
+            st.info("Zaten aktif bir onayınız yoktu - değişiklik yapılmadı.")
+        else:
+            st.cache_data.clear()
+            st.success(
+                f"{_etkilenen_ab} onayınız kaldırıldı - Optima Skorunuz "
+                f"artık varsayılan (haber etkisi olmayan) haline döndü. "
+                f"Bu SADECE sizin skorunuzu etkiledi, diğer abonelerin "
+                f"onayları değişmedi.")
+    st.caption(
+        "Varsayılan Skor: şu an aktif (onayladığınız, süresi dolmamış) "
+        "tüm haber tespiti etkilerinizi HEMEN kapatır - geçmiş kayıtlar "
+        "silinmez, sadece SİZİN için etkileri durdurulur."
+    )
 
 elif page=="Yardım":
     is_admin = _cur_user.get("is_admin", False)

@@ -51,8 +51,13 @@ import feedparser
 # ══════════════════════════════════════════════════════════════
 # RSS kaynaklari - dogrudan test edildi (2026-08-18), hepsi HTTP 200
 # ══════════════════════════════════════════════════════════════
+# v2.0.7.207 (Bahri'nin talebi, 27 Ağustos 2026 — "AA Ekonomi konusunda
+# kesinlikle haklısın, hükümet yanlısı haberler ürettiği için bu
+# kaynağı devre dışı bırakmak daha doğru olacaktır"): AA EKONOMİ
+# KALDIRILDI. Anadolu Ajansı (AA) Türkiye'nin resmi devlet haber
+# ajansıdır - Bahri'nin standing tarafsızlık ilkesiyle ("hiçbir ülkenin
+# veya hükümetinin sesi olmaksızın") doğrudan çelişiyordu.
 _RSS_KAYNAKLARI = [
-    ("AA Ekonomi", "https://www.aa.com.tr/tr/rss/default?cat=ekonomi"),
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
     ("Investing.com TR", "https://tr.investing.com/rss/news_25.rss"),
@@ -102,6 +107,21 @@ _RSS_KAYNAKLARI = [
     ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),  # Ingiltere
     ("Sky News Business", "https://feeds.skynews.com/feeds/rss/business.xml"),  # Ingiltere
     ("ABC News Australia", "http://www.abc.net.au/news/feed/45910/rss.xml"),  # Avustralya, genel
+    # v2.0.7.208 (Bahri'nin talebi, 27-28 Ağustos 2026 — "hiçbir ülkenin
+    # veya hükümetin sesi olmaksızın tarafsız kaynaklar" ilkesiyle çok
+    # dilli araştırmanın ilk sonuçları): 2 yeni kaynak canlı test edilip
+    # eklendi. Kalan diller (Japonca, Çince, Arapça, Rusça, Yunanca/
+    # İspanyolca doğrulama) SONRAKİ BİR TURDA ele alınacak - bu turda
+    # sadece doğrulananlar eklendi.
+    # Euronews: özel yatırım fonu (Alpac Capital) sahipliğinde, pan-
+    # Avrupa, hiçbir tek hükümete ait değil - canlı test edildi, güçlü
+    # finans içeriği (Fed, enerji, vergi politikası).
+    ("Euronews", "https://www.euronews.com/rss"),
+    # ANSA: İtalya'nın 36 bağımsız gazete yayıncısının ortak sahipliğindeki
+    # kooperatifi (AP'ye benzer yapı) - devlet ajansı DEĞİL, hafif kamu
+    # desteği alsa da editoryal olarak bağımsız kabul ediliyor. Canlı
+    # test edildi, çalışıyor. İtalyanca - çeviri gerekiyor.
+    ("ANSA", "https://www.ansa.it/sito/ansait_rss.xml"),
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -475,6 +495,8 @@ _CEVIRI_GEREKEN_KAYNAKLAR = {
     "NPR Business", "Sky News", "BBC Business", "Sky News Business",
     "ABC News Australia",  # Ingilizce (v2.0.7.204)
     "Handelsblatt Finanzen",  # Almanca (v2.0.7.204)
+    "Euronews",  # Ingilizce (v2.0.7.208)
+    "ANSA",  # Italyanca (v2.0.7.208)
 }
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk
@@ -554,31 +576,11 @@ KURALLAR:
         return {}
 
 
-def _groq_ceviri(haberler):
-    """v2.0.7.187 (Bahri'nin canlı log paylaşımı, 25 Ağustos 2026):
-    KRİTİK BULGU - `_ucretsiz_yedek_ceviri` (deep-translator) canlıda
-    HER SEFERİNDE 40/40 başlık için "TranslationNotFound" hatası
-    veriyordu. Bu istatistiksel olarak imkansıza yakın (ör. "US
-    Supreme Court sides with Trump administration on mail voting"
-    gibi sıradan bir cümlenin çevrilemez olması mantıksız). Araştırma
-    (Ağustos 2026) doğruladı: bu, deep-translator'ın altında yatan
-    Google Translate kazıma (scraping) mekanizmasının, GitHub
-    Actions'ın PAYLAŞILAN sunucu IP'lerinde SIK KARŞILAŞILAN bir
-    "olağandışı trafik" ENGELLEMESİ - birden fazla GitHub issue'sunda
-    "~40-50 çeviri isteğinden sonra Google engelliyor" doğrulandı,
-    tam bizim istek sayımıza denk geliyor. `TranslationNotFound`
-    hatası aslında "bu metin çevrilemedi" DEĞİL, "Google bize normal
-    sayfa yerine bir engelleme sayfası döndürdü, kütüphane bunu
-    ayrıştıramadı" anlamına geliyor - SİSTEMİK bir sorun, tek tek
-    başlıkların sorunu değil.
-
-    ÇÖZÜM: Groq (resmi, sanctioned bir API - kazıma değil) çeviri
-    için de kullanılıyor. Google'ın bot-engelleme sistemine hiç maruz
-    kalmıyor. Girdi/çıktı formatı `_ucretsiz_yedek_ceviri` ile AYNI -
-    çağıran taraf hangi katmanın çalıştığını bilmesine gerek duymuyor.
-
-    Tek bir Groq isteğinde TÜM başlık+özetleri birlikte çeviriyor
-    (JSON formatında) - hem hızlı hem az istek sayısı."""
+def _groq_ceviri_tek_parti(haberler):
+    """v2.0.7.205: `_groq_ceviri`'nin TEK BİR grup üzerinde çalışan iç
+    fonksiyonu - dış sarmalayıcı (`_groq_ceviri`) bunu TPM limitini
+    aşmayacak küçük gruplar hâlinde çağırır (bkz. o fonksiyonun
+    dokümantasyonu)."""
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key or not haberler:
         return {}
@@ -608,14 +610,10 @@ KURALLAR:
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
-                # v2.0.7.191 (Bahri'nin log bulgusu - "json_validate_failed",
-                # failed_generation BOŞ): max_completion_tokens hiç
-                # belirtilmemişti. 32-40 haberlik BÜYÜK bir JSON üretirken
-                # varsayılan (muhtemelen düşük, ör. 1024) limit JSON'ı
-                # yarıda kesip GEÇERSİZ hale getiriyordu - Groq bunu
-                # sunucu tarafında doğruluyor ve "json_validate_failed"
-                # ile reddediyor. 40 madde x ~50-80 token/madde ~2000-3200
-                # token eder - 6000 cömert bir pay bırakıyor.
+                # v2.0.7.191: JSON'ın yarıda kesilmemesi için pay.
+                # v2.0.7.205: gruplama sayesinde artık her istek çok
+                # daha küçük (bkz. _groq_ceviri) - 6000 hala cömert
+                # bir üst sınır, düşürmeye gerek yok.
                 "max_completion_tokens": 6000,
             },
             timeout=45,
@@ -648,6 +646,46 @@ KURALLAR:
                 pass
         print(f"[haber_izleme] Groq ceviri hatasi: {type(e).__name__}: {e}{_detay}")
         return {}
+
+
+def _groq_ceviri(haberler):
+    """v2.0.7.187: Groq (resmi, sanctioned bir API - kazıma değil)
+    çeviri için kullanılıyor. Google'ın bot-engelleme sistemine hiç
+    maruz kalmıyor.
+
+    v2.0.7.205 (Bahri'nin log bulgusu, 27 Ağustos 2026 — "413 Request
+    too large... TPM Limit 8000, Requested 8225"): KESİN KÖK NEDEN -
+    Groq'un `openai/gpt-oss-120b` modeli, "on_demand" hesap katmanında
+    DAKİKA BAŞINA 8000 TOKEN (TPM) sınırı koyuyor. 40 haberi TEK
+    istekte çevirmeye çalışmak (girdi + 6000 max_completion_tokens
+    rezervasyonu) bu sınırı hafifçe (8225) aşıyordu - önceki turda
+    (v2.0.7.191) çözdüğümüz "JSON yarıda kesilme" sorunuyla AYNI KÖKTEN
+    ama FARKLI bir limit (o zaman TOKEN SAYISI yetersizdi, şimdi TOKEN
+    HIZI/DAKİKA aşılıyor).
+
+    ÇÖZÜM: 40 haber, TPM sınırının güvenle altında kalacak küçük
+    gruplara (varsayılan: 12 haber/grup) bölünüyor, gruplar arasına
+    kısa bir bekleme (15 saniye) konuyor - TPM dakika bazlı bir
+    limit olduğu için, art arda gönderilen KÜÇÜK istekler bile
+    yeterince hızlı gönderilirse TOPLAMDA yine sınırı aşabilir; bekleme
+    bunu önlüyor. Sonuçlar birleştirilip TEK bir sözlük olarak
+    döndürülüyor - çağıran taraf (`main()`) bu gruplama detayından
+    HABERSİZ, eski tek-çağrı arayüzüyle AYNI şekilde kullanmaya devam
+    ediyor."""
+    import time
+    GRUP_BOYUTU = 12
+    BEKLEME_SANIYE = 15
+
+    if not haberler:
+        return {}
+
+    gruplar = [haberler[i:i + GRUP_BOYUTU] for i in range(0, len(haberler), GRUP_BOYUTU)]
+    toplam_sonuc = {}
+    for idx, grup in enumerate(gruplar):
+        if idx > 0:
+            time.sleep(BEKLEME_SANIYE)
+        toplam_sonuc.update(_groq_ceviri_tek_parti(grup))
+    return toplam_sonuc
 
 
 def _ucretsiz_yedek_ceviri(haberler):
