@@ -1671,7 +1671,39 @@ tamam, canlı doğrulama BEKLİYOR):**
   sesi olmaksızın") doğrudan çelişiyordu. `_RSS_KAYNAKLARI`'ndan
   kaldırıldı, `app.py`'deki kaynak listesi metni de güncellendi.
 
-- **[UYGULANDI, TEST EDİLDİ] v2.0.7.208 (27-28 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, İZOLE TEST EDİLDİ, CANLI TEST EDİLMEDİ] v2.0.7.209
+  (29 Ağustos 2026, Bahri'nin bulgusu — "pop-up'ın en az iki kaynaktan
+  doğrulanmış olması VE yüksek şiddette olması kuralıydı, gelen
+  pop-up'larda bu kuralların uygulanmadığını görüyorum"): İKİ GERÇEK
+  EKSİKLİK BULUNDU VE DÜZELTİLDİ.**
+  - **Eksiklik 1 - "Yüksek şiddet" hiçbir zaman pop-up şartı DEĞİLDİ:**
+    Bu kural sadece AYRI bir özellik olan toplu onayın ("Tümünü
+    Onayla") 3 kriterinden biriydi - tekil pop-up gösterimini hiç
+    kısıtlamıyordu. Bahri'nin ORİJİNAL isteği ("çok yüksek risk
+    taşıyan... olsun, diğerlerini pop-up yapma") aslında POP-UP'IN
+    KENDİSİ için bir şarttı. **Çözüm:** `get_bekleyen_tespitler()`'in
+    SQL'ine `AND t1.siddet = 'Yüksek'` eklendi - Orta/Düşük şiddetteki
+    tespitler artık HİÇ pop-up olarak çıkmıyor.
+  - **Eksiklik 2 - çoklu kaynak teyidi GÖRÜNMEZDİ:** Teyit arka planda
+    doğru çalışıyordu (v2.0.7.199/200) ama modal/liste SADECE tespitin
+    KENDİ tek kaynağını gösteriyordu - teyit eden İKİNCİ kaynak hiç
+    görünmüyordu. Bu, Bahri'ye "teyit hiç yapılmamış" izlenimi
+    veriyordu. **Çözüm:** `get_bekleyen_tespitler()` artık her tespit
+    sözlüğüne `teyit_kaynak`/`teyit_baslik` alanlarını da ekliyor;
+    hem modal dialog hem Ana Sayfa listesi artık "Ayrıca [X] kaynağından
+    '...' haberiyle de teyit edildi" satırını gösteriyor.
+  - **İzole test edildi:** Yüksek+teyitli iki tespit (gerçekten aynı
+    olay, farklı kaynak, doğrulanmış 0.714 benzerlik) → ikisi de
+    gösterildi; Orta şiddetli bir tespit → hiç değerlendirilmedi;
+    Yüksek ama teyitsiz bir tespit → gösterilmedi. Beklenen sonuç
+    tam olarak elde edildi.
+  - **Yan etki (zararsız):** Bulk onayın 3 kriterinden ikisi (Yüksek +
+    çoklu kaynak) artık bu noktaya ulaşan HER tespit için otomatik
+    sağlanmış oluyor - tek gerçek ayırt edici kalan kriter kalıbın
+    "istatistiksel dayanak" bayrağı. Bu bir hata değil, doğal bir
+    sadeleşme.
+
+
   talebi — çok dilli, tarafsız kaynak araştırmasının İLK SONUÇLARI):
   2 YENİ KAYNAK EKLENDİ (16 TOPLAM KAYNAK) - KALAN DİLLER SONRAKİ
   TURA BIRAKILDI.**

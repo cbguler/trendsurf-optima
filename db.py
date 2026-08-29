@@ -1214,13 +1214,26 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
     v2.0.7.203 (Bahri'nin talebi, 26 Ağustos 2026 — "her abone kendi
     tespitlerini görsün/onaylasın, Optima Skor kişiye özel olsun"):
     KRİTİK MİMARİ DEĞİŞİKLİK - artık `kullanici_id` ZORUNLU parametre.
-    `beklenti_otomatik_tespit.onay_durumu` sütunu ARTIK KULLANILMIYOR
-    (paylaşımlı/global karar kavramı KALKTI) - bunun yerine SADECE bu
-    KULLANICININ `kullanici_tespit_karari` tablosunda HENÜZ bir kararı
-    olmayan tespitler döner. Aynı tespit, HENÜZ karar vermemiş HER
-    kullanıcıya AYNI ANDA "bekliyor" olarak görünebilir - biri
-    onaylasa/reddetse bile DİĞER kullanıcılar için hâlâ "bekliyor"
-    kalır (çünkü artık her kullanıcının kendi kararı var)."""
+
+    v2.0.7.209 (Bahri'nin bulgusu, 29 Ağustos 2026 — "kullanıcının
+    onayına sunulacak pop-up'ın en az iki kaynaktan doğrulanmış olması
+    VE yüksek şiddette olması kuralıydı, gelen pop-up'larda bu
+    kuralların uygulanmadığını görüyorum"): İKİ GERÇEK EKSİKLİK
+    BULUNDU VE DÜZELTİLDİ:
+    (1) "Yüksek şiddet" kuralı ASLA pop-up gösterimine bir ŞART olarak
+        eklenmemişti - sadece AYRI bir özellik olan toplu onayın
+        ("Tümünü Onayla") 3 kriterinden biriydi. Bahri'nin ORİJİNAL
+        isteği ("çok yüksek risk taşıyan... olsun, diğerlerini pop-up
+        yapma") aslında POP-UP'IN KENDİSİ için bir şarttı - bu şimdi
+        SQL'e `AND t1.siddet = 'Yüksek'` olarak eklendi.
+    (2) Çoklu kaynak teyidi ARKA PLANDA doğru çalışıyordu ama ARAYÜZDE
+        HİÇ GÖRÜNMÜYORDU - modal/liste sadece tespitin KENDİ tek
+        kaynağını gösteriyordu, teyit eden İKİNCİ kaynak tamamen
+        görünmezdi. Bu, Bahri'ye "teyit hiç yapılmamış" izlenimi
+        veriyordu (yanlış, ama şeffaflık eksikliği yüzünden GÖRÜNÜŞTE
+        doğru). Artık her tespit sözlüğü `teyit_kaynak` ve
+        `teyit_baslik` alanlarını da içeriyor - app.py bunu
+        gösterebilir."""
     import difflib
 
     def _baslik_benzer_mi(b1, b2, esik=0.35):
@@ -1233,14 +1246,14 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         return []
 
     try:
-        # v2.0.7.203: "onay_durumu='bekliyor'" filtresi KALDIRILDI -
-        # artik SADECE "bu kullanicinin HENUZ karari yok mu" bakiyoruz
-        # (NOT EXISTS ile kullanici_tespit_karari'nda).
+        # v2.0.7.209: "AND t1.siddet = 'Yüksek'" eklendi - Orta/Düşük
+        # şiddetteki tespitler ARTIK HİÇ POP-UP OLARAK ÇIKMIYOR.
         rows = get_conn().execute(
             "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
             "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
             "FROM beklenti_otomatik_tespit t1 "
             "WHERE t1.gecerlilik_bitis > now() "
+            "AND t1.siddet = 'Yüksek' "
             "AND NOT EXISTS ("
             "  SELECT 1 FROM kullanici_tespit_karari k "
             "  WHERE k.tespit_id = t1.id AND k.kullanici_id = ?"
@@ -1263,6 +1276,8 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         ).fetchall()
 
         onaylanan_id_listesi = []
+        # v2.0.7.209: teyit eden kaynagin bilgisini de sakla (seffaflik).
+        teyit_bilgisi = {}
         for r in rows:
             _id = _v(r, "id", 0)
             _kalip = _v(r, "kalip_key", 1)
@@ -1274,10 +1289,13 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
                     continue
                 if _v(r2, "kalip_key", 1) != _kalip:
                     continue
-                if _v(r2, "haber_kaynak", 3) == _kaynak:
+                _kaynak2 = _v(r2, "haber_kaynak", 3)
+                if _kaynak2 == _kaynak:
                     continue  # ayni kaynak - teyit sayilmaz
-                if _baslik_benzer_mi(_baslik, _v(r2, "haber_basligi", 2)):
+                _baslik2 = _v(r2, "haber_basligi", 2)
+                if _baslik_benzer_mi(_baslik, _baslik2):
                     onaylanan_id_listesi.append(_id)
+                    teyit_bilgisi[_id] = {"kaynak": _kaynak2, "baslik": _baslik2}
                     break
 
         onaylanan_satirlar = [r for r in rows if _v(r, "id", 0) in onaylanan_id_listesi]
@@ -1286,7 +1304,14 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         onaylanan_satirlar.sort(key=lambda r: _v(r, "tespit_zamani", 6), reverse=True)
     except Exception:
         return []
-    return _tespit_satirlarini_donustur(onaylanan_satirlar)
+    _sonuc_listesi = _tespit_satirlarini_donustur(onaylanan_satirlar)
+    # v2.0.7.209: teyit eden kaynak/baslik bilgisini her sozluge ekle -
+    # app.py bunu goruntuleyerek teyidi SEFFAF hale getirebilir.
+    for _d in _sonuc_listesi:
+        _tb = teyit_bilgisi.get(_d.get("id"), {})
+        _d["teyit_kaynak"] = _tb.get("kaynak")
+        _d["teyit_baslik"] = _tb.get("baslik")
+    return _sonuc_listesi
 
 
 def get_onaylanmis_tespitler(kullanici_id) -> list:

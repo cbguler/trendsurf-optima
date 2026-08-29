@@ -2579,6 +2579,17 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
             st.caption(
                 f"Kaynak: [{_tm.get('haber_kaynak','')} — "
                 f"{_tm.get('haber_basligi','')}]({_tm.get('haber_url')})")
+        # v2.0.7.209 (Bahri'nin bulgusu — "çoklu kaynak teyidi hiç
+        # uygulanmamış gibi görünüyor"): teyit ARKA PLANDA zaten
+        # uygulanıyordu (bu tespit bu pop-up'ta göründüğüne göre bir
+        # teyidi VAR) ama HANGİ kaynağın teyit ettiği hiç gösterilmiyordu
+        # - bu da "teyit hiç yok" izlenimi veriyordu. Artık açıkça
+        # gösteriliyor.
+        if _tm.get("teyit_kaynak"):
+            st.caption(
+                f"Ayrıca **{_tm.get('teyit_kaynak')}** kaynağından "
+                f"\"{_tm.get('teyit_baslik','')}\" haberiyle de teyit "
+                f"edildi (çoklu kaynak teyidi şartı bu şekilde sağlandı).")
 
         _mc1, _mc2 = st.columns(2)
         with _mc1:
@@ -3945,6 +3956,13 @@ if page=="Ana Sayfa":
                 st.caption(
                     f"Kaynak: [{_tespit.get('haber_kaynak','')} — "
                     f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
+                # v2.0.7.209: modal dialogdaki AYNI seffaflik eklentisi
+                # (bkz. o yorum) - tutarlilik icin.
+                if _tespit.get("teyit_kaynak"):
+                    st.caption(
+                        f"Ayrıca **{_tespit.get('teyit_kaynak')}** kaynağından "
+                        f"\"{_tespit.get('teyit_baslik','')}\" haberiyle de "
+                        f"teyit edildi.")
                 _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
                 with _oc1:
                     if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
