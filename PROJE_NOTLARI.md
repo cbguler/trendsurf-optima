@@ -1691,7 +1691,43 @@ tamam, canlı doğrulama BEKLİYOR):**
     (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
     log'unda görülmeli.
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ] v2.0.7.214 (29 Ağustos 2026, Bahri'nin
+- **[UYGULANDI, İZOLE TEST EDİLDİ (Bahri'nin gerçek örneğiyle)] v2.0.7.215
+  (29 Ağustos 2026, Bahri'nin talebi — "ikinci kaynağı sadece 'Ayrıca...'
+  yazısında değil, ana cümlenin başında ve Kaynak listesinde numaralı
+  olarak görmek istiyorum"): ÇOKLU KAYNAK TEYİDİ ARTIK ANA CÜMLEDE VE
+  NUMARALI KAYNAK LİSTESİNDE GÖSTERİLİYOR.**
+  - **Sorun:** v2.0.7.209'da teyit eden ikinci kaynak eklenmişti ama
+    sadece ayrı, ikincil bir "Ayrıca..." satırında - ana cümle SADECE
+    birincil kaynaktan bahsediyordu, Kaynak bölümü de tek link
+    gösteriyordu.
+  - **Çözüm 1 - Ana cümle:** Yeni `_cok_kaynakli_cumle_olustur()`
+    fonksiyonu, AI'nın ürettiği "{kaynak} kaynağından alınan habere
+    göre" ifadesini basit bir METİN İKAMESİYLE (AI'ya tekrar
+    sormadan) "{kaynak}'den alınan ve {teyit_kaynak} kaynağından da
+    tespit edilen habere göre" haline getiriyor.
+  - **Çözüm 2 - Kaynak listesi:** Yeni `_kaynak_bolumu_goster()`
+    fonksiyonu, teyit varsa "Kaynak: 1- [...] 2- [...]" şeklinde
+    NUMARALI, İKİSİ DE TIKLANABİLİR bir liste gösteriyor (eskiden
+    sadece birincil kaynak tıklanabilirdi, ikincisi düz metindi).
+  - **DB değişikliği:** `get_bekleyen_tespitler()` artık teyit eden
+    ikinci makalenin `haber_url`'ini de yakalayıp `teyit_url` olarak
+    döndürüyor (eskiden sadece kaynak adı + başlık vardı, link yoktu).
+  - **KRİTİK YAPISAL HATA BULUNDU VE DÜZELTİLDİ (kendi hatam):** İlk
+    düzenlemede yeni yardımcı fonksiyonlar yanlışlıkla `@st.dialog(...)`
+    dekoratörü İLE `_tespit_onay_modali()` fonksiyonu ARASINA
+    eklenmişti - bu, dekoratörün YANLIŞ fonksiyona (yeni yardımcı
+    fonksiyona) uygulanmasına yol açıyordu, modal tamamen bozulurdu.
+    Fark edilip dekoratör doğru fonksiyonun hemen üstüne taşındı.
+  - **İzole test edildi (Bahri'nin GERÇEK ekran görüntüsündeki
+    örnekle):** "Dünya Gazetesi kaynağından alınan habere göre..."
+    cümlesi, "Dünya Gazetesi'den alınan ve ABC News Australia
+    kaynağından da tespit edilen habere göre..." haline doğru şekilde
+    dönüştü, cümlenin geri kalanı (somut detaylar) bozulmadı. Teyit
+    yoksa cümlenin değişmediği de doğrulandı.
+  - Hem modal dialog hem Ana Sayfa listesi AYNI iki ortak fonksiyonu
+    kullanıyor - kod tekrarı yok, ikisi de tutarlı.
+
+
   talebi — "Abonelik Ayarları'na profil bilgileri, iletişim bilgileri,
   şifre değişikliği eklensin, kalıp ayarları eskisi gibi admin
   panelinde kalsın"): ABONELİK SAYFASINA HESAP YÖNETİMİ EKLENDİ.**

@@ -1278,14 +1278,19 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         # Ayni kalipteki TUM son-24-saat tespitleri (paylasimli havuzdan,
         # kullanicidan BAGIMSIZ) tek seferde cek - her aday icin ayri
         # sorgu atmamak icin (performans).
+        # v2.0.7.215 (Bahri'nin talebi - Kaynak bolumunde teyit eden
+        # ikinci kaynagin da tiklanabilir bir link olmasi): haber_url
+        # da sorguya eklendi.
         tum_yakin = get_conn().execute(
-            "SELECT id, kalip_key, haber_basligi, haber_kaynak "
+            "SELECT id, kalip_key, haber_basligi, haber_kaynak, haber_url "
             "FROM beklenti_otomatik_tespit "
             "WHERE tespit_zamani > now() - interval '24 hours'"
         ).fetchall()
 
         onaylanan_id_listesi = []
-        # v2.0.7.209: teyit eden kaynagin bilgisini de sakla (seffaflik).
+        # v2.0.7.209/215: teyit eden kaynagin bilgisini (kaynak, baslik,
+        # url) de sakla - hem ana cumlede hem Kaynak listesinde
+        # goruntulemek icin.
         teyit_bilgisi = {}
         for r in rows:
             _id = _v(r, "id", 0)
@@ -1304,7 +1309,10 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
                 _baslik2 = _v(r2, "haber_basligi", 2)
                 if _baslik_benzer_mi(_baslik, _baslik2):
                     onaylanan_id_listesi.append(_id)
-                    teyit_bilgisi[_id] = {"kaynak": _kaynak2, "baslik": _baslik2}
+                    teyit_bilgisi[_id] = {
+                        "kaynak": _kaynak2, "baslik": _baslik2,
+                        "url": _v(r2, "haber_url", 4),
+                    }
                     break
 
         onaylanan_satirlar = [r for r in rows if _v(r, "id", 0) in onaylanan_id_listesi]
@@ -1320,6 +1328,7 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         _tb = teyit_bilgisi.get(_d.get("id"), {})
         _d["teyit_kaynak"] = _tb.get("kaynak")
         _d["teyit_baslik"] = _tb.get("baslik")
+        _d["teyit_url"] = _tb.get("url")
     return _sonuc_listesi
 
 

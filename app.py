@@ -2544,6 +2544,47 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         return [(_ad_o.get(_k_o, _k_o), _p_o * _carpan_o)
                 for _k_o, _p_o in _KALIP_TABLOSU.get(_kalip_key_o, {}).items()]
 
+    # v2.0.7.215 (Bahri'nin talebi, 29 Ağustos 2026 — "ikinci kaynağı
+    # sadece 'Ayrıca...' yazısında değil, ana cümlenin başında ve
+    # Kaynak listesinde numaralı olarak görmek istiyorum"): AI'nın
+    # ürettiği cümle SADECE birincil kaynakla üretiliyor (teyit,
+    # AI çağrısından SONRA, ayrı bir veritabanı sorgusuyla tespit
+    # ediliyor) - bu yüzden AI'ya tekrar sormak yerine, cümledeki
+    # "{kaynak} kaynağından alınan habere göre" ifadesini basit bir
+    # metin ikamesiyle "{kaynak}'den alınan ve {teyit_kaynak}
+    # kaynağından da tespit edilen habere göre" haline getiriyoruz.
+    # ÖNEMLİ: Bu iki yardımcı fonksiyon, @st.dialog dekoratörlü
+    # _tespit_onay_modali'DEN AYRI, sıradan (dekoratörsüz) fonksiyonlar
+    # olarak BİLEREK burada, dekoratörden ÖNCE tanımlanıyor - dekoratör
+    # yanlışlıkla bu fonksiyonlardan birine değil, doğrudan
+    # _tespit_onay_modali'ye uygulanmalı.
+    def _cok_kaynakli_cumle_olustur(ai_gerekce, haber_kaynak, teyit_kaynak):
+        if not ai_gerekce or not teyit_kaynak or not haber_kaynak:
+            return ai_gerekce
+        eski_ifade = f"{haber_kaynak} kaynağından alınan habere göre"
+        if eski_ifade not in ai_gerekce:
+            return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
+        yeni_ifade = (f"{haber_kaynak}'den alınan ve {teyit_kaynak} "
+                      f"kaynağından da tespit edilen habere göre")
+        return ai_gerekce.replace(eski_ifade, yeni_ifade, 1)
+
+    def _kaynak_bolumu_goster(satir):
+        """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
+        gosterimi - v2.0.7.215."""
+        if not satir.get("haber_url"):
+            return
+        if satir.get("teyit_kaynak") and satir.get("teyit_url"):
+            st.caption(
+                f"Kaynak: 1- [{satir.get('haber_kaynak','')} — "
+                f"{satir.get('haber_basligi','')}]({satir.get('haber_url')})  \n"
+                f"2- [{satir.get('teyit_kaynak','')} — "
+                f"{satir.get('teyit_baslik','')}]({satir.get('teyit_url')})"
+            )
+        else:
+            st.caption(
+                f"Kaynak: [{satir.get('haber_kaynak','')} — "
+                f"{satir.get('haber_basligi','')}]({satir.get('haber_url')})")
+
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():
         _tm = _bekleyen_tespitler[0]
@@ -2553,6 +2594,8 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
             st.caption(f"1 / {len(_bekleyen_tespitler)} bekleyen tespit")
         _cumle_m = _tm.get("ai_gerekce", "") or (
             f"{_KALIP_ISIM.get(_tkm, _tkm)} kalıbı tespit edildi.")
+        _cumle_m = _cok_kaynakli_cumle_olustur(
+            _cumle_m, _tm.get("haber_kaynak"), _tm.get("teyit_kaynak"))
         st.markdown(f"{_cumle_m} **Onaylıyor musunuz?**")
 
         _onizleme = _tespit_puan_onizleme(_tkm, _sdm)
@@ -2575,21 +2618,10 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                  <b>Şiddet:</b> <span style="color:{_siddet_renk};font-weight:700;">{_sdm}</span>
                  &nbsp;·&nbsp; <b>Geçerlilik:</b> 48 saat</div>""",
             unsafe_allow_html=True)
-        if _tm.get("haber_url"):
-            st.caption(
-                f"Kaynak: [{_tm.get('haber_kaynak','')} — "
-                f"{_tm.get('haber_basligi','')}]({_tm.get('haber_url')})")
-        # v2.0.7.209 (Bahri'nin bulgusu — "çoklu kaynak teyidi hiç
-        # uygulanmamış gibi görünüyor"): teyit ARKA PLANDA zaten
-        # uygulanıyordu (bu tespit bu pop-up'ta göründüğüne göre bir
-        # teyidi VAR) ama HANGİ kaynağın teyit ettiği hiç gösterilmiyordu
-        # - bu da "teyit hiç yok" izlenimi veriyordu. Artık açıkça
-        # gösteriliyor.
-        if _tm.get("teyit_kaynak"):
-            st.caption(
-                f"Ayrıca **{_tm.get('teyit_kaynak')}** kaynağından "
-                f"\"{_tm.get('teyit_baslik','')}\" haberiyle de teyit "
-                f"edildi (çoklu kaynak teyidi şartı bu şekilde sağlandı).")
+        _kaynak_bolumu_goster(_tm)
+        # v2.0.7.215: Eski "Ayrıca ... teyit edildi" satırı KALDIRILDI -
+        # bu bilgi artık ana cümlenin başında ve yukarıdaki numaralı
+        # Kaynak listesinde zaten gösteriliyor (bkz. yukarıdaki yorumlar).
 
         _mc1, _mc2 = st.columns(2)
         with _mc1:
@@ -3942,6 +3974,10 @@ if page=="Ana Sayfa":
                 # ARKASINDA gizlenmeden, doğrudan gösteriliyor.
                 _dogal_cumle = _tespit.get('ai_gerekce', '') or (
                     f"{_kalip_adi_gosterim} kalıbı tespit edildi.")
+                # v2.0.7.215: modal dialogdaki AYNI cok-kaynakli cumle
+                # donusumu - tutarlilik icin (bkz. o yorum).
+                _dogal_cumle = _cok_kaynakli_cumle_olustur(
+                    _dogal_cumle, _tespit.get('haber_kaynak'), _tespit.get('teyit_kaynak'))
                 st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
                 # v2.0.7.195: modal dialogdaki AYNI rozet stili -
                 # tutarlılık için (bkz. o yorum).
@@ -3953,16 +3989,9 @@ if page=="Ana Sayfa":
                          <b>Kalıp:</b> {_kalip_adi_gosterim} &nbsp;·&nbsp;
                          <b>Önerilen şiddet:</b> <span style="color:{_sr2};font-weight:700;">{_sdt2}</span></div>""",
                     unsafe_allow_html=True)
-                st.caption(
-                    f"Kaynak: [{_tespit.get('haber_kaynak','')} — "
-                    f"{_tespit.get('haber_basligi','')}]({_tespit.get('haber_url','')})")
-                # v2.0.7.209: modal dialogdaki AYNI seffaflik eklentisi
-                # (bkz. o yorum) - tutarlilik icin.
-                if _tespit.get("teyit_kaynak"):
-                    st.caption(
-                        f"Ayrıca **{_tespit.get('teyit_kaynak')}** kaynağından "
-                        f"\"{_tespit.get('teyit_baslik','')}\" haberiyle de "
-                        f"teyit edildi.")
+                # v2.0.7.215: modal dialogdaki AYNI numarali kaynak
+                # gosterimi - tutarlilik icin (bkz. o yorum).
+                _kaynak_bolumu_goster(_tespit)
                 _oc1, _oc2, _oc3 = st.columns([1, 1, 4])
                 with _oc1:
                     if st.button("Onayla", key=f"tespit_onay_{_tespit['id']}"):
