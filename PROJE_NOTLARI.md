@@ -1711,7 +1711,30 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Çözüm:** 600sn (10 dk) → 300sn (5 dk) - uygulamanın başka
     birçok yerinde zaten kullanılan standart TTL değeriyle tutarlı.
 
-- **[UYGULANDI, MANTIK+DERLEME DOĞRULANDI, CANLI (GERÇEK PDF+OCR) TEST
+- **[UYGULANDI, İZOLE TEST EDİLDİ (2 senaryo)] v2.0.7.222 (31 Ağustos
+  2026, Bahri'nin netleştirmesi — "maliyetten ziyade işlemleri çok
+  yavaşlatıyordu asıl mesele zamanın çok uzamasıydı"): ORTA SAYFA
+  OCR'INA GÜVENLİ BİR ÜST SINIR EKLENDİ.**
+  - **Gerçek risk:** `update_data.yml` workflow'unun 45 DAKİKALIK SERT
+    zaman aşımı var (`timeout-minutes: 45`) - v2.0.7.221'in sınırsız
+    orta sayfa OCR'ı, şu an TÜM bekleyen adayların bu veriden yoksun
+    olması nedeniyle İLK çalıştırmada hepsi birden pahalı OCR'a
+    girecekti - patolojik derecede uzun bir belge (150+ sayfa) tek
+    başına dakikalarca sürebilir, toplam süre 45 dakikayı zorlayabilirdi.
+  - **Çözüm:** Yeni `ORTA_SAYFA_OCR_MAX_SAYFA = 40` sabiti - mevcut
+    `FIYAT_TESPIT_MAX_YENI_ISLEME` ("çalışma süresi patlamasın diye")
+    ile AYNI kurulu desen. Sınır SADECE OCR gerektiren (metin katmanı
+    olmayan) sayfalar için geçerli - ücretsiz/hızlı metin katmanı
+    çıkarma bu sınırdan hiç etkilenmiyor. Sınır aşılırsa kalan görsel
+    sayfalar sessizce (log'a not düşülerek) atlanıyor - toplam çalışma
+    süresi asla kontrolsüz büyüyemiyor.
+  - **İzole test edildi (2 senaryo):** TERA benzeri tipik belge (53
+    orta sayfa, sadece 4'ü taranmış) → sınıra HİÇ takılmıyor, 4/4 OCR
+    ediliyor. Patolojik uzun belge (200 sayfanın tamamı taranmış) →
+    sınır tam olarak 40'ta duruyor, kalan 160 sayfa güvenli şekilde
+    atlanıyor.
+
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA
