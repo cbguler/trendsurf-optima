@@ -1691,7 +1691,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
     log'unda görülmeli.
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ (Bahri'nin gerçek örneğiyle)] v2.0.7.215
+- **[UYGULANDI, İZOLE TEST EDİLDİ (3 senaryo)] v2.0.7.216 (29 Ağustos
+  2026, Bahri'nin bulgusu — canlıda "Kaynak:" bölümü hâlâ tek kaynak
+  gösteriyordu, cümle iki kaynaktan bahsetmesine rağmen): KESİN KÖK
+  NEDEN BULUNDU VE DÜZELTİLDİ - KAYNAK LİSTESİ ARTIK DAHA DAYANIKLI.**
+  - **Kesin kök neden:** v2.0.7.215'in `_kaynak_bolumu_goster()`
+    fonksiyonu hem `teyit_kaynak` HEM `teyit_url` ikisinin de dolu
+    olmasını ŞART koşuyordu. Teyit eden makalenin `haber_url`'i
+    boşsa (nadir bir veri eksikliği), İKİNCİ KAYNAK TAMAMEN
+    GİZLENİYORDU - halbuki ana cümle (`_cok_kaynakli_cumle_olustur`,
+    SADECE `teyit_kaynak`'a bakıyor) zaten iki kaynaktan bahsediyordu.
+    Bu, cümle "2 kaynak" derken Kaynak listesinin "1 kaynak"
+    göstermesi gibi bir TUTARSIZLIK yaratıyordu.
+  - **Çözüm:** Artık SADECE `teyit_kaynak` yeterli - `teyit_url`
+    varsa link, yoksa DÜZ METİN olarak gösteriliyor ama İKİNCİ
+    KAYNAK HER ZAMAN görünüyor. Başlık da "Kaynak" yerine
+    **"Kaynaklar"** (çoğul) olarak değiştirildi, 2+ kaynak olduğunda.
+  - **Ek düzeltme:** Ana cümledeki "...kaynağından da **tespit
+    edilen** habere göre" → "...kaynağından da **teyit edilen**
+    habere göre" (Bahri'nin talebi - anlamsal olarak daha doğru,
+    ikinci kaynak haberi yeniden TESPİT etmiyor, TEYİT ediyor).
+  - **İzole test edildi (3 senaryo):** Bahri'nin GERÇEK yaşadığı durum
+    (teyit_kaynak var, teyit_url yok) → artık ikinci kaynak düz metin
+    olarak görünüyor (eskiden tamamen gizleniyordu); normal durum
+    (ikisi de dolu) → ikisi de tıklanabilir link; teyit yok → tekil
+    "Kaynak:" başlığı kullanılıyor. Hem modal hem Ana Sayfa listesi
+    AYNI paylaşımlı fonksiyonu kullandığı için tek bir düzeltme
+    ikisini de kapsadı.
+
+
   (29 Ağustos 2026, Bahri'nin talebi — "ikinci kaynağı sadece 'Ayrıca...'
   yazısında değil, ana cümlenin başında ve Kaynak listesinde numaralı
   olarak görmek istiyorum"): ÇOKLU KAYNAK TEYİDİ ARTIK ANA CÜMLEDE VE

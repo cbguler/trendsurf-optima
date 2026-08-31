@@ -2564,26 +2564,45 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         eski_ifade = f"{haber_kaynak} kaynağından alınan habere göre"
         if eski_ifade not in ai_gerekce:
             return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
+        # v2.0.7.216 (Bahri'nin talebi - "tespit yerine teyit
+        # kullanılsın"): ikinci kaynak haberi yeniden TESPİT etmiyor,
+        # birincil kaynağın tespitini TEYİT ediyor - anlam olarak
+        # daha doğru kelime.
         yeni_ifade = (f"{haber_kaynak}'den alınan ve {teyit_kaynak} "
-                      f"kaynağından da tespit edilen habere göre")
+                      f"kaynağından da teyit edilen habere göre")
         return ai_gerekce.replace(eski_ifade, yeni_ifade, 1)
 
     def _kaynak_bolumu_goster(satir):
         """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
-        gosterimi - v2.0.7.215."""
+        gosterimi - v2.0.7.215.
+
+        v2.0.7.216 (Bahri'nin bulgusu, 29 Ağustos 2026 — "Kaynak sadece
+        investing.com.tr belirtilmiş, iki kaynak varsa Kaynaklar
+        denilerek gösterilmeli"): KÖK NEDEN - eski kod hem
+        `teyit_kaynak` HEM `teyit_url` ikisinin de dolu olmasını
+        ŞART koşuyordu; teyit eden makalenin `haber_url`'i boşsa
+        (nadir bir veri eksikliği - haber_izleme.py'nin o makaleyi
+        URL'siz kaydettiği bir durum) İKİNCİ KAYNAK TAMAMEN
+        GİZLENİYORDU, halbuki ana cümle zaten iki kaynaktan
+        bahsediyordu - bu TUTARSIZLIK yaratıyordu (cümle 2 kaynak
+        diyor, Kaynak listesi 1 kaynak gösteriyor). ÇÖZÜM: artık
+        SADECE `teyit_kaynak` yeterli - `teyit_url` varsa link,
+        yoksa düz metin olarak gösteriliyor, ama İKİNCİ KAYNAK HER
+        ZAMAN görünüyor. Ayrıca başlık "Kaynak" yerine "Kaynaklar"
+        olarak değiştirildi (birden fazla kaynak olduğunda)."""
         if not satir.get("haber_url"):
             return
-        if satir.get("teyit_kaynak") and satir.get("teyit_url"):
-            st.caption(
-                f"Kaynak: 1- [{satir.get('haber_kaynak','')} — "
-                f"{satir.get('haber_basligi','')}]({satir.get('haber_url')})  \n"
-                f"2- [{satir.get('teyit_kaynak','')} — "
-                f"{satir.get('teyit_baslik','')}]({satir.get('teyit_url')})"
-            )
+        _birinci = f"[{satir.get('haber_kaynak','')} — {satir.get('haber_basligi','')}]({satir.get('haber_url')})"
+        if satir.get("teyit_kaynak"):
+            if satir.get("teyit_url"):
+                _ikinci = f"[{satir.get('teyit_kaynak','')} — {satir.get('teyit_baslik','')}]({satir.get('teyit_url')})"
+            else:
+                # teyit_url yoksa duz metin olarak goster - ikinci
+                # kaynak GENE DE gorunur kalsin, tamamen gizlenmesin.
+                _ikinci = f"{satir.get('teyit_kaynak','')} — {satir.get('teyit_baslik','')}"
+            st.caption(f"Kaynaklar: 1- {_birinci}  \n2- {_ikinci}")
         else:
-            st.caption(
-                f"Kaynak: [{satir.get('haber_kaynak','')} — "
-                f"{satir.get('haber_basligi','')}]({satir.get('haber_url')})")
+            st.caption(f"Kaynak: {_birinci}")
 
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():
