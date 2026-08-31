@@ -1291,12 +1291,23 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         # v2.0.7.209/215: teyit eden kaynagin bilgisini (kaynak, baslik,
         # url) de sakla - hem ana cumlede hem Kaynak listesinde
         # goruntulemek icin.
+        # v2.0.7.217 (Bahri'nin sorusu, 29 Ağustos 2026 — "üç, dört,
+        # beş, altı kaynak olması halinde pop-up bunları da
+        # gösterebilecek mi?"): KESİN KÖK NEDEN - eski kod ilk eşleşen
+        # teyidi bulur bulmaz `break` ile aramayı durduruyordu, bu
+        # yüzden 5-6 kaynak aynı haberi doğrulasa bile SADECE İLKİ
+        # yakalanıyordu. Artık `teyit_bilgisi[_id]` tekil bir sözlük
+        # DEĞİL, bir LİSTE - eşleşen HER FARKLI kaynak (aynı kaynaktan
+        # birden fazla makale varsa bile o kaynak sadece BİR KEZ
+        # sayılır) listeye ekleniyor, `break` KALDIRILDI.
         teyit_bilgisi = {}
         for r in rows:
             _id = _v(r, "id", 0)
             _kalip = _v(r, "kalip_key", 1)
             _baslik = _v(r, "haber_basligi", 3)
             _kaynak = _v(r, "haber_kaynak", 5)
+            _bu_tespitin_teyitleri = []
+            _teyit_eden_kaynaklar = {_kaynak}  # kendi kaynagi + eklenen her teyit kaynagi buraya girer (tekrar onlemek icin)
             for r2 in tum_yakin:
                 _id2 = _v(r2, "id", 0)
                 if _id2 == _id:
@@ -1304,16 +1315,20 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
                 if _v(r2, "kalip_key", 1) != _kalip:
                     continue
                 _kaynak2 = _v(r2, "haber_kaynak", 3)
-                if _kaynak2 == _kaynak:
-                    continue  # ayni kaynak - teyit sayilmaz
+                if _kaynak2 in _teyit_eden_kaynaklar:
+                    continue  # ayni kaynak (birincil VEYA zaten eklenmis bir teyit) - tekrar sayilmaz
                 _baslik2 = _v(r2, "haber_basligi", 2)
                 if _baslik_benzer_mi(_baslik, _baslik2):
-                    onaylanan_id_listesi.append(_id)
-                    teyit_bilgisi[_id] = {
+                    _bu_tespitin_teyitleri.append({
                         "kaynak": _kaynak2, "baslik": _baslik2,
                         "url": _v(r2, "haber_url", 4),
-                    }
-                    break
+                    })
+                    _teyit_eden_kaynaklar.add(_kaynak2)
+                    # NOT: break YOK - taramaya devam, BASKA teyit
+                    # eden kaynaklar da varsa hepsini toplasin.
+            if _bu_tespitin_teyitleri:
+                onaylanan_id_listesi.append(_id)
+                teyit_bilgisi[_id] = _bu_tespitin_teyitleri
 
         onaylanan_satirlar = [r for r in rows if _v(r, "id", 0) in onaylanan_id_listesi]
         # v2.0.7.200: Python tarafinda filtreleme SQL'in ORDER BY'ini
@@ -1322,13 +1337,12 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
     except Exception:
         return []
     _sonuc_listesi = _tespit_satirlarini_donustur(onaylanan_satirlar)
-    # v2.0.7.209: teyit eden kaynak/baslik bilgisini her sozluge ekle -
-    # app.py bunu goruntuleyerek teyidi SEFFAF hale getirebilir.
+    # v2.0.7.217: artik TEK bir teyit degil, BIRDEN FAZLA teyit eden
+    # kaynak listesi ekleniyor - "teyit_listesi" alani (bos liste =
+    # teyit yok, ki bu duruma zaten hic ulasilmaz cunku teyitsiz
+    # tespitler yukarida zaten elenmisti).
     for _d in _sonuc_listesi:
-        _tb = teyit_bilgisi.get(_d.get("id"), {})
-        _d["teyit_kaynak"] = _tb.get("kaynak")
-        _d["teyit_baslik"] = _tb.get("baslik")
-        _d["teyit_url"] = _tb.get("url")
+        _d["teyit_listesi"] = teyit_bilgisi.get(_d.get("id"), [])
     return _sonuc_listesi
 
 

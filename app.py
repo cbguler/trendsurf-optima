@@ -2558,51 +2558,69 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
     # olarak BİLEREK burada, dekoratörden ÖNCE tanımlanıyor - dekoratör
     # yanlışlıkla bu fonksiyonlardan birine değil, doğrudan
     # _tespit_onay_modali'ye uygulanmalı.
-    def _cok_kaynakli_cumle_olustur(ai_gerekce, haber_kaynak, teyit_kaynak):
-        if not ai_gerekce or not teyit_kaynak or not haber_kaynak:
+    def _turkce_liste_birlestir(ogeler):
+        """v2.0.7.217: ['A'] -> 'A', ['A','B'] -> 'A ve B',
+        ['A','B','C'] -> 'A, B ve C' - dogal Turkce liste birlestirme."""
+        if not ogeler:
+            return ""
+        if len(ogeler) == 1:
+            return ogeler[0]
+        return ", ".join(ogeler[:-1]) + " ve " + ogeler[-1]
+
+    def _cok_kaynakli_cumle_olustur(ai_gerekce, haber_kaynak, teyit_listesi):
+        """v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
+        olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
+        TEK BİR teyit_kaynak DEĞİL, `teyit_listesi` (sözlük listesi)
+        alıyor - kaç tane teyit eden kaynak varsa hepsi doğal bir
+        Türkçe listede ("X, Y ve Z kaynaklarından da teyit edilen")
+        cümleye ekleniyor."""
+        if not ai_gerekce or not teyit_listesi or not haber_kaynak:
             return ai_gerekce
         eski_ifade = f"{haber_kaynak} kaynağından alınan habere göre"
         if eski_ifade not in ai_gerekce:
             return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
-        # v2.0.7.216 (Bahri'nin talebi - "tespit yerine teyit
-        # kullanılsın"): ikinci kaynak haberi yeniden TESPİT etmiyor,
-        # birincil kaynağın tespitini TEYİT ediyor - anlam olarak
-        # daha doğru kelime.
-        yeni_ifade = (f"{haber_kaynak}'den alınan ve {teyit_kaynak} "
-                      f"kaynağından da teyit edilen habere göre")
+        _teyit_isimleri = [t.get("kaynak", "") for t in teyit_listesi if t.get("kaynak")]
+        if not _teyit_isimleri:
+            return ai_gerekce
+        _isim_metni = _turkce_liste_birlestir(_teyit_isimleri)
+        # v2.0.7.216: "tespit edilen" -> "teyit edilen" (Bahri'nin
+        # talebi - anlamsal olarak daha doğru kelime).
+        _kaynak_ek = "kaynağından" if len(_teyit_isimleri) == 1 else "kaynaklarından"
+        yeni_ifade = (f"{haber_kaynak}'den alınan ve {_isim_metni} "
+                      f"{_kaynak_ek} da teyit edilen habere göre")
         return ai_gerekce.replace(eski_ifade, yeni_ifade, 1)
 
     def _kaynak_bolumu_goster(satir):
         """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
-        gosterimi - v2.0.7.215.
+        gosterimi.
 
-        v2.0.7.216 (Bahri'nin bulgusu, 29 Ağustos 2026 — "Kaynak sadece
-        investing.com.tr belirtilmiş, iki kaynak varsa Kaynaklar
-        denilerek gösterilmeli"): KÖK NEDEN - eski kod hem
-        `teyit_kaynak` HEM `teyit_url` ikisinin de dolu olmasını
-        ŞART koşuyordu; teyit eden makalenin `haber_url`'i boşsa
-        (nadir bir veri eksikliği - haber_izleme.py'nin o makaleyi
-        URL'siz kaydettiği bir durum) İKİNCİ KAYNAK TAMAMEN
-        GİZLENİYORDU, halbuki ana cümle zaten iki kaynaktan
-        bahsediyordu - bu TUTARSIZLIK yaratıyordu (cümle 2 kaynak
-        diyor, Kaynak listesi 1 kaynak gösteriyor). ÇÖZÜM: artık
-        SADECE `teyit_kaynak` yeterli - `teyit_url` varsa link,
-        yoksa düz metin olarak gösteriliyor, ama İKİNCİ KAYNAK HER
-        ZAMAN görünüyor. Ayrıca başlık "Kaynak" yerine "Kaynaklar"
-        olarak değiştirildi (birden fazla kaynak olduğunda)."""
+        v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
+        olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
+        SINIRSIZ SAYIDA teyit eden kaynak destekleniyor - eskiden
+        `teyit_kaynak` tekil bir alandı (en fazla 1 teyit
+        gösterilebiliyordu, `db.py`'deki eşleştirme mantığı da ilk
+        eşleşmede duruyordu). Şimdi `teyit_listesi` bir DİZİ - kaç
+        tane bağımsız kaynak aynı olayı doğruladıysa hepsi 2, 3, 4...
+        şeklinde numaralanarak gösteriliyor.
+
+        v2.0.7.216: teyit eden bir kaynağın `haber_url`'i boşsa link
+        yerine düz metin olarak gösteriliyor - kaynak GENE DE
+        listeden tamamen gizlenmiyor."""
         if not satir.get("haber_url"):
             return
-        _birinci = f"[{satir.get('haber_kaynak','')} — {satir.get('haber_basligi','')}]({satir.get('haber_url')})"
-        if satir.get("teyit_kaynak"):
-            if satir.get("teyit_url"):
-                _ikinci = f"[{satir.get('teyit_kaynak','')} — {satir.get('teyit_baslik','')}]({satir.get('teyit_url')})"
+        _tum_maddeler = [f"[{satir.get('haber_kaynak','')} — {satir.get('haber_basligi','')}]({satir.get('haber_url')})"]
+        for _t in satir.get("teyit_listesi") or []:
+            if _t.get("url"):
+                _tum_maddeler.append(f"[{_t.get('kaynak','')} — {_t.get('baslik','')}]({_t.get('url')})")
             else:
-                # teyit_url yoksa duz metin olarak goster - ikinci
-                # kaynak GENE DE gorunur kalsin, tamamen gizlenmesin.
-                _ikinci = f"{satir.get('teyit_kaynak','')} — {satir.get('teyit_baslik','')}"
-            st.caption(f"Kaynaklar: 1- {_birinci}  \n2- {_ikinci}")
+                # url yoksa duz metin olarak goster - kaynak GENE DE
+                # gorunur kalsin, tamamen gizlenmesin (v2.0.7.216).
+                _tum_maddeler.append(f"{_t.get('kaynak','')} — {_t.get('baslik','')}")
+        if len(_tum_maddeler) == 1:
+            st.caption(f"Kaynak: {_tum_maddeler[0]}")
         else:
-            st.caption(f"Kaynak: {_birinci}")
+            _numarali = "  \n".join(f"{i+1}- {m}" for i, m in enumerate(_tum_maddeler))
+            st.caption(f"Kaynaklar: {_numarali}")
 
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():
@@ -2614,7 +2632,7 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         _cumle_m = _tm.get("ai_gerekce", "") or (
             f"{_KALIP_ISIM.get(_tkm, _tkm)} kalıbı tespit edildi.")
         _cumle_m = _cok_kaynakli_cumle_olustur(
-            _cumle_m, _tm.get("haber_kaynak"), _tm.get("teyit_kaynak"))
+            _cumle_m, _tm.get("haber_kaynak"), _tm.get("teyit_listesi"))
         st.markdown(f"{_cumle_m} **Onaylıyor musunuz?**")
 
         _onizleme = _tespit_puan_onizleme(_tkm, _sdm)
@@ -3996,7 +4014,7 @@ if page=="Ana Sayfa":
                 # v2.0.7.215: modal dialogdaki AYNI cok-kaynakli cumle
                 # donusumu - tutarlilik icin (bkz. o yorum).
                 _dogal_cumle = _cok_kaynakli_cumle_olustur(
-                    _dogal_cumle, _tespit.get('haber_kaynak'), _tespit.get('teyit_kaynak'))
+                    _dogal_cumle, _tespit.get('haber_kaynak'), _tespit.get('teyit_listesi'))
                 st.markdown(f"{_dogal_cumle} **Onaylıyor musunuz?**")
                 # v2.0.7.195: modal dialogdaki AYNI rozet stili -
                 # tutarlılık için (bkz. o yorum).

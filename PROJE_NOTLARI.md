@@ -1691,7 +1691,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
     log'unda görülmeli.
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ (3 senaryo)] v2.0.7.216 (29 Ağustos
+- **[UYGULANDI, İZOLE TEST EDİLDİ (1 ve 3 kaynaklı senaryolar)] v2.0.7.217
+  (29 Ağustos 2026, Bahri'nin sorusu — "üç, dört, beş, altı kaynak
+  olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
+  SINIRSIZ SAYIDA TEYİT EDEN KAYNAK DESTEKLENİYOR.**
+  - **Kesin kök neden:** `db.py`'deki eşleştirme döngüsü, ilk eşleşen
+    teyidi bulur bulmaz `break` ile aramayı durduruyordu - 5-6 kaynak
+    aynı haberi doğrulasa bile SADECE İLKİ yakalanıyordu, `teyit_kaynak`
+    tekil bir alandı (en fazla 1 teyit tutabiliyordu).
+  - **Çözüm (db.py):** `break` kaldırıldı, döngü artık TÜM eşleşen
+    FARKLI kaynakları topluyor (aynı kaynaktan birden fazla makale
+    varsa bile o kaynak sadece BİR KEZ sayılıyor - `_teyit_eden_
+    kaynaklar` seti ile). Sonuç `teyit_kaynak`/`teyit_baslik`/
+    `teyit_url` (tekil alanlar) yerine tek bir `teyit_listesi`
+    (sözlük listesi) alanında dönüyor.
+  - **Çözüm (app.py):** Yeni `_turkce_liste_birlestir()` yardımcısı -
+    ['A'] → "A", ['A','B'] → "A ve B", ['A','B','C'] → "A, B ve C".
+    `_cok_kaynakli_cumle_olustur()` artık `teyit_listesi` alıp TÜM
+    teyit eden kaynakların isimlerini doğal bir Türkçe listede
+    cümleye ekliyor ("...X, Y ve Z kaynaklarından da teyit edilen
+    habere göre..."), tekil/çoğul "kaynağından"/"kaynaklarından" eki
+    de sayıya göre doğru seçiliyor. `_kaynak_bolumu_goster()` de
+    listedeki HER kaynağı 2, 3, 4... şeklinde numaralandırıyor - url'i
+    olmayan bir kaynak (v2.0.7.216'nın dayanıklılık düzeltmesi
+    korunarak) düz metin, olan link olarak gösteriliyor.
+  - **İzole test edildi:** 1 teyitli senaryo (eski davranış
+    bozulmadı) ve 3 teyitli senaryo (biri url'siz, karışık) - cümle
+    "ABC News Australia, NPR Business ve Sky News kaynaklarından da
+    teyit edilen" şeklinde doğru birleşti, Kaynaklar listesi 1'den
+    4'e kadar doğru numaralandı, url'siz olan doğru şekilde düz metin
+    kaldı.
+
+
   2026, Bahri'nin bulgusu — canlıda "Kaynak:" bölümü hâlâ tek kaynak
   gösteriyordu, cümle iki kaynaktan bahsetmesine rağmen): KESİN KÖK
   NEDEN BULUNDU VE DÜZELTİLDİ - KAYNAK LİSTESİ ARTIK DAHA DAYANIKLI.**
