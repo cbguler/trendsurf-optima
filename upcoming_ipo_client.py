@@ -126,6 +126,18 @@ FIYAT_TESPIT_TARAMA_SAYFA_SAYISI = 15
 # siniri - ayni gun cok sayida yeni IPO bildirimi gelirse calisma suresi
 # patlamasin diye).
 FIYAT_TESPIT_MAX_YENI_ISLEME = 10
+# v2.0.7.222 (Bahri'nin talebi, 31 Ağustos 2026 — "maliyetten ziyade
+# işlemleri çok yavaşlatıyordu asıl mesele zamanın çok uzamasıydı"):
+# v2.0.7.221'de orta sayfalara da OCR eklendi (Graham/Çarpan verisi
+# çoğunlukla taranmış orta sayfalarda) - ama workflow'un 45 DAKİKALIK
+# SERT ZAMAN AŞIMI sınırı var (`update_data.yml`), ve şu an TÜM
+# bekleyen adaylar bu veriden yoksun, yani İLK çalıştırmada hepsi
+# birden pahalı OCR'a girecek. Bu sabit, `FIYAT_TESPIT_MAX_YENI_ISLEME`
+# ile AYNI kurulu desen - bir belgede en fazla kaç orta sayfa OCR
+# edilsin (patolojik derecede uzun - 150+ sayfalık - belgelerde
+# çalışma süresi patlamasın diye). Tipik belgeler (TERA örneğinde 83
+# sayfa, ~53 orta sayfa) bu sınırın altında kalır, sorunsuz taranır.
+ORTA_SAYFA_OCR_MAX_SAYFA = 40
 
 
 # ── v2.0.6.4: Supabase kalici katmani (ipo_valuations) ───────────────────────
@@ -526,17 +538,32 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                         bitis = (n if not metin_son
                                  else n - FIYAT_TESPIT_TARAMA_SAYFA_SAYISI)
                         orta_parcalar = []
+                        # v2.0.7.222: OCR edilen sayfa sayisini ayrica say -
+                        # sinir SADECE OCR gereken (metin katmani olmayan)
+                        # sayfalar icin gecerli, ucretsiz/hizli metin
+                        # katmani cikarma bu sinirdan ETKILENMEZ.
+                        _ocr_edilen_sayfa_sayisi = 0
                         for sayfa in pdf.pages[FIYAT_TESPIT_TARAMA_SAYFA_SAYISI:bitis]:
                             try:
                                 if _sayfa_metin_var_mi(sayfa):
                                     orta_parcalar.append(sayfa.extract_text() or "")
-                                else:
+                                elif _ocr_edilen_sayfa_sayisi < ORTA_SAYFA_OCR_MAX_SAYFA:
                                     # v2.0.7.221: eskiden "continue" (atla) -
                                     # artik son-N-sayfa mantigiyla AYNI
                                     # sekilde OCR uygulaniyor.
+                                    # v2.0.7.222: ama patolojik derecede uzun
+                                    # belgelerde calisma suresi patlamasin
+                                    # diye bir ust sinira tabi.
                                     orta_parcalar.append(_ocr_sayfa(sayfa))
+                                    _ocr_edilen_sayfa_sayisi += 1
+                                # else: sinir asildi, bu sayfa (OCR
+                                # gerektirdigi icin) sessizce atlanir.
                             except Exception:
                                 continue
+                        if _ocr_edilen_sayfa_sayisi >= ORTA_SAYFA_OCR_MAX_SAYFA:
+                            print(f"[upcoming-ipo] Orta sayfa OCR siniri "
+                                  f"({ORTA_SAYFA_OCR_MAX_SAYFA}) asildi - "
+                                  f"kalan gorsel sayfalar atlandi", flush=True)
                         if orta_parcalar:
                             print(f"[upcoming-ipo] Kalan {len(orta_parcalar)} sayfa "
                                   f"(metin + OCR) Format-2 icin tarandi", flush=True)
