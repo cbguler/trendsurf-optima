@@ -498,9 +498,21 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         # v2.0.6: ORTA SAYFA DENEMESI (Format-2). TERA gibi raporlarda tam
         # Bilanco/Gelir Tablosu belgenin ORTASINDA (orn. 83 sayfalik raporda
         # s.63-66) - ilk+son 15 taramasi bunlari hic gormuyor. Ilk+son
-        # tarama Graham/Carpan uretemediyse, orta sayfalarin YALNIZCA metin
-        # katmani olanlari (OCR YOK - maliyet dusuk, taranmis sayfalar
-        # atlanir) okunup yeniden denenir.
+        # tarama Graham/Carpan uretemediyse, orta sayfalar taranip
+        # yeniden denenir.
+        #
+        # v2.0.7.221 (Bahri'nin talebi, 31 Ağustos 2026 — "Graham Değeri
+        # ve Çarpan Bazlı Değer sütunlarının boş kalması sorun, bu
+        # değerlerin tabloda görünmesini sağla"): KESİN KÖK NEDEN
+        # BULUNDU - eskiden orta sayfalarda SADECE metin katmanı olanlar
+        # okunuyordu, taranmış (görsel) sayfalar "maliyet düşük olsun"
+        # diye BİLEREK OCR'sız atlanıyordu. Ama TAM OLARAK Bilanço/Gelir
+        # Tablosu gibi kritik finansal tablolar çoğu izahnamede
+        # SAYFA GÖRÜNTÜSÜ (taranmış) olarak gömülü - bu yüzden Graham/
+        # Çarpan hesaplaması için gereken veri hiç okunamıyordu. Bahri
+        # doğruluğun maliyetten önemli olduğunu belirtti - artık orta
+        # sayfalarda da (ilk+son N sayfa taramasıyla AYNI şekilde)
+        # metin katmanı yoksa OCR uygulanıyor, hiçbir sayfa atlanmıyor.
         if temel.get("graham_degeri") is None and temel.get("carpan_bazli_deger") is None:
             try:
                 with pdfplumber.open(tmp_path) as pdf:
@@ -518,11 +530,16 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                             try:
                                 if _sayfa_metin_var_mi(sayfa):
                                     orta_parcalar.append(sayfa.extract_text() or "")
+                                else:
+                                    # v2.0.7.221: eskiden "continue" (atla) -
+                                    # artik son-N-sayfa mantigiyla AYNI
+                                    # sekilde OCR uygulaniyor.
+                                    orta_parcalar.append(_ocr_sayfa(sayfa))
                             except Exception:
                                 continue
                         if orta_parcalar:
                             print(f"[upcoming-ipo] Kalan {len(orta_parcalar)} sayfa "
-                                  f"(yalnizca metin katmanli) Format-2 icin tarandi", flush=True)
+                                  f"(metin + OCR) Format-2 icin tarandi", flush=True)
                             temel2 = _extract_temel_deger(
                                 metin_birlesik + "\n\n" + "\n\n".join(orta_parcalar),
                                 arz_fiyati=sonuc.arz_fiyati)

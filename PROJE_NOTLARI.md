@@ -1711,7 +1711,43 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Çözüm:** 600sn (10 dk) → 300sn (5 dk) - uygulamanın başka
     birçok yerinde zaten kullanılan standart TTL değeriyle tutarlı.
 
-- **[UYGULANDI, TEST EDİLDİ (kısmen — Streamlit Cloud IP'sinden değil,
+- **[UYGULANDI, MANTIK+DERLEME DOĞRULANDI, CANLI (GERÇEK PDF+OCR) TEST
+  EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
+  sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
+  kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA
+  SAYFALARA DA OCR UYGULANIYOR - KESİN KÖK NEDEN BULUNDU.**
+  - **Kesin kök neden:** `upcoming_ipo_client.py`'nin "orta sayfa"
+    (Format-2) tarama mantığı, metin katmanı OLMAYAN (taranmış/görsel)
+    sayfaları BİLEREK OCR'sız atlıyordu ("maliyet düşük olsun" diye,
+    v2.0.6'dan beri). Ama TAM OLARAK Bilanço/Gelir Tablosu gibi kritik
+    finansal tablolar (Graham/Çarpan hesaplaması için gereken veri),
+    çoğu izahnamede SAYFA GÖRÜNTÜSÜ (taranmış) olarak raporun ORTASINA
+    gömülü (ör. TERA'da 83 sayfalık raporun 63-66. sayfaları) - bu
+    yüzden bu veri hiç okunamıyordu, sütunlar sürekli boş kalıyordu.
+  - **Doğrulama:** `requirements.txt`'te `pytesseract` var, GitHub
+    Actions workflow'u (`update_data.yml`) `tesseract-ocr` VE
+    `tesseract-ocr-tur` sistem paketlerini doğru şekilde kuruyor -
+    OCR ALTYAPISI TAMDI, sadece orta sayfalar için KULLANILMIYORDU.
+    OCR fonksiyonunun kendisi (`pdf_text_extract.py`'deki `_ocr_sayfa`)
+    zaten "son N sayfa" taramasında kullanılıyordu - aynı fonksiyon
+    artık orta sayfalar için de çağrılıyor.
+  - **Çözüm:** Orta sayfa döngüsündeki `else: continue` (atla)
+    `else: orta_parcalar.append(_ocr_sayfa(sayfa))` ile değiştirildi -
+    artık hiçbir sayfa (ilk/orta/son fark etmeksizin) OCR'sız
+    atlanmıyor.
+  - **Bahri'nin bilerek kabul ettiği maliyet:** Bu, işlem süresini
+    artırır (bir raporda onlarca orta sayfa OCR gerektirebilir) -
+    Bahri doğruluğun maliyetten/hızdan önemli olduğunu belirtti,
+    bilerek bir üst sınır (cap) EKLENMEDİ.
+  - **AÇIK - CANLI TEST EDİLMEDİ:** Gerçek bir KAP izahnamesi indirip
+    OCR çalıştırmak bu ortamda pratik değildi - sadece kod mantığı
+    (son-sayfa mantığıyla birebir aynı desen) ve derleme doğrulandı.
+    Etkiyi görmek için `worker.py`'nin bir sonraki çalışmasını (gece
+    otomatik ya da elle "Run workflow") beklemek/tetiklemek gerekiyor -
+    Graham/Çarpan sütunlarının o çalışmadan sonra dolup dolmadığı
+    kontrol edilmeli.
+
+
   kendi ortamımdan)] v2.0.7.220 (31 Ağustos 2026, Bahri'nin bulgusu —
   Temettü sayfasında AKBNK, BIMAS, CCOLA gibi bilinen temettü ödeyen
   şirketler bile "0,0000 / %0,00" gösteriyordu, "Zorla Yenile" bile
