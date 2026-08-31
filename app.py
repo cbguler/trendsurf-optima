@@ -764,7 +764,20 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
         pass
 
 
-@st.cache_data(ttl=600,show_spinner=False)  # v1.9.4: 60s -> 600s (kullanici beklemesi 1dk yerine 10dk'da bir)
+@st.cache_data(ttl=300,show_spinner=False)  # v1.9.4: 60s -> 600s (kullanici beklemesi 1dk yerine 10dk'da bir)
+# v2.0.7.219 (Bahri'nin bulgusu, 31 Ağustos 2026 — TEFAS workflow'unu
+# elle çalıştırıp CSV'nin başarıyla güncellendiğini doğruladı, ama
+# uygulamada tarayıcı yenilemesiyle yeni değer görünmedi - sadece TAM
+# REBOOT sonrası göründü): 600sn (10 dk) -> 300sn (5 dk). Kök neden
+# kod hatası DEĞİLDİ - bu, `st.cache_data`'nın SUNUCU TARAFI, TÜM
+# kullanıcılar arası PAYLAŞIMLI önbelleği - tarayıcı yenilemesi bunu
+# TEMİZLEMEZ, sadece TTL süresi dolunca (ya da uygulama yeniden
+# başlayınca) yeni veri okunur. v2.0.7.218'de TEFAS güncellemeleri
+# sabah 30 dakikada bire çıkarıldığı için, 10 dakikalık önbellek payı
+# artık orantısız uzun kalıyordu. 5 dakika, eski "kullanıcı her dakika
+# bekliyor" sorununu (60sn'den 600sn'ye çıkışın sebebi) tekrar
+# getirmeyecek kadar uzun, ama elle tetiklenen güncellemelerden sonra
+# makul bir bekleme süresi sağlıyor.
 def load_universe():
     import time as _t
     _t0 = _t.perf_counter()

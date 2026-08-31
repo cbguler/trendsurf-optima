@@ -1691,7 +1691,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
     log'unda görülmeli.
 
-- **[UYGULANDI, YAML+ZAMAN DÖNÜŞÜMÜ DOĞRULANDI, CANLI TEST EDİLMEDİ]
+- **[UYGULANDI, TEST EDİLDİ] v2.0.7.219 (31 Ağustos 2026, Bahri'nin
+  bulgusu — TEFAS workflow'unu elle çalıştırdı, CSV'nin başarıyla
+  güncellendiğini doğruladı, ama tarayıcı yenilemesiyle uygulamada
+  yeni değer görünmedi, sadece TAM REBOOT sonrası göründü): `load_
+  universe()` ÖNBELLEK SÜRESİ 10 DK'DAN 5 DK'YA KISALTILDI.**
+  - **KOD HATASI DEĞİLDİ - araştırmayla doğrulandı:** GitHub Actions
+    log'u incelendi ("CSV'yi commit + push et" adımı) - "1 file
+    changed, 1348 insertions(+), 1340 deletions(-)", "TEFAS CSV
+    pushlandi" - gerçek bir güncelleme olmuş. Taze klonlanan CSV'de
+    MTG'nin fiyatı (1,740899) TEFAS'ın kendi web sitesindeki değerle
+    BİREBİR eşleşiyordu - veri kesinlikle doğru ve günceldi. Sorun,
+    `load_universe()`'ün `@st.cache_data(ttl=600)` ile SUNUCU TARAFI,
+    TÜM kullanıcılar arası PAYLAŞIMLI bir önbellek kullanmasıydı -
+    tarayıcı yenilemesi bu önbelleği TEMİZLEMEZ, sadece TTL süresi
+    dolunca (ya da uygulama tam reboot ile yeniden başlayınca, ki
+    Bahri'nin "reboot yapınca yeni rakamlar geldi" gözlemi tam olarak
+    bunu doğruladı) yeni veri okunur.
+  - **Çözüm:** 600sn (10 dk) → 300sn (5 dk). v2.0.7.218'de TEFAS
+    güncellemeleri sabah 30 dakikada bire çıkarıldığı için, 10
+    dakikalık önbellek payı artık orantısız uzun kalıyordu. 300sn,
+    kodun kendi tarihçesindeki "60sn çok agresifti, kullanıcı her
+    dakika bekliyordu" sorununu (v1.9.4'te 60→600 artışının sebebi)
+    tekrar getirmeyecek kadar uzun tutuldu - ayrıca bu değer zaten
+    uygulamanın BAŞKA BİRÇOK yerinde (BIST verisi ve diğerleri)
+    kullanılan standart TTL değeriyle TUTARLI, rastgele seçilmedi.
+  - **Bahri'ye açıklanan pratik sonuç:** elle bir workflow
+    çalıştırdıktan sonra artık en fazla ~5 dakika beklemek yeterli
+    olacak (eskiden en fazla 10 dakika idi) - tarayıcı yenilemesi
+    TEK BAŞINA hiçbir zaman yeterli olmayacak, TTL'in dolması
+    gerekiyor (bu, değişmeyen bir Streamlit mimarisi kısıtlaması).
+
+
   v2.0.7.218 (30 Ağustos 2026, Bahri'nin bulgusu — saat 09:03'te ING
   bankadaki gerçek portföy değeri (27.889,12 TL) ile uygulamanın
   gösterdiği değer (27.869,55 TL) arasında ~19,57 TL fark bulundu):
