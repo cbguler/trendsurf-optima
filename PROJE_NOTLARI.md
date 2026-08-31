@@ -1691,7 +1691,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     (birçok başka kaynakla aynı durum) - bir sonraki haber taramasının
     log'unda görülmeli.
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ (1 ve 3 kaynaklı senaryolar)] v2.0.7.217
+- **[UYGULANDI, YAML+ZAMAN DÖNÜŞÜMÜ DOĞRULANDI, CANLI TEST EDİLMEDİ]
+  v2.0.7.218 (30 Ağustos 2026, Bahri'nin bulgusu — saat 09:03'te ING
+  bankadaki gerçek portföy değeri (27.889,12 TL) ile uygulamanın
+  gösterdiği değer (27.869,55 TL) arasında ~19,57 TL fark bulundu):
+  TEFAS SABAH KONTROL PENCERESİ SIKLAŞTIRILDI.**
+  - **Kesin kök neden:** Bahri'nin gözlemi TAM OLARAK 08:00
+    çalışmasından SONRA, 10:00 çalışmasından ÖNCE yapılmıştı (v2.0.7.165'te
+    kurulan 2 saatlik aralık - TRT 08/10/12/14/16/18/20). TEFAS
+    muhtemelen bu ~1 saatlik pencerede yeni NAV yayınlamıştı, sistem
+    ancak 10:00'da yakalayacaktı - en fazla ~2 saatlik gecikme riski.
+  - **Çözüm (`update_tefas_evening.yml`):** Sabah penceresi (TRT
+    07:00-09:30) artık 30 DAKİKADA BİR kontrol ediliyor (6 kontrol:
+    07:00, 07:30, 08:00, 08:30, 09:00, 09:30) - Bahri'nin istediği
+    "sabah 08:00 civarında bir güncelleme daha" isteği bu şekilde
+    fazlasıyla karşılandı. Günün geri kalanı (TRT 10-20) eski 2
+    saatlik aralıkta bırakıldı - günde toplam 7 çalışmadan 12
+    çalışmaya çıkıldı. Var olan "birincil + 2 dakika offsetli yedek"
+    cron çifti mantığı hem sabah hem gündüz pencereleri için korundu.
+  - **Maliyet notu:** düşük - `update_tefas_evening.py` zaten SADECE
+    değişiklik varsa commit/push atıyor ("git diff --cached --quiet"
+    kontrolü) - değişiklik yoksa maliyet sadece ~1 GitHub Actions
+    dakikası.
+  - **Doğrulandı:** UTC→TRT zaman dönüşümleri Python'da izole test
+    edildi - sabah penceresi tam olarak 07:00-09:30 arası 30 dk
+    aralıkla, gündüz penceresi tam olarak 10:00-20:00 arası 2 saatte
+    bir olduğu doğrulandı. YAML dosyası `yaml.safe_load()` ile
+    sözdizimi olarak da doğrulandı.
+
+
   (29 Ağustos 2026, Bahri'nin sorusu — "üç, dört, beş, altı kaynak
   olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
   SINIRSIZ SAYIDA TEYİT EDEN KAYNAK DESTEKLENİYOR.**

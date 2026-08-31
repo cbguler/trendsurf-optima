@@ -33,12 +33,28 @@ name: TEFAS Aksam Guncelle
 # mantigiyla ayni): GitHub Actions'in kendi cron gecikmesi ihtimaline
 # karsi, her slot icin 2 dakika offsetli bir yedek var.
 
+# v2.0.7.218 (Bahri'nin bulgusu, 30 Ağustos 2026 - saat 09:03'te ING
+# bankadaki gerçek portföy değeri (27.889,12 TL) ile uygulamanın
+# gösterdiği değer (27.869,55 TL) arasında fark bulundu): 2 SAATLİK
+# ARALIK SABAH PENCERESİNDE YETERSİZ KALDI. Kesin kök neden: Bahri'nin
+# gözlemi TAM OLARAK 08:00 çalışmasından SONRA, 10:00 çalışmasından
+# ÖNCE yapılmış - TEFAS muhtemelen bu ~1 saatlik aralıkta yeni NAV
+# yayınlamıştı, biz ancak 10:00'da yakalayacaktık (en fazla ~2 saatlik
+# gecikme riski). ÇÖZÜM: Sabah penceresi (TRT 07:00-09:30) artık 30
+# DAKİKADA BİR kontrol ediliyor (6 kontrol), günün geri kalanı (TRT
+# 10-20) eski 2 saatlik aralıkta kalıyor - TOPLAM günde 7'den 12
+# çalışmaya çıkıyor. Maliyet düşük: değişiklik yoksa sadece ~1 GitHub
+# Actions dakikası, commit/push yok (aşağıdaki "git diff --cached
+# --quiet" kontrolü zaten böyle çalışıyordu).
+
 on:
   schedule:
-    # TRT 08/10/12/14/16/18/20 = UTC 05/07/09/11/13/15/17 (TR yaz saati
-    # uygulamiyor, yil boyu UTC+3 sabit - "Europe/Istanbul" 2016'dan beri)
-    - cron: '0 5,7,9,11,13,15,17 * * *'   # Birincil
-    - cron: '2 5,7,9,11,13,15,17 * * *'   # Yedek (2 dk offset)
+    # TRT 07:00,07:30,08:00,08:30,09:00,09:30 = UTC 04:00-06:30 (30 dk aralikla)
+    - cron: '0,30 4,5,6 * * *'      # Birincil - sabah yogun pencere
+    - cron: '2,32 4,5,6 * * *'      # Yedek (2 dk offset) - sabah yogun pencere
+    # TRT 10,12,14,16,18,20 = UTC 07,09,11,13,15,17 (2 saatte bir, eskisi gibi)
+    - cron: '0 7,9,11,13,15,17 * * *'   # Birincil - gunun geri kalani
+    - cron: '2 7,9,11,13,15,17 * * *'   # Yedek (2 dk offset) - gunun geri kalani
   workflow_dispatch:
 
 jobs:
