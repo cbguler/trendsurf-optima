@@ -1708,21 +1708,41 @@ tamam, canlı doğrulama BEKLİYOR):**
     dolunca (ya da uygulama tam reboot ile yeniden başlayınca, ki
     Bahri'nin "reboot yapınca yeni rakamlar geldi" gözlemi tam olarak
     bunu doğruladı) yeni veri okunur.
-  - **Çözüm:** 600sn (10 dk) → 300sn (5 dk). v2.0.7.218'de TEFAS
-    güncellemeleri sabah 30 dakikada bire çıkarıldığı için, 10
-    dakikalık önbellek payı artık orantısız uzun kalıyordu. 300sn,
-    kodun kendi tarihçesindeki "60sn çok agresifti, kullanıcı her
-    dakika bekliyordu" sorununu (v1.9.4'te 60→600 artışının sebebi)
-    tekrar getirmeyecek kadar uzun tutuldu - ayrıca bu değer zaten
-    uygulamanın BAŞKA BİRÇOK yerinde (BIST verisi ve diğerleri)
-    kullanılan standart TTL değeriyle TUTARLI, rastgele seçilmedi.
-  - **Bahri'ye açıklanan pratik sonuç:** elle bir workflow
-    çalıştırdıktan sonra artık en fazla ~5 dakika beklemek yeterli
-    olacak (eskiden en fazla 10 dakika idi) - tarayıcı yenilemesi
-    TEK BAŞINA hiçbir zaman yeterli olmayacak, TTL'in dolması
-    gerekiyor (bu, değişmeyen bir Streamlit mimarisi kısıtlaması).
+  - **Çözüm:** 600sn (10 dk) → 300sn (5 dk) - uygulamanın başka
+    birçok yerinde zaten kullanılan standart TTL değeriyle tutarlı.
 
+- **[UYGULANDI, TEST EDİLDİ (kısmen — Streamlit Cloud IP'sinden değil,
+  kendi ortamımdan)] v2.0.7.220 (31 Ağustos 2026, Bahri'nin bulgusu —
+  Temettü sayfasında AKBNK, BIMAS, CCOLA gibi bilinen temettü ödeyen
+  şirketler bile "0,0000 / %0,00" gösteriyordu, "Zorla Yenile" bile
+  düzeltmiyordu): TEMETTÜ VERİSİ ÇEKME MANTIĞI DÜZELTİLDİ, AMA KÖK
+  NEDEN TAM KESİNLEŞMEDİ.**
+  - **Bulunan 3 sorun (`temettu_client.py`'deki `_fetch_dividend_data`):**
+    (1) BİRİM YORUMLAMA HATASI - eski kod yfinance'in `dividendYield`
+    alanını bir ORAN (0.03=%3) sanıp `0 < div_yield <= 0.6` kontrolü
+    yapıyordu - canlı test (31 Ağustos, kendi ortamımdan) yfinance'in
+    bunu ARTIK DOĞRUDAN YÜZDE (3.01=%3,01) döndürdüğünü gösterdi.
+    Düzeltildi - artık HER İKİ format da otomatik algılanıyor.
+    (2) SESSİZ HATA YUTMA - eski `except: pass` hiçbir iz bırakmıyordu.
+    Artık hata `print` ile loglanıyor. (3) YENİDEN DENEME YOK - artık
+    2 deneme var, aralarında 2 saniyelik bekleme.
+  - **DÜRÜSTLÜK NOTU - kök neden TAM olarak kesinleşmedi:** Kendi
+    ortamımdan yapılan canlı test (AKBNK için dividendRate=2.2,
+    dividendYield=3.01 başarıyla geldi) BİRİM HATASINI doğruladı, AMA
+    matematiksel olarak eski kod BİLE (yedek hesaplama yoluyla)
+    dividendRate=2.2 başarıyla çekilmiş olsaydı sıfırdan farklı bir
+    sonuç vermeliydi. Bahri'nin gördüğü TAM SIFIR sonucu, `.info`
+    çağrısının Streamlit Cloud'dan TAMAMEN BAŞARISIZ OLDUĞUNA
+    (Yahoo Finance'in bulut IP'lerini engellemesi - yfinance'in çok
+    bilinen bir sorunu) işaret ediyor - bu, benim ortamımdan
+    DOĞRULANAMAZ (farklı IP aralığı). Eklenen hata loglama sayesinde,
+    sorun DEVAM EDERSE sunucu loglarında gerçek hata görünecek.
+  - **AÇIK - Bahri'nin push sonrası tekrar test edip sonucu bildirmesi
+    gerekiyor.** Eğer hâlâ sıfır geliyorsa, bir sonraki adım
+    muhtemelen yfinance yerine farklı bir veri kaynağına (KAP,
+    Investing.com API vb.) geçmek olacaktır.
 
+- **[UYGULANDI, YAML+ZAMAN DÖNÜŞÜMÜ DOĞRULANDI, CANLI TEST EDİLMEDİ]
   v2.0.7.218 (30 Ağustos 2026, Bahri'nin bulgusu — saat 09:03'te ING
   bankadaki gerçek portföy değeri (27.889,12 TL) ile uygulamanın
   gösterdiği değer (27.869,55 TL) arasında ~19,57 TL fark bulundu):

@@ -772,12 +772,7 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
 # kod hatası DEĞİLDİ - bu, `st.cache_data`'nın SUNUCU TARAFI, TÜM
 # kullanıcılar arası PAYLAŞIMLI önbelleği - tarayıcı yenilemesi bunu
 # TEMİZLEMEZ, sadece TTL süresi dolunca (ya da uygulama yeniden
-# başlayınca) yeni veri okunur. v2.0.7.218'de TEFAS güncellemeleri
-# sabah 30 dakikada bire çıkarıldığı için, 10 dakikalık önbellek payı
-# artık orantısız uzun kalıyordu. 5 dakika, eski "kullanıcı her dakika
-# bekliyor" sorununu (60sn'den 600sn'ye çıkışın sebebi) tekrar
-# getirmeyecek kadar uzun, ama elle tetiklenen güncellemelerden sonra
-# makul bir bekleme süresi sağlıyor.
+# başlayınca) yeni veri okunur.
 def load_universe():
     import time as _t
     _t0 = _t.perf_counter()

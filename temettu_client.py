@@ -169,7 +169,32 @@ def _fix_encoding(text: str) -> str:
 # ── Temettü verisi çekimi ─────────────────────────────────────────────────────
 
 def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
-    """yfinance'den temettü verilerini çeker."""
+    """yfinance'den temettü verilerini çeker.
+
+    v2.0.7.220 (Bahri'nin bulgusu, 31 Ağustos 2026 — Temettü sayfasında
+    AKBNK, BIMAS, CCOLA gibi bilinen temettü ödeyen şirketler bile
+    "0,0000 / %0,00" gösteriyordu, "Zorla Yenile" bile düzeltmiyordu):
+    ÜÇ SORUN BULUNDU VE DÜZELTİLDİ.
+    (1) BİRİM YORUMLAMA HATASI: eski kod `dividendYield`'in bir ORAN
+        (0.03 = %3) olduğunu varsayıp `0 < div_yield <= 0.6` kontrolü
+        yapıyordu - ama canlı test (31 Ağustos 2026) yfinance'in bunu
+        ARTIK DOĞRUDAN YÜZDE (3.01 = %3,01) olarak döndürdüğünü
+        gösterdi. Eski eşik bu durumda YANLIŞ dala düşüyordu (yanlışlıkla
+        "geçersiz" sayılıp göz ardı ediliyordu, sadece tesadüfen
+        div_per_share/fiyat yedek hesabı bazen doğru sonuca yakın
+        çıkıyordu). Artık HER İKİ FORMAT da (eski oran biçimi VE yeni
+        yüzde biçimi) otomatik algılanıp doğru yorumlanıyor.
+    (2) SESSİZ HATA YUTMA: eski `except: pass` - yfinance'in `.info`
+        özelliği (Yahoo Finance'in bilinen şekilde GÜVENİLMEZ, özellikle
+        bulut platformlarında sık sık engellenen/rate-limit'e takılan bir
+        endpoint'i) başarısız olduğunda HİÇBİR İZ BIRAKMADAN sessizce
+        varsayılan sıfır sonucu dönüyordu - "Zorla Yenile" bile bu
+        sessiz başarısızlığı gizliyordu. Artık hata `print` ile
+        loglanıyor (sunucu loglarında görülebilir).
+    (3) YENİDEN DENEME YOK: tek bir başarısız deneme, o hisseyi
+        kalıcı olarak "temettüsüz" gösteriyordu. Artık 2 deneme var,
+        aralarında kısa bir bekleme (rate-limit'in GEÇİCİ olma
+        ihtimaline karşı)."""
     result = {
         "div_per_share": 0.0,
         "div_yield":     0.0,
@@ -177,35 +202,49 @@ def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
         "frequency":     "—",
         "annual_div":    0.0,
     }
-    try:
-        import yfinance as yf
-        import datetime
-        info = yf.Ticker(f"{ticker}.IS").info
+    import time as _time
+    for _deneme in range(2):
+        try:
+            import yfinance as yf
+            import datetime
+            info = yf.Ticker(f"{ticker}.IS").info
 
-        div_rate  = float(info.get("dividendRate")  or 0)
-        div_yield = float(info.get("dividendYield") or 0)
-        ex_ts     = info.get("exDividendDate")
-        freq      = info.get("dividendFrequency")
+            div_rate  = float(info.get("dividendRate")  or 0)
+            div_yield_ham = float(info.get("dividendYield") or 0)
+            ex_ts     = info.get("exDividendDate")
+            freq      = info.get("dividendFrequency")
 
-        if div_rate > 0:
-            result["div_per_share"] = round(div_rate, 4)
-            result["annual_div"]    = round(div_rate, 4)
+            if div_rate > 0:
+                result["div_per_share"] = round(div_rate, 4)
+                result["annual_div"]    = round(div_rate, 4)
 
-        if 0 < div_yield <= 0.6:
-            result["div_yield"] = round(div_yield * 100, 2)
-        elif result["div_per_share"] > 0 and cur_price > 0:
-            result["div_yield"] = round(result["div_per_share"] / cur_price * 100, 2)
+            # v2.0.7.220: iki formati da algila - yfinance zaman icinde
+            # bu alani hem ORAN (0.03) hem DOGRUDAN YUZDE (3.0) olarak
+            # dondurmus olabilir. "<=0.6" (yani <= %60) eski oran
+            # formatini, ">0.6" yeni yuzde formatini isaret eder -
+            # gercekci bir temettu verimi hicbir zaman %60'i asmaz,
+            # bu esik guvenli bir ayirt edici.
+            if 0 < div_yield_ham <= 0.6:
+                result["div_yield"] = round(div_yield_ham * 100, 2)
+            elif div_yield_ham > 0.6:
+                result["div_yield"] = round(div_yield_ham, 2)
+            elif result["div_per_share"] > 0 and cur_price > 0:
+                result["div_yield"] = round(result["div_per_share"] / cur_price * 100, 2)
 
-        if ex_ts:
-            try:
-                result["ex_date"] = datetime.datetime.fromtimestamp(ex_ts).strftime("%d.%m.%Y")
-            except Exception:
-                pass
+            if ex_ts:
+                try:
+                    result["ex_date"] = datetime.datetime.fromtimestamp(ex_ts).strftime("%d.%m.%Y")
+                except Exception:
+                    pass
 
-        result["frequency"] = {1: "Yıllık", 2: "Yarıyıllık", 4: "Çeyreklik"}.get(freq, "Yıllık")
+            result["frequency"] = {1: "Yıllık", 2: "Yarıyıllık", 4: "Çeyreklik"}.get(freq, "Yıllık")
+            return result  # basarili - deneme dongusunden cik
 
-    except Exception:
-        pass
+        except Exception as e:
+            print(f"[temettu_client] {ticker} temettu cekme hatasi "
+                  f"(deneme {_deneme+1}/2): {type(e).__name__}: {e}")
+            if _deneme == 0:
+                _time.sleep(2)  # rate-limit gecici olabilir - kisa bekleme
     return result
 
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
