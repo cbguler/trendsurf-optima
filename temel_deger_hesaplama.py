@@ -383,6 +383,61 @@ def _format4_hesapla(metin: str) -> Optional["DonemDegerleme"]:
     return dv
 
 
+# ── v2.0.7.233: FORMAT-5 - duz metin cumleleri icinde gecen TL degeri
+# (tablo/kutu YOK), Pazar Yaklasimi (carpan) sonucu TL olarak DOGRUDAN
+# veriliyor ama pay basina bolunmesi gerekiyor ─────────────────────────────
+# Bazi raporlarda (ör. TERA Yatirim'in Teknika Plast icin yazdigi rapor -
+# AYNI TERA'nin Kapeks/Bewen icin kullandigi Format-2 tarzindan TAMAMEN
+# FARKLI) "Degerleme Ozeti" bolumu tablo degil, DUZ METIN CUMLELERI
+# seklinde: "Pazar Yaklasimi kapsaminda ... X TL ozkaynak degerine
+# ulasilmistir." Bu, hem Format-2'nin (tablo/satir sayisi bazli) hem
+# Format-3/4'un (kutu/USD bazli) yakalayamadigi ucuncu bir yapisal desen.
+_F5_PAZAR_YAKLASIMI_OZKAYNAK = (
+    r"Pazar\s+Yaklasimi\s+kapsaminda.{0,400}?(" + _SAYI + r")\s*TL\s*"
+    r"oz(?:kaynak|sermaye)\s*degerine\s*ulasilmistir"
+)
+_F5_ODENMIS_SERMAYE = r"Odenmis\s+Sermaye\s*\(?TL\)?\s*(" + _SAYI + r")"
+
+
+def _f5_carpan_pay_basi_deger(norm: str) -> Optional[float]:
+    """Pazar Yaklasimi (carpan) sonucunu DUZ METIN CUMLESINDEN okur -
+    rapor bunu zaten TL olarak veriyor (kur cevrimi gerekmiyor, Format-4'ten
+    farkli), sadece pay adedine bolup pay basina indirgemek gerekiyor."""
+    m_deger = re.search(_F5_PAZAR_YAKLASIMI_OZKAYNAK, norm,
+                         re.IGNORECASE | re.DOTALL)
+    m_sermaye = re.search(_F5_ODENMIS_SERMAYE, norm, re.IGNORECASE)
+    if not (m_deger and m_sermaye):
+        return None
+    ozkaynak_tl = _tr_sayi_to_float(m_deger.group(1))
+    pay_adedi = _tr_sayi_to_float(m_sermaye.group(1))
+    if not (ozkaynak_tl and pay_adedi and pay_adedi > 0):
+        return None
+    return ozkaynak_tl / pay_adedi
+
+
+def _format5_hesapla(metin: str) -> Optional["DonemDegerleme"]:
+    """Format-5 ana akisi. Basari kosulu saglanmazsa None."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    carpan_pay_basi = _f5_carpan_pay_basi_deger(norm)
+    if carpan_pay_basi is None or carpan_pay_basi <= 0:
+        return None
+
+    dv = DonemDegerleme(donem_etiketi="Rapor Ozeti (Format-5)")
+    dv.carpan_bazli_deger = carpan_pay_basi
+    dv.notlar.append(
+        "Format-5: raporun duz metin cumlesinde verdigi Pazar Yaklasimi "
+        "(carpan) ozkaynak degeri (TL), raporun kendi Odenmis Sermaye "
+        "(pay adedi) rakamina bolunerek pay basina indirgendi - "
+        "raporun kendi NIHAI (agirlikli/gayrimenkul eklenmis) sonucu "
+        "DEGIL, SADECE carpan yontemi payi")
+    dv.notlar.append(
+        "Graham: bu formatta hesaplanamiyor (INA yontemi ayri, raporun "
+        "kendi DCF sonucu - Graham Sayisi ile ayni sey degil, bilerek "
+        "None birakildi)")
+    return dv
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -521,6 +576,15 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
         f4 = _format4_hesapla(metin)
         if f4 is not None:
             sonuclar.append(f4)
+
+    # ── v2.0.7.233: FORMAT-5 YEDEGI ──────────────────────────────────────
+    # Onceki DORT asama da basarisiz olursa (TERA'nin Teknika Plast icin
+    # kullandigi duz-metin-cumlesi tarzi gibi) Format-5 denenir.
+    if not any(d.graham_degeri is not None or d.carpan_bazli_deger is not None
+               for d in sonuclar):
+        f5 = _format5_hesapla(metin)
+        if f5 is not None:
+            sonuclar.append(f5)
 
     return sonuclar
 

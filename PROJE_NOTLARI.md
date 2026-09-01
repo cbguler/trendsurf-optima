@@ -2087,12 +2087,39 @@ tamam, canlı doğrulama BEKLİYOR):**
       TERA Yatırım'ın Kapeks'ten TAMAMEN farklı yazdığı bir rapor -
       sayılar tablo yerine düz metin cümleleri içinde: "...8.131.630.099
       TL özkaynak değerine ulaşılmıştır"). Bahri'ye bu örüntü
-      (her yeni şirket = yeni format) açıkça bildirildi, devam edip
-      etmeme kararı soruldu - cevap bekleniyor, bu turda Format-5
-      YAZILMADI.
+      (her yeni şirket = yeni format) açıkça bildirildi, devam etmesi
+      istendi - **v2.0.7.233 ile Format-5 yazıldı** (aşağıya bkz.).
   - **AÇIK:** BLS'in cache kaydı `graham_degeri=None` olduğu için
     `force_refresh` bir sonraki çalıştırmada otomatik yeniden
     deneyecek - Format-4 o zaman gerçek üretimde test edilmiş olacak.
+
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.233
+  (1 Eylül 2026, Bahri'nin talebi — "Şimdi bu format için de kod yaz"):
+  FORMAT-5 EKLENDİ - düz metin cümlesi içinde geçen TL değeri.**
+  - TERA85/Teknika Plast raporu (Kapeks/Bewen'i üreten AYNI TERA
+    Yatırım'ın hazırladığı ama TAMAMEN farklı yazılmış bir rapor),
+    Pazar Yaklaşımı (çarpan) sonucunu ne tablo ne kutu içinde, DÜZ
+    METİN CÜMLESİ içinde veriyordu: "Pazar Yaklaşımı kapsamında ise
+    ... 8.131.630.099 TL özkaynak değerine ulaşılmıştır." Bu, ne
+    Format-2'nin (satır/tablo bazlı) ne Format-3/4'ün (kutu/USD bazlı)
+    yakaladığı üçüncü bir yapısal desen.
+  - **Çözüm:** Yeni `_format5_hesapla()`, "Pazar Yaklaşımı kapsamında"
+    ifadesinden sonraki (400 karaktere kadar, satır sonu dahil) "...TL
+    özkaynak değerine ulaşılmıştır" cümlesini regex ile yakalayıp,
+    raporun kendi "Ödenmiş Sermaye (TL)" (pay adedi - burada nominal
+    değer 1 TL olduğu için TL tutarı = pay adedi) rakamına bölerek
+    pay başına değeri hesaplıyor. Format-4'ten farkı: burada KUR
+    ÇEVİRİMİ YOK, rapor zaten TL cinsinden veriyor.
+  - **Gerçek metinle doğrulandı:** 81,3163 TL (elle hesaplanan
+    8.131.630.099 / 100.000.000 ile birebir aynı). Bu, raporun NİHAİ
+    (gayrimenkul eklenmiş, ağırlıklı) sonucu (85,40 TL sonrası arz
+    fiyatının temeli) DEĞİL, SADECE çarpan yönteminin payı - tıpkı
+    diğer formatlarda olduğu gibi bağımsız bir çapraz kontrol değeri.
+  - **Genel değerlendirme (Bahri'ye iletildi):** 5 farklı aracı kurum/
+    yazım tarzı formatı artık kapsanıyor. Her yeni şirket/aracı kurum
+    potansiyel olarak yeni bir format getirebilir - bu "yakala-düzelt"
+    döngüsü muhtemelen tamamen bitmeyecek, ama en yaygın kalıplar
+    zamanla kapsanmış olacak.
 
 - **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
   2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul
