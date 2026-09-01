@@ -187,6 +187,31 @@ _RSS_KAYNAKLARI = [
     # enflasyonu, elektrikli araç kayıtları, Merkez Bankası, fabrika
     # aktivitesi) - şimdiye kadar eklenen en alakalı akışlardan biri.
     ("RTÉ Business", "https://www.rte.ie/feeds/rss/?index=/news/business/"),
+    #
+    # v2.0.7.234 (1 Eylül 2026, Bahri'nin hatırlattığı standing kural -
+    # "minimum 20 maksimum 30 kaynak"): v2.0.7.231'de 5 kaynak çıkarılıp
+    # 3 eklenince toplam 19'a düşmüştü (minimumun altında). 2 yeni kaynak
+    # canlı test edilip eklendi, Afrika ve Güneydoğu Asya'yı ilk kez
+    # kapsıyorlar.
+    # Africanews: Euronews S.A.'nın %100 iştiraki (zaten listede olan
+    # Euronews ile AYNI sahiplik yapısı - Alpac Capital, tek bir ülke/
+    # hükümetin kontrolünde değil), reklam+abonelikle finanse ediliyor,
+    # kendi editoryal tüzüğü Euronews'inkiyle aynı. CANLI TEST EDİLDİ:
+    # gerçek ekonomi/siyaset içeriği (IMF kredisi, grev, AB yardımı).
+    ("Africanews", "https://www.africanews.com/feed/rss"),
+    # Philippine Star Business: Filipinler - çoğunluk hissesi (%51)
+    # MediaQuest Holdings'te (PLDT'nin emeklilik fonu - şirketin kendisi
+    # değil - üzerinden kurulmuş özel bir holding), kurucu Belmonte
+    # ailesi %20 hisse + YÖNETİM/EDİTORYAL KONTROLÜ elinde tutuyor -
+    # devlet bağlantısı yok, "siyasi yönelim: bağımsız/merkez-sol"
+    # olarak tanımlanıyor. CANLI TEST EDİLDİ: saf, güçlü iş dünyası
+    # içeriği (halka arz, hisse satışı, bankacılık, altyapı yatırımı).
+    # NOT: Aynı taramada denenen Buenos Aires Times (Arjantin) BİLEREK
+    # EKLENMEDİ - sahibi Grupo Indalo'nun patronu belgelenmiş şekilde
+    # belirli bir siyasi harekete (Kirchnerizm) yakın ve vergi
+    # kaçakçılığından hapis yatıyor; tarafsızlık/güvenilirlik açısından
+    # riskli bulundu.
+    ("Philippine Star Business", "https://www.philstar.com/rss/business"),
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -569,6 +594,7 @@ _CEVIRI_GEREKEN_KAYNAKLAR = {
     "CBC Business",  # Ingilizce (v2.0.7.231)
     "Yle News",  # Ingilizce akis (v2.0.7.231)
     "RTÉ Business",  # Ingilizce (v2.0.7.231)
+    "Africanews", "Philippine Star Business",  # Ingilizce (v2.0.7.234)
 }
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk
