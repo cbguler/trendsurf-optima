@@ -1927,15 +1927,27 @@ tamam, canlı doğrulama BEKLİYOR):**
     OCR.space metni → 80,58 (doğru, değişmedi). Bewen'in gerçek OCR.space
     metni → 51,84 (raporun kendi bastığı değerle birebir aynı - artık
     doğru çıkıyor).
-  - **AÇIK:** Hem Kapeks hem Bewen'in cache kaydı `graham_degeri=None`
-    olduğu için `force_refresh` bir sonraki çalıştırmada ikisini de
-    otomatik yeniden deneyecek. Ama OCR.space'in saatlik 60 istek kotası
-    hâlâ geçerli - hangisinin/hangilerinin kota bitmeden sırasının
-    geleceği yine çalıştırma sırasına bağlı. Bu etiket varyasyonu
-    sorununun BAŞKA raporlarda da (henüz görülmemiş üçüncü bir etiket
-    biçimi) çıkabileceği unutulmamalı - her yeni "gerçek adayda hâlâ
-    None" durumu, muhtemelen yeni bir küçük etiket farkı anlamına
-    geliyor, OCR kalitesizliği değil.
+  - **✅ CANLI DOĞRULANDI (1 Eylül 2026, 18:32 TRT çalıştırması):** Bewen
+    Enerji için log'da `carpan=51.84` çıktı - raporun kendi bastığı
+    değerle (51,84 TL) birebir aynı. Uçtan uca zincir (OCR.space Engine 3
+    → Format-3 → esnetilmiş etiket regex'i → Supabase) artık gerçek
+    üretimde doğrulanmış durumda. Graham Değeri bilinçli olarak boş
+    kaldı (bkz. yukarı - bu formatta hesaplanmıyor).
+  - **NOT:** Kapeks bu çalıştırmada işlenen 6 aday arasında değildi -
+    muhtemelen "yaklaşan halka arz" listesinden düştü (halka arz süreci
+    ilerlemiş olabilir). Listede kalan tek "TSK,TSKB" kodlu aday Bewen
+    oldu ve o başarıyla düzeldi.
+  - **AÇIK - İZLENECEK:** Bu etiket varyasyonu sorununun BAŞKA
+    raporlarda da (henüz görülmemiş üçüncü bir etiket biçimi)
+    çıkabileceği unutulmamalı - her yeni "gerçek adayda hâlâ None"
+    durumu, muhtemelen yeni bir küçük etiket farkı anlamına geliyor,
+    OCR kalitesizliği değil. OCR.space'in saatlik 60 istek kotası da
+    hâlâ geçerli - bazı sayfalarda ara sıra "Read timed out" görülmeye
+    devam ediyor (kota değil, ağ zaman aşımı - zararsız, Tesseract'a
+    düşüyor).
+  - **DURUM: KAPANDI (Bewen için). Genel Halka Arz OCR/Format konusu
+    açık kalmaya devam ediyor - yeni adaylarda yeni etiket varyasyonları
+    çıkabilir, göründükçe ele alınacak.**
 
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
