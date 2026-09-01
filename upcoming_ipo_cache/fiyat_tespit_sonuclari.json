@@ -99,7 +99,7 @@
   },
   "1636741": {
     "arz_fiyati": 48.1,
-    "iskonto_orani": 20.0,
+    "iskonto_orani": null,
     "tip": "D",
     "graham_degeri": null,
     "carpan_bazli_deger": null
