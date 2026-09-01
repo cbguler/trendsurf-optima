@@ -323,6 +323,66 @@ def _format3_hesapla(metin: str) -> Optional["DonemDegerleme"]:
     return dv
 
 
+# ── v2.0.7.232: FORMAT-4 - USD bazli ayri FD/FAVOK ve INA ozsermaye
+# degerleri, TL/pay basi degeri raporun KENDISI vermiyor - kur ve pay
+# adedi ile BAGIMSIZ hesaplanmasi gerekiyor ─────────────────────────────────
+# Bazi raporlarda (ör. Intetra/Bulls Yatirim, 21 Agustos 2026) hem INA
+# hem Piyasa Carpanlari (FD/FAVOK) yontemi ayri ayri USD ozsermaye degeri
+# olarak veriliyor, sonra agirlikli ortalamasi al ınıp TEK bir TL/pay
+# degerine donusturuluyor - TSKB tarzinin (Format-3) aksine Carpan
+# yontemi icin AYRI bir TL/pay basi kutusu YOK. Ancak raporun "5. Sonuc"
+# bolumunden ONCEKI detayli altbolumde ("FD/FAVOK Carpanina Gore ...
+# Ozsermaye Degeri") acik bir cumleyle USD tutari zaten yaziyor - bunu,
+# ayni yerde verilen TCMB kuru ve cikarilmis sermaye ile TL/pay basina
+# BAGIMSIZ CEVIRIYORUZ (rapor bu haliyle vermiyor ama tum girdiler
+# raporun kendisinde acikca mevcut, tahmin/varsayim YOK).
+_F4_CARPAN_OZSERMAYE_CUMLE = (
+    r"Piyasa\s+yaklasimi\s+kapsaminda\s*\(FD\s*/\s*FAVOK\)\s*(" + _SAYI +
+    r")\s*(?:ABD\s*Dolari|USD)?\s*Ozsermaye\s+Degeri\s+hesaplanmaktadir"
+)
+_F4_KUR = r"TCMB\s+Alis\s+Kuru\s*(" + _SAYI + r")"
+_F4_CIKARILMIS_SERMAYE = r"Cikarilmis\s+Sermaye\s*(" + _SAYI + r")"
+
+
+def _f4_carpan_pay_basi_deger(norm: str) -> Optional[float]:
+    """Rapor USD ozsermaye degerini (FD/FAVOK yontemi, aciklayici cumle
+    icinde) dogrudan verir; TL/pay basi degerini KENDIMIZ hesapliyoruz
+    (kur x ozsermaye / cikarilmis sermaye) - rapor bu haliyle sunmuyor."""
+    m_deger = re.search(_F4_CARPAN_OZSERMAYE_CUMLE, norm, re.IGNORECASE)
+    m_kur = re.search(_F4_KUR, norm, re.IGNORECASE)
+    m_sermaye = re.search(_F4_CIKARILMIS_SERMAYE, norm, re.IGNORECASE)
+    if not (m_deger and m_kur and m_sermaye):
+        return None
+    ozsermaye_usd = _tr_sayi_to_float(m_deger.group(1))
+    kur = _tr_sayi_to_float(m_kur.group(1))
+    pay_adedi = _tr_sayi_to_float(m_sermaye.group(1))
+    if not (ozsermaye_usd and kur and pay_adedi and pay_adedi > 0):
+        return None
+    return (ozsermaye_usd * kur) / pay_adedi
+
+
+def _format4_hesapla(metin: str) -> Optional["DonemDegerleme"]:
+    """Format-4 ana akisi. Basari kosulu saglanmazsa None."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    carpan_pay_basi = _f4_carpan_pay_basi_deger(norm)
+    if carpan_pay_basi is None or carpan_pay_basi <= 0:
+        return None
+
+    dv = DonemDegerleme(donem_etiketi="Rapor Ozeti (Format-4)")
+    dv.carpan_bazli_deger = carpan_pay_basi
+    dv.notlar.append(
+        "Format-4: FD/FAVOK yontemiyle hesaplanan USD ozsermaye degeri, "
+        "raporun kendi TCMB kuru ve cikarilmis sermaye rakamlariyla "
+        "TL/pay basina BAGIMSIZ CEVRILDI - rapor bu degeri dogrudan TL/pay "
+        "olarak vermiyor, sadece agirlikli (INA ile karma) sonucu veriyor")
+    dv.notlar.append(
+        "Graham: bu formatta hesaplanamiyor (INA yontemi ayri, raporun "
+        "kendi DCF sonucu - Graham Sayisi ile ayni sey degil, bilerek "
+        "None birakildi)")
+    return dv
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -451,6 +511,16 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
         f3 = _format3_hesapla(metin)
         if f3 is not None:
             sonuclar.append(f3)
+
+    # ── v2.0.7.232: FORMAT-4 YEDEGI ──────────────────────────────────────
+    # Onceki UC asama da basarisiz olursa (Bulls Yatirim/Intetra gibi USD
+    # bazli, TL/pay basi degeri KENDI HESAPLAMAMIZ gereken raporlar)
+    # Format-4 denenir.
+    if not any(d.graham_degeri is not None or d.carpan_bazli_deger is not None
+               for d in sonuclar):
+        f4 = _format4_hesapla(metin)
+        if f4 is not None:
+            sonuclar.append(f4)
 
     return sonuclar
 

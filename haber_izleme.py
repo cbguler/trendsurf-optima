@@ -67,6 +67,15 @@ import feedparser
 # ve finanse edildiği"ni resmi olarak tespit etmiş. AA Ekonomi'den
 # BİLE daha doğrudan bir devlet kontrolü örneği - aynı gerekçeyle
 # kaldırıldı.
+#
+# [KALICI DIŞLAMA KURALI - 1 Eylül 2026, Bahri'nin talebi] Yunanistan
+# ve İsrail (ve benzer şekilde Türkiye'yle yapısal/tarihsel gerilimi
+# olan ülkeler) MENŞELİ haber kaynakları YENİ ADAY OLARAK
+# DEĞERLENDİRİLMEZ - gerekçe: bu ülkelerin Türkiye ile ilgili konularda
+# yanlı haber üretebileceği şüphesi. Bu, yukarıdaki "devlet sesi
+# olmama" tarafsızlık ilkesinden AYRI, EK bir kriterdir - kaynağın
+# bağımsız/özel olup olmamasından bağımsız olarak SADECE menşe ülkeye
+# göre uygulanır (bkz. PROJE_NOTLARI.md).
 _RSS_KAYNAKLARI = [
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Investing.com TR", "https://tr.investing.com/rss/news_25.rss"),

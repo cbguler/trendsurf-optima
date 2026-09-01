@@ -1662,6 +1662,21 @@ tamam, canlı doğrulama BEKLİYOR):**
   "ileriye dönük" uygulanmasını istedi, mevcut kaynakları hemen
   gözden geçirmedi - bu, ayrı bir gündem maddesi olarak açık kalıyor.
 
+- **[KALICI TERCİH - 1 Eylül 2026] Yunanistan ve İsrail kaynaklı haber
+  organları HARİÇ TUTULUYOR:** Bahri'nin gerekçesi: bu ülkelerin (ve
+  benzer şekilde Türkiye'ye karşı yapısal/tarihsel gerilimi olan
+  ülkelerin) haber kaynaklarının Türkiye'yle ilgili konularda yanlı
+  haber üretebileceği şüphesi. Bu, yukarıdaki "hiçbir ülkenin/hükümetin
+  sesi olmama" tarafsızlık ilkesinden AYRI, EK bir dışlama kriteri -
+  bir kaynağın devlet güdümlü olup olmamasından bağımsız olarak,
+  SADECE menşe ülkesi nedeniyle uygulanıyor. Bu ilke gelecekteki TÜM
+  kaynak araştırmalarında (yeni aday tarama, mevcut kaynak
+  değerlendirmesi) dikkate alınmalı - Claude'un kalıcı hafızasına da
+  işlendi. Uygulama notu: Kathimerini (Yunanca) zaten v2.0.7.231'de
+  FARKLI bir sebeple (bot koruması/HTTP 403) kaldırılmıştı, bu ilkeyle
+  de zaten çelişirdi. Şu an aktif listede İsrail kaynaklı bir kaynak
+  yok - ileride aday olarak değerlendirilmeyecek.
+
 - **[UYGULANDI, TEST EDİLDİ] v2.0.7.207 (27 Ağustos 2026, Bahri'nin
   talebi — "AA Ekonomi konusunda kesinlikle haklısın, hükümet yanlısı
   haberler ürettiği için bu kaynağı devre dışı bırakmak daha doğru
@@ -2045,6 +2060,39 @@ tamam, canlı doğrulama BEKLİYOR):**
     24'ü "Geçti" (referans/geçmiş bilgi olarak listede kalıyor - sayfanın
     var olan sıralama/durum mantığı hiç değiştirilmedi).
   - **DURUM: Temettü boru hattı artık tam, doğru ve kapsamlı çalışıyor.**
+
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.232
+  (1 Eylül 2026): FORMAT-4 EKLENDİ - USD bazlı, TL/pay değerini
+  raporun kendisi vermediği Halka Arz raporları için.**
+  - **Bulgu:** Halka Arz sayfasında hâlâ boş kalan 3 aday (BLS/BLSMD -
+    Intetra, INM - Bakırcı GYO, TERA/TRA 85,40 - Teknika Plast)
+    incelendi. Üçü de FARKLI nedenlerle boş çıktı:
+    - **INM (Bakırcı GYO):** Bu bir GYO (gayrimenkul yatırım
+      ortaklığı) - DCF/çarpan DEĞİL, **Net Aktif Değer (NAD)**
+      yöntemi kullanıyor. Graham Değeri/Çarpan Bazlı Değer kavramları
+      bu değerleme metodolojisine HİÇ UYMUYOR - boş kalması bir hata
+      DEĞİL, doğru davranış. Düzeltme gerekmiyor/yapılmadı.
+    - **BLS/Intetra (Bulls Yatırım):** DÖRDÜNCÜ farklı format - hem
+      İNA hem FD/FAVÖK yöntemi AYRI AYRI USD özsermaye değeri olarak
+      veriliyor, TL/pay basi değerini rapor DOĞRUDAN vermiyor (sadece
+      %50/%50 ağırlıklı KARMA sonucu TL/pay olarak veriyor). Yeni
+      `_format4_hesapla()`: raporun "Piyasa yaklaşımı kapsamında
+      (FD/FAVÖK) ... ABD Doları Özsermaye Değeri hesaplanmaktadır"
+      cümlesinden USD tutarını, ayrıca raporun kendi TCMB kuru ve
+      Çıkarılmış Sermaye rakamlarını okuyup TL/pay değerini BAĞIMSIZ
+      hesaplıyor (rapor bu haliyle sunmuyor ama tüm girdiler raporun
+      kendisinde açıkça mevcut - tahmin/varsayım YOK). Gerçek metinle
+      test edildi: 73,69 TL (elle doğrulanan hesapla birebir aynı).
+    - **TERA85/Teknika Plast:** BEŞİNCİ farklı format bulundu (aynı
+      TERA Yatırım'ın Kapeks'ten TAMAMEN farklı yazdığı bir rapor -
+      sayılar tablo yerine düz metin cümleleri içinde: "...8.131.630.099
+      TL özkaynak değerine ulaşılmıştır"). Bahri'ye bu örüntü
+      (her yeni şirket = yeni format) açıkça bildirildi, devam edip
+      etmeme kararı soruldu - cevap bekleniyor, bu turda Format-5
+      YAZILMADI.
+  - **AÇIK:** BLS'in cache kaydı `graham_degeri=None` olduğu için
+    `force_refresh` bir sonraki çalıştırmada otomatik yeniden
+    deneyecek - Format-4 o zaman gerçek üretimde test edilmiş olacak.
 
 - **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
   2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul
