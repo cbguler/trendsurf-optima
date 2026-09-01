@@ -1734,6 +1734,55 @@ tamam, canlı doğrulama BEKLİYOR):**
     sınır tam olarak 40'ta duruyor, kalan 160 sayfa güvenli şekilde
     atlanıyor.
 
+- **[UYGULANDI] v2.0.7.223 (1 Eylül 2026): Halka Arz Graham/Çarpan için
+  açık başarı/başarısızlık teşhis loglaması eklendi** (3 nokta: ilk+son
+  sayfa sonrası, orta sayfa sonrası, nihai sonuç). Bu loglama sayesinde
+  1 Eylül 2026'da OCR'ın gerçekten çalıştığı ama TÜM adaylarda
+  `graham=None, carpan=None` kaldığı kesin olarak doğrulandı - kod
+  içinde zaten belgelenmiş "OCR bazı raporlarda rakamları bile bozuyor"
+  sorunu v2.0.7.221/222'nin çözmediği DAHA DERİN bir OCR KALİTE sorunu
+  olarak teşhis edildi. AÇIK - sonraki oturumda ayrı bir proje olarak
+  ele alınacak (görüntü ön-işleme veya farklı OCR motoru/API).
+
+- **[UYGULANDI, İZOLE TEST EDİLDİ - CANLI DOĞRULAMA BEKLİYOR] v2.0.7.224
+  (1 Eylül 2026, Bahri'nin bulgusu — "Portföyümdeki varlıklarımın karı
+  dün 2026 TL üzerindeyken bugün 1801,67 TL, fiyatlar düştüğü halde ve
+  uyarı ayarlarım açık olduğu halde hiç uyarı gelmedi"): PEAK TRACKER
+  AYNI HİSSENİN BİRDEN FAZLA LOTUNU DOĞRU KONSOLİDE EDİYOR - KRİTİK
+  UYARI HATASI DÜZELTİLDİ.**
+  - **Kesin kök neden:** GitHub Actions'ta "Peak Check Alert System"
+    force modda çalıştırılıp log incelendi:
+    `[peak_tracker] batch_upsert hatasi (user=2): ON CONFLICT DO UPDATE
+    command cannot affect row a second time`. `_load_user_portfolio()`
+    her lotu (alım kaydı) ayrı satır olarak dönüyordu. Bahri'nin aynı
+    hisseden (ör. MTG) birden fazla lotu olduğu için,
+    `evaluate_user_alerts()`'in per-ticker döngüsü aynı ticker'ı TEK bir
+    batch UPSERT komutunun `upserts` listesine İKİ KEZ ekliyordu -
+    PostgreSQL bunu tek komutta reddediyordu. **Sonuç: o hisselerin
+    `peak_price`'ı veritabanında HİÇ GÜNCELLENMİYORDU** - kayıtlı
+    "zirve" donuk/eski kalıyor, gerçek düşüş yüzdesi yanlış
+    hesaplanıyor, uyarı hiç tetiklenmiyordu.
+  - **Çözüm:** Yeni `_consolidate_portfolio_lots()` fonksiyonu,
+    `evaluate_user_alerts()` içinde per-ticker değerlendirmeden ÖNCE
+    çağrılıyor - aynı ticker'ın tüm lotları miktar toplanarak + maliyet
+    miktar-ağırlıklı ortalama alınarak TEK pozisyona indirgeniyor.
+    `_batch_upsert_peaks()`'e de savunma amaçlı ek tekilleştirme
+    eklendi (beklenmedik bir çağrı yolundan aynı ticker iki kez gelirse
+    en yüksek fiyatı tutan tek kayda indirgeniyor).
+  - **İzole test edildi:** Bahri'nin gerçek portföy yapısına benzer
+    sahte veriyle (MTG'nin 2 lotu, 100@10 + 50@13) doğru birleşti:
+    miktar=150, ağırlıklı ort. maliyet=11.0, upserts listesinde MTG
+    sadece 1 kez.
+  - **⚠️ AÇIK - EN ÖNCELİKLİ MADDE (O&M3'e devredildi):** Bu düzeltme
+    O&M2 oturumunda GitHub'a hiç PUSH EDİLMEMİŞ olarak bulundu (O&M3'ün
+    ilk taze klonunda `peak_tracker.py` hâlâ 28 Haziran 2026 tarihli
+    eski haliydi, fix marker'ı yoktu) - dosya kopyalama/push adımı
+    atlanmış. O&M3'te GitHub'dan alınan fresh clone üzerinde yeniden
+    uygulandı, PUSH BEKLİYOR. Push sonrası "Peak Check Alert System"
+    workflow'u force modda YENİDEN çalıştırılıp log'da `batch_upsert
+    hatasi` satırının artık ÇIKMADIĞI doğrulanmalı.
+  - **Önemli:** Bu düzeltme İLERİYE DÖNÜKTÜR - geçmişte kaçırılan uyarı
+    geri getirilemez (o anki gerçek zirve kayıtlı değildi).
 
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş

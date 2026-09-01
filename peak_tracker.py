@@ -98,6 +98,54 @@ def _load_user_peaks_map(user_id: int) -> dict:
         return {}
 
 
+def _consolidate_portfolio_lots(portfolio: list) -> list:
+    """Ayni tickera ait birden fazla lotu (alim kaydi) TEK pozisyonda birlestirir.
+
+    KESIN KOK NEDEN BULUNDU VE DUZELTILDI (v2.0.7.224, 1 Eylul 2026,
+    Bahri'nin bulgusu): Portfoyde ayni hisseden (ornek: MTG) birden fazla
+    lot varsa, konsolidasyon yapilmadan evaluate_user_alerts() ayni
+    ticker'i TEK bir batch UPSERT komutunun icine birden fazla kez
+    ekliyordu. PostgreSQL bunu reddediyor:
+        "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    Sonuc: o hissenin peak_price'i veritabaninda HIC GUNCELLENMIYORDU -
+    kayitli "zirve" donuk/eski kaliyor, gercek dusus yuzdesi yanlis
+    hesaplaniyor, uyari hic tetiklenmiyordu.
+
+    Cozum: ayni ticker'in tum lotlari, per-ticker degerlendirmeden ONCE,
+    miktar toplanarak + maliyet miktar-agirlikli ortalama alinarak TEK
+    pozisyona indirgenir. asset_type/unit_type ilk lottan alinir (ayni
+    ticker icin bunlarin degismedigi varsayilir).
+    """
+    consolidated = {}
+    for pos in portfolio:
+        t = pos["ticker"]
+        if t not in consolidated:
+            consolidated[t] = {
+                "ticker":          t,
+                "asset_type":      pos["asset_type"],
+                "unit_type":       pos["unit_type"],
+                "quantity":        0.0,
+                "_maliyet_toplam": 0.0,  # agirlikli ortalama payi
+            }
+        c = consolidated[t]
+        q = pos["quantity"]
+        c["quantity"]        += q
+        c["_maliyet_toplam"] += q * pos["avg_cost"]
+
+    out = []
+    for c in consolidated.values():
+        qty = c["quantity"]
+        avg_cost = (c["_maliyet_toplam"] / qty) if qty else 0.0
+        out.append({
+            "ticker":     c["ticker"],
+            "asset_type": c["asset_type"],
+            "quantity":   qty,
+            "avg_cost":   avg_cost,
+            "unit_type":  c["unit_type"],
+        })
+    return out
+
+
 def _batch_upsert_peaks(user_id: int, upserts: list) -> bool:
     """Toplu peak UPSERT - tek query'de tum guncellemeler.
 
@@ -110,6 +158,17 @@ def _batch_upsert_peaks(user_id: int, upserts: list) -> bool:
     """
     if not upserts:
         return True
+    # Savunma amacli ek tekillestirme (v2.0.7.224): ana cozum
+    # _consolidate_portfolio_lots() olsa da, beklenmedik bir cagri yolundan
+    # ayni ticker iki kez gelirse burada da PostgreSQL'in "cannot affect
+    # row a second time" hatasi vermesini onlemek icin en yuksek fiyati
+    # tutan tek kayda indirgenir.
+    dedup = {}
+    for ticker, current in upserts:
+        t = str(ticker)
+        if t not in dedup or current > dedup[t]:
+            dedup[t] = current
+    upserts = list(dedup.items())
     try:
         # Dinamik placeholder string'i build et: "(?, ?, ?, NOW(), FALSE), ..."
         placeholders = ",".join(["(?, ?, ?, NOW(), FALSE)"] * len(upserts))
@@ -214,6 +273,12 @@ def evaluate_user_alerts(user_id: int, df_uni) -> dict:
         if not portfolio:
             result["skipped"].append(("(tum portfoy)", "portfoy bos"))
             return result
+
+        # v2.0.7.224: Ayni tickera ait birden fazla lot varsa (ör. MTG'nin
+        # 2 alim kaydi), tek pozisyona konsolide et - aksi halde asagidaki
+        # per-ticker donguyu ayni ticker'i upserts listesine iki kez ekler
+        # ve PostgreSQL batch UPSERT'i reddeder (bkz. _consolidate_portfolio_lots).
+        portfolio = _consolidate_portfolio_lots(portfolio)
 
         # Universe -> ticker:fiyat dict (memory, hizli)
         price_map = {}
