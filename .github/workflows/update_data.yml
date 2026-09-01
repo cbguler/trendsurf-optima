@@ -19,6 +19,12 @@ name: Veri Güncelle
 # Cogu rapor taranmis/gorsel PDF oldugundan Turkce OCR (tesseract-ocr-tur)
 # gerekiyor - bu yuzden asagida yeni bir "Turkce OCR paketlerini kur" adimi
 # ve pip bagimliliklarina pdfplumber + pytesseract eklendi.
+#
+# v2.0.7.225 (1 Eylul 2026): OCRSPACE_API_KEY secret'i eklendi - Graham/
+# Carpan degerleri icin ONCELIKLI OCR yontemi artik OCR.space Engine 3
+# (ucretsiz, kartsiz - gercek bir sorunlu raporda 47/47 dogru rakam,
+# Tesseract ise 9/47). Tesseract kurulumu YEDEK yontem olarak korunuyor -
+# anahtar yoksa veya API basarisiz olursa otomatik ona dusulur.
 
 on:
   schedule:
@@ -76,6 +82,7 @@ jobs:
         env:
           TCMB_KEY: ${{ secrets.TCMB_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          OCRSPACE_API_KEY: ${{ secrets.OCRSPACE_API_KEY }}
 
       - name: CSV sonrasi durum
         run: |

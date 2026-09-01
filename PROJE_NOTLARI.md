@@ -1790,6 +1790,44 @@ tamam, canlı doğrulama BEKLİYOR):**
     geri getirilemez (o anki gerçek zirve kayıtlı değildi).
   - **DURUM: KAPANDI.**
 
+- **[UYGULANDI, GERÇEK RAPORLA TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.225
+  (1 Eylül 2026): HALKA ARZ OCR MOTORU DEĞİŞTİRİLDİ - OCR.SPACE ENGINE 3
+  (ücretsiz, kartsız).**
+  - **Süreç:** Önce ücretsiz görüntü ön-işleme (kontrast/eşikleme/
+    keskinleştirme/çözünürlük artırma) denendi - GERÇEK bir sorunlu rapor
+    (Kapeks Kimya/TSKB Fiyat Tespit Raporu, 68 sayfa tamamen taranmış)
+    üzerinde ölçüldü, **hiçbir varyant güvenilir bir iyileşme sağlamadı**
+    (bazıları mevcut sistemden daha kötü sonuç verdi - ör. keskinleştirme
+    47 rakamdan 0'ını doğru buldu). Bu yaklaşım terk edildi.
+  - **Bulunan gerçek çözüm:** OCR.space (ücretsiz katman: ayda 25.000
+    istek Engine 1/2 + ayrıca 2.500 istek Engine 3, KREDİ KARTI
+    İSTEMİYOR - Google Cloud Vision'ın aksine). Aynı test sayfasında:
+    Tesseract 47 rakamdan 9'unu doğru bulurken, **OCR.space Engine 3
+    47/47'sini TAM DOĞRU buldu**, üstelik çıktıyı hazır Markdown tablo
+    olarak döndürdü.
+  - **Uygulama (`pdf_text_extract.py`):** `_ocr_sayfa()` artık ÖNCELİKLE
+    OCR.space Engine 3'ü dener (`OCRSPACE_API_KEY` ortam değişkeni/
+    GitHub secret'ı gerekli); anahtar yoksa veya çağrı herhangi bir
+    nedenle (ağ/kota/zaman aşımı) başarısız olursa SESSİZCE yerel
+    Tesseract'a düşer - sistem hiçbir zaman "OCR hiç yapılamadı" diye
+    tamamen durmaz. Yeni `_markdown_tablo_duzlestir()` fonksiyonu,
+    Engine 3'ün döndürdüğü Markdown tablo satırlarını (`| a | b |`)
+    mevcut regex parser'ların (`fiyat_tespit_parser.py`,
+    `temel_deger_hesaplama.py`) beklediği düz, boşlukla ayrılmış metne
+    çeviriyor - parser mantığı hiç değişmeden çalışmaya devam ediyor.
+    Düzleştirme sonrası test sayfasında hâlâ 47/47 doğru rakam korundu.
+  - **`update_data.yml`:** `OCRSPACE_API_KEY` secret'ı worker.py adımına
+    env olarak eklendi. Tesseract kurulumu YEDEK yöntem olarak
+    kaldırıldı değil, korundu.
+  - **AÇIK - PUSH BEKLİYOR:** Bahri kendi ücretsiz OCR.space anahtarını
+    aldı ve GitHub repo secret'ı olarak eklemesi gerekiyor
+    (`OCRSPACE_API_KEY`). Kod değişiklikleri bu oturumda hazırlandı,
+    henüz push edilmedi. Push sonrası GERÇEK bir Halka Arz adayı
+    (ör. daha önce `graham=None, carpan=None` kalan biriyle) ile canlı
+    doğrulama yapılmalı - test sadece tek bir izole sayfada yapıldı,
+    tüm pipeline (KAP'tan indirme → OCR → parser → Supabase yazma)
+    henüz uçtan uca canlı çalıştırılmadı.
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA
