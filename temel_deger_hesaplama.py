@@ -257,6 +257,65 @@ def _format2_hesapla(metin: str) -> Optional["DonemDegerleme"]:
     return dv
 
 
+# ── v2.0.7.226: FORMAT-3 - TSKB tarzi ayri "... Degerleme Ozeti" kutulari ───
+# Bazi raporlarda (ör. TSKB araci kurumluk yaptigi raporlar - Kapeks ornegi)
+# ne ORZAX'in kompakt "ozet kutusu"su ne de TERA'nin tek-satirlik
+# "FD / FAVOK <carpan> <FAVOK> <Ozkaynak>" deseni var. Bunun yerine, HER
+# degerleme yontemi (INA ve Piyasa Carpanlari) kendi ayri "... Degerleme
+# Ozeti" kutusuna sahip; kutunun son satiri DOGRUDAN "Pay Basina Oz Sermaye
+# Degeri - TL <X>" seklinde nihai pay basi degeri veriyor - ayrica hesaplama
+# gerekmiyor (bkz. PROJE_NOTLARI.md v2.0.7.226 - Kapeks/TSKB ornegi).
+#
+# BILINCLI SINIRLAMA: Sadece PIYASA CARPANLARI kutusu kullanilir (Carpan
+# Bazli Deger sutunuyla ayni anlam alanina denk gelir - benzer sirket
+# carpanlarindan turetilmis pay basi deger). INA kutusundaki deger BILEREK
+# kullanilmaz - raporun kendi DCF sonucudur, Graham Sayisi (Bahri'nin
+# BAGIMSIZ, tamamen farkli bir formulle - sqrt(22.5 x EPS x BVPS) -
+# hesapladigi metrik) ile AYNI SEY DEGILDIR ve karistirilmamalidir. Bu
+# yuzden Format-3'te Graham Degeri HER ZAMAN None kalir - yanlis bir
+# esitleme yapmaktansa bos birakmak tercih edilir (bkz. dosya basi ilke).
+_F3_PIYASA_CARPANLARI_BASLIK = r"Piyasa\s*Carpanlari\s*Degerleme\s*Ozeti"
+_F3_PAY_BASINA_DEGER = (r"Pay\s*Basina\s*(?:Oz\s*)?Sermaye\s*Degeri\s*"
+                          r"[-\u2013\u2014]?\s*TL\s*(" + _SAYI + r")")
+
+
+def _f3_piyasa_carpanlari_pay_basi_deger(norm: str) -> Optional[float]:
+    """'Piyasa Carpanlari Degerleme Ozeti' kutusundan Pay Basina Oz Sermaye
+    Degeri'ni (TL) dogrudan okur. INA kutusuyla (ayni etiket ORADA da var)
+    karismamasi icin arama SADECE bu basliktan sonraki dar bir pencerede
+    (600 karakter) yapilir - bu pencere bir sonraki bolume tasmaya yetecek
+    kadar genis degildir."""
+    m_baslik = re.search(_F3_PIYASA_CARPANLARI_BASLIK, norm, re.IGNORECASE)
+    if not m_baslik:
+        return None
+    pencere = norm[m_baslik.end(): m_baslik.end() + 600]
+    m_deger = re.search(_F3_PAY_BASINA_DEGER, pencere, re.IGNORECASE)
+    if not m_deger:
+        return None
+    return _tr_sayi_to_float(m_deger.group(1))
+
+
+def _format3_hesapla(metin: str) -> Optional["DonemDegerleme"]:
+    """Format-3 ana akisi. Basari kosulu saglanmazsa None."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    carpan_pay_basi = _f3_piyasa_carpanlari_pay_basi_deger(norm)
+    if carpan_pay_basi is None or carpan_pay_basi <= 0:
+        return None
+
+    dv = DonemDegerleme(donem_etiketi="Rapor Ozeti (Format-3)")
+    dv.carpan_bazli_deger = carpan_pay_basi
+    dv.notlar.append(
+        "Format-3: raporun kendi 'Piyasa Carpanlari Degerleme Ozeti' "
+        "kutusundan dogrudan okunan Pay Basina Oz Sermaye Degeri - "
+        "Bahri'nin bagimsiz hesaplamasi DEGIL, raporun kendi sonucu")
+    dv.notlar.append(
+        "Graham: bu formatta hesaplanamiyor (ayri bir INA kutusu var ama "
+        "o raporun kendi DCF sonucu, Graham Sayisi ile ayni sey degil - "
+        "bilerek None birakildi)")
+    return dv
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -375,6 +434,16 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
         f2 = _format2_hesapla(metin)
         if f2 is not None:
             sonuclar.append(f2)
+
+    # ── v2.0.7.226: FORMAT-3 YEDEGI ──────────────────────────────────────
+    # Ozet kutusu VE Format-2 ikisi de basarisiz olursa (TSKB gibi ayri
+    # "Degerleme Ozeti" kutulu raporlar) Format-3 denenir. Herhangi bir
+    # onceki asama zaten sonuc urettiyse Format-3 HIC devreye girmez.
+    if not any(d.graham_degeri is not None or d.carpan_bazli_deger is not None
+               for d in sonuclar):
+        f3 = _format3_hesapla(metin)
+        if f3 is not None:
+            sonuclar.append(f3)
 
     return sonuclar
 

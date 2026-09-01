@@ -1828,6 +1828,47 @@ tamam, canlı doğrulama BEKLİYOR):**
     tüm pipeline (KAP'tan indirme → OCR → parser → Supabase yazma)
     henüz uçtan uca canlı çalıştırılmadı.
 
+- **[UYGULANDI, GERÇEK RAPORLA UÇTAN UCA DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.226 (1 Eylül 2026): CANLI TESTTE İKİNCİ BİR SORUN BULUNDU VE
+  ÇÖZÜLDÜ - FORMAT-3 (TSKB tarzı "Değerleme Özeti" kutuları) eklendi.**
+  - **v2.0.7.225'in ilk canlı çalıştırması:** OCR.space çoğu sayfada
+    başarıyla çalıştı (log'da onlarca "OCR.space Engine 3 kullanildi"),
+    ama işlenen 4 Halka Arz adayının HİÇBİRİNDE Graham/Çarpan sonucu
+    çıkmadı - hepsi `graham=None, carpan=None` olarak kaldı. Ayrıca
+    çalıştırma ortasında art arda ~10 "OCR.space kullanilamadi" satırı
+    görüldü (muhtemelen GitHub Actions'ın paylaşımlı IP'sinden günlük
+    istek sınırına yaklaşılması) - bunun kesin nedenini görebilmek için
+    hata loglaması detaylandırıldı (HTTP durum kodu / hata mesajı artık
+    ayrıca yazılıyor).
+  - **Kök neden (Kapeks/TSKB örneğiyle doğrulandı):** OCR artık doğru
+    çalışıyor ama `temel_deger_hesaplama.py`'nin regex'leri SADECE daha
+    önce görülen 2 rapor formatına göre yazılmıştı (ORZAX'ın kompakt
+    "özet kutusu"su, TERA'nın tek-satırlık "FD / FAVOK <çarpan> <FAVÖK>
+    <Özkaynak>" deseni). TSKB'nin araci kurumluk yaptığı bu rapor ÜÇÜNCÜ
+    bir format kullanıyor: her yöntem (İNA ve Piyasa Çarpanları) kendi
+    ayrı "... Değerleme Özeti" kutusuna sahip, kutunun son satırı
+    doğrudan "Pay Başına Öz Sermaye Değeri - TL <X>" veriyor - hiçbiri
+    eski regex'lerle eşleşmiyordu.
+  - **Çözüm - yeni `_format3_hesapla()`:** "Piyasa Çarpanları Değerleme
+    Özeti" başlığından sonraki dar bir pencerede (600 karakter) "Pay
+    Başına Öz Sermaye Değeri" satırını arayıp doğrudan okuyor. BİLİNÇLİ
+    SINIRLAMA: İNA (DCF) kutusundaki değer KULLANILMIYOR - o, raporun
+    kendi DCF sonucu, Graham Sayısı (Bahri'nin bağımsız, sqrt(22,5 x EPS
+    x BVPS) formülüyle hesapladığı FARKLI bir metrik) ile karıştırılmaması
+    için Format-3'te Graham Değeri her zaman None kalıyor (açık notla).
+  - **Uçtan uca doğrulandı:** Gerçek sayfa 59 (İNA kutusu, 172,88 TL) VE
+    sayfa 64 (Piyasa Çarpanları kutusu, 80,58 TL) birlikte OCR.space
+    Engine 3 ile okunup birleştirildi, Format-3 doğru şekilde SADECE
+    80,58'i (Piyasa Çarpanları) seçti - 172,88'i (İNA) yanlışlıkla
+    almadı. `hedef_fiyat_hesapla()`'ya özet-kutusu ve Format-2'nin İKİSİ
+    de başarısız olursa devreye giren üçüncü yedek olarak eklendi.
+  - **AÇIK - PUSH BEKLİYOR:** `pdf_text_extract.py` (hata loglaması) ve
+    `temel_deger_hesaplama.py` (Format-3) bu oturumda hazırlandı. Push
+    sonrası GERÇEK bir çalıştırmayla (TSK/Kapeks veya benzer bir aday)
+    Çarpan Bazlı Değer sütununun artık dolu geldiği doğrulanmalı, ayrıca
+    detaylı hata loglarıyla önceki hız sınırı şüphesinin gerçekten
+    kota/hız sınırı mı olduğu netleştirilmeli.
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA

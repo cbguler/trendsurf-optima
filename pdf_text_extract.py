@@ -103,11 +103,20 @@ def _ocr_sayfa_ocrspace(im) -> Optional[str]:
             timeout=60,
         )
         if r.status_code != 200:
+            import sys
+            print(f"[pdf_text_extract] OCR.space HTTP {r.status_code}: "
+                  f"{r.text[:300]}", file=sys.stderr)
             return None
         data = r.json()
         if data.get("IsErroredOnProcessing"):
+            import sys
+            print(f"[pdf_text_extract] OCR.space isleme hatasi: "
+                  f"{data.get('ErrorMessage')}", file=sys.stderr)
             return None
         if data.get("OCRExitCode") not in (1, 2):
+            import sys
+            print(f"[pdf_text_extract] OCR.space beklenmeyen OCRExitCode="
+                  f"{data.get('OCRExitCode')}", file=sys.stderr)
             return None
         sonuclar = data.get("ParsedResults") or []
         if not sonuclar:
@@ -116,7 +125,9 @@ def _ocr_sayfa_ocrspace(im) -> Optional[str]:
         if not ham.strip():
             return None
         return _markdown_tablo_duzlestir(ham)
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"[pdf_text_extract] OCR.space cagri istisnasi: {e}", file=sys.stderr)
         return None
 
 
