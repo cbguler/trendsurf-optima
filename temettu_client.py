@@ -54,22 +54,24 @@ HEADERS = {
     "Referer": "https://www.kap.org.tr/tr/Endeksler",
 }
 
-# ── v2.0.7.229: KAP "Kar Payı Dağıtımı" bildirim sorgusu ────────────────────
-# subjectOid, KAP'ın bildirim-sorgu sayfasının kendi HTML'ine gömülü
-# tam bildirim türü listesinden bulundu (1 Eylül 2026) - "Kar Payı
-# Dağıtımı" -> 4028328d5988e2630159d5fb51c81fe6. Bu deger olmadan (veya
-# yanlis) sorgu FILTRESIZ, karisik binlerce bildirim donuyor - kategori
-# eslemesi icin ZORUNLU.
-KAP_BILDIRIM_SORGU_URL = "https://www.kap.org.tr/tr/bildirim-sorgu-sonuc"
-KAP_BILDIRIM_DETAY_URL = "https://www.kap.org.tr/tr/api/notification/attachment-detail/{idx}"
-KAP_BILDIRIM_LINK_URL  = "https://www.kap.org.tr/tr/Bildirim/{idx}"
-KAP_KAR_PAYI_S_HASH    = "4028328d5988e2630159d5fb51c81fe6"
-KAP_KAR_PAYI_PARAMS = {
-    "srcbar": "Y", "cmp": "Y", "cat": "4",
-    "s": KAP_KAR_PAYI_S_HASH,
-    "st": "Kar Payı Dağıtımı",
-    "kw": "kar payi dagitimi", "slf": "ALL",
-}
+# ── v2.0.7.230 (1 Eylül 2026, Bahri'nin Chrome DevTools ile bulduğu
+# GERÇEK API): KAP "Kar Payı Dağıtımı" bildirim sorgusu ─────────────────────
+# v2.0.7.229'da kullanılan GET bildirim-sorgu-sonuc uç noktası aslında
+# sitenin arama kutusu OTOMATİK TAMAMLAMA (öneri) özelliğiydi - KAP'ın
+# kendi sayfasındaki bir uyarı bunun "geçmişe dönük 30 gün"le sınırlı
+# olduğunu söylüyordu, ki canlı testte de öyle çıktı (hep 29 kayıt).
+# Bahri, KAP'ın "Detaylı Sorgulama" sayfasında gerçek bir tarih aralığı
+# aratıp Chrome DevTools Network sekmesinden GERÇEK isteği yakaladı:
+# POST https://www.kap.org.tr/tr/api/disclosure/members/byCriteria
+# JSON gövdeli, fromDate/toDate (YYYY-MM-DD) ve subjectList (subjectOid
+# dizisi) destekli TAM sorgu API'si - sayfalama/kısıtlama YOK. Test:
+# 2026-01-01 → 2026-09-01 aralığında 1233 kayıt döndü, XTMTU'nun 25
+# üyesinin TAMAMI (25/25) bu veri setinde bulundu (önceki yöntemde 0/25).
+KAP_BILDIRIM_KRITER_URL = "https://www.kap.org.tr/tr/api/disclosure/members/byCriteria"
+KAP_BILDIRIM_DETAY_URL  = "https://www.kap.org.tr/tr/api/notification/attachment-detail/{idx}"
+KAP_BILDIRIM_LINK_URL   = "https://www.kap.org.tr/tr/Bildirim/{idx}"
+KAP_KAR_PAYI_S_HASH     = "4028328d5988e2630159d5fb51c81fe6"  # "Kar Payı Dağıtımı" subjectOid
+KAP_KAR_PAYI_GERI_GUN   = 365  # kayan 12 aylık pencere - yil donumunde kapsam sifirlanmasin diye
 HEADERS_BILDIRIM = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -124,74 +126,75 @@ def _write_kar_payi_detay_cache(cache: dict):
         pass
 
 
-def _kap_bildirim_html_getir(params: dict) -> Optional[str]:
-    """bildirim-sorgu-sonuc uc noktasindan HTML ceker. Basarisiz olursa
-    SESSIZCE None doner - cagiran taraf bunu 'bu calistirmada veri yok'
-    olarak ele alir, hata firlatmaz."""
+def _fetch_kar_payi_map() -> dict:
+    """Son 12 ayın (kayan pencere) 'Kar Payı Dağıtımı' bildirimlerini
+    KAP'ın GERÇEK detaylı sorgulama API'sinden (byCriteria, JSON POST)
+    çeker, her ticker kodu icin EN GUNCEL bildirimin disclosure_index'ini
+    dondurur: {"TBORG": {"disclosure_index": 1654862, "tarih": "..."}, ...}
+
+    v2.0.7.230: Bahri'nin Chrome DevTools ile yakaladigi gercek API -
+    v2.0.7.229'daki GET tabanli yontemin "son 30 gunle sinirli" sorununu
+    tamamen cozdu (canli testte 1233 kayit, XTMTU'nun 25/25 uyesi
+    bulundu - onceki yontemde 0/25)."""
     try:
         import requests
-        r = requests.get(KAP_BILDIRIM_SORGU_URL, params=params,
-                          headers=HEADERS_BILDIRIM, timeout=20)
-        if r.status_code == 200 and len(r.text) > 1000:
-            r.encoding = "utf-8"
-            return r.text
-        print(f"[temettu_client] KAP bildirim sorgu HTTP durumu: {r.status_code}",
-              flush=True)
-        return None
-    except Exception as e:
-        print(f"[temettu_client] KAP bildirim sorgu hatasi: {e}", flush=True)
-        return None
-
-
-def _kap_bildirim_json_cikar(html_text: str) -> list:
-    """HTML icine gomulu Next.js 'data' JSON dizisini cikarir - Fiyat
-    Tespit Raporu'nda kullanilan YONTEMLE AYNI (upcoming_ipo_client.py),
-    ayri bir modul oldugu icin burada kucuk bir kopyasi tutuluyor."""
-    try:
-        unescaped = html_text.replace('\\"', '"').replace('\\\\', '\\')
-        m = re.search(r'"data":(\[\{.*?"fundCode":(?:null|"[^"]*")\}\}\])', unescaped)
-        if not m:
-            m = re.search(r'"data":(\[\{.*?\}\])\s*,\s*"SERVER_BASE_URL"', unescaped)
-        if not m:
-            return []
-        return json.loads(m.group(1))
-    except Exception as e:
-        print(f"[temettu_client] KAP bildirim JSON cikarma hatasi: {e}", flush=True)
-        return []
-
-
-def _fetch_kar_payi_map() -> dict:
-    """Guncel 'Kar Payı Dağıtımı' bildirimlerini ceker, her ticker kodu
-    icin EN GUNCEL bildirimin disclosure_index'ini dondurur:
-    {"TBORG": {"disclosure_index": 1654862, "tarih": "..."}, ...}
-
-    KAPSAM SINIRI: bkz. modul basi notu - KAP bu sorguda platform
-    genelinde sadece en son ~29 bildirimi donduruyor, tarih araligi
-    parametreleri etkisiz bulundu. Bu yuzden BAZI XTMTU uyeleri bu
-    haritada hic gorunmeyebilir (son donemde temettu bildirimi
-    yapmamislarsa) - cagiran taraf bunu BOS SONUC olarak ele alir,
-    hata degildir."""
-    try:
-        html_text = _kap_bildirim_html_getir(KAP_KAR_PAYI_PARAMS)
-        if not html_text:
+        from datetime import datetime, timedelta
+        bugun = datetime.now()
+        baslangic = bugun - timedelta(days=KAP_KAR_PAYI_GERI_GUN)
+        payload = {
+            "fromDate": baslangic.strftime("%Y-%m-%d"),
+            "toDate": bugun.strftime("%Y-%m-%d"),
+            "memberType": "IGS",
+            "mkkMemberOidList": [], "bdkMemberOidList": [],
+            "bdkReview": "", "disclosureClass": "", "disclosureIndexList": [],
+            "fromSrc": False, "inactiveMkkMemberOidList": [], "index": "",
+            "isLate": "", "mainSector": "", "marketOid": "", "period": "",
+            "ruleType": "", "sector": "", "srcCategory": "", "subSector": "",
+            "subjectList": [KAP_KAR_PAYI_S_HASH], "term": "", "year": "",
+        }
+        headers = dict(HEADERS_BILDIRIM)
+        headers["Content-Type"] = "application/json"
+        headers["Origin"] = "https://www.kap.org.tr"
+        r = requests.post(KAP_BILDIRIM_KRITER_URL, headers=headers,
+                           json=payload, timeout=30)
+        if r.status_code != 200:
+            print(f"[temettu_client] KAP byCriteria HTTP durumu: {r.status_code}",
+                  flush=True)
             return {}
-        raw_records = _kap_bildirim_json_cikar(html_text)
+        raw_records = r.json()
+        if not isinstance(raw_records, list):
+            return {}
+
         code_map = {}
         for rec in raw_records:
-            d = rec.get("disclosureBasic", {})
-            idx = d.get("disclosureIndex", "")
+            idx = rec.get("disclosureIndex")
             if not idx:
                 continue
-            publish_date = d.get("publishDate", "")
-            raw_codes = f"{d.get('stockCode','')},{d.get('relatedStocks','')}"
+            publish_date = rec.get("publishDate", "")
+            # v2.0.7.230: DD.MM.YYYY bicimini dogru KRONOLOJIK karsilastirma
+            # icin sortlanabilir YYYYMMDDHHMMSS anahtarina cevir - duz metin
+            # karsilastirmasi (upcoming_ipo_client.py'nin eski oruntusu) ay/
+            # gun sinirlarinda YANLIS sonuc verebiliyordu (ornek: '05.09...'
+            # ile '31.08...' metin olarak karsilastirilinca 31.08 'daha
+            # buyuk/yeni' cikar, oysa 05.09 gercekte daha yenidir).
+            try:
+                gun, ay, geri = publish_date.split(".", 2)
+                yil = geri[:4]
+                saat_kismi = geri[4:].strip().replace(":", "").replace(" ", "")
+                sirala_anahtari = f"{yil}{ay}{gun}{saat_kismi}"
+            except Exception:
+                sirala_anahtari = publish_date
+            raw_codes = f"{rec.get('stockCodes','') or ''},{rec.get('relatedStocks','') or ''}"
             codes = [c.strip().upper() for c in re.split(r"[,\s]+", raw_codes) if c.strip()]
             for code in codes:
                 if len(code) < 2 or len(code) > 8:
                     continue
                 existing = code_map.get(code)
-                if existing is None or publish_date > existing.get("tarih", ""):
-                    code_map[code] = {"disclosure_index": idx, "tarih": publish_date}
-        print(f"[temettu_client] Kar Payı Dağıtımı: {len(raw_records)} bildirim -> "
+                if existing is None or sirala_anahtari > existing.get("_sirala", ""):
+                    code_map[code] = {"disclosure_index": idx, "tarih": publish_date,
+                                       "_sirala": sirala_anahtari}
+        print(f"[temettu_client] Kar Payı Dağıtımı ({baslangic.strftime('%d.%m.%Y')} - "
+              f"{bugun.strftime('%d.%m.%Y')}): {len(raw_records)} bildirim -> "
               f"{len(code_map)} benzersiz ticker eslesti", flush=True)
         return code_map
     except Exception as e:
@@ -211,10 +214,18 @@ def _tr_sayi(s) -> Optional[float]:
         return None
 
 
-def _kar_payi_bildirimi_parse_et(disclosure_index) -> dict:
+def _kar_payi_bildirimi_parse_et(disclosure_index, ticker: str) -> dict:
     """Tek bir 'Kar Payı Dağıtımı' bildiriminin HTML govdesini indirip
     yapilandirilmis veriye cevirir. PDF/OCR YOK - dogrudan KAP API
     yanitindaki HTML tablosu BeautifulSoup ile parse ediliyor.
+
+    v2.0.7.230 (Bahri'nin canli testte bulduğu ISCTR ornegiyle):
+    BAZI sirketlerin (ornek: Is Bankasi - ISATR/ISBTR/ISCTR/ISKUR) TEK
+    bir bildirimde BIRDEN FAZLA pay grubu/ticker'i vardir, HER GRUBUN
+    kar payi tutari FARKLIDIR. Eskiden kod "Islem Gormuyor" olmayan ILK
+    pozitif satiri aliyordu - bu, ISCTR sorgulanirken yanlislikla A
+    Grubu'nun (ISATR) degerini donduruyordu (46,92 TL yerine gercek
+    0,54 TL). Artik `ticker` parametresiyle DOGRU satir eslestiriliyor.
 
     Doner: {"brut_tl": float|None, "net_tl": float|None,
             "ex_date": "gg.aa.yyyy"|None, "odeme_tarihi": "gg.aa.yyyy"|None,
@@ -238,6 +249,7 @@ def _kar_payi_bildirimi_parse_et(disclosure_index) -> dict:
         soup = BeautifulSoup(html, "html.parser")
 
         sonuc = dict(bos)
+        ticker_u = (ticker or "").strip().upper()
 
         # --- Para tablosu: basligi 'Brüt(TL)' iceren herhangi bir tablo ---
         for table in soup.find_all("table"):
@@ -251,23 +263,36 @@ def _kar_payi_bildirimi_parse_et(disclosure_index) -> dict:
             if brut_idx is None:
                 continue
             veri_satirlari = table.find_all("tr")[1:]
+
             secilen = None
-            # Once ayni pay kodunu (Pay Grup Bilgileri hucresinde gecen
-            # kisa kod) iceren, "Islem Gormuyor" OLMAYAN satiri tercih et.
-            for tr in veri_satirlari:
-                cells = [td.get_text(strip=True) for td in tr.find_all("td")]
-                if not cells:
-                    continue
-                ilk_hucre = cells[0]
-                if "İşlem Görmüyor" in ilk_hucre or "Islem Gormuyor" in ilk_hucre:
-                    continue
-                brut_val = _tr_sayi(cells[brut_idx]) if brut_idx < len(cells) else None
-                if brut_val and brut_val > 0:
-                    secilen = cells
-                    break
+            # 1. ONCELIK: "Pay Grup Bilgileri" hucresinde TAM OLARAK aranan
+            # ticker kodu geçen satır (virgülle ayrılmış parçalardan biri
+            # birebir eşleşmeli - "ISCTR" ile "ISCTRX" gibi yanlış kısmi
+            # eşleşmeler önlensin diye).
+            if ticker_u:
+                for tr in veri_satirlari:
+                    cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+                    if not cells:
+                        continue
+                    parcalar = [p.strip().upper() for p in cells[0].split(",")]
+                    if ticker_u in parcalar:
+                        secilen = cells
+                        break
+            # 2. YEDEK (ticker eşleşmesi yoksa - ör. tek satırlık basit
+            # raporlar): "Islem Gormuyor" OLMAYAN ilk pozitif satır.
+            if secilen is None:
+                for tr in veri_satirlari:
+                    cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+                    if not cells:
+                        continue
+                    ilk_hucre = cells[0]
+                    if "İşlem Görmüyor" in ilk_hucre or "Islem Gormuyor" in ilk_hucre:
+                        continue
+                    brut_val = _tr_sayi(cells[brut_idx]) if brut_idx < len(cells) else None
+                    if brut_val and brut_val > 0:
+                        secilen = cells
+                        break
             if secilen is None and veri_satirlari:
-                # hicbiri pozitif degilse ilk satiri (genelde tek satir
-                # olur, temettu dagitilmayacaksa zaten 0 olacak) kullan
                 secilen = [td.get_text(strip=True) for td in veri_satirlari[0].find_all("td")]
             if secilen:
                 if brut_idx < len(secilen):
@@ -307,14 +332,19 @@ def _kar_payi_bildirimi_parse_et(disclosure_index) -> dict:
         return bos
 
 
-def _kar_payi_detay_getir(disclosure_index, detay_cache: dict) -> dict:
+def _kar_payi_detay_getir(disclosure_index, ticker: str, detay_cache: dict) -> dict:
     """Onbellekten (suresiz) doner, yoksa indirip parse eder ve
     onbellege yazar. cagiran taraf onbellegi diske YAZMAKTAN sorumludur
-    (toplu is bittikten sonra tek seferde - performans icin)."""
-    key = str(disclosure_index)
+    (toplu is bittikten sonra tek seferde - performans icin).
+
+    v2.0.7.230: onbellek anahtari artik SADECE disclosure_index DEGIL,
+    "disclosure_index:ticker" - cunku tek bir bildirimde birden fazla
+    pay grubu/ticker olabiliyor (bkz. yukaridaki fonksiyon notu), her
+    birinin degeri farkli, aynı anahtar altinda saklanamazlar."""
+    key = f"{disclosure_index}:{ticker.upper()}"
     if key in detay_cache:
         return detay_cache[key]
-    sonuc = _kar_payi_bildirimi_parse_et(disclosure_index)
+    sonuc = _kar_payi_bildirimi_parse_et(disclosure_index, ticker)
     detay_cache[key] = sonuc
     return sonuc
 
@@ -468,7 +498,7 @@ def _fetch_dividend_data(ticker: str, cur_price: float, kar_payi_map: dict,
     if not eslesme:
         return result
 
-    detay = _kar_payi_detay_getir(eslesme["disclosure_index"], detay_cache)
+    detay = _kar_payi_detay_getir(eslesme["disclosure_index"], ticker, detay_cache)
     brut = detay.get("brut_tl")
     if brut and brut > 0:
         result["div_per_share"] = round(brut, 4)

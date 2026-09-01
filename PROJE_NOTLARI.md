@@ -2000,10 +2000,51 @@ tamam, canlı doğrulama BEKLİYOR):**
     geldikçe, veya gelecek yılın Şub-Haz döneminde) organik olarak
     dolacak. yfinance'e GERİ DÖNÜLMEDİ (Bahri'nin açık talebi) -
     kapsam dışı kalan hisseler satırda sessizce boş kalıyor.
-  - **SONRAKİ OTURUMDA (istenirse):** Tarayıcı bağlantısı kurup KAP'ın
-    "bildirim-sorgu" sayfasında gerçek bir tarih aralığı seçip arama
-    yaparak, oluşan GERÇEK isteği (Network sekmesinden) yakalamak -
-    bu, doğru sayfalama/tarih parametresini kesin olarak ortaya çıkarır.
+  - **DURUM: v2.0.7.230 ile ÇÖZÜLDÜ (aşağıya bkz.) - kapsam sınırı
+    ortadan kalktı.**
+
+- **[UYGULANDI, GERÇEK VERİYLE UÇTAN UCA DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.230 (1 Eylül 2026): KAPSAM SINIRI TAMAMEN ÇÖZÜLDÜ - Bahri'nin
+  Chrome DevTools ile bulduğu GERÇEK KAP API'si + kritik çoklu-pay-grubu
+  hatası düzeltildi.**
+  - **Kapsam sınırı çözümü:** Bahri, Chrome DevTools bağlantı sorunları
+    nedeniyle KAP'ın "Detaylı Sorgulama" sayfasında Network sekmesini
+    kendisi inceledi ve GERÇEK arama API'sini buldu:
+    `POST https://www.kap.org.tr/tr/api/disclosure/members/byCriteria`
+    - JSON gövdeli, `fromDate`/`toDate` (YYYY-MM-DD) ve `subjectList`
+    (subjectOid dizisi) destekli TAM sorgu, sayfalama/kısıtlama YOK.
+    v2.0.7.229'da kullanılan GET `bildirim-sorgu-sonuc` uç noktasının
+    aslında sitenin arama kutusu OTOMATİK TAMAMLAMA özelliği olduğu
+    ortaya çıktı (KAP'ın kendi sayfasındaki bir not bunun "geçmişe
+    dönük 30 gün"le sınırlı olduğunu doğruluyordu). Yeni API ile test:
+    2026-01-01→2026-09-01 aralığında **1233 kayıt**, XTMTU'nun 25
+    üyesinin **TAMAMI (25/25)** bulundu (önceki yöntemde 0/25). Kod
+    artık kayan 12 aylık pencere kullanıyor (`KAP_KAR_PAYI_GERI_GUN`).
+    Ayrıca bu, geçen oturumun ORİJİNAL araştırmasının bulduğu tam
+    başlığı ("Kar Payı Dağıtım İşlemlerine İlişkin Bildirim") API
+    yanıtındaki `subject` alanında birebir doğruladı.
+  - **Kritik ikinci hata bulundu ve düzeltildi (canlı testte):** İlk
+    tam çalıştırmada 25/25 hisse dolu geldi ama ISCTR (Türkiye İş
+    Bankası) **%368 verim** gösterdi - açıkça yanlış. Kök neden: İş
+    Bankası'nın TEK bir bildiriminde 4 farklı pay grubu var (A/ISATR,
+    B/ISBTR, C/ISCTR, ISKUR), HER BİRİNİN kâr payı tutarı FARKLI
+    (ISATR: 46,92 TL, ISCTR: sadece 0,54 TL). Eski kod "İşlem
+    Görmüyor" olmayan İLK pozitif satırı alıyordu - ISCTR sorgulanırken
+    yanlışlıkla ISATR'ın (46,92 TL) değerini alıyordu. **Düzeltme:**
+    `_kar_payi_bildirimi_parse_et()` artık `ticker` parametresi alıyor,
+    "Pay Grup Bilgileri" hücresinde TİCKER'IN TAM OLARAK eşleştiği
+    satırı önceliklendiriyor (virgülle ayrılmış parçalardan biri birebir
+    eşleşmeli - kısmi/yanlış eşleşme riski yok), sadece eşleşme
+    bulunamazsa eski "ilk pozitif satır" yedeğine düşüyor. Önbellek
+    anahtarı da `disclosure_index` yerine `disclosure_index:ticker`
+    yapıldı (aynı bildirim farklı ticker'lar için farklı değer verebilir).
+  - **Son doğrulama:** Temiz önbellekle sıfırdan çalıştırıldı - XTMTU'nun
+    25 üyesinin TAMAMI dolu, verimler %0,49 (BIMAS) ile %9,98 (BRYAT)
+    arasında GERÇEKÇİ bir aralıkta. ISCTR düzeltme sonrası %4,23 (bankalar
+    için makul). TCELL "Yaklaşıyor" durumunda (09.12.2026), geri kalan
+    24'ü "Geçti" (referans/geçmiş bilgi olarak listede kalıyor - sayfanın
+    var olan sıralama/durum mantığı hiç değiştirilmedi).
+  - **DURUM: Temettü boru hattı artık tam, doğru ve kapsamlı çalışıyor.**
 
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
