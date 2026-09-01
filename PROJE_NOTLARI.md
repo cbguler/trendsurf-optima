@@ -1744,7 +1744,7 @@ tamam, canlı doğrulama BEKLİYOR):**
   olarak teşhis edildi. AÇIK - sonraki oturumda ayrı bir proje olarak
   ele alınacak (görüntü ön-işleme veya farklı OCR motoru/API).
 
-- **[UYGULANDI, İZOLE TEST EDİLDİ - CANLI DOĞRULAMA BEKLİYOR] v2.0.7.224
+- **[UYGULANDI, İZOLE + CANLI TEST EDİLDİ - DOĞRULANDI] v2.0.7.224
   (1 Eylül 2026, Bahri'nin bulgusu — "Portföyümdeki varlıklarımın karı
   dün 2026 TL üzerindeyken bugün 1801,67 TL, fiyatlar düştüğü halde ve
   uyarı ayarlarım açık olduğu halde hiç uyarı gelmedi"): PEAK TRACKER
@@ -1773,16 +1773,22 @@ tamam, canlı doğrulama BEKLİYOR):**
     sahte veriyle (MTG'nin 2 lotu, 100@10 + 50@13) doğru birleşti:
     miktar=150, ağırlıklı ort. maliyet=11.0, upserts listesinde MTG
     sadece 1 kez.
-  - **⚠️ AÇIK - EN ÖNCELİKLİ MADDE (O&M3'e devredildi):** Bu düzeltme
-    O&M2 oturumunda GitHub'a hiç PUSH EDİLMEMİŞ olarak bulundu (O&M3'ün
-    ilk taze klonunda `peak_tracker.py` hâlâ 28 Haziran 2026 tarihli
-    eski haliydi, fix marker'ı yoktu) - dosya kopyalama/push adımı
-    atlanmış. O&M3'te GitHub'dan alınan fresh clone üzerinde yeniden
-    uygulandı, PUSH BEKLİYOR. Push sonrası "Peak Check Alert System"
-    workflow'u force modda YENİDEN çalıştırılıp log'da `batch_upsert
-    hatasi` satırının artık ÇIKMADIĞI doğrulanmalı.
+  - **NOT - O&M2→O&M3 kopukluk:** Bu düzeltme O&M2 oturumunda GitHub'a
+    hiç PUSH EDİLMEMİŞ olarak bulundu (O&M3'ün ilk taze klonunda
+    `peak_tracker.py` hâlâ 28 Haziran 2026 tarihli eski haliydi, fix
+    marker'ı yoktu) - dosya kopyalama/push adımı atlanmış. O&M3'te
+    GitHub'dan alınan fresh clone üzerinde yeniden uygulanıp push
+    edildi.
+  - **✅ CANLI DOĞRULANDI (1 Eylül 2026, O&M3):** "Peak Check Alert
+    System" workflow'u `main` dalından, force modda yeniden çalıştırıldı.
+    Log'da `batch_upsert hatasi` satırı ARTIK HİÇ ÇIKMIYOR. Temiz sonuç:
+    `[peak_tracker] evaluate user=2 updated=5 pending=0 skipped=0
+    sure=3.84s`. İlk denemede yanlışlıkla eski bir tag (`v2.0.4`, 5
+    Temmuz 2026 tarihli) üzerinden çalıştırılmıştı, bu fark edilip
+    `main` ile tekrarlandı - ikinci çalıştırma kesin doğrulamayı verdi.
   - **Önemli:** Bu düzeltme İLERİYE DÖNÜKTÜR - geçmişte kaçırılan uyarı
     geri getirilemez (o anki gerçek zirve kayıtlı değildi).
+  - **DURUM: KAPANDI.**
 
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
