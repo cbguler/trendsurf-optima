@@ -2089,9 +2089,9 @@ tamam, canlı doğrulama BEKLİYOR):**
       TL özkaynak değerine ulaşılmıştır"). Bahri'ye bu örüntü
       (her yeni şirket = yeni format) açıkça bildirildi, devam etmesi
       istendi - **v2.0.7.233 ile Format-5 yazıldı** (aşağıya bkz.).
-  - **AÇIK:** BLS'in cache kaydı `graham_degeri=None` olduğu için
-    `force_refresh` bir sonraki çalıştırmada otomatik yeniden
-    deneyecek - Format-4 o zaman gerçek üretimde test edilmiş olacak.
+  - **✅ CANLI DOĞRULANDI (1 Eylül 2026, 20:25 TRT çalıştırması):**
+    BLS/Intetra → `carpan=73.69115395427077` (Format-4, elle hesaplanan
+    değerle TAM eşleşme). DURUM: KAPANDI.
 
 - **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.233
   (1 Eylül 2026, Bahri'nin talebi — "Şimdi bu format için de kod yaz"):
@@ -2115,6 +2115,12 @@ tamam, canlı doğrulama BEKLİYOR):**
     (gayrimenkul eklenmiş, ağırlıklı) sonucu (85,40 TL sonrası arz
     fiyatının temeli) DEĞİL, SADECE çarpan yönteminin payı - tıpkı
     diğer formatlarda olduğu gibi bağımsız bir çapraz kontrol değeri.
+  - **✅ CANLI DOĞRULANDI (1 Eylül 2026, 20:25 TRT çalıştırması):**
+    TERA85/Teknika Plast → `carpan=81.31630099` (Format-5, elle
+    hesaplanan değerle TAM eşleşme). Aynı çalıştırmada TSK/TSKB(Bewen)
+    → 51,84 (Format-3) ve BLS/Intetra → 73,69 (Format-4) da doğrulandı -
+    bugün eklenen ÜÇ formatın (3, 4, 5) TAMAMI ilk canlı denemede
+    tuttu. DURUM: KAPANDI.
   - **Genel değerlendirme (Bahri'ye iletildi):** 5 farklı aracı kurum/
     yazım tarzı formatı artık kapsanıyor. Her yeni şirket/aracı kurum
     potansiyel olarak yeni bir format getirebilir - bu "yakala-düzelt"
