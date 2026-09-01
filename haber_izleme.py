@@ -132,8 +132,7 @@ _RSS_KAYNAKLARI = [
     # test edildi, çalışıyor. İtalyanca - çeviri gerekiyor.
     ("ANSA", "https://www.ansa.it/sito/ansait_rss.xml"),
     # v2.0.7.211 (Bahri'nin talebi, 28-29 Ağustos 2026 — çok dilli
-    # tarafsız kaynak araştırmasının İKİNCİ turu, kalan diller): 4 yeni
-    # kaynak eklendi.
+    # tarafsız kaynak araştırmasının İKİNCİ turu, kalan diller):
     # Meduza: Rusça - CANLI TEST EDİLDİ, çalışıyor. Rus devleti
     # tarafından TAMAMEN YASAKLANMIŞ, Riga'dan (Letonya) sürgünde
     # yayın yapıyor - bağımsızlığı şüphe götürmez (RT/TASS gibi devlet
@@ -142,37 +141,43 @@ _RSS_KAYNAKLARI = [
     # sürgüne gitmiş bir ekip) - bu "hükümetin sesi olmama" testini
     # kesinlikle geçiyor ama "taraf tutmama" anlamında tek yönlü.
     ("Meduza", "https://meduza.io/rss/all"),
-    # Kathimerini: Yunanca - kendi test ortamımda domain kısıtlaması
-    # nedeniyle DOĞRUDAN test edilemedi (BBC/Sky gibi). Özel aile
-    # şirketi (Alafouzos ailesi) sahipliğinde, Yunanistan'ın en saygın
-    # "kayıt gazetesi" - devlet ajansı değil. Wikipedia "merkez-sağ"
-    # olarak tanımlıyor (hafif bir siyasi eğilim, ama devlet kontrolü
-    # değil).
-    ("Kathimerini", "https://www.ekathimerini.com/infeeds/rss/nx-rss-feed.xml"),
-    # El País: İspanyolca - aynı araç kısıtlaması, doğrudan test
-    # edilemedi. Özel medya grubu (PRISA) sahipliğinde - EFE (İspanyol
-    # devletine tam bağlı) YERİNE seçildi. Wikipedia "merkez-sol"
-    # olarak tanımlıyor.
-    ("El País", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"),
-    # Kyodo News: Japonca - aynı araç kısıtlaması. Kâr amacı gütmeyen
-    # kooperatif (56 Japon gazetesi + 111 yayın kuruluşunun üye
-    # aidatlarıyla finanse ediliyor) - eski devlet ajansı Dōmei'nin
-    # YERİNE 1945'te kurulmuş, devletten ve ticari etkiden bağımsız
-    # olması özellikle tasarlanmış.
-    ("Kyodo News", "https://english.kyodonews.net/rss/all.xml"),
-    # v2.0.7.213 (Bahri'nin talebi, 29 Ağustos 2026 — "öncelik ABD,
-    # İngiltere ve Fransa olmak üzere birkaç sağlam kaynak bul"):
-    # PBS NewsHour: ABD - WETA'nın (kamu yayıncısı) kâr amacı gütmeyen
-    # yan kuruluşu, saygın vakıflarca (Carnegie, Ford, MacArthur,
-    # Hewlett) fonlanıyor - doğrudan hükümet ataması/kontrolü YOK.
-    # Ekonomiye özel akışı kullanılıyor.
-    ("PBS NewsHour", "https://www.pbs.org/newshour/feeds/rss/economy"),
-    # Ouest-France: Fransa'nın en çok okunan gazetesi (günlük 2,5
-    # milyon okuyucu) - bir vakıf/dernek yapısı aracılığıyla editoryal
-    # bağımsızlığı korunuyor, hükümete/partiye bağlı değil. Fransa
-    # için ÇOK SAYIDA başarısız denemeden (France24, Le Monde, Les
-    # Echos, RFI, Mediapart) sonra bulunan İLK çalışan aday.
-    ("Ouest-France", "https://www.ouest-france.fr/rss/une"),
+    #
+    # v2.0.7.231 (1 Eylül 2026, Bahri'nin talebi — "dil önemli değil,
+    # önemli olan dünyaca kabul gören güvenilir kaynaklardan çok sayıda
+    # haber almamız"): O&M3'ün başında "eklendi ama canlı doğrulama
+    # bekliyor" durumunda kalan 5 kaynak GERÇEKTEN test edildi -
+    # SONUÇ: Kathimerini, El País, Kyodo News, Ouest-France HTTP 403
+    # (bot koruması/Cloudflare tarafından engelleniyor) ve PBS NewsHour
+    # HTTP 202 + AWS WAF "challenge" (JS/CAPTCHA duvarı) döndürdü -
+    # BEŞİ DE gerçekte KULLANILAMIYOR, bu durum hem yerel test ortamında
+    # hem GERÇEK GitHub Actions ortamında AYNI (ikisi de bulut/veri
+    # merkezi IP'si, aynı bot korumasına takılıyor). Doğru olan bunları
+    # koddan tamamen ÇIKARMAK - "eklendi" görünüp sessizce hiç veri
+    # üretmeyen kaynaklar tutmaktansa dürüstçe kaldırmak (bkz. dosya başı
+    # ilke). Yerlerine, AYNI oturumda yeni adaylar test edilip 3'ü
+    # (aşağıda) çalışır bulundu.
+    #
+    # CBC Business: Kanada - Kanada Yayın Kurumu (CBC), kamu yayıncısı
+    # ama Broadcasting Act ile YASAL OLARAK editoryal bağımsızlığı
+    # güvence altına alınmış (BBC ile aynı model - hükümetten kol
+    # mesafeli). CANLI TEST EDİLDİ: gerçek iş dünyası haberleri (ABD'ye
+    # teknoloji bağımlılığı, tahıl ihracatı, GM sendika anlaşması,
+    # kuantum bilgisayar yatırımı).
+    ("CBC Business", "https://www.cbc.ca/webfeed/rss/rss-business"),
+    # Yle News (İngilizce): Finlandiya - Finlandiya Yayın Şirketi (Yle),
+    # doğrudan devlet bütçesinden DEĞİL ayrı bir "Yle vergisi"nden
+    # finanse ediliyor, yasal güvenceli bağımsızlığı var. Finlandiya
+    # basın özgürlüğü endekslerinde dünyada sürekli ilk sıralarda.
+    # CANLI TEST EDİLDİ (İngilizce akış - Fince genel akış yerine,
+    # çeviri gerektirmiyor ve ekonomiye daha alakalı): işsizlik
+    # istatistikleri, NATO/ekonomi politikası, emeklilik rakamları.
+    ("Yle News", "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS"),
+    # RTÉ Business: İrlanda - İrlanda'nın kamu yayın kurumu, lisans
+    # ücretiyle finanse ediliyor, yasal olarak bağımsız. CANLI TEST
+    # EDİLDİ: güçlü, doğrudan ekonomi/finans içeriği (euro bölgesi
+    # enflasyonu, elektrikli araç kayıtları, Merkez Bankası, fabrika
+    # aktivitesi) - şimdiye kadar eklenen en alakalı akışlardan biri.
+    ("RTÉ Business", "https://www.rte.ie/feeds/rss/?index=/news/business/"),
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -549,11 +554,12 @@ _CEVIRI_GEREKEN_KAYNAKLAR = {
     "Euronews",  # Ingilizce (v2.0.7.208)
     "ANSA",  # Italyanca (v2.0.7.208)
     "Meduza",  # Rusca (v2.0.7.211)
-    "Kathimerini",  # Yunanca (v2.0.7.211)
-    "El País",  # Ispanyolca (v2.0.7.211)
-    "Kyodo News",  # Japonca (v2.0.7.211)
-    "PBS NewsHour",  # Ingilizce (v2.0.7.213)
-    "Ouest-France",  # Fransizca (v2.0.7.213)
+    # v2.0.7.231: Kathimerini/El País/Kyodo News/PBS NewsHour/Ouest-France
+    # canli testte hepsi engellendigi (403/WAF) icin KALDIRILDI - bkz.
+    # _RSS_KAYNAKLARI'ndaki not. Yerlerine gelen 3 yeni kaynak:
+    "CBC Business",  # Ingilizce (v2.0.7.231)
+    "Yle News",  # Ingilizce akis (v2.0.7.231)
+    "RTÉ Business",  # Ingilizce (v2.0.7.231)
 }
 
 # GUNLUK GEMINI CAGRI BUTCESI. Gemini ucretsiz katmanin gercek gunluk

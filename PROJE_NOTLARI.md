@@ -2046,6 +2046,45 @@ tamam, canlı doğrulama BEKLİYOR):**
     var olan sıralama/durum mantığı hiç değiştirilmedi).
   - **DURUM: Temettü boru hattı artık tam, doğru ve kapsamlı çalışıyor.**
 
+- **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
+  2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul
+  gören güvenilir kaynaklardan çok sayıda haber almamız"): HABER
+  KAYNAKLARI TEMİZLENDİ VE GENİŞLETİLDİ.**
+  - **5 "beklemede" kaynak GERÇEKTEN test edildi, hepsi ÇALIŞMADIĞI
+    bulundu:** Kathimerini, El País, Kyodo News, Ouest-France → HTTP 403
+    (bot koruması/Cloudflare). PBS NewsHour → HTTP 202 + `x-amzn-waf-
+    action: challenge` (AWS WAF JS/CAPTCHA duvarı). Bu 5'i koddan
+    ÇIKARILDI - hem yerel test ortamında hem gerçek GitHub Actions
+    ortamında (ikisi de bulut/veri merkezi IP'si) aynı şekilde
+    engellenecekleri için "eklendi" görünüp sessizce hiç katkı
+    sağlamamaları yerine dürüstçe kaldırıldılar. Meduza (aynı turdan)
+    CANLI TEST EDİLDİ, çalışıyor - kaldı.
+  - **3 yeni kaynak bulundu, canlı test edildi, eklendi:**
+    - **CBC Business** (Kanada) - CBC, Broadcasting Act ile yasal
+      güvenceli editoryal bağımsızlığa sahip kamu yayıncısı (BBC ile
+      aynı model). Gerçek iş dünyası içeriği doğrulandı.
+    - **Yle News** (Finlandiya, İngilizce akış) - Yle, ayrı bir "Yle
+      vergisi"yle finanse edilen, basın özgürlüğü endekslerinde
+      dünyada sürekli ilk sıralarda olan kamu yayıncısı. Fince genel
+      akış yerine İngilizce, ekonomiye daha alakalı akış seçildi.
+    - **RTÉ Business** (İrlanda) - İrlanda'nın lisans ücretiyle
+      finanse edilen, yasal bağımsız kamu yayıncısı. En alakalı yeni
+      akışlardan biri (doğrudan enflasyon/merkez bankası/sanayi
+      içeriği).
+  - **Denenip ELENEN adaylar (bu turda):** Associated Press (rsshub.app
+    proxy'si de dahil, 403), The Guardian Business (403), Deutsche Welle
+    (3 farklı URL denendi, hepsi 403), NHK World (403), Franceinfo
+    Eco (403), Der Spiegel International (403), The Hindu Business
+    (403), SWI swissinfo.ch (410 - feed kaldırılmış), Korea Herald
+    Business (200 ama 0 kayıt - feed formatı bozuk/boş).
+  - **Güncel durum: 19 aktif kaynak** (21'den 5 çıkarıldı, 3 eklendi).
+  - **SONRAKİ OTURUMDA (istenirse):** Kapsanmayan büyük bölgeler hâlâ
+    var - Güney Amerika, Afrika, Güneydoğu Asya, Hindistan (The Hindu
+    denendi/başarısız oldu, başka aday aranabilir), Çin/Arapça
+    (Bahri'nin notu: öncelikli değil ama iyi bir bağımsız aday çıkarsa
+    eklenebilir - ör. Initium Media (端傳媒, Çince, Hong Kong merkezli
+    bağımsız) veya Daraj/Independent Arabia (Arapça) denenebilir).
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA
