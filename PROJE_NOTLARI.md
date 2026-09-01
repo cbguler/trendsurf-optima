@@ -1905,6 +1905,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     çalıştırma sonra TSK'nın gerçekten Format-3 ile denendiği takip
     edilmeli).
 
+- **[UYGULANDI, İKİ GERÇEK RAPORLA DOĞRULANDI] v2.0.7.228 (1 Eylül 2026):
+  FORMAT-3 ETİKET VARYASYONU BULUNDU VE DÜZELTİLDİ - "Pay Değeri" (kısa
+  form) da destekleniyor.**
+  - **Bulgu:** v2.0.7.227'nin canlı çalıştırmasında "48,1 TL / 78 sayfa"
+    adayının aslında Kapeks DEĞİL, **Bewen Enerji A.Ş.** olduğu ortaya
+    çıktı (ikisi de KAP'ta "TSK, TSKB" kodunu paylaşıyor - kod çakışması
+    Halka Arz sayfasında ikisinin de aynı arz fiyatını göstermesine yol
+    açıyor). Bewen'in raporu gerçek KAP'tan indirilip incelendi: aynı
+    TSKB şablonunu kullanıyor (aynı "Piyasa Çarpanları Değerleme Özeti"
+    başlığı, aynı satır düzeni) AMA son satırda Kapeks'in kullandığı
+    "Pay Başına Öz Sermaye Değeri - TL" yerine SADECE **"Pay Değeri -
+    TL"** yazıyor - Format-3'ün regex'i "Basina"/"Sermaye" kelimelerini
+    ZORUNLU aradığı için bu varyantı hiç yakalamıyordu.
+  - **Çözüm:** `_F3_PAY_BASINA_DEGER` regex'inde "Basina", "Oz", "Sermaye"
+    kelimeleri OPSİYONEL yapıldı - sadece "Pay ... Değeri - TL <sayı>"
+    aranıyor artık. Arama zaten dar bir pencereyle ("Piyasa Çarpanları
+    Değerleme Özeti" başlığından sonraki 600 karakter) sınırlı olduğu
+    için yanlış satırı yakalama riski düşük.
+  - **İki gerçek raporla doğrulandı (regresyon yok):** Kapeks'in gerçek
+    OCR.space metni → 80,58 (doğru, değişmedi). Bewen'in gerçek OCR.space
+    metni → 51,84 (raporun kendi bastığı değerle birebir aynı - artık
+    doğru çıkıyor).
+  - **AÇIK:** Hem Kapeks hem Bewen'in cache kaydı `graham_degeri=None`
+    olduğu için `force_refresh` bir sonraki çalıştırmada ikisini de
+    otomatik yeniden deneyecek. Ama OCR.space'in saatlik 60 istek kotası
+    hâlâ geçerli - hangisinin/hangilerinin kota bitmeden sırasının
+    geleceği yine çalıştırma sırasına bağlı. Bu etiket varyasyonu
+    sorununun BAŞKA raporlarda da (henüz görülmemiş üçüncü bir etiket
+    biçimi) çıkabileceği unutulmamalı - her yeni "gerçek adayda hâlâ
+    None" durumu, muhtemelen yeni bir küçük etiket farkı anlamına
+    geliyor, OCR kalitesizliği değil.
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA

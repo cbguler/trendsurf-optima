@@ -275,8 +275,15 @@ def _format2_hesapla(metin: str) -> Optional["DonemDegerleme"]:
 # yuzden Format-3'te Graham Degeri HER ZAMAN None kalir - yanlis bir
 # esitleme yapmaktansa bos birakmak tercih edilir (bkz. dosya basi ilke).
 _F3_PIYASA_CARPANLARI_BASLIK = r"Piyasa\s*Carpanlari\s*Degerleme\s*Ozeti"
-_F3_PAY_BASINA_DEGER = (r"Pay\s*Basina\s*(?:Oz\s*)?Sermaye\s*Degeri\s*"
-                          r"[-\u2013\u2014]?\s*TL\s*(" + _SAYI + r")")
+# v2.0.7.228 (1 Eylul 2026, Bewen Enerji ornegiyle bulundu): Ayni TSKB
+# sablonu icinde bile etiket metni RAPORDAN RAPORA DEGISEBILIYOR - Kapeks
+# "Pay Basina Oz Sermaye Degeri - TL" derken, Bewen ayni kutuda sadece
+# "Pay Degeri - TL" diyor (Basina/Oz/Sermaye kelimeleri YOK). Bu yuzden
+# regex, ortadaki kelimeleri OPSIYONEL yaparak ikisini de kapsayacak
+# sekilde gevsetildi - arama zaten dar bir pencereyle (bu basliktan sonraki
+# 600 karakter) sinirli oldugu icin yanlis satiri yakalama riski dusuk.
+_F3_PAY_BASINA_DEGER = (r"Pay\s*(?:Basina\s*)?(?:Oz\s*)?(?:Sermaye\s*)?"
+                          r"Degeri\s*[-\u2013\u2014]?\s*TL\s*(" + _SAYI + r")")
 
 
 def _f3_piyasa_carpanlari_pay_basi_deger(norm: str) -> Optional[float]:
