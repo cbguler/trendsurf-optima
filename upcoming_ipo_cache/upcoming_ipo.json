@@ -51,7 +51,7 @@
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1645066",
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1636741",
     "Arz_Fiyati": 48.1,
-    "Iskonto_Orani": null,
+    "Iskonto_Orani": 20.0,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   },
@@ -80,20 +80,6 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1644893",
     "Arz_Fiyati": null,
     "Iskonto_Orani": 20.0,
-    "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
-  },
-  {
-    "Tarih": "31.07.2026 18:39:27",
-    "Kod": "TSK, TSKB",
-    "Sirket": "Bewen Enerji A.Ş",
-    "Konu": "İzahname (SPK Tarafından Onaylanan)",
-    "Ozet": "Bewen Enerji A.Ş.'nin SPK onaylı İzahnamesi hk",
-    "Durum": "Onaylandı Talep Toplanıyor Yakında",
-    "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1641554",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1636741",
-    "Arz_Fiyati": 48.1,
-    "Iskonto_Orani": null,
     "Graham_Degeri": null,
     "Carpan_Bazli_Deger": null
   }
