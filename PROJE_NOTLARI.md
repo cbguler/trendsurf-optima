@@ -1949,6 +1949,62 @@ tamam, canlı doğrulama BEKLİYOR):**
     açık kalmaya devam ediyor - yeni adaylarda yeni etiket varyasyonları
     çıkabilir, göründükçe ele alınacak.**
 
+- **[UYGULANDI, GERÇEK VERİYLE UÇTAN UCA TEST EDİLDİ - KAPSAM SINIRI
+  BİLİNİYOR, PUSH BEKLİYOR] v2.0.7.229 (1 Eylül 2026): TEMETTÜ BORU HATTI
+  YFINANCE'DEN KAP'A TAŞINDI.**
+  - **Önceki engel çözüldü:** Geçen oturumda "KAP kategori kimliği
+    (dahili hash) bulunamadı" diye yarım kalmış araştırma tamamlandı.
+    KAP'ın bildirim-sorgu sayfasının kendi HTML'ine gömülü tam
+    bildirim-türü/subjectOid listesi bulundu - **"Kar Payı Dağıtımı" →
+    `4028328d5988e2630159d5fb51c81fe6`**. Bu hash olmadan sorgu
+    tamamen filtresiz oluyor (112 farklı bildirim türü karışık dönüyor);
+    doğru hash ile SADECE gerçek temettü bildirimleri geliyor.
+  - **Beklenenden de iyi çıkan bir bulgu:** Bu bildirimlerin PDF eki
+    bile YOK - veri doğrudan KAP API yanıtında yapılandırılmış HTML
+    tablosu olarak geliyor. OCR/PDF indirme tamamen gereksiz - sadece
+    BeautifulSoup ile tablo parse ediliyor.
+  - **`temettu_client.py`'de yapılan değişiklik:** `_fetch_dividend_data`
+    yfinance'i TAMAMEN bıraktı. Yeni akış: `_fetch_kar_payi_map()` güncel
+    "Kar Payı Dağıtımı" bildirimlerini ticker koduna göre eşler,
+    `_kar_payi_bildirimi_parse_et()` her bildirimin HTML gövdesini
+    (`SHARE_DIVIDEND_FLEX_TABLE_*` tablolarını başlık metnine göre
+    bularak - ID numaralandırmasına güvenmeden) parse edip Brüt(TL)/
+    Net(TL)/Kesinleşen-Hak-Kullanım-Tarihi'ni çıkarır. Bildirim detayları
+    disclosure_index başına SÜRESİZ önbelleklenir (Fiyat Tespit Raporu
+    önbelleğiyle aynı ilke - yayınlanmış bildirim değişmez).
+  - **ÖNEMLİ - verim (%) hesabı düzeltildi:** KAP'ın kendi "Brüt(%)"
+    alanı **1 TL nominal değere göredir, PİYASA FİYATINA GÖRE DEĞİL**
+    (TBORG örneğinde "%952" gibi anlamsız görünen bir sayı çıkıyor -
+    aslında 9,52 TL / 1 TL nominal = %952 demek). Bu yüzden verim
+    HER ZAMAN kendimiz hesaplanıyor: Brüt TL / güncel piyasa fiyatı.
+  - **Gerçek veriyle uçtan uca doğrulandı:** TBORG (gerçek bildirim,
+    idx=1654862) → brüt=9,5209 TL, ex_date=02.09.2026 (Kesinleşen Hak
+    Kullanım Tarihi) - haber sitelerinde yayınlanan gerçek değerlerle
+    birebir eşleşti. KAPLM ve ESCOM (ikisi de "dağıtılmayacak" kararı
+    almış) → doğru şekilde 0 döndü, hata vermedi - şirketin gerçekten
+    temettü dağıtmama kararını doğru yorumluyor.
+  - **⚠️ AÇIK - KAPSAM SINIRI (önemli):** KAP'ın bildirim-sorgu-sonuc uç
+    noktası, denenen HİÇBİR parametreyle (fromDate/toDate/ps/pageSize/
+    count/limit vb. - hepsi denendi) 29 kaydı aşmadı. KAP'ın kendi
+    sitesindeki bir not, arama ÖNERİLERİNİN (autocomplete) varsayılan
+    olarak "geçmişe dönük 30 günlük dönem" ile sınırlı olduğunu ve daha
+    geniş aralık için "detaylı sorgulama" gerektiğini söylüyor - ama bu
+    ayrı sayfa/mekanizma bulunamadı (muhtemelen gerçek form gönderimi
+    farklı bir POST/parametre seti kullanıyor, tarayıcı ile form
+    doldurup gerçek isteği yakalamak gerekebilir). SONUÇ: Türkiye'de
+    temettüler çoğunlukla Mart-Haziran'da açıklandığından, Eylül'de bu
+    "son ~30 gün" penceresi çoğu şirketin ilgili bildirimini
+    KAÇIRIYOR - canlı testte XTMTU'nun 25 üyesinden 0'ı bu pencereye
+    denk geldi. Mekanizma DOĞRU ÇALIŞIYOR (TBORG/KAPLM/ESCOM ile
+    doğrulandı) ama PRATİK KAPSAM şu an düşük. Zamanla (yeni bildirimler
+    geldikçe, veya gelecek yılın Şub-Haz döneminde) organik olarak
+    dolacak. yfinance'e GERİ DÖNÜLMEDİ (Bahri'nin açık talebi) -
+    kapsam dışı kalan hisseler satırda sessizce boş kalıyor.
+  - **SONRAKİ OTURUMDA (istenirse):** Tarayıcı bağlantısı kurup KAP'ın
+    "bildirim-sorgu" sayfasında gerçek bir tarih aralığı seçip arama
+    yaparak, oluşan GERÇEK isteği (Network sekmesinden) yakalamak -
+    bu, doğru sayfalama/tarih parametresini kesin olarak ortaya çıkarır.
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA

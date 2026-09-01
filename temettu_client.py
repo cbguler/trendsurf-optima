@@ -1,8 +1,35 @@
 """
 temettu_client.py — TrendSurf Optima
-BIST Temettü Endeksi (XTMTU) üyelerini KAP RSC endpoint'inden çeker,
-yfinance'den temettü verilerini zenginleştirir.
-Cache: 4 saat
+BIST Temettü Endeksi (XTMTU) üyelerini KAP RSC endpoint'inden çeker.
+
+v2.0.7.229 (1 Eylül 2026): Temettü verisi artık yfinance YERİNE doğrudan
+KAP'ın "Kar Payı Dağıtımı" bildirimlerinden (subjectOid ile filtrelenmiş
+bildirim-sorgu-sonuc sorgusu) çekiliyor - Bahri'nin talebiyle yfinance'e
+tamamen veda edildi. Bu bildirimlerin PDF eki bile yok; veri doğrudan KAP
+API yanıtında YAPILANDIRILMIŞ HTML tablosu olarak geliyor - OCR/PDF
+gerekmiyor, doğrudan BeautifulSoup ile parse ediliyor.
+
+ÖNEMLİ - KAPSAM SINIRI: KAP'ın bildirim-sorgu-sonuc uç noktası (denendi,
+doğrulandı) tarih aralığı parametresi ne verilirse verilsin platform
+genelinde SADECE EN SON ~29 "Kar Payı Dağıtımı" bildirimini döndürüyor
+(muhtemelen sunucu tarafı sabit bir üst sınır, gerçek sayfalama/tarih
+filtresi bulunamadı). Türkiye'de temettüler çoğunlukla Mart-Haziran
+arasında yoğunlaşıyor - bu pencerenin dışında kalan (daha eski) bir
+XTMTU üyesi için bu API'den veri gelMEYECEK, satır BOŞ kalacak (ESKİ
+YANLIŞ VERİ GÖSTERMEK YERİNE - proje ilkesi). yfinance'e geri dönüş
+YOKTUR (Bahri'nin açık talebi) - kapsam dışı kalan hisseler için satır
+sessizce boş kalır, sonraki bir oturumda gerçek sayfalama/tarih
+parametresi bulunursa genişletilebilir.
+
+ÖNEMLİ - VERİM (%) HESABI: KAP'ın döndürdüğü "Brüt(%)" / "Net(%)"
+alanları PİYASA FİYATINA göre DEĞİL, 1 TL NOMİNAL DEĞERE göre yüzdedir
+(ör. "%952" gibi anlamsız görünen değerler bu yüzden - 1 TL'lik nominal
+üzerinden). Bu yüzden verim YÜZDESİ HER ZAMAN kendimiz hesaplıyoruz:
+(Brüt TL pay başı temettü) / (güncel piyasa fiyatı) * 100.
+
+Cache: XTMTU üye listesi + temettü detayları 4 saat; ham KAP bildirim
+detayları (disclosure_index başına) SÜRESİZ (yayınlanmış bildirim
+değişmez - Fiyat Tespit Raporu önbelleğiyle aynı ilke).
 """
 import os, json, time, re
 from typing import Optional
@@ -27,6 +54,32 @@ HEADERS = {
     "Referer": "https://www.kap.org.tr/tr/Endeksler",
 }
 
+# ── v2.0.7.229: KAP "Kar Payı Dağıtımı" bildirim sorgusu ────────────────────
+# subjectOid, KAP'ın bildirim-sorgu sayfasının kendi HTML'ine gömülü
+# tam bildirim türü listesinden bulundu (1 Eylül 2026) - "Kar Payı
+# Dağıtımı" -> 4028328d5988e2630159d5fb51c81fe6. Bu deger olmadan (veya
+# yanlis) sorgu FILTRESIZ, karisik binlerce bildirim donuyor - kategori
+# eslemesi icin ZORUNLU.
+KAP_BILDIRIM_SORGU_URL = "https://www.kap.org.tr/tr/bildirim-sorgu-sonuc"
+KAP_BILDIRIM_DETAY_URL = "https://www.kap.org.tr/tr/api/notification/attachment-detail/{idx}"
+KAP_BILDIRIM_LINK_URL  = "https://www.kap.org.tr/tr/Bildirim/{idx}"
+KAP_KAR_PAYI_S_HASH    = "4028328d5988e2630159d5fb51c81fe6"
+KAP_KAR_PAYI_PARAMS = {
+    "srcbar": "Y", "cmp": "Y", "cat": "4",
+    "s": KAP_KAR_PAYI_S_HASH,
+    "st": "Kar Payı Dağıtımı",
+    "kw": "kar payi dagitimi", "slf": "ALL",
+}
+HEADERS_BILDIRIM = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.kap.org.tr/tr/bildirim-sorgu",
+}
+
+KAR_PAYI_DETAY_CACHE_FILE = os.path.join(CACHE_DIR, "kar_payi_detay.json")
+
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
 def _read_cache() -> Optional[list]:
@@ -47,6 +100,223 @@ def _write_cache(rows: list):
             json.dump(rows, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+# ── v2.0.7.229: Kar Payı Dağıtımı detay önbelleği (SÜRESİZ) ─────────────────
+# Fiyat Tespit Raporu önbelleğiyle AYNI ilke: yayınlanmış bir bildirimin
+# içeriği değişmez (şirket düzeltme yaparsa YENİ bir disclosure_index ile
+# yeni bildirim yayınlar), bu yüzden disclosure_index başına süresiz
+# önbelleklenebilir - her çalıştırmada aynı bildirimi tekrar indirip
+# parse etmeye gerek yok.
+
+def _read_kar_payi_detay_cache() -> dict:
+    try:
+        with open(KAR_PAYI_DETAY_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _write_kar_payi_detay_cache(cache: dict):
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(KAR_PAYI_DETAY_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _kap_bildirim_html_getir(params: dict) -> Optional[str]:
+    """bildirim-sorgu-sonuc uc noktasindan HTML ceker. Basarisiz olursa
+    SESSIZCE None doner - cagiran taraf bunu 'bu calistirmada veri yok'
+    olarak ele alir, hata firlatmaz."""
+    try:
+        import requests
+        r = requests.get(KAP_BILDIRIM_SORGU_URL, params=params,
+                          headers=HEADERS_BILDIRIM, timeout=20)
+        if r.status_code == 200 and len(r.text) > 1000:
+            r.encoding = "utf-8"
+            return r.text
+        print(f"[temettu_client] KAP bildirim sorgu HTTP durumu: {r.status_code}",
+              flush=True)
+        return None
+    except Exception as e:
+        print(f"[temettu_client] KAP bildirim sorgu hatasi: {e}", flush=True)
+        return None
+
+
+def _kap_bildirim_json_cikar(html_text: str) -> list:
+    """HTML icine gomulu Next.js 'data' JSON dizisini cikarir - Fiyat
+    Tespit Raporu'nda kullanilan YONTEMLE AYNI (upcoming_ipo_client.py),
+    ayri bir modul oldugu icin burada kucuk bir kopyasi tutuluyor."""
+    try:
+        unescaped = html_text.replace('\\"', '"').replace('\\\\', '\\')
+        m = re.search(r'"data":(\[\{.*?"fundCode":(?:null|"[^"]*")\}\}\])', unescaped)
+        if not m:
+            m = re.search(r'"data":(\[\{.*?\}\])\s*,\s*"SERVER_BASE_URL"', unescaped)
+        if not m:
+            return []
+        return json.loads(m.group(1))
+    except Exception as e:
+        print(f"[temettu_client] KAP bildirim JSON cikarma hatasi: {e}", flush=True)
+        return []
+
+
+def _fetch_kar_payi_map() -> dict:
+    """Guncel 'Kar Payı Dağıtımı' bildirimlerini ceker, her ticker kodu
+    icin EN GUNCEL bildirimin disclosure_index'ini dondurur:
+    {"TBORG": {"disclosure_index": 1654862, "tarih": "..."}, ...}
+
+    KAPSAM SINIRI: bkz. modul basi notu - KAP bu sorguda platform
+    genelinde sadece en son ~29 bildirimi donduruyor, tarih araligi
+    parametreleri etkisiz bulundu. Bu yuzden BAZI XTMTU uyeleri bu
+    haritada hic gorunmeyebilir (son donemde temettu bildirimi
+    yapmamislarsa) - cagiran taraf bunu BOS SONUC olarak ele alir,
+    hata degildir."""
+    try:
+        html_text = _kap_bildirim_html_getir(KAP_KAR_PAYI_PARAMS)
+        if not html_text:
+            return {}
+        raw_records = _kap_bildirim_json_cikar(html_text)
+        code_map = {}
+        for rec in raw_records:
+            d = rec.get("disclosureBasic", {})
+            idx = d.get("disclosureIndex", "")
+            if not idx:
+                continue
+            publish_date = d.get("publishDate", "")
+            raw_codes = f"{d.get('stockCode','')},{d.get('relatedStocks','')}"
+            codes = [c.strip().upper() for c in re.split(r"[,\s]+", raw_codes) if c.strip()]
+            for code in codes:
+                if len(code) < 2 or len(code) > 8:
+                    continue
+                existing = code_map.get(code)
+                if existing is None or publish_date > existing.get("tarih", ""):
+                    code_map[code] = {"disclosure_index": idx, "tarih": publish_date}
+        print(f"[temettu_client] Kar Payı Dağıtımı: {len(raw_records)} bildirim -> "
+              f"{len(code_map)} benzersiz ticker eslesti", flush=True)
+        return code_map
+    except Exception as e:
+        print(f"[temettu_client] Kar Payı Dağıtımı eslestirmesi atlandi (hata): {e}", flush=True)
+        return {}
+
+
+def _tr_sayi(s) -> Optional[float]:
+    """KAP'in Turkce sayi bicimini (virgul ondalik, opsiyonel nokta
+    binlik ayiraci) float'a cevirir. '9,5209164' -> 9.5209164"""
+    if s is None:
+        return None
+    s = str(s).strip().replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return None
+
+
+def _kar_payi_bildirimi_parse_et(disclosure_index) -> dict:
+    """Tek bir 'Kar Payı Dağıtımı' bildiriminin HTML govdesini indirip
+    yapilandirilmis veriye cevirir. PDF/OCR YOK - dogrudan KAP API
+    yanitindaki HTML tablosu BeautifulSoup ile parse ediliyor.
+
+    Doner: {"brut_tl": float|None, "net_tl": float|None,
+            "ex_date": "gg.aa.yyyy"|None, "odeme_tarihi": "gg.aa.yyyy"|None,
+            "odeme_sekli": str|None, "pay_kodu": str|None}
+    Bulunamayan/parse edilemeyen alanlar None kalir - UYDURMA YOK."""
+    bos = {"brut_tl": None, "net_tl": None, "ex_date": None,
+           "odeme_tarihi": None, "odeme_sekli": None, "pay_kodu": None}
+    try:
+        from bs4 import BeautifulSoup
+        import requests
+        url = KAP_BILDIRIM_DETAY_URL.format(idx=disclosure_index)
+        headers = dict(HEADERS_BILDIRIM)
+        headers["Referer"] = KAP_BILDIRIM_LINK_URL.format(idx=disclosure_index)
+        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code != 200:
+            return bos
+        data = r.json()
+        if not data or not data[0].get("disclosureBody"):
+            return bos
+        html = data[0]["disclosureBody"][0]
+        soup = BeautifulSoup(html, "html.parser")
+
+        sonuc = dict(bos)
+
+        # --- Para tablosu: basligi 'Brüt(TL)' iceren herhangi bir tablo ---
+        for table in soup.find_all("table"):
+            baslik_hucreleri = table.find_all("tr")[0].find_all("td") if table.find_all("tr") else []
+            baslik_metni = [td.get_text(strip=True) for td in baslik_hucreleri]
+            if not any("Brüt(TL)" in b or "Brut(TL)" in b for b in baslik_metni):
+                continue
+            brut_idx = next((i for i, b in enumerate(baslik_metni) if "Brüt(TL)" in b), None)
+            net_idx = next((i for i, b in enumerate(baslik_metni) if "Net(TL)" in b), None)
+            odeme_idx = next((i for i, b in enumerate(baslik_metni) if b == "Ödeme"), None)
+            if brut_idx is None:
+                continue
+            veri_satirlari = table.find_all("tr")[1:]
+            secilen = None
+            # Once ayni pay kodunu (Pay Grup Bilgileri hucresinde gecen
+            # kisa kod) iceren, "Islem Gormuyor" OLMAYAN satiri tercih et.
+            for tr in veri_satirlari:
+                cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+                if not cells:
+                    continue
+                ilk_hucre = cells[0]
+                if "İşlem Görmüyor" in ilk_hucre or "Islem Gormuyor" in ilk_hucre:
+                    continue
+                brut_val = _tr_sayi(cells[brut_idx]) if brut_idx < len(cells) else None
+                if brut_val and brut_val > 0:
+                    secilen = cells
+                    break
+            if secilen is None and veri_satirlari:
+                # hicbiri pozitif degilse ilk satiri (genelde tek satir
+                # olur, temettu dagitilmayacaksa zaten 0 olacak) kullan
+                secilen = [td.get_text(strip=True) for td in veri_satirlari[0].find_all("td")]
+            if secilen:
+                if brut_idx < len(secilen):
+                    sonuc["brut_tl"] = _tr_sayi(secilen[brut_idx])
+                if net_idx is not None and net_idx < len(secilen):
+                    sonuc["net_tl"] = _tr_sayi(secilen[net_idx])
+                if odeme_idx is not None and odeme_idx < len(secilen):
+                    sonuc["odeme_sekli"] = secilen[odeme_idx]
+                sonuc["pay_kodu"] = secilen[0]
+            break
+
+        # --- Tarih tablosu: basligi 'Kesinleşen'/'Teklif Edilen' iceren ---
+        for table in soup.find_all("table"):
+            baslik_hucreleri = table.find_all("tr")[0].find_all("td") if table.find_all("tr") else []
+            baslik_metni = [td.get_text(strip=True) for td in baslik_hucreleri]
+            if not any("Hak Kullanım Tarihi" in b for b in baslik_metni):
+                continue
+            kesin_idx = next((i for i, b in enumerate(baslik_metni)
+                                if b.startswith("Kesinleşen")), None)
+            teklif_idx = next((i for i, b in enumerate(baslik_metni)
+                                 if b.startswith("Teklif")), None)
+            odeme_tarihi_idx = next((i for i, b in enumerate(baslik_metni)
+                                       if b.startswith("Ödeme Tarihi")), None)
+            veri_satirlari = table.find_all("tr")[1:]
+            if veri_satirlari:
+                cells = [td.get_text(strip=True) for td in veri_satirlari[0].find_all("td")]
+                hedef_idx = kesin_idx if kesin_idx is not None else teklif_idx
+                if hedef_idx is not None and hedef_idx < len(cells) and cells[hedef_idx]:
+                    sonuc["ex_date"] = cells[hedef_idx]
+                if odeme_tarihi_idx is not None and odeme_tarihi_idx < len(cells):
+                    sonuc["odeme_tarihi"] = cells[odeme_tarihi_idx]
+            break
+
+        return sonuc
+    except Exception as e:
+        print(f"[temettu_client] Bildirim {disclosure_index} parse hatasi: {e}", flush=True)
+        return bos
+
+
+def _kar_payi_detay_getir(disclosure_index, detay_cache: dict) -> dict:
+    """Onbellekten (suresiz) doner, yoksa indirip parse eder ve
+    onbellege yazar. cagiran taraf onbellegi diske YAZMAKTAN sorumludur
+    (toplu is bittikten sonra tek seferde - performans icin)."""
+    key = str(disclosure_index)
+    if key in detay_cache:
+        return detay_cache[key]
+    sonuc = _kar_payi_bildirimi_parse_et(disclosure_index)
+    detay_cache[key] = sonuc
+    return sonuc
 
 # ── KAP RSC çekimi ────────────────────────────────────────────────────────────
 
@@ -168,33 +438,25 @@ def _fix_encoding(text: str) -> str:
 
 # ── Temettü verisi çekimi ─────────────────────────────────────────────────────
 
-def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
-    """yfinance'den temettü verilerini çeker.
+# ── Temettü verisi çekimi ─────────────────────────────────────────────────────
 
-    v2.0.7.220 (Bahri'nin bulgusu, 31 Ağustos 2026 — Temettü sayfasında
-    AKBNK, BIMAS, CCOLA gibi bilinen temettü ödeyen şirketler bile
-    "0,0000 / %0,00" gösteriyordu, "Zorla Yenile" bile düzeltmiyordu):
-    ÜÇ SORUN BULUNDU VE DÜZELTİLDİ.
-    (1) BİRİM YORUMLAMA HATASI: eski kod `dividendYield`'in bir ORAN
-        (0.03 = %3) olduğunu varsayıp `0 < div_yield <= 0.6` kontrolü
-        yapıyordu - ama canlı test (31 Ağustos 2026) yfinance'in bunu
-        ARTIK DOĞRUDAN YÜZDE (3.01 = %3,01) olarak döndürdüğünü
-        gösterdi. Eski eşik bu durumda YANLIŞ dala düşüyordu (yanlışlıkla
-        "geçersiz" sayılıp göz ardı ediliyordu, sadece tesadüfen
-        div_per_share/fiyat yedek hesabı bazen doğru sonuca yakın
-        çıkıyordu). Artık HER İKİ FORMAT da (eski oran biçimi VE yeni
-        yüzde biçimi) otomatik algılanıp doğru yorumlanıyor.
-    (2) SESSİZ HATA YUTMA: eski `except: pass` - yfinance'in `.info`
-        özelliği (Yahoo Finance'in bilinen şekilde GÜVENİLMEZ, özellikle
-        bulut platformlarında sık sık engellenen/rate-limit'e takılan bir
-        endpoint'i) başarısız olduğunda HİÇBİR İZ BIRAKMADAN sessizce
-        varsayılan sıfır sonucu dönüyordu - "Zorla Yenile" bile bu
-        sessiz başarısızlığı gizliyordu. Artık hata `print` ile
-        loglanıyor (sunucu loglarında görülebilir).
-    (3) YENİDEN DENEME YOK: tek bir başarısız deneme, o hisseyi
-        kalıcı olarak "temettüsüz" gösteriyordu. Artık 2 deneme var,
-        aralarında kısa bir bekleme (rate-limit'in GEÇİCİ olma
-        ihtimaline karşı)."""
+def _fetch_dividend_data(ticker: str, cur_price: float, kar_payi_map: dict,
+                          detay_cache: dict) -> dict:
+    """KAP'ın 'Kar Payı Dağıtımı' bildiriminden temettü verilerini çeker.
+
+    v2.0.7.229 (1 Eylül 2026, Bahri'nin talebi): yfinance TAMAMEN
+    KALDIRILDI, yerine doğrudan KAP kullanılıyor. Önceki v2.0.7.220
+    düzeltmesi yfinance'in dividendYield birim belirsizliğini (oran mı
+    yüzde mi) *yorumlamaya* çalışıyordu - KAP'a geçilince bu belirsizlik
+    tamamen ortadan kalktı: KAP'ın kendi yüzde alanı zaten kullanılmıyor
+    (bkz. modül başı not - nominal değere göre, piyasa fiyatına göre
+    DEĞİL), verim HER ZAMAN kendimiz (brüt TL / güncel fiyat) hesaplıyoruz
+    - tek, tutarlı, belirsizliksiz bir yöntem.
+
+    ticker kar_payi_map'te yoksa (KAP'ın döndürdüğü ~29 bildirimlik
+    pencerede bu hisse için son dönemde bildirim yoksa) SESSİZCE boş
+    sonuç döner - UYDURMA YOK, eski/yanlış bir değer göstermektense
+    satır boş kalır (bkz. modül başı 'KAPSAM SINIRI' notu)."""
     result = {
         "div_per_share": 0.0,
         "div_yield":     0.0,
@@ -202,49 +464,26 @@ def _fetch_dividend_data(ticker: str, cur_price: float) -> dict:
         "frequency":     "—",
         "annual_div":    0.0,
     }
-    import time as _time
-    for _deneme in range(2):
-        try:
-            import yfinance as yf
-            import datetime
-            info = yf.Ticker(f"{ticker}.IS").info
+    eslesme = kar_payi_map.get(ticker.upper())
+    if not eslesme:
+        return result
 
-            div_rate  = float(info.get("dividendRate")  or 0)
-            div_yield_ham = float(info.get("dividendYield") or 0)
-            ex_ts     = info.get("exDividendDate")
-            freq      = info.get("dividendFrequency")
+    detay = _kar_payi_detay_getir(eslesme["disclosure_index"], detay_cache)
+    brut = detay.get("brut_tl")
+    if brut and brut > 0:
+        result["div_per_share"] = round(brut, 4)
+        result["annual_div"]    = round(brut, 4)
+        if cur_price and cur_price > 0:
+            result["div_yield"] = round(brut / cur_price * 100, 2)
 
-            if div_rate > 0:
-                result["div_per_share"] = round(div_rate, 4)
-                result["annual_div"]    = round(div_rate, 4)
+    if detay.get("ex_date"):
+        result["ex_date"] = detay["ex_date"]
+    if detay.get("odeme_sekli"):
+        # KAP'ta cogunlukla "Peşin" (tek seferde) goruluyor - Turkiye'de
+        # temettu dagitim kararlari yilda bir kez alindigi icin "Yıllık"
+        # olarak etiketleniyor (odeme TAKSITLE yapilsa bile karar yillik).
+        result["frequency"] = "Yıllık"
 
-            # v2.0.7.220: iki formati da algila - yfinance zaman icinde
-            # bu alani hem ORAN (0.03) hem DOGRUDAN YUZDE (3.0) olarak
-            # dondurmus olabilir. "<=0.6" (yani <= %60) eski oran
-            # formatini, ">0.6" yeni yuzde formatini isaret eder -
-            # gercekci bir temettu verimi hicbir zaman %60'i asmaz,
-            # bu esik guvenli bir ayirt edici.
-            if 0 < div_yield_ham <= 0.6:
-                result["div_yield"] = round(div_yield_ham * 100, 2)
-            elif div_yield_ham > 0.6:
-                result["div_yield"] = round(div_yield_ham, 2)
-            elif result["div_per_share"] > 0 and cur_price > 0:
-                result["div_yield"] = round(result["div_per_share"] / cur_price * 100, 2)
-
-            if ex_ts:
-                try:
-                    result["ex_date"] = datetime.datetime.fromtimestamp(ex_ts).strftime("%d.%m.%Y")
-                except Exception:
-                    pass
-
-            result["frequency"] = {1: "Yıllık", 2: "Yarıyıllık", 4: "Çeyreklik"}.get(freq, "Yıllık")
-            return result  # basarili - deneme dongusunden cik
-
-        except Exception as e:
-            print(f"[temettu_client] {ticker} temettu cekme hatasi "
-                  f"(deneme {_deneme+1}/2): {type(e).__name__}: {e}")
-            if _deneme == 0:
-                _time.sleep(2)  # rate-limit gecici olabilir - kisa bekleme
     return result
 
 # ── CSV zenginleştirme ────────────────────────────────────────────────────────
@@ -345,7 +584,8 @@ def fetch_temettu_list(force_refresh: bool = False, df_uni_hazir=None) -> pd.Dat
             # YENİDEN HESAPLANMIYOR - bkz. _enrich() notu) - ya doğrudan
             # hazır df_uni'den (hızlı, ekstra sorgu yok) ya da
             # (verilmemişse) kendi CSV+overlay sorgusundan. Sadece pahalı
-            # kısımlar (XTMTU üye listesi, yfinance temettü verisi) 4 saat
+            # kısımlar (XTMTU üye listesi, KAP temettü bildirim detayları -
+            # detay zaten ayrıca SÜRESİZ önbellekli, bkz. modül başı) 4 saat
             # önbellekli kalıyor.
             cached = _enrich(cached, df_uni_hazir)
             return pd.DataFrame(cached)
@@ -358,14 +598,20 @@ def fetch_temettu_list(force_refresh: bool = False, df_uni_hazir=None) -> pd.Dat
     # CSV'den (veya hazır df_uni'den) fiyat/skor ekle
     rows = _enrich(rows, df_uni_hazir)
 
-    # Temettü verisi — yfinance (paralel)
-    print(f"  Temettü verisi çekiliyor ({len(rows)} hisse)...")
+    # Temettü verisi — KAP "Kar Payı Dağıtımı" bildirimleri (paralel)
+    # v2.0.7.229: yfinance yerine KAP. Once TUM ticker'lar icin tek bir
+    # bildirim haritasi cekiliyor (1 istek), sonra her hisse icin (varsa)
+    # kendi bildirim detayi aciliyor - detay onbellegi SURESIZ oldugu icin
+    # daha once gorulmus bir bildirim tekrar indirilmiyor.
+    print(f"  Temettü verisi çekiliyor (KAP - {len(rows)} hisse)...")
+    kar_payi_map = _fetch_kar_payi_map()
+    detay_cache = _read_kar_payi_detay_cache()
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     def _get_div(r):
         t = r["Ticker"]
         p = r.get("Son_Fiyat", 0)
-        d = _fetch_dividend_data(t, p)
+        d = _fetch_dividend_data(t, p, kar_payi_map, detay_cache)
         r.update(d)
         # Toplam tahmini getiri = Optima Skor bazlı momentum + temettü verimi
         r["Toplam_Getiri"] = round(
@@ -381,6 +627,10 @@ def fetch_temettu_list(force_refresh: bool = False, df_uni_hazir=None) -> pd.Dat
                 enriched.append(fut.result())
             except Exception:
                 enriched.append(futures[fut])
+
+    # Bu calistirmada yeni parse edilen bildirim detaylari (varsa) diske
+    # yaziliyor - suredzz onbellek boylece kalici hale geliyor.
+    _write_kar_payi_detay_cache(detay_cache)
 
     df = pd.DataFrame(enriched)
 
