@@ -1869,6 +1869,42 @@ tamam, canlı doğrulama BEKLİYOR):**
     detaylı hata loglarıyla önceki hız sınırı şüphesinin gerçekten
     kota/hız sınırı mı olduğu netleştirilmeli.
 
+- **[UYGULANDI - GERÇEK NEDEN CANLI LOGLA DOĞRULANDI] v2.0.7.227 (1 Eylül
+  2026): OCR.space GERÇEK KOTA SINIRI BULUNDU - SAATTE 60 İSTEK (E553).**
+  - **Detaylı hata loglaması (v2.0.7.226) meyvesini verdi:** Bir sonraki
+    canlı çalıştırmada log artık kesin hatayı gösterdi: `E553: Rate limit
+    exceeded. Max 60 requests per 3600s for Engine3 for Free Plan`.
+    Reklam sayfasındaki "ayda 2.500 istek" rakamı yanıltıcıydı - gerçek
+    kısıt SAATLİK. Bir Fiyat Tespit Raporu tek başına 40-70 sayfa OCR
+    gerektirebildiğinden, BİR ADAY BİLE kotanın tamamını tüketebiliyor.
+  - **Bu çalıştırmada ne oldu:** İlk 3 aday sırayla işlendi (kota henüz
+    doluydu, OCR.space çalıştı ama yine de graham/carpan bulunamadı -
+    ayrı bir konu, muhtemelen bu adayların formatı hiç tanınmıyor).
+    4. aday (TSK/Kapeks - Format-3'ün gerçek doğrulandığı örnek) tam
+    sırası geldiğinde kota bitmişti - yani Format-3 bu çalıştırmada HİÇ
+    şansını bulamadı, yine eski/kötü Tesseract metniyle çalıştı.
+  - **İYİ HABER - ekstra düzeltme gerekmedi:** `force_refresh=True`
+    zaten her çalıştırmada aktif (worker.py) ve `graham_degeri` boş
+    kalan kayıtları cache'ten silip yeniden deniyor (v2.0.4.18 kuralı,
+    önceden mevcuttu) - yani TSK bir sonraki çalıştırmada otomatik
+    tekrar denenecek, ayrı bir "yeniden dene" mekanizması eklemeye
+    gerek kalmadı.
+  - **Eklenen tek düzeltme - gereksiz istek israfını önleme:** Kota
+    aşıldıktan sonra sistem yine de HER sayfa için OCR.space'e istek
+    atıp 429 alıyordu (onlarca gereksiz ağ gecikmesi + log gürültüsü).
+    Artık `_OCRSPACE_KOTA_ASILDI` modül-seviyesi bayrağı ilk 429'da
+    kalkıyor, o çalıştırmanın geri kalanında OCR.space HİÇ denenmeden
+    doğrudan Tesseract'a düşülüyor. Sahte 429 yanıtıyla test edildi:
+    ilk çağrıda bayrak kalkıyor, ikinci çağrıda gerçek HTTP isteği HİÇ
+    yapılmıyor.
+  - **AÇIK - İZLENECEK:** Kota saatlik sıfırlandığı için, aynı adaylar
+    hangi sırayla işleniyorsa (KAP listesi sırası) kota her seferinde
+    muhtemelen aynı ilk birkaç adaya gidecek, TSK gibi sıradaki adaylar
+    şanslarını yine bulamayabilir. Bu, sıra/öncelik mantığına dair daha
+    büyük bir iyileştirme gerektirebilir (şimdilik ele alınmadı - kaç
+    çalıştırma sonra TSK'nın gerçekten Format-3 ile denendiği takip
+    edilmeli).
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA

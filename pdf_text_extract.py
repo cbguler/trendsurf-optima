@@ -29,12 +29,25 @@ Sistem paketi (GitHub Actions / apt): tesseract-ocr, tesseract-ocr-tur
   -> apt-get install -y tesseract-ocr tesseract-ocr-tur (YEDEK yöntem için
   hâlâ gerekli - OCR.space kullanılamazsa devreye girer.)
 GitHub Actions secret: OCRSPACE_API_KEY (https://ocr.space/ocrapi/freekey -
-  ücretsiz, kredi kartı istemiyor, ayda 25.000 istek Engine 1/2 + ayrıca
-  2.500 istek Engine 3 için).
+  ücretsiz, kredi kartı istemiyor). DİKKAT (v2.0.7.227'de canlıda bulundu):
+  reklam sayfasında "ayda 2.500 istek" yazsa da, Engine 3'ün gerçek limiti
+  SAATTE 60 istek (E553 hatası) - bir Fiyat Tespit Raporu tek başına 40-70
+  sayfa gerektirebildiğinden bir aday bile kotanın tamamını tüketebilir.
+  Kota aşılınca o çalıştırmanın geri kalanı otomatik Tesseract'a düşer.
 """
 
 import re
 from typing import Optional
+
+# v2.0.7.227 (1 Eylul 2026, canli calistirmada bulundu - E553 "Max 60
+# requests per 3600s for Engine3"): OCR.space Engine 3'un ucretsiz plani
+# SAATTE sadece 60 istege izin veriyor - tek bir Fiyat Tespit Raporu 40-70
+# sayfa OCR gerektirebildigi icin BIR ADAY BILE kotanin tamamini tuketebilir.
+# Kota asildiktan sonra HER sayfa icin yine de bosuna API'ye istek atip 429
+# almak (ag gecikmesi + gurultu log) yerine, bu surec (workflow calistirmasi)
+# icinde bir kez 429 gorulunce bayrak kaldirilip o calistirmanin geri
+# kalaninda OCR.space HIC denenmeden dogrudan Tesseract'a dusulur.
+_OCRSPACE_KOTA_ASILDI = False
 
 
 def _sayfa_metin_var_mi(sayfa) -> bool:
@@ -69,13 +82,15 @@ def _markdown_tablo_duzlestir(metin: str) -> str:
 def _ocr_sayfa_ocrspace(im) -> Optional[str]:
     """Bir PIL Image'i OCR.space Engine 3 API'siyle metne çevirir.
 
-    OCRSPACE_API_KEY ortam değişkeni yoksa veya herhangi bir hata olursa
-    (ağ, kota, zaman aşımı, beklenmeyen yanıt) SESSİZCE None döner - hata
-    fırlatmaz, çağıran taraf (_ocr_sayfa) bunu yerel Tesseract'a düşme
-    sinyali olarak kullanır."""
+    OCRSPACE_API_KEY ortam değişkeni yoksa, kota bu süreçte zaten aşıldıysa
+    (bkz. _OCRSPACE_KOTA_ASILDI) veya herhangi bir hata olursa (ağ, kota,
+    zaman aşımı, beklenmeyen yanıt) SESSİZCE None döner - hata fırlatmaz,
+    çağıran taraf (_ocr_sayfa) bunu yerel Tesseract'a düşme sinyali olarak
+    kullanır."""
+    global _OCRSPACE_KOTA_ASILDI
     import os
     api_key = os.environ.get("OCRSPACE_API_KEY")
-    if not api_key:
+    if not api_key or _OCRSPACE_KOTA_ASILDI:
         return None
     try:
         import io
@@ -102,6 +117,14 @@ def _ocr_sayfa_ocrspace(im) -> Optional[str]:
             data={"language": "auto", "OCREngine": 3, "isTable": "true"},
             timeout=60,
         )
+        if r.status_code == 429:
+            _OCRSPACE_KOTA_ASILDI = True
+            import sys
+            print(f"[pdf_text_extract] OCR.space KOTA ASILDI (429) - bu "
+                  f"calistirmanin geri kalaninda ARTIK DENENMEYECEK, "
+                  f"dogrudan Tesseract'a dusulecek. Detay: {r.text[:200]}",
+                  file=sys.stderr)
+            return None
         if r.status_code != 200:
             import sys
             print(f"[pdf_text_extract] OCR.space HTTP {r.status_code}: "
