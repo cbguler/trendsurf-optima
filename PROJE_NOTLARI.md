@@ -2174,6 +2174,43 @@ tamam, canlı doğrulama BEKLİYOR):**
     eklenebilir - ör. Initium Media (端傳媒, Çince, Hong Kong merkezli
     bağımsız) veya Daraj/Independent Arabia (Arapça) denenebilir).
 
+- **[KALICI TERCİH - 1 Eylül 2026] Yunanistan ve İsrail kaynaklı haber
+  organları HARİÇ TUTULUYOR** (yukarı bkz.) - bu, Bahri'nin bu iki
+  ülkenin Türkiye'ye karşı yanlı haber üretebileceği şüphesiyle koyduğu
+  EK bir dışlama kriteri, mevcut "devlet sesi olmama" ilkesinden ayrı.
+
+- **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.234 (1 Eylül
+  2026, Bahri'nin hatırlattığı standing kural — "minimum 20 maksimum
+  30 kaynak"): KAYNAK SAYISI TEKRAR MİNİMUMUN ÜZERİNE ÇIKARILDI.**
+  - v2.0.7.231'de 5 kaynak çıkarılıp 3 eklenince toplam 19'a düşmüştü -
+    Bahri'nin önceki oturumda (O&M2) koyduğu "minimum 20, maksimum 30"
+    standing kuralının altına inmişti, bu oturumda fark edilip
+    düzeltildi.
+  - **2 yeni kaynak canlı test edilip eklendi (toplam 21):**
+    - **Africanews** - Euronews S.A.'nın %100 iştiraki (listede zaten
+      olan Euronews ile AYNI sahiplik yapısı/tüzük), reklam+abonelikle
+      finanse ediliyor. CANLI TEST EDİLDİ: gerçek ekonomi/siyaset
+      içeriği (IMF kredisi, grev, AB yardımı). Afrika kıtasını İLK
+      KEZ kapsıyor.
+    - **Philippine Star Business** - Filipinler. Çoğunluk hissesi
+      (%51) MediaQuest Holdings'te (PLDT'nin emeklilik fonu üzerinden
+      kurulmuş özel holding, PLDT şirketinin kendisi değil), kurucu
+      Belmonte ailesi yönetim/editoryal kontrolü elinde tutuyor -
+      devlet bağlantısı yok. CANLI TEST EDİLDİ: saf iş dünyası
+      içeriği. Güneydoğu Asya'yı İLK KEZ kapsıyor.
+  - **Denenip REDDEDİLEN aday:** Buenos Aires Times (Arjantin) - RSS
+    çalışıyordu ama sahibi Grupo Indalo'nun patronu (Cristóbal López)
+    belgelenmiş şekilde Kirchnerist harekete yakın VE vergi
+    kaçakçılığından hapis yatıyor - tarafsızlık/güvenilirlik açısından
+    riskli bulunup bilerek eklenmedi.
+  - **Denenip TEKNİK OLARAK BAŞARISIZ olan diğer adaylar:** Folha de
+    S.Paulo/Brezilya (403), Bangkok Post/Tayland (451 - coğrafi
+    engelleme), Jakarta Post/Endonezya (404), Channel 4 News/İngiltere
+    (404), Business Day/Güney Afrika (404), Channel News Asia/Singapur
+    (403 - ayrıca Temasek/Singapur devleti bağlantısı nedeniyle zaten
+    tarafsızlık ilkesine takılırdı).
+  - **Güncel durum: 21 aktif kaynak** - Bahri'nin 20-30 aralığında.
+
   EDİLMEDİ] v2.0.7.221 (31 Ağustos 2026, Bahri'nin talebi — "Halka Arz
   sayfasında Graham Değeri ve Çarpan Bazlı Değer sütunlarının boş
   kalması sorun, bu değerlerin tabloda görünmesini sağla"): ORTA
