@@ -2153,6 +2153,20 @@ tamam, canlı doğrulama BEKLİYOR):**
     (403), SWI swissinfo.ch (410 - feed kaldırılmış), Korea Herald
     Business (200 ama 0 kayıt - feed formatı bozuk/boş).
   - **Güncel durum: 19 aktif kaynak** (21'den 5 çıkarıldı, 3 eklendi).
+  - **[DÜZELTME - 1 Eylül 2026, Bahri'nin bulgusu] `app.py`'deki UI metni
+    UNUTULMUŞTU:** `_RSS_KAYNAKLARI`'ndan kaldırılan 5 kaynak (özellikle
+    Kathimerini), Son Dakika Haberleri sayfasındaki "Kaynaklar:" alt
+    yazısında hâlâ görünüyordu - AA Ekonomi kaldırılırken (v2.0.7.207)
+    da aynı hata yapılmıştı ("app.py'deki kaynak listesi metni de
+    güncellendi" notu o zaman düşülmüştü ama bu kez atlandı). `app.py`
+    satır ~6736-6750'deki `st.caption(...)` metni güncellendi: 5 ölü
+    kaynak çıkarıldı, 3 yeni kaynak (CBC Business, Yle News, RTÉ
+    Business) eklendi, "çevrilir" dil listesinden Yunanca/İspanyolca/
+    Japonca/Fransızca çıkarıldı (artık bu dillerden kaynak yok).
+    **DERS:** `_RSS_KAYNAKLARI` her değiştiğinde `app.py`'deki bu
+    metnin de MANUEL güncellenmesi gerekiyor - iki yerde ayrı ayrı
+    tutuluyor, otomatik senkron değil. Bir sonraki kaynak değişikliğinde
+    bu adım unutulmamalı.
   - **SONRAKİ OTURUMDA (istenirse):** Kapsanmayan büyük bölgeler hâlâ
     var - Güney Amerika, Afrika, Güneydoğu Asya, Hindistan (The Hindu
     denendi/başarısız oldu, başka aday aranabilir), Çin/Arapça
