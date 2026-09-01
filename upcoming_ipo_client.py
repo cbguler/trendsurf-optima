@@ -506,6 +506,16 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         # sebep oluyordu.
         metin_birlesik = metin + ("\n\n" + metin_son if metin_son else "")
         temel = _extract_temel_deger(metin_birlesik, arz_fiyati=sonuc.arz_fiyati)
+        # v2.0.7.223 (Bahri'nin bulgusu, 31 Ağustos 2026 — OCR düzeltmesi
+        # sonrası bile Graham/Çarpan sütunları boş kaldı, ama log'da bu
+        # değerlerin BULUNUP BULUNMADIĞINA dair hiçbir satır yoktu - sadece
+        # arz_fiyati için vardı): TEŞHİS EKSİKLİĞİ GİDERİLDİ. Artık her
+        # aşamadan sonra Graham/Çarpan durumu AÇIKÇA loglanıyor - bir
+        # sonraki çalıştırmada, sorunun "OCR metni üretmiyor" mu yoksa
+        # "metin üretiliyor ama regex/parser bulamıyor" mu olduğu netleşecek.
+        print(f"[upcoming-ipo] İlk+son sayfa sonrası: "
+              f"graham={temel.get('graham_degeri')}, "
+              f"carpan={temel.get('carpan_bazli_deger')}", flush=True)
 
         # v2.0.6: ORTA SAYFA DENEMESI (Format-2). TERA gibi raporlarda tam
         # Bilanco/Gelir Tablosu belgenin ORTASINDA (orn. 83 sayfalik raporda
@@ -570,12 +580,23 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
                             temel2 = _extract_temel_deger(
                                 metin_birlesik + "\n\n" + "\n\n".join(orta_parcalar),
                                 arz_fiyati=sonuc.arz_fiyati)
+                            # v2.0.7.223: orta sayfa taramasi Graham/Carpan
+                            # ACISINDAN basarili mi degil mi - acikca logla.
+                            print(f"[upcoming-ipo] Orta sayfa (Format-2) sonrasi: "
+                                  f"graham={temel2.get('graham_degeri')}, "
+                                  f"carpan={temel2.get('carpan_bazli_deger')}", flush=True)
                             for k in temel:
                                 if temel[k] is None:
                                     temel[k] = temel2.get(k)
             except Exception as e:
                 print(f"[upcoming-ipo] Orta sayfa denemesi hatasi: {e}", flush=True)
 
+        # v2.0.7.223: NIHAI sonuc - bu belge icin Graham/Carpan sonunda
+        # bulundu mu bulunamadi mi, hangi asamada olursa olsun tek satirda
+        # ozetleniyor.
+        print(f"[upcoming-ipo] NIHAI SONUC: arz_fiyati={sonuc.arz_fiyati}, "
+              f"graham={temel.get('graham_degeri')}, "
+              f"carpan={temel.get('carpan_bazli_deger')}", flush=True)
         return {
             "arz_fiyati": sonuc.arz_fiyati,
             "iskonto_orani": sonuc.iskonto_orani,
