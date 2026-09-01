@@ -2127,6 +2127,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     döngüsü muhtemelen tamamen bitmeyecek, ama en yaygın kalıplar
     zamanla kapsanmış olacak.
 
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.235
+  (1 Eylül 2026, Bahri'nin bulgusu — "Halka Arzda bazı rakamlar geldi
+  ama hepsi değil", HALKI/HLY-VEYAS satırında Arz Fiyatı bile boştu):
+  ARZ FİYATI (TİP C) ETİKET VARYASYONU DÜZELTİLDİ.**
+  - **Bulgu:** Bu, Graham/Çarpan'dan ÖNCE gelen daha temel bir alan
+    (Arz Fiyatı) için bir eksiklikti - Format-3/4/5'ten farklı bir
+    konu. Türker Vangölü Enerji/VEYAS raporu (Vakıf Yatırım) açıkça
+    "Halka Arz Fiyatı (TL) 136,00" yazıyordu ama mevcut Tip C regex'i
+    (`fiyat_tespit_parser.py`) etiket ile sayı arasında SADECE boşluk
+    (`\s*`) bekliyordu - araya giren "(TL)" birim notasyonu eşleşmeyi
+    engelliyordu.
+  - **Çözüm:** `_TIP_C_ETIKET` regex'i, etiket ile sayı arasında
+    opsiyonel bir parantez içi birim notasyonuna (TL, Bin TL vb.)
+    tolerans verecek şekilde güncellendi.
+  - **Gerçek metinle doğrulandı:** arz_fiyati=136,0, iskonto=%20,0 -
+    raporun kendi değerleriyle birebir eşleşti.
+  - **AÇIK - Bahri'ye soruldu, cevap bekleniyor (2 madde):**
+    (1) Aynı VEYAS raporu, Graham/Çarpan için ALTINCI farklı bir format
+    kullanıyor ("VEYAS - Değerleme Özeti" kutusu: "İNA Yöntemi" /
+    "Çarpan Analizi" satırları, Bin TL cinsinden, "Ödenmiş Sermaye"ye
+    bölünmesi gerekiyor - hesaplanabilir: ~188,6 TL). Format-6 yazılsın
+    mı yoksa bu turda atlansın mı?
+    (2) TSK/TSKB satırında bir ETİKETLEME hatası bulundu: "Kapeks Kimya
+    Sanayi A.Ş" satırında görünen Çarpan Bazlı Değer (51,84) aslında
+    BEWEN Enerji'ye ait - iki şirket de KAP'ın izahname listesinde AYNI
+    "TSK, TSKB" kodunu paylaştığı için (muhtemelen ortak aracı kurum
+    TSKB nedeniyle), ticker koduna dayalı eşleştirme ikisini de aynı
+    Fiyat Tespit Raporu'na yönlendiriyor. Düzeltme, şirket ADI bazlı
+    (ör. "Kapeks" ~ "KPEKS" kodu, "Bewen" ~ "BEWEN" kodu) daha spesifik
+    bir eşleştirme mantığı gerektiriyor - mevcut kodu bozma riski
+    taşıyan bir değişiklik, bu yüzden önce onay isteniyor.
+
 - **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
   2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul
   gören güvenilir kaynaklardan çok sayıda haber almamız"): HABER

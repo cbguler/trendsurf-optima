@@ -101,7 +101,13 @@ _TIP_B_NIHAI_SATIR = r"Niha[iI1lL]\s+Deger\s+" + _NUM + r"\s+.*?" + _NUM
 
 # --- TİP C: Değerleme Sonucu tablosu (doğrudan "Halka Arz Fiyatı") -----------
 _TIP_C_BASLIK = r"Degerleme Sonucu"
-_TIP_C_ETIKET = r"Halka Arz Fiyati\s*" + _NUM
+# v2.0.7.235 (1 Eylül 2026, Bahri'nin bulgusu - Türker Vangölü Enerji/VEYAS
+# raporunda arz fiyatı hiç yakalanmıyordu): KESİN KÖK NEDEN BULUNDU.
+# Rapor "Halka Arz Fiyatı (TL) 136,00" yazıyor - etiket ile sayı arasında
+# eskiden SADECE boşluk (\s*) bekleniyordu, ama araya "(TL)" birim notasyonu
+# giriyor. Opsiyonel bir parantez içi birim notasyonuna (TL, Bin TL, vb.)
+# tolerans eklendi.
+_TIP_C_ETIKET = r"Halka Arz Fiyati\s*(?:\([^)]{0,15}\))?\s*" + _NUM
 
 # --- İskonto oranı (tüm tipler için ortak arama) -----------------------------
 _ISKONTO_PATTERNS = [
