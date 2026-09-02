@@ -49,11 +49,11 @@
     "Ozet": "Kapeks Kimya Sanayi A.Ş.'nin SPK onaylı İzahnamesi ekleri 6. Bölüm",
     "Durum": "Onaylandı Talep Toplanıyor Yakında",
     "Detay_URL": "https://www.kap.org.tr/tr/Bildirim/1645066",
-    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1636741",
-    "Arz_Fiyati": 48.1,
+    "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1645057",
+    "Arz_Fiyati": 94.0,
     "Iskonto_Orani": 20.0,
     "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": 51.84
+    "Carpan_Bazli_Deger": 80.58
   },
   {
     "Tarih": "07.08.2026 01:20:18",
@@ -67,7 +67,7 @@
     "Arz_Fiyati": 136.0,
     "Iskonto_Orani": 20.0,
     "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
+    "Carpan_Bazli_Deger": 99852771.0
   },
   {
     "Tarih": "06.08.2026 23:51:09",
@@ -81,6 +81,6 @@
     "Arz_Fiyati": 136.0,
     "Iskonto_Orani": 20.0,
     "Graham_Degeri": null,
-    "Carpan_Bazli_Deger": null
+    "Carpan_Bazli_Deger": 99852771.0
   }
 ]
