@@ -4918,5 +4918,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     kontrol etmesi gerekiyor.
   - **DURUM: Kod hazır, canlı mobil doğrulama bekliyor.**
 
+- **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.242 (2 Eylül
+  2026, Bahri'nin bulgusu — "Bunu onayladıktan sonra neden çok uzun
+  süre bekliyorum?"): OTOMATİK TESPİT ONAYI SONRASI YAVAŞLIK - KESİN
+  KÖK NEDEN BULUNDU (v2.0.7.193'ten FARKLI, DAHA DERİN bir sorun).**
+  - **Bağlam:** v2.0.7.193 (25 Ağustos) bu şikayeti bir kez düzeltmişti
+    (genel `st.cache_data.clear()` yerine sadece 2 küçük önbelleği
+    temizleme) - ama Bahri AYNI şikayeti tekrar bildirdi. Bu, farklı
+    ve daha köklü ikinci bir performans sorunuydu.
+  - **Kök neden:** Bir tespit onaylanıp Değerli Maden/Döviz/BIST
+    kategorilerine puan ayarı uygulanacağı zaman, kod önce o
+    kategorilerdeki TÜM eksik (NaN) Optima_Skor'ları scoring.py ile
+    dolduruyor - bu adım `pandas.apply(..., axis=1)` (satır satır,
+    Python seviyesinde çalışan, pandas'ın EN YAVAŞ kalıplarından biri)
+    kullanıyordu VE ÖNBELLEKSİZDİ. Sorun SADECE onay anında değildi -
+    bir tespit onaylandıktan sonra 48 saatlik geçerlilik süresi
+    boyunca, kullanıcının yaptığı HER TEK etkileşimde (Streamlit her
+    etkileşimde tüm betiği yeniden çalıştırır) BIST'in (772 satır)
+    NaN skorlu tüm satırları için bu hesaplama YENİDEN yapılıyordu -
+    yani "onayladıktan sonra uzun süre bekleme" aslında tek seferlik
+    değil, SÜREKLİ TEKRARLANAN bir yavaşlıktı.
+  - **Çözüm:** Hesaplama `st.cache_data(ttl=300)` ile önbelleğe alındı
+    (`_bekleyen_tespitler_onbellekli` ile AYNI, dosyada zaten kurulu
+    kalıp). Artık aynı eksik-skorlu alt küme için tekrar tekrar
+    hesaplama yapılmıyor - sadece alttaki veri gerçekten değiştiğinde
+    (CSV yenilendiğinde, en fazla 5 dakikada bir) yeniden hesaplanıyor.
+  - **Doğrulama:** Hesaplama mantığının kendisi (lambda içeriği)
+    karakter karakter AYNI bırakıldı - sadece önbellek katmanı eklendi,
+    davranış/sonuç değişmedi, sadece tekrar eden gereksiz hesaplama
+    önlendi. Gerçek Streamlit ortamında canlı hız testi henüz
+    yapılmadı - bir sonraki onaydan sonra Bahri'nin gözlemlemesi
+    gerekiyor.
+  - **DURUM: Kod hazır, canlı hız iyileşmesi doğrulaması bekliyor.**
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

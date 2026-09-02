@@ -2834,19 +2834,39 @@ if _beklenti_ayarlar:
     # ayarlama uygulanmadan ÖNCE, etkilenen kategorilerdeki TÜM eksik
     # (NaN) Optima_Skor'lar önce scoring.py ile tam olarak hesaplanıp
     # dolduruluyor - böylece ayarlama HİÇBİR varlığı atlamadan uygulanır.
+    #
+    # v2.0.7.242 (2 Eylül 2026, Bahri'nin bulgusu — "onayladıktan sonra
+    # neden çok uzun süre bekliyorum"): KESİN KÖK NEDEN BULUNDU. Aşağıdaki
+    # `.apply(..., axis=1)` çağrısı satır satır Python seviyesinde
+    # çalışıyor (pandas'ın en yavaş kalıplarından biri) VE ÖNBELLEKSİZDİ -
+    # bir tespit onaylandığında SADECE o anki tıklamada değil, tespitin
+    # 48 saatlik geçerlilik süresi boyunca HER TEK sayfa yenilemesinde/
+    # etkileşiminde (Streamlit her etkileşimde TÜM betiği yeniden
+    # çalıştırır) BIST'in (772 satır) NaN skorlu TÜM satırları için
+    # YENİDEN hesaplanıyordu - "onayladıktan sonra uzun süre bekleme"
+    # aslında tek seferlik değil, SÜREKLİ tekrar eden bir yavaşlıktı.
+    # Çözüm: hesaplama `st.cache_data` ile önbelleğe alındı (5 dakika) -
+    # aynı eksik-skorlu alt küme için tekrar tekrar hesaplama yapılmıyor,
+    # sadece alttaki veri gerçekten değiştiğinde (CSV yenilendiğinde)
+    # yeniden hesaplanıyor.
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _eksik_skor_doldur_onbellekli(_alt_df: pd.DataFrame) -> pd.Series:
+        return _alt_df.apply(
+            lambda r: optima_score(
+                float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
+                vol=float(r.get("Vol", 30) or 30),
+                has_fundamental=any(
+                    v is not None and str(v) != "nan" and float(v or 0) > 0
+                    for v in (r.get("PB"), r.get("PE"), r.get("DY"))),
+                pb=r.get("PB"), pe=r.get("PE"), dy=r.get("DY")),
+            axis=1)
+
     _etkilenen_kategoriler = [k for k, v in _beklenti_kategori_ayar.items() if v != 0]
     for _kat_doldur in _etkilenen_kategoriler:
         _mask_eksik = (df_uni["Kategori"] == _kat_doldur) & (df_uni["Optima_Skor"].isna())
         if _mask_eksik.any():
-            df_uni.loc[_mask_eksik, "Optima_Skor"] = df_uni.loc[_mask_eksik].apply(
-                lambda r: optima_score(
-                    float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
-                    vol=float(r.get("Vol", 30) or 30),
-                    has_fundamental=any(
-                        v is not None and str(v) != "nan" and float(v or 0) > 0
-                        for v in (r.get("PB"), r.get("PE"), r.get("DY"))),
-                    pb=r.get("PB"), pe=r.get("PE"), dy=r.get("DY")),
-                axis=1)
+            df_uni.loc[_mask_eksik, "Optima_Skor"] = _eksik_skor_doldur_onbellekli(
+                df_uni.loc[_mask_eksik])
 
     for _kat, _ayar in _beklenti_kategori_ayar.items():
         if _ayar != 0:
