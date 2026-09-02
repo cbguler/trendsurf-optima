@@ -120,8 +120,19 @@ def _build_alert_html(user_email: str, alerts_pending: list,
     }.get(settings.get("emir_formul", "peak_minus_threshold"),
           "Peak x (1 - threshold)")
 
-    # Tablo satirlari
-    rows_html = ""
+    # v2.0.7.241 (2 Eylül 2026, Bahri'nin bulgusu — mobilde 9 sütunlu tablo
+    # okunamayacak kadar küçülüyordu, ekran görüntüsü ekte): YATAY TABLO
+    # YERİNE DİKEY "KART" TASARIMINA GEÇİLDİ. Kök neden: e-posta
+    # istemcileri (özellikle mobil Gmail uygulaması) geniş tabloları
+    # `overflow-x:auto` ile yatay kaydırmak yerine EKRANA SIĞDIRMAK için
+    # tüm hücreleri küçültüyor - 9 sütun mobilde okunaksız hale geliyordu.
+    # Her varlık artık kendi kutusunda, etiket-değer çiftleri ALT ALTA
+    # (2 sütunlu basit tablolar) gösteriliyor - bu düzen HERHANGİ bir
+    # ekran genişliğinde (mobil/masaüstü) otomatik okunaklı kalıyor,
+    # medya sorgusu (@media) veya flexbox/grid GEREKTİRMİYOR (bunlar
+    # Outlook gibi istemcilerde güvenilir değil - sadece <table>
+    # kullanılıyor, e-posta uyumluluğu için en güvenli yöntem).
+    cards_html = ""
     for a in alerts_pending:
         ticker      = a.get("ticker", "")
         kategori    = a.get("asset_type", "")
@@ -135,18 +146,48 @@ def _build_alert_html(user_email: str, alerts_pending: list,
         toplam      = _fmt_tr_num(a.get("toplam_deger"), 2)
         tavsi_disp  = tavsi if a.get("tavsiye_fiyat", 0) > 0 else "—"
 
-        rows_html += f"""
-        <tr style="border-bottom:1px solid #e5e7eb;">
-            <td style="padding:10px 12px;font-weight:700;color:#1b2a4a;">{ticker}</td>
-            <td style="padding:10px 12px;color:#6c7a9c;font-size:12px;">{kategori}</td>
-            <td style="padding:10px 12px;text-align:right;">{alish}</td>
-            <td style="padding:10px 12px;text-align:right;font-weight:700;color:#0d9488;">{peak}</td>
-            <td style="padding:10px 12px;text-align:right;font-weight:700;">{current}</td>
-            <td style="padding:10px 12px;text-align:right;color:#dc2626;font-weight:700;">{drop_pct}</td>
-            <td style="padding:10px 12px;text-align:right;color:#2563eb;font-weight:700;">{tavsi_disp}</td>
-            <td style="padding:10px 12px;text-align:right;color:#6c7a9c;">{miktar} {unit}</td>
-            <td style="padding:10px 12px;text-align:right;font-weight:700;">{toplam} TL</td>
-        </tr>
+        cards_html += f"""
+        <div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:16px;overflow:hidden;">
+            <table role="presentation" style="width:100%;border-collapse:collapse;background:#f9fafb;">
+                <tr>
+                    <td style="padding:14px 16px;font-size:19px;font-weight:800;color:#1b2a4a;">{ticker}</td>
+                    <td style="padding:14px 16px;text-align:right;font-size:13px;color:#6c7a9c;
+                               text-transform:uppercase;letter-spacing:0.5px;">{kategori}</td>
+                </tr>
+            </table>
+            <table role="presentation" style="width:100%;border-collapse:collapse;font-size:15px;">
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Alış</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:700;border-top:1px solid #f1f2f4;">{alish}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Peak</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:700;color:#0d9488;border-top:1px solid #f1f2f4;">{peak}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Şu Anki</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:700;border-top:1px solid #f1f2f4;">{current}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Düşüş</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:800;font-size:17px;
+                               color:#dc2626;border-top:1px solid #f1f2f4;">{drop_pct}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Tavsiye Fiyat</td>
+                    <td style="padding:10px 16px;text-align:right;font-weight:700;color:#2563eb;border-top:1px solid #f1f2f4;">{tavsi_disp}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 16px;color:#6c7a9c;border-top:1px solid #f1f2f4;">Miktar</td>
+                    <td style="padding:10px 16px;text-align:right;color:#374151;border-top:1px solid #f1f2f4;">{miktar} {unit}</td>
+                </tr>
+                <tr>
+                    <td style="padding:12px 16px;font-weight:800;color:#1b2a4a;border-top:2px solid #e5e7eb;">Toplam</td>
+                    <td style="padding:12px 16px;text-align:right;font-weight:800;font-size:16px;
+                               color:#1b2a4a;border-top:2px solid #e5e7eb;">{toplam} TL</td>
+                </tr>
+            </table>
+        </div>
         """
 
     html = f"""<!DOCTYPE html>
@@ -185,27 +226,8 @@ def _build_alert_html(user_email: str, alerts_pending: list,
                 göre değişebilir.
             </div>
 
-            <div style="overflow-x:auto;margin-top:20px;">
-                <table style="width:100%;border-collapse:collapse;font-size:13px;
-                              background:#fff;border:1px solid #e5e7eb;border-radius:8px;
-                              overflow:hidden;">
-                    <thead>
-                        <tr style="background:#f9fafb;color:#374151;text-align:left;
-                                   font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
-                            <th style="padding:12px;font-weight:700;">Ticker</th>
-                            <th style="padding:12px;font-weight:700;">Kategori</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Alış</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Peak</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Şu Anki</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Düşüş</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Tavsiye</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Miktar</th>
-                            <th style="padding:12px;font-weight:700;text-align:right;">Toplam</th>
-                        </tr>
-                    </thead>
-                    <tbody>{rows_html}
-                    </tbody>
-                </table>
+            <div style="margin-top:20px;">
+                {cards_html}
             </div>
 
             <div style="margin-top:24px;padding:14px 16px;background:#eff6ff;

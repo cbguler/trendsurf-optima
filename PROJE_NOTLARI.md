@@ -4841,19 +4841,11 @@ tamam, canlı doğrulama BEKLİYOR):**
     gelen yetkisiz erişimi kapatır. Politika (CREATE POLICY) eklenmedi -
     zaten çalışan diğer tablolardaki AYNI ("sadece RLS'i aç, politika
     yok" = PostgREST'ten sıfır erişim) deseni izleniyor.
-<<<<<<< Updated upstream
   - **✅ CANLI DOĞRULANDI (2 Eylül 2026):** Bahri push edip uygulamayı
     yeniden başlattı, Supabase Dashboard → Advisors → Security Advisor
     "0 errors / No errors detected - Congrats!" gösterdi. RLS düzeltmesi
     başarıyla uygulandı, kritik güvenlik açığı tamamen kapandı.
   - **DURUM: KAPANDI.**
-=======
-  - **AÇIK - Bahri'nin yapması gereken:** (1) `db.py`'yi push et,
-    (2) Streamlit Cloud'da "Manage app > Reboot app" ile uygulamayı
-    yeniden başlat (böylece `init_db()` yeniden çalışıp RLS'i açar),
-    (3) Supabase Dashboard → Advisors sayfasını yeniden çalıştırıp
-    "0 errors / No errors detected" görüldüğünü doğrula.
->>>>>>> Stashed changes
   - **KALICI KURAL (bu sefer GERÇEKTEN kalıcı hale getirildi):** Yeni
     bir Supabase tablosu eklenirken (ister `db.py`'de `CREATE TABLE`
     ile ister başka bir dosyada elle), AYNI anda `db.py`'deki RLS
@@ -4896,6 +4888,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     Regresyon testleri: parantezsiz eski senaryo, tek teyit kaynağı,
     teyit yokken hiç dokunmama - hepsi doğru çalışıyor.
   - **DURUM: KAPANDI.**
+
+- **[UYGULANDI, HTML İNCELENDİ - PUSH BEKLİYOR] v2.0.7.241 (2 Eylül
+  2026, Bahri'nin bulgusu — mobilde Kar Realizasyonu Uyarısı e-postası
+  ekran görüntüsü paylaşıldı, "varlık ile ilgili değerler okunamayacak
+  kadar küçük"): E-POSTA TABLOSU MOBİL UYUMLU "KART" TASARIMINA
+  ÇEVRİLDİ.**
+  - **Kök neden:** `peak_alert_emailer.py`'deki uyarı e-postası, her
+    varlık için 9 sütunlu (Ticker/Kategori/Alış/Peak/Şu Anki/Düşüş/
+    Tavsiye/Miktar/Toplam) TEK BİR YATAY tablo satırı kullanıyordu.
+    Mobil e-posta istemcileri (özellikle Gmail uygulaması), geniş
+    tabloları `overflow-x:auto` ile yatay kaydırmak yerine EKRANA
+    SIĞDIRMAK için tüm hücreleri küçültüyor - 9 sütun mobilde
+    okunamayacak kadar küçülüyordu.
+  - **Çözüm:** Her varlık artık kendi kutusunda ("kart"), etiket-değer
+    çiftleri ALT ALTA (basit 2 sütunlu tablolar) gösteriliyor. Bu
+    düzen HERHANGİ bir ekran genişliğinde (mobil/masaüstü) otomatik
+    okunaklı kalıyor - `@media` sorgusu veya flexbox/grid GEREKTİRMİYOR
+    (bunlar Outlook gibi e-posta istemcilerinde güvenilir değil);
+    sadece `<table>` kullanılıyor - e-posta uyumluluğu için en güvenli
+    yöntem. "Düşüş" satırı görsel olarak vurgulanmış (büyük, kırmızı,
+    kalın) - en kritik bilgi ilk bakışta göze çarpıyor.
+  - **Doğrulama:** Gerçek BAG örnek verisiyle HTML üretilip incelendi -
+    yapı doğru, tüm etiketler kapanıyor, birden fazla varlık olması
+    durumunda (`alerts_pending` listesi >1 eleman) her biri ayrı kart
+    olarak alt alta sıralanacak şekilde tasarlandı. Gerçek bir mobil
+    istemcide (Gmail uygulaması vb.) henüz CANLI görsel doğrulama
+    yapılmadı - bir sonraki gerçek uyarı e-postasında Bahri'nin
+    kontrol etmesi gerekiyor.
+  - **DURUM: Kod hazır, canlı mobil doğrulama bekliyor.**
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
