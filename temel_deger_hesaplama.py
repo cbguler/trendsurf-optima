@@ -454,7 +454,25 @@ def _format5_hesapla(metin: str) -> Optional["DonemDegerleme"]:
 # bulundu). Bu yuzden burada _SAYI YERINE, yakalanan grubun bir RAKAMLA
 # BASLAMASINI sart kosan ozel bir desen kullaniliyor.
 _F6_CARPAN_ANALIZI_DEGER = r"Carpan\s+Analizi\s*(\d[\d.,]*)"
-_F6_ODENMIS_SERMAYE = r"Odenmis\s+Sermaye[^\d]{0,80}(\d[\d.,]*)"
+# v2.0.7.239 NOT (Bahri'nin canli calistirmada bulduğu hata - VEYAS
+# carpan degeri 99.852.771 TL olarak (bolunmemis) gorundu): "Odenmis
+# Sermaye" ifadesi raporda BASKA yerlerde de (duz metin cumleleri
+# icinde, ornek: "...odenmis sermayesi dikkate alinarak 1 TL nominal
+# degerli pay basina...") geciyor - eski gevsek desen (`[^\d]{0,80}`)
+# bu PROZA cumlesindeki alakasiz "1" rakamini (nominal deger "1 TL"
+# ifadesinden) pay adedi SANIYORDU (99.852.771 / 1 = degismeden
+# donuyordu). "İlk+son sayfa" birlestirilmis metinde bu proza cumlesi,
+# GERCEK veri satirindan (Odenmis Sermaye (Bin TL) 529.355) ONCE
+# geldigi icin re.search ILK (yanlis) eslesmeyi yakaliyordu. Duzeltme:
+# etiketten hemen sonra parantez icinde "(Bin TL)" birim notasyonunu
+# SART kosuyoruz - bu SADECE gercek veri tablosu satirinda var, proza
+# cumlelerinde yok.
+# v2.0.7.239 (devam): "(Bin TL)"den SONRA da ikinci bir parantez ("(31.03.2026
+# itibarıyla)" gibi bir tarih notu) araya girebiliyor - bu da yanlislikla
+# "sayi" olarak yakalanabiliyordu (tarih "31.03.2026" -> "31032026" gibi
+# okunuyordu). Opsiyonel bir ikinci parantez grubu ACIKCA atlaniyor.
+_F6_ODENMIS_SERMAYE = (r"Odenmis\s+Sermaye\s*\(\s*Bin\s*TL\s*\)\s*"
+                        r"(?:\([^)]*\)\s*)?(\d[\d.,]*)")
 
 
 def _f6_carpan_pay_basi_deger(norm: str) -> Optional[float]:

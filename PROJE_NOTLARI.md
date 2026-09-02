@@ -2206,7 +2206,53 @@ tamam, canlı doğrulama BEKLİYOR):**
     ediliyor.
   - **Gerçek veriyle simüle edilip doğrulandı:** Kapeks → kendi raporu
     (6/6 kesişim), Bewen → kendi raporu (5/5 kesişim) - ikisi de doğru.
+  - **✅ CANLI DOĞRULANDI (2 Eylül 2026, 04:24 TRT çalıştırması):**
+    Kapeks'in kendi raporu artık doğru şekilde bulunuyor - arz_fiyati=
+    94,0 (önceki, YANLIŞ gösterilen 48,10 değeri aslında hep Bewen'e
+    aitmiş), carpan=80,58 (Format-3'ün daha önce doğrulanan kendi
+    değeriyle birebir aynı). Aynı çalıştırmada BLS (73,69, Format-4) ve
+    TERA85 (81,32, Format-5) de sorunsuz çalışmaya devam etti.
   - **DURUM: KAPANDI.**
+
+- **[UYGULANDI, GERÇEK CANLI HATA ÜZERİNDEN DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.239 (2 Eylül 2026, Bahri'nin paylaştığı canlı log - kendi
+  bulgusu): FORMAT-6'DA KRİTİK BÖLME HATASI BULUNDU VE DÜZELTİLDİ -
+  VEYAS için carpan_bazli_deger yanlışlıkla 99.852.771 TL (bölünmemiş
+  ham değer) olarak Supabase'e yazılmıştı.**
+  - **Bulgu:** v2.0.7.236 (Format-6) ilk yazıldığında SADECE raporun
+    TAM METNİYLE test edilmişti - ama gerçek pipeline önce SADECE
+    "ilk 15 + son 15 sayfa" birleştirilmiş kısaltılmış metni dener
+    ("İlk+son sayfa sonrası" aşaması). Bu kısaltılmış metinde format-6
+    ÇÖKTÜ: `carpan_bazli_deger=99852771.0` (188,63 TL yerine) - bölme
+    hiç gerçekleşmemiş gibi görünüyordu.
+  - **Kök neden (İKİ KATMANLI, art arda bulundu):**
+    (1) "Ödenmiş Sermaye" etiketi raporda BAŞKA yerlerde de (düz metin
+    cümlesi içinde: "...ödenmiş sermayesi dikkate alınarak **1** TL
+    nominal değerli pay başına...") geçiyordu - eski gevşek desen bu
+    cümledeki alakasız "1" rakamını pay adedi SANIYORDU (99.852.771/1
+    = değişmeden dönüyordu). Kısaltılmış "ilk+son" metinde bu yanlış
+    cümle, GERÇEK veri satırından (sayfa sırası birleştirme nedeniyle)
+    ÖNCE geldiği için `re.search` yanlış eşleşmeyi yakalıyordu.
+    (2) İlk düzeltme (etikete "(Bin TL)" birim notasyonu şartı ekleme)
+    YETERSİZ çıktı - bu sefer regex, "(Bin TL)" ile gerçek sayı
+    arasına giren İKİNCİ bir parantezi ("(31.03.2026 itibarıyla)" tarih
+    notu) sayı sanıp "31032026" olarak yakaladı.
+  - **Nihai çözüm:** Regex artık HEM "(Bin TL)" birim notasyonunu HEM
+    de opsiyonel bir sonraki parantez grubunu (tarih notu gibi) açıkça
+    atlayıp GERÇEK sayıya ("529.355") ulaşıyor.
+  - **Doğrulama metodolojisi güncellendi:** Bundan sonra her yeni
+    format, SADECE tam metinle değil, gerçek pipeline'ın kullandığı
+    "ilk 15 + son 15 sayfa" KISALTILMIŞ metniyle de test edilecek -
+    bu hatayı gösteren senaryo tam olarak buydu, tam metin testi tek
+    başına yeterli değildi. Tüm formatlar (3/4/5/6) bu iki koşulda da
+    (tam metin + ilk+son kısaltılmış metin) yeniden test edildi, hepsi
+    doğru sonuç veriyor.
+  - **Kendi kendine düzelecek:** Yanlış değer (99.852.771) zaten
+    Supabase'e yazılmıştı, ama `graham_degeri` boş kaldığı için mevcut
+    "force_refresh ile yeniden dene" mekanizması (v2.0.4.18 kuralı) bu
+    kaydı BİR SONRAKİ çalıştırmada otomatik silip doğru değerle
+    (188,63 TL) yeniden hesaplayacak - elle müdahale gerekmiyor.
+  - **DURUM: KAPANDI - bir sonraki çalıştırmada canlı doğrulanmalı.**
 
 - **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
   2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul
