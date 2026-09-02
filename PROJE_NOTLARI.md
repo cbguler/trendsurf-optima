@@ -4753,5 +4753,58 @@ tamam, canlı doğrulama BEKLİYOR):**
   denendi — **BAŞARISIZ, v2.0.7.88 ile GERİ ALINDI** (Streamlit'in
   element-degistirme modeli yanlış anlaşılmıştı, bkz. §4).
 
+- **[UYGULANDI, PUSH BEKLİYOR - APP YENİDEN BAŞLATILINCA OTOMATİK
+  UYGULANACAK] v2.0.7.238 (1 Eylül 2026, Supabase'in gönderdiği güvenlik
+  e-postası - Bahri'nin bulgusu): KRİTİK GÜVENLİK - "ipo_valuations" ve
+  7 "haber izleme" TABLOSUNDA RLS KALICI OLARAK KAPATILDI (kod
+  seviyesinde, artık bir daha unutulamaz).**
+  - **Tetikleyici:** Supabase, "trendsurf-optima" projesinde "Table
+    publicly accessible - Row-Level Security is not enabled" uyarısı
+    içeren bir e-posta gönderdi (proje URL'sini bilen HERKESİN o tabloyu
+    okuyup/değiştirip/silebileceği anlamına geliyor).
+  - **Kök neden (iki katmanlı, ikisi de "elle düzeltilmiş ama koda hiç
+    işlenmemiş" kalıbı):**
+    (1) 25 Ağustos 2026'da AYNI uyarı 7 "haber izleme" tablosu için
+    çıkmıştı (`beklenti_otomatik_tespit`, `kullanici_tespit_karari`,
+    `haber_islenmis`, `haber_akisi`, `ai_cagri_butcesi`,
+    `haber_kaliplari`, `haber_kalip_kelime`, `haber_kalip_etki`) -
+    o zaman SADECE Supabase SQL editöründe elle düzeltilmiş,
+    `db.py`'deki RLS döngüsüne (v2.0.7.100'den beri var olan, ama
+    SADECE 8 farklı - `users/portfolio/sessions/password_resets/
+    portfolio_sales/portfolio_fee_settings/portfolio_capital_tx/
+    benchmark_rates` - tabloyu kapsayan) HİÇ eklenmemişti. O zamanki
+    "KALICI KURAL - GELECEKTE HATIRLANMALI" notu yazılmış ama
+    UYGULANMAMIŞTI.
+    (2) `ipo_valuations` tablosu (v2.0.6.4, 10 Temmuz 2026) `db.py`'de
+    HİÇ `CREATE TABLE` içermiyor - elle/dışarıda oluşturulmuş - bu
+    yüzden ne 22 Temmuz'daki (v2.0.7.100) ne 25 Ağustos'taki taramaya
+    hiç girmemişti. 1 Eylül'deki uyarının EN OLASI kaynağı bu tablo.
+  - **Çözüm - bu sefer KALICI (koda işlendi):** `db.py`'nin `init_db()`
+    fonksiyonunun sonuna, mevcut 8-tablolu RLS döngüsünün HEMEN
+    ARDINDAN, eksik kalan 8 tabloyu (7 haber izleme tablosu +
+    `ipo_valuations`) kapsayan İKİNCİ bir `ALTER TABLE ... ENABLE ROW
+    LEVEL SECURITY` döngüsü eklendi. `init_db()` `app.py` başlangıcında
+    OTOMATİK çalıştığı için, bu düzeltme uygulamanın bir sonraki
+    başlatılmasında KENDİLİĞİNDEN uygulanacak - elle SQL çalıştırmaya
+    gerek YOK.
+  - **Güvenlik notu (önceki sweeple AYNI, doğrulanmış ilke):** Uygulama
+    Supabase'e `SUPABASE_DB_URL` ile DOĞRUDAN Postgres bağlantısı
+    kullanıyor (RLS'i doğal olarak atlayan bir rolle) - RLS açmak
+    uygulamanın kendi erişimini ETKİLEMEZ, sadece Supabase'in genel
+    PostgREST API'sinden (proje URL'siyle herkesin erişebildiği katman)
+    gelen yetkisiz erişimi kapatır. Politika (CREATE POLICY) eklenmedi -
+    zaten çalışan diğer tablolardaki AYNI ("sadece RLS'i aç, politika
+    yok" = PostgREST'ten sıfır erişim) deseni izleniyor.
+  - **AÇIK - Bahri'nin yapması gereken:** (1) `db.py`'yi push et,
+    (2) Streamlit Cloud'da "Manage app > Reboot app" ile uygulamayı
+    yeniden başlat (böylece `init_db()` yeniden çalışıp RLS'i açar),
+    (3) Supabase Dashboard → Advisors sayfasını yeniden çalıştırıp
+    "0 errors / No errors detected" görüldüğünü doğrula.
+  - **KALICI KURAL (bu sefer GERÇEKTEN kalıcı hale getirildi):** Yeni
+    bir Supabase tablosu eklenirken (ister `db.py`'de `CREATE TABLE`
+    ile ister başka bir dosyada elle), AYNI anda `db.py`'deki RLS
+    döngülerinden birine (veya yeni bir üçüncüsüne) o tablo adı da
+    eklenmeli - bu iki kez atlanmış bir adım, üçüncü kez atlanmamalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
