@@ -2145,19 +2145,68 @@ tamam, canlı doğrulama BEKLİYOR):**
     raporun kendi değerleriyle birebir eşleşti.
   - **AÇIK - Bahri'ye soruldu, cevap bekleniyor (2 madde):**
     (1) Aynı VEYAS raporu, Graham/Çarpan için ALTINCI farklı bir format
-    kullanıyor ("VEYAS - Değerleme Özeti" kutusu: "İNA Yöntemi" /
-    "Çarpan Analizi" satırları, Bin TL cinsinden, "Ödenmiş Sermaye"ye
+    kullanıyor (\"VEYAS - Değerleme Özeti\" kutusu: \"İNA Yöntemi\" /
+    \"Çarpan Analizi\" satırları, Bin TL cinsinden, \"Ödenmiş Sermaye\"ye
     bölünmesi gerekiyor - hesaplanabilir: ~188,6 TL). Format-6 yazılsın
-    mı yoksa bu turda atlansın mı?
+    mı yoksa bu turda atlansın mı? **→ CEVAP: Evet, yaz. Aşağıda
+    v2.0.7.236'ya bkz.**
     (2) TSK/TSKB satırında bir ETİKETLEME hatası bulundu: "Kapeks Kimya
     Sanayi A.Ş" satırında görünen Çarpan Bazlı Değer (51,84) aslında
-    BEWEN Enerji'ye ait - iki şirket de KAP'ın izahname listesinde AYNI
-    "TSK, TSKB" kodunu paylaştığı için (muhtemelen ortak aracı kurum
-    TSKB nedeniyle), ticker koduna dayalı eşleştirme ikisini de aynı
-    Fiyat Tespit Raporu'na yönlendiriyor. Düzeltme, şirket ADI bazlı
-    (ör. "Kapeks" ~ "KPEKS" kodu, "Bewen" ~ "BEWEN" kodu) daha spesifik
-    bir eşleştirme mantığı gerektiriyor - mevcut kodu bozma riski
-    taşıyan bir değişiklik, bu yüzden önce onay isteniyor.
+    BEWEN Enerji'ye ait. **→ CEVAP: Evet, düzelt. Aşağıda v2.0.7.237'ye
+    bkz.**
+
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.236
+  (1 Eylül 2026, Bahri'nin talebi — "Evet, yaz"): FORMAT-6 EKLENDİ -
+  "İNA Yöntemi / Çarpan Analizi" kutusu (Bin TL cinsinden).**
+  - Vakıf Yatırım'ın VEYAS raporu, "<Kod> - Değerleme Özeti" başlığı
+    altında "İNA Yöntemi 80.139.640 %50" / "Çarpan Analizi 99.852.771
+    %50" satırları veriyor (Bin TL). Aynı raporun "Ödenmiş Sermaye
+    (Bin TL)" değeri (1 TL nominal olduğu için AYNI ZAMANDA pay adedi)
+    İLE AYNI BİRİMDE olduğundan, "Bin" katsayısı bölme işleminde
+    birbirini götürüyor - ham sayılar doğrudan bölünebiliyor.
+  - **Canlı testte bulunan ek bir hata:** İlk denemede "Çarpan Analizi"
+    ifadesi raporun İÇİNDEKİLER tablosundaki nokta doldurma karakterleri
+    ("5.1.3. Çarpan Analizi ...................") ile yanlış eşleşti -
+    kök neden: paylaşılan `_SAYI` deseni (`\(?-?[\d.,]+\)?`) EN AZ BİR
+    RAKAM ZORUNLU KILMIYOR, salt nokta dizisi de "sayı" sayılıyordu.
+    Format-6'nın kendi deseni, yakalanan grubun bir RAKAMLA BAŞLAMASINI
+    şart koşacak şekilde düzeltildi (`\d[\d.,]*`) - bu, `_SAYI`'nın
+    paylaşılan/gizli bir kusuru, başka formatlarda da tetiklenme
+    ihtimaline karşı not düşülüyor.
+  - **Gerçek metinle doğrulandı:** 188,63101510328607 TL (elle
+    hesaplanan 99.852.771 / 529.355 ile birebir aynı). Ayrıca BLS,
+    TERA85, INM (boş kalmalı) ile birlikte tam regresyon testi
+    yapıldı - hiçbiri bozulmadı.
+  - **DURUM: KAPANDI.**
+
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.237
+  (1 Eylül 2026, Bahri'nin talebi — "Evet, düzelt"): KAPEKS/BEWEN
+  ETİKETLEME HATASI KÖKTEN DÜZELTİLDİ - kesişim tabanlı eşleştirme.**
+  - **Kök neden (tam teşhis):** İki AYRI hata bir araya gelmişti:
+    (1) `_en_iyi_eslesme()` sadece genel "Kod" alanını (stockCode -
+    "TSK, TSKB", TSKB'nin TÜM müşterilerinde aynı) kullanıyordu,
+    şirkete özel kodu (relatedStocks - "KPEKS", "BEWEN") hiç
+    kullanmıyordu. (2) `_fetch_fiyat_tespit_map()`'in "en güncel"
+    seçimi DÜZ METİN tarih karşılaştırması yapıyordu
+    ("25.07..." metin olarak "07.08..."den BÜYÜK görünüyor, oysa
+    takvimde 07 Ağustos daha yeni) - temettü modülündeki (v2.0.7.230)
+    AYNI SINIF hatanın buradaki eşdeğeri.
+  - **İlk denenen düzeltme YETERSİZ çıktı:** Önce "önce özel kodu dene,
+    yoksa genel koda düş" mantığı denendi - ama bu da yanıltıcı oldu:
+    Bewen'in "YAT"/"YFMEN" gibi PAYLAŞILAN (Kapeks'te de geçen) özel
+    kodları, o kodların "en güncel" (Kapeks'e ait) haline yönlendirdiği
+    için Bewen'in kendi "BEWEN" kodunu ezip geçiyordu.
+  - **Gerçek çözüm - KESİŞİM BÜYÜKLÜĞÜ:** `_fetch_fiyat_tespit_map()`
+    artık her bildirimin TAM kod kümesini de saklıyor (`_kodlar`).
+    Eşleştirme, bir IPO satırının TÜM kodlarının (Kod + relatedStocks)
+    her aday Fiyat Tespit Raporu'nun kod kümesiyle KESİŞİM BÜYÜKLÜĞÜNÜ
+    hesaplıyor - en çok örtüşen bildirim kazanıyor (eşitlikte en
+    güncel olan). Kapeks'in 6 kodu kendi raporuyla 6/6 örtüşürken
+    Bewen'in raporuyla sadece kısmi örtüşüyor - artık doğru ayırt
+    ediliyor.
+  - **Gerçek veriyle simüle edilip doğrulandı:** Kapeks → kendi raporu
+    (6/6 kesişim), Bewen → kendi raporu (5/5 kesişim) - ikisi de doğru.
+  - **DURUM: KAPANDI.**
 
 - **[UYGULANDI, CANLI TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.231 (1 Eylül
   2026, Bahri'nin talebi — "dil önemli değil, önemli olan dünyaca kabul

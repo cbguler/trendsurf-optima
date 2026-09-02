@@ -438,6 +438,66 @@ def _format5_hesapla(metin: str) -> Optional["DonemDegerleme"]:
     return dv
 
 
+# ── v2.0.7.236: FORMAT-6 - ayri bir "... Degerleme Ozeti" kutusunda
+# "INA Yontemi" / "Carpan Analizi" satirlari (Bin TL cinsinden), Odenmis
+# Sermayeye (ayni birimde) bolerek pay basina indirgemek gerekiyor ─────────
+# Vakif Yatirim'in hazirladigi rapor (Turker Vangolu Enerji/VEYAS): "<Kod> -
+# Degerleme Ozeti" basligi altinda "INA Yontemi <deger1> %50" ve "Carpan
+# Analizi <deger2> %50" satirlari var - degerler Bin TL cinsinden. Ayni
+# raporun "Odenmis Sermaye (Bin TL)" degeri (1 TL nominal degerli oldugu
+# icin AYNI ZAMANDA pay adedi) İLE AYNI BIRIMDE oldugundan, "Bin" katsayisi
+# bolme isleminde birbirini goturur - ham sayilar dogrudan bolunebilir.
+# v2.0.7.236 NOT: Genel _SAYI deseni (\(?-?[\d.,]+\)?) EN AZ BIR RAKAM
+# ZORUNLU KILMIYOR - salt nokta dizisi (ör. icindekiler tablosundaki
+# "Carpan Analizi ..................." sayfa numarasi doldurma noktalari)
+# da eslesiyordu, bu da YANLIS ESLESMEYE yol aciyordu (canli testte
+# bulundu). Bu yuzden burada _SAYI YERINE, yakalanan grubun bir RAKAMLA
+# BASLAMASINI sart kosan ozel bir desen kullaniliyor.
+_F6_CARPAN_ANALIZI_DEGER = r"Carpan\s+Analizi\s*(\d[\d.,]*)"
+_F6_ODENMIS_SERMAYE = r"Odenmis\s+Sermaye[^\d]{0,80}(\d[\d.,]*)"
+
+
+def _f6_carpan_pay_basi_deger(norm: str) -> Optional[float]:
+    """'... Degerleme Ozeti' kutusunun 'Carpan Analizi' satirindaki
+    Ozsermaye Degerini (Bin TL), raporun Odenmis Sermaye (Bin TL) rakamina
+    bolerek pay basina indirger. "Carpan Analizi" ifadesi raporda metodoloji
+    anlatimi icinde de gecebiliyor - hemen ardindan bir SAYI gelen TEK
+    yer gercek deger satiridir, bu yuzden ek bir baslik/kutu arama
+    gerekmiyor (_SAYI capasi kendiliginden ayirt edici)."""
+    m_deger = re.search(_F6_CARPAN_ANALIZI_DEGER, norm, re.IGNORECASE)
+    m_sermaye = re.search(_F6_ODENMIS_SERMAYE, norm, re.IGNORECASE)
+    if not (m_deger and m_sermaye):
+        return None
+    ozsermaye = _tr_sayi_to_float(m_deger.group(1))
+    pay_adedi = _tr_sayi_to_float(m_sermaye.group(1))
+    if not (ozsermaye and pay_adedi and pay_adedi > 0):
+        return None
+    return ozsermaye / pay_adedi
+
+
+def _format6_hesapla(metin: str) -> Optional["DonemDegerleme"]:
+    """Format-6 ana akisi. Basari kosulu saglanmazsa None."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    carpan_pay_basi = _f6_carpan_pay_basi_deger(norm)
+    if carpan_pay_basi is None or carpan_pay_basi <= 0:
+        return None
+
+    dv = DonemDegerleme(donem_etiketi="Rapor Ozeti (Format-6)")
+    dv.carpan_bazli_deger = carpan_pay_basi
+    dv.notlar.append(
+        "Format-6: raporun 'Degerleme Ozeti' kutusundaki 'Carpan Analizi' "
+        "satirinin Ozsermaye Degeri (Bin TL), ayni raporun Odenmis "
+        "Sermaye (Bin TL) rakamina bolunerek pay basina indirgendi - "
+        "raporun kendi agirlikli (INA ile karma) NIHAI sonucu DEGIL, "
+        "SADECE carpan yontemi payi")
+    dv.notlar.append(
+        "Graham: bu formatta hesaplanamiyor (INA yontemi ayri, raporun "
+        "kendi DCF sonucu - Graham Sayisi ile ayni sey degil, bilerek "
+        "None birakildi)")
+    return dv
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -585,6 +645,16 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
         f5 = _format5_hesapla(metin)
         if f5 is not None:
             sonuclar.append(f5)
+
+    # ── v2.0.7.236: FORMAT-6 YEDEGI ──────────────────────────────────────
+    # Onceki BES asama da basarisiz olursa (Vakif Yatirim'in VEYAS icin
+    # kullandigi "INA Yontemi / Carpan Analizi" Bin-TL-bazli kutu tarzi
+    # gibi) Format-6 denenir.
+    if not any(d.graham_degeri is not None or d.carpan_bazli_deger is not None
+               for d in sonuclar):
+        f6 = _format6_hesapla(metin)
+        if f6 is not None:
+            sonuclar.append(f6)
 
     return sonuclar
 

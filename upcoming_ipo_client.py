@@ -671,22 +671,35 @@ FIYAT_TESPIT_PARAMS = {
 }
 
 
-def _fetch_fiyat_tespit_map() -> dict:
-    """Fiyat Tespit Raporu bildirimlerini ceker, her ticker kodu icin EN GUNCEL
-    bildirimin KAP linkini dondurur: {"GOLDA": {"url": ..., "tarih": ...}, ...}
+def _fetch_fiyat_tespit_map() -> tuple:
+    """Fiyat Tespit Raporu bildirimlerini ceker. Iki deger dondurur:
+      1) code_map: her ticker kodu icin EN GUNCEL bildirimin KAP linki
+         {"GOLDA": {"url": ..., "tarih": ...}, ...} (basit/hizli arama icin)
+      2) disclosures: HER bildirimin TAM kod kumesini (stockCode+relatedStocks)
+         iceren liste - v2.0.7.237'de eklendi, bkz. asagidaki not.
     Bir sirketin birden fazla bolumlu raporu olabilir (orn. Golda icin
     "Sayfa 1-36" + "Sayfa 37-72") - en yeni publishDate kazanir.
-    Hata durumunda SESSIZCE bos sozluk doner - cagiran taraf link gostermez,
-    ama IPO listesi kendisi etkilenmez."""
+    Hata durumunda SESSIZCE (bos dict, bos liste) doner - cagiran taraf
+    link gostermez, ama IPO listesi kendisi etkilenmez.
+
+    v2.0.7.237 (Bahri'nin bulgusu - Kapeks/Bewen karisikligi): SADECE
+    code_map (kod -> TEK en guncel bildirim) yeterli DEGIL - iki farkli
+    sirket AYNI paylasilan/genel kodu (ornek "TSK, TSKB" - ortak araci
+    kurum TSKB) kullanabiliyor, bu durumda code_map o kod icin sadece
+    TEK (en guncel) sirketi hatirlar, digeri "kaybolur". 'disclosures'
+    listesi, eslestirme sirasinda HANGI bildirimin sorgulanan satirin
+    kod kumesiyle EN COK ORTUSTUGUNU (kesisim buyuklugu) bulabilmek icin
+    tutuluyor - bu, salt "en guncel" secmekten cok daha guvenilir."""
     try:
         html_text = _fetch_kap_html(FIYAT_TESPIT_PARAMS)
         if not html_text:
-            return {}
+            return {}, []
         raw_records = _extract_disclosure_json(html_text)
         if not raw_records:
-            return {}
+            return {}, []
 
         code_map = {}
+        disclosures = []
         for rec in raw_records:
             d = rec.get("disclosureBasic", {})
             idx = d.get("disclosureIndex", "")
@@ -695,24 +708,44 @@ def _fetch_fiyat_tespit_map() -> dict:
             publish_date = d.get("publishDate", "")
             url = KAP_DETAIL_URL.format(disclosure_index=idx)
 
+            # v2.0.7.237: DD.MM.YYYY bicimini dogru KRONOLOJIK karsilastirma
+            # icin sortlanabilir YYYYMMDDHHMMSS anahtarina cevir - duz metin
+            # karsilastirmasi GUN basamagini ONCE kiyasladigi icin YANLIS
+            # sonuc verebiliyordu (ornek: '25.07...' metin olarak '07.08...'
+            # dan BUYUK gorunur, ama takvimde 07 Agustos 25 Temmuz'dan daha
+            # yenidir). Bu, Kapeks/Bewen karisikligina KATKIDA BULUNAN ikinci
+            # bir hataydi (temettu_client.py'deki ayni sinif hatanin
+            # esdegeri - bkz. v2.0.7.230).
+            try:
+                gun, ay, geri = publish_date.split(".", 2)
+                yil = geri[:4]
+                saat_kismi = geri[4:].strip().replace(":", "").replace(" ", "")
+                sirala_anahtari = f"{yil}{ay}{gun}{saat_kismi}"
+            except Exception:
+                sirala_anahtari = publish_date
+
             # stockCode + relatedStocks icindeki TUM kodlari cikar (virgul/boslukla ayrik)
             raw_codes = f"{d.get('stockCode','')},{d.get('relatedStocks','')}"
-            codes = [c.strip().upper() for c in re.split(r"[,\s]+", raw_codes) if c.strip()]
+            codes = [c.strip().upper() for c in re.split(r"[,\s]+", raw_codes)
+                     if c.strip() and 2 <= len(c.strip()) <= 8]
+            if not codes:
+                continue
+
+            bildirim = {"url": url, "tarih": publish_date, "disclosure_index": idx,
+                        "_sirala": sirala_anahtari, "_kodlar": set(codes)}
+            disclosures.append(bildirim)
 
             for code in codes:
-                if len(code) < 2 or len(code) > 8:
-                    continue
                 existing = code_map.get(code)
-                if existing is None or publish_date > existing.get("tarih", ""):
-                    code_map[code] = {"url": url, "tarih": publish_date,
-                                        "disclosure_index": idx}
+                if existing is None or sirala_anahtari > existing.get("_sirala", ""):
+                    code_map[code] = bildirim
 
         print(f"[upcoming-ipo] Fiyat Tespit Raporu: {len(raw_records)} bildirim -> "
               f"{len(code_map)} benzersiz ticker eslesti", flush=True)
-        return code_map
+        return code_map, disclosures
     except Exception as e:
         print(f"[upcoming-ipo] Fiyat Tespit Raporu eslestirmesi atlandi (hata): {e}", flush=True)
-        return {}
+        return {}, []
 
 
 # ── KAP'tan cekim ve JSON cikarma (2 Temmuz 2026'da dogrulanan yontem) ────────
@@ -886,6 +919,15 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
                 "Durum":     cat["durum_label"],
                 "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
                 "_dedup_key": f"{kod_raw}|{related}",
+                # v2.0.7.237: relatedStocks AYRICA saklanıyor - "Kod" alanı
+                # (stockCode) çoğu zaman şirketin KENDİ ticker'ı değil,
+                # aracı kurumun genel kodu (ör. "TSK, TSKB" = TSKB'nin TÜM
+                # müşterileri için aynı) - bu tek başına iki farklı şirketi
+                # (Kapeks/Bewen gibi) ayırt edemiyor. relatedStocks ise
+                # şirkete ÖZEL kodu (ör. "KPEKS", "BEWEN") içeriyor -
+                # Fiyat Tespit Raporu eşleştirmesinde ikisi BİRLİKTE
+                # kullanılacak (bkz. _en_iyi_eslesme).
+                "_related_kod": related,
             })
 
         print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi", flush=True)
@@ -928,18 +970,49 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
         df["Graham_Degeri"] = None
         df["Carpan_Bazli_Deger"] = None
         try:
-            ft_map = _fetch_fiyat_tespit_map()
+            ft_map, ft_disclosures = _fetch_fiyat_tespit_map()
             if ft_map:
-                def _en_iyi_eslesme(kod_raw):
-                    codes = [c.strip().upper() for c in re.split(r"[,\s]+", str(kod_raw)) if c.strip()]
-                    best = None
-                    for c in codes:
-                        hit = ft_map.get(c)
-                        if hit and (best is None or hit["tarih"] > best["tarih"]):
-                            best = hit
-                    return best
+                def _kodlari_cikar(ham):
+                    return {c.strip().upper() for c in re.split(r"[,\s]+", str(ham)) if c.strip()}
 
-                eslesmeler = df["Kod"].apply(_en_iyi_eslesme)
+                def _en_iyi_eslesme(row):
+                    # v2.0.7.237 (Bahri'nin bulgusu - Kapeks/Bewen karisikligi):
+                    # Basit "kod -> EN GUNCEL bildirim" eslestirmesi yeterli
+                    # degildi - iki farkli sirket AYNI paylasilan/genel kodu
+                    # (ornek "TSK, TSKB" - ortak araci kurum TSKB; hatta "YAT",
+                    # "YFMEN" gibi bazi kodlar da iki sirket arasinda ortak
+                    # cikabiliyor) kullanabiliyor. Sadece "en son tarihli"
+                    # secmek, satirin KENDI ozel kodunu (ornek "BEWEN")
+                    # gormezden gelip paylasilan kodun EN GUNCEL sahibine
+                    # (ornek Kapeks) yanlislikla yonlendirebiliyordu.
+                    #
+                    # Cozum: satirin TUM kodlarini (Kod + relatedStocks) bir
+                    # kume olarak al, HER aday Fiyat Tespit Raporu bildirimiyle
+                    # KESISIM BUYUKLUGUNU hesapla - en cok ORTUSEN bildirim
+                    # kazanir (esitlikte en guncel olan). Bu, "Kapeks" satirinin
+                    # kendi 5 kodundan (TSK,TSKB,KPEKS,YAT,YFMEN,ZRY) kendi
+                    # raporuyla 6/6 orusurken Bewen'in raporuyla sadece
+                    # kismi ortustugunu doğru ayirt eder.
+                    satir_kodlari = (_kodlari_cikar(row.get("Kod", "")) |
+                                      _kodlari_cikar(row.get("_related_kod", "")))
+                    if not satir_kodlari or not ft_disclosures:
+                        return None
+                    en_iyi = None
+                    en_iyi_skor = -1
+                    for bildirim in ft_disclosures:
+                        skor = len(satir_kodlari & bildirim["_kodlar"])
+                        if skor == 0:
+                            continue
+                        if (skor > en_iyi_skor or
+                                (skor == en_iyi_skor and
+                                 bildirim.get("_sirala", "") > en_iyi.get("_sirala", ""))):
+                            en_iyi_skor = skor
+                            en_iyi = bildirim
+                    return en_iyi
+
+                eslesmeler = df.apply(_en_iyi_eslesme, axis=1)
+                if "_related_kod" in df.columns:
+                    df = df.drop(columns=["_related_kod"])
                 df["Fiyat_Tespit_URL"] = eslesmeler.apply(lambda h: h["url"] if h else "")
                 eslesen = (df["Fiyat_Tespit_URL"] != "").sum()
                 print(f"[upcoming-ipo] Fiyat Tespit Raporu eslesen satir sayisi: {eslesen}/{len(df)}", flush=True)
