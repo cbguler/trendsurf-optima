@@ -4841,11 +4841,11 @@ tamam, canlı doğrulama BEKLİYOR):**
     gelen yetkisiz erişimi kapatır. Politika (CREATE POLICY) eklenmedi -
     zaten çalışan diğer tablolardaki AYNI ("sadece RLS'i aç, politika
     yok" = PostgREST'ten sıfır erişim) deseni izleniyor.
-  - **AÇIK - Bahri'nin yapması gereken:** (1) `db.py`'yi push et,
-    (2) Streamlit Cloud'da "Manage app > Reboot app" ile uygulamayı
-    yeniden başlat (böylece `init_db()` yeniden çalışıp RLS'i açar),
-    (3) Supabase Dashboard → Advisors sayfasını yeniden çalıştırıp
-    "0 errors / No errors detected" görüldüğünü doğrula.
+  - **✅ CANLI DOĞRULANDI (2 Eylül 2026):** Bahri push edip uygulamayı
+    yeniden başlattı, Supabase Dashboard → Advisors → Security Advisor
+    "0 errors / No errors detected - Congrats!" gösterdi. RLS düzeltmesi
+    başarıyla uygulandı, kritik güvenlik açığı tamamen kapandı.
+  - **DURUM: KAPANDI.**
   - **KALICI KURAL (bu sefer GERÇEKTEN kalıcı hale getirildi):** Yeni
     bir Supabase tablosu eklenirken (ister `db.py`'de `CREATE TABLE`
     ile ister başka bir dosyada elle), AYNI anda `db.py`'deki RLS
