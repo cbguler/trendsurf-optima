@@ -636,6 +636,30 @@ def init_db():
         except Exception as _e:
             print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
 
+    # v2.0.7.238 (1 Eylül 2026, Supabase güvenlik uyarısı e-postası -
+    # Bahri'nin bulgusu): Yukarıdaki liste SADECE 22 Temmuz'daki (v2.0.7.100)
+    # 8 tabloyu kapsıyordu. AMA 25 Ağustos'ta AYRICA 7 "haber izleme"
+    # tablosunda (beklenti_otomatik_tespit, kullanici_tespit_karari,
+    # haber_islenmis, haber_akisi, ai_cagri_butcesi, haber_kaliplari,
+    # haber_kalip_kelime, haber_kalip_etki) AYNI uyarı çıkmıştı - o zaman
+    # SADECE Supabase SQL editöründe ELLE düzeltilmiş, bu koda HİÇ
+    # işlenmemişti (KALICI KURAL o zaman yazılmıştı ama uygulanmamıştı).
+    # Ayrıca `ipo_valuations` (upcoming_ipo_client.py, v2.0.6.4) de bu
+    # tabloyu bu dosyada hiç OLUŞTURMADIĞI için (dışarıda, elle
+    # oluşturulmuş) HİÇBİR sweep'e hiç girmemişti - 1 Eylül 2026'daki
+    # Supabase uyarısının en olası kaynağı bu tablo. Yukarıdaki listeye
+    # eklenerek artık HER uygulama başlangıcında (init_db her çalıştığında)
+    # bu tablolarda da RLS'in açık kaldığı garanti ediliyor - bir daha
+    # "manuel düzelttim ama koda işlemeyi unuttum" riski kalmıyor.
+    for _rls_tablo in ("beklenti_otomatik_tespit", "kullanici_tespit_karari",
+                       "haber_islenmis", "haber_akisi", "ai_cagri_butcesi",
+                       "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
+                       "ipo_valuations"):
+        try:
+            c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
+        except Exception as _e:
+            print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
+
     conn.commit()
     conn.close()
 
