@@ -4841,16 +4841,61 @@ tamam, canlı doğrulama BEKLİYOR):**
     gelen yetkisiz erişimi kapatır. Politika (CREATE POLICY) eklenmedi -
     zaten çalışan diğer tablolardaki AYNI ("sadece RLS'i aç, politika
     yok" = PostgREST'ten sıfır erişim) deseni izleniyor.
+<<<<<<< Updated upstream
   - **✅ CANLI DOĞRULANDI (2 Eylül 2026):** Bahri push edip uygulamayı
     yeniden başlattı, Supabase Dashboard → Advisors → Security Advisor
     "0 errors / No errors detected - Congrats!" gösterdi. RLS düzeltmesi
     başarıyla uygulandı, kritik güvenlik açığı tamamen kapandı.
   - **DURUM: KAPANDI.**
+=======
+  - **AÇIK - Bahri'nin yapması gereken:** (1) `db.py`'yi push et,
+    (2) Streamlit Cloud'da "Manage app > Reboot app" ile uygulamayı
+    yeniden başlat (böylece `init_db()` yeniden çalışıp RLS'i açar),
+    (3) Supabase Dashboard → Advisors sayfasını yeniden çalıştırıp
+    "0 errors / No errors detected" görüldüğünü doğrula.
+>>>>>>> Stashed changes
   - **KALICI KURAL (bu sefer GERÇEKTEN kalıcı hale getirildi):** Yeni
     bir Supabase tablosu eklenirken (ister `db.py`'de `CREATE TABLE`
     ile ister başka bir dosyada elle), AYNI anda `db.py`'deki RLS
     döngülerinden birine (veya yeni bir üçüncüsüne) o tablo adı da
     eklenmeli - bu iki kez atlanmış bir adım, üçüncü kez atlanmamalı.
+
+- **[UYGULANDI, SİMÜLASYONLA DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.240
+  (2 Eylül 2026, Bahri'nin bulgusu — "Otomatik tespit pop-up'ındaki
+  ifadenin başında yine sadece tek kaynak gösterilmiş, altta 3 kaynak
+  gösterilmesine rağmen"): ÇOKLU KAYNAK CÜMLESİ DÖNÜŞÜMÜ SESSİZCE
+  ÇALIŞMIYORDU - KESİN KÖK NEDEN BULUNDU.**
+  - **Bulgu:** v2.0.7.215-217'de eklenen `_cok_kaynakli_cumle_olustur()`
+    (ana cümleyi "[Kaynak]'den alınan VE Y, Z kaynaklarından da teyit
+    edilen habere göre..." haline getiren fonksiyon) ekran görüntüsünde
+    HİÇ TETİKLENMEMİŞ - üstteki cümle tek kaynak ("[Investing.com TR]
+    kaynağından alınan habere göre...") gösterirken, alttaki "Kaynaklar:"
+    listesi doğru şekilde 3 kaynak gösteriyordu (bu liste AYRI bir
+    fonksiyondan, `_kaynak_bolumu_goster()`'dan geliyor - o hep
+    çalışıyordu, sorun SADECE üst cümledeydi).
+  - **Kök neden:** AI (Gemini), prompt şablonundaki örnek kalıpta
+    ("[Kaynak] kaynağından alınan habere göre") köşeli parantezleri
+    bazen yer tutucu işareti olarak değil, ÇIKTININ BİR PARÇASI olarak
+    yorumluyor - "[Investing.com TR] kaynağından..." gibi PARANTEZLİ
+    üretiyor. Eski `eski_ifade` ise PARANTEZSİZ arıyordu ("Investing.com
+    TR kaynağından...") - metin İÇİNDE hiç bulunamıyordu, güvenli geri
+    dönüş (`if eski_ifade not in ai_gerekce: return ai_gerekce`)
+    SESSİZCE devreye giriyordu - hiçbir hata/log yoktu, sadece cümle
+    hiç değişmiyordu. İlginç not: kodun kendi içinde BİLE bir yorum
+    satırı örnek çıktıyı köşeli parantezle göstermiş ("[Kaynak]'a göre,
+    ...") ama bu asla eşleştirme mantığına yansıtılmamıştı.
+  - **Çözüm:** Sabit metin arama/`.replace()` yerine, kaynak adının
+    etrafında OPSİYONEL köşeli parantez toleranslı bir regex
+    (`\[?{kaynak}\]?\s*kaynağından alınan habere göre`) kullanılıyor -
+    parantezli/parantezsiz HER İKİ hâl de yakalanıp DOĞRU (tutarlı,
+    parantezsiz) yeni ifadeyle değiştiriliyor. Fonksiyon TEK yerde
+    tanımlı, popup'ın İKİ çağrı noktasının (dialog modalı + Ana Sayfa
+    listesi) İKİSİNDE de otomatik düzeliyor.
+  - **Simülasyonla doğrulandı:** Ekran görüntüsündeki gerçek senaryo
+    (parantezli AI çıktısı + 2 teyit kaynağı) doğru dönüştürüldü.
+    Regresyon testleri: parantezsiz eski senaryo, tek teyit kaynağı,
+    teyit yokken hiç dokunmama - hepsi doğru çalışıyor.
+  - **DURUM: KAPANDI.**
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

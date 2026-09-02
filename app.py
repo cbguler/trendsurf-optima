@@ -2581,11 +2581,28 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         TEK BİR teyit_kaynak DEĞİL, `teyit_listesi` (sözlük listesi)
         alıyor - kaç tane teyit eden kaynak varsa hepsi doğal bir
         Türkçe listede ("X, Y ve Z kaynaklarından da teyit edilen")
-        cümleye ekleniyor."""
+        cümleye ekleniyor.
+
+        v2.0.7.240 (Bahri'nin bulgusu, 2 Eylül 2026 — pop-up'ta üstteki
+        cümle hep TEK kaynak gösteriyordu, alttaki "Kaynaklar:" listesi
+        3 kaynak gösterse bile): KESİN KÖK NEDEN BULUNDU. AI (Gemini),
+        prompt şablonundaki "[Kaynak] kaynağından alınan habere göre"
+        örneğindeki köşeli parantezleri bazen YER TUTUCU işareti olarak
+        değil, ÇIKTININ BİR PARÇASI olarak yorumluyor - "[Investing.com
+        TR] kaynağından alınan habere göre..." gibi PARANTEZLİ üretiyor.
+        Eski `eski_ifade` ise PARANTEZSİZ ("Investing.com TR
+        kaynağından...") arıyordu - metin İÇİNDE hiç bulunamıyordu,
+        `if eski_ifade not in ai_gerekce: return ai_gerekce` güvenli
+        geri dönüşü SESSİZCE devreye giriyordu. Düzeltme: sabit metin
+        arama yerine, kaynak adının etrafında OPSİYONEL köşeli parantez
+        toleranslı bir regex kullanılıyor - parantezli/parantezsiz
+        HER İKİ hâli de yakalanıp DOĞRU (parantezsiz, tutarlı) yeni
+        ifadeyle değiştiriliyor."""
         if not ai_gerekce or not teyit_listesi or not haber_kaynak:
             return ai_gerekce
-        eski_ifade = f"{haber_kaynak} kaynağından alınan habere göre"
-        if eski_ifade not in ai_gerekce:
+        import re
+        desen = r"\[?" + re.escape(haber_kaynak) + r"\]?\s*kaynağından alınan habere göre"
+        if not re.search(desen, ai_gerekce):
             return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
         _teyit_isimleri = [t.get("kaynak", "") for t in teyit_listesi if t.get("kaynak")]
         if not _teyit_isimleri:
@@ -2596,7 +2613,7 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         _kaynak_ek = "kaynağından" if len(_teyit_isimleri) == 1 else "kaynaklarından"
         yeni_ifade = (f"{haber_kaynak}'den alınan ve {_isim_metni} "
                       f"{_kaynak_ek} da teyit edilen habere göre")
-        return ai_gerekce.replace(eski_ifade, yeni_ifade, 1)
+        return re.sub(desen, yeni_ifade, ai_gerekce, count=1)
 
     def _kaynak_bolumu_goster(satir):
         """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
