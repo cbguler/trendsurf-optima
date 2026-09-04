@@ -5065,9 +5065,12 @@ tamam, canlı doğrulama BEKLİYOR):**
     beklenen ilişki). TERA85: 32,10 TL (arz 85,40, çarpan 81,32).
     VEYAS: 60,95 TL (arz 136,00, çarpan 188,63). Kapeks/Bewen/INM ile
     tam regresyon testi de yapıldı - hiçbiri bozulmadı.
-  - **AÇIK:** Bir sonraki "Veri Güncelle" çalıştırmasında Halka Arz
-    sayfasında Graham Değeri sütununun gerçekten dolu geldiği canlı
-    olarak doğrulanmalı.
+  - **✅ CANLI DOĞRULANDI (4 Eylül 2026, v2.0.7.247'nin push'undan sonraki
+    "Veri Güncelle" çalıştırması):** BLS 20,61, TERA85 32,10, VEYAS 60,95
+    (Kapeks'in dosyasından ELLE hesaplananlarla BİREBİR aynı) + Kapeks
+    KENDİ verisiyle 53,73 (ilk kez, v2.0.7.237'nin kesişim eşleştirmesi
+    sayesinde artık Bewen'in değil kendi raporunun rakamlarını
+    kullanıyor). INM (GYO) doğru şekilde boş kaldı. DURUM: KAPANDI.
 
 - **[BACKLOG - HENÜZ BAŞLANMADI] v2.0.7.246 (planlı) - GRAFİK YORUMLAMA
   BUTONU (2 Eylül 2026, Bahri'nin talebi — "Daha sonra varlıklar ile
@@ -5161,10 +5164,10 @@ tamam, canlı doğrulama BEKLİYOR):**
     çözüyor mu, yoksa hâlâ başka bir kaynak mı var, bir sonraki
     kontrolde netleşecek.
 
-- **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.247 (2 Eylül
-  2026, Bahri'nin bulgusu — "Sadece bir şirketin graham değeri
-  çıkıyor"): GRAHAM DEĞERİ'NİN NEREDEYSE HİÇ ÇALIŞMAMASININ KESİN KÖK
-  NEDENİ BULUNDU - "VE" OLMASI GEREKEN YERDE "VEYA" KULLANILMIŞTI.**
+- **[UYGULANDI, CANLI DOĞRULANDI] v2.0.7.247 (2 Eylül 2026, Bahri'nin
+  bulgusu — "Sadece bir şirketin graham değeri çıkıyor"): GRAHAM
+  DEĞERİ'NİN NEREDEYSE HİÇ ÇALIŞMAMASININ KESİN KÖK NEDENİ BULUNDU -
+  "VE" OLMASI GEREKEN YERDE "VEYA" KULLANILMIŞTI.**
   - **Bulgu:** v2.0.7.245 (Graham) push edilip canlıda denendiğinde,
     SADECE BLS için Graham Değeri (20,61) geldi - TERA85/Kapeks/VEYAS
     (hepsi v2.0.7.245'in yerel testinde BAŞARILI olmuştu) hâlâ boş
@@ -5193,8 +5196,12 @@ tamam, canlı doğrulama BEKLİYOR):**
     - OCR.space saatlik kotasını daha hızlı tüketebilir. Bahri
     "doğruluk maliyetten önemli" demişti (v2.0.7.221), bu değişiklik
     o tercihle tutarlı.
-  - **AÇIK:** Bir sonraki "Veri Güncelle" çalıştırmasında TERA85/
-    Kapeks/VEYAS için de Graham Değeri'nin geldiği canlı doğrulanmalı.
+  - **✅ CANLI DOĞRULANDI (4 Eylül 2026):** Push sonrası "Veri Güncelle"
+    çalıştırıldı - TERA85 32,10, Kapeks 53,73 (kendi verisiyle, ilk
+    kez), VEYAS 60,95 (x2 satır) - hepsi doğru geldi. INM (GYO) doğru
+    şekilde boş kaldı. DURUM: KAPANDI - Halka Arz sayfasındaki Graham/
+    Çarpan/Kapeks-Bewen konu zinciri (v2.0.7.221'den v2.0.7.247'ye
+    kadar) tamamen sonuçlandı.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
