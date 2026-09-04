@@ -5023,5 +5023,112 @@ tamam, canlı doğrulama BEKLİYOR):**
     push sonrası Bahri'nin genel hızı tekrar değerlendirmesi gerekiyor;
     hâlâ yavaşsa, başka sayfa-özel uncached DB çağrıları aranmalı.
 
+- **[UYGULANDI, GERÇEK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.245
+  (2 Eylül 2026, Bahri'nin talebi — "Halka Arz sayfasındaki Graham
+  Değeri sorunumuz vardı hâlen devam ediyor" → "Evet, şimdi başlayalım"):
+  GRAHAM DEĞERİ - FORMAT 2-6'DAN TAMAMEN BAĞIMSIZ YENİ BİR ÇIKARIM
+  KATMANI EKLENDİ.**
+  - **Neden ayrı bir iş:** Format 2-6'nın hiçbiri Graham hesaplamıyordu
+    (bilerek - Çarpan/İNA yöntemleriyle karıştırılmasın diye). Graham
+    Sayısı (`√(22,5 × EPS × BVPS)`) TAMAMEN FARKLI bir veri kaynağına
+    dayanır: Bilanço'daki Özkaynaklar + Gelir Tablosu'ndaki Net Kar -
+    bunlar değerleme özeti kutusunda DEĞİL, raporun ayrı bir bölümünde.
+  - **Keşif (VEYAS örneğiyle):** "Özkaynaklar" ve "Ödenmiş sermaye"
+    genelde TEMİZ, çok-dönemli (2023/2024/2025/güncel) bir tabloda
+    bulunuyor - Format-1'in (özet kutusu) zaten kullandığı
+    `_etiketten_sonraki_sayilar()` yardımcı fonksiyonu BURADA DA
+    çalışıyor. Ama "Net Kar" bazen (VEYAS) düz metin cümlesi içinde:
+    "Şirket'in 2023 yılında X bin TL olan net dönem karı, 2024'te Y
+    bin TL'ye gerilemiş, 2025'te Z bin TL olarak gerçekleşmiştir" -
+    büyük (>1000) sayıları sırayla toplama yaklaşımıyla çözüldü.
+  - **Etiket çeşitliliği (BLS/TERA85 testinde bulundu):** Her aracı
+    kurum farklı etiket kullanıyor - "Ödenmiş Sermaye" vs "Çıkarılmış
+    Sermaye" (pay adedi için), "Net Dönem Karı" vs "Dönem Karı /
+    (Zararı)" vs düz metin "Net Kar" (gelir için). Kod artık HER
+    BİRİNİ SIRAYLA dener, ilk eşleşen kazanır.
+  - **Canlı testte bulunan KRİTİK bir hata, düzeltildi:** İlk denemede
+    BLS için Graham = 2.678.951.310 TL (!) gibi absürt bir değer çıktı.
+    Kök neden: "Çıkarılmış Sermaye 130.000.000" hemen ardından gelen
+    "1 Adet Pay Başına Düşen Değer" satırındaki YALNIZ "1" rakamını da
+    kod "sayı" sanıp bunu (SON değer olarak) pay adedi diye almıştı -
+    130 milyon yerine 1 kullanılınca EPS/BVPS milyonlarca kat şişti.
+    Düzeltme: pay adedi etiketleri artık ÇOK-DEĞERLİ seri yerine TEK
+    değer arayan `_tek_sayi_bul()` ile okunuyor (bu etiketler zaten
+    tek bir güncel rakam, çok dönemli bir seri DEĞİL).
+  - **GYO/INM için BİLEREK boş kalıyor:** INM (Bakırcı GYO) raporunda
+    "Özkaynaklar" terimi HİÇ geçmiyor (GYO'lar Net Aktif Değer
+    kullanıyor, farklı bir bilanço sunum tarzı) - Graham bu formatta
+    da hesaplanamıyor, ki bu tutarlı: Çarpan Bazlı Değer de aynı
+    sebeple INM için zaten boştu.
+  - **Gerçek veriyle doğrulandı (elle hesaplanan değerlerle birebir):**
+    BLS: 20,61 TL (arz 53,60, çarpan 73,69 - Graham en muhafazakar,
+    beklenen ilişki). TERA85: 32,10 TL (arz 85,40, çarpan 81,32).
+    VEYAS: 60,95 TL (arz 136,00, çarpan 188,63). Kapeks/Bewen/INM ile
+    tam regresyon testi de yapıldı - hiçbiri bozulmadı.
+  - **AÇIK:** Bir sonraki "Veri Güncelle" çalıştırmasında Halka Arz
+    sayfasında Graham Değeri sütununun gerçekten dolu geldiği canlı
+    olarak doğrulanmalı.
+
+- **[BACKLOG - HENÜZ BAŞLANMADI] v2.0.7.246 (planlı) - GRAFİK YORUMLAMA
+  BUTONU (2 Eylül 2026, Bahri'nin talebi — "Daha sonra varlıklar ile
+  ilgili grafiği yorumlamak için bir buton ekleyelim"):**
+  - **İstek:** BIST/TEFAS/Döviz/Kripto vb. varlık grafiklerinin altına,
+  basıldığında otomatik bir teknik analiz yorumu üreten bir buton.
+  Bahri, BTC/TL grafiği örneğiyle TAM BEKLENEN FORMATI/ŞABLONU verdi -
+  bu değerli, aynen korunuyor:
+
+    **Şablon (Bahri'nin kendi ifadeleriyle, BTC/TL örneğiyle):**
+    > Bir teknik analiz grafiğini okurken fiyat aksiyonu, hareketli
+    > ortalamalar, hacim onayları ile yatay destek ve direnç seviyeleri
+    > birlikte değerlendirilir.
+    >
+    > **Grafik Yorumlama Kriterleri ve Temel Göstergeler**
+    > - Hareketli Ortalamalar (MA20 ve MA50): Trendin yönünü ve esnek
+    >   destek/direnç hatlarını gösterir. Kısa vadeli ortalamanın
+    >   (MA20), uzun vadeli ortalamayı (MA50) yukarı kesmesi yükseliş
+    >   sinyali (Golden Cross); aşağı kesmesi ise düşüş sinyalidir
+    >   (Death Cross). Fiyat ortalamaların üzerindeyse trend pozitif
+    >   değerlendirilir.
+    > - Yatay Destek ve Dirençler: Fiyatın geçmişte birden fazla kez
+    >   tepki verip yukarı döndüğü dip noktaları destek, aşmakta
+    >   zorlanıp geri çekildiği tepe noktaları direnç alanlarıdır.
+    > - Kırılım Kriteri (Breakout): Bir çizginin kırılmış sayılması
+    >   için fiyatın sadece o seviyeye iğne atması yeterli değildir.
+    >   İlgili seviyenin üzerinde/altında yüksek hacimli mum kapanışı
+    >   gerçekleşmelidir.
+    > - Hacim (Volume): Yükseliş veya düşüş hareketinin arkasındaki
+    >   piyasa katılımını ölçer. Direnç kırılımlarında hacim barlarının
+    >   ortalamanın üzerine çıkması, hareketin sahte olmadığını (tuzak
+    >   olmadığını) doğrular.
+    >
+    > **[Varlık Adı] Grafiğinin Detaylı Analizi**
+    > - Mevcut Trend: [dip/tepe seviyeleri ve yön tarifi]
+    > - Ortalamaların Durumu: [MA20/MA50 kesişim durumu, fiyatın
+    >   konumu]
+    > - Dip/Tepe Formasyonu: [varsa ikili dip/tepe, kanal, vb.]
+    >
+    > **Kritik Seviyeler ve Senaryolar**
+    > - Yükseliş Senaryosu (Direnç Hedefleri): [ilk direnç, ana hedef -
+    >   somut fiyat seviyeleriyle]
+    > - Geri Çekilme Senaryosu (Destek Seviyeleri): [dinamik destek
+    >   (MA kümelenmesi), ana taban/stop-loss seviyesi]
+    >
+    > Kapanış: [belirli bir seviyeden direkt alım yerine, kırılım veya
+    > geri çekilme beklenmesinin riski nasıl düşürdüğüne dair bir not]
+
+  - **Uygulama notları (henüz TASARLANMADI, sadece ilk düşünceler):**
+    Bu, birkaç algoritmik bileşen gerektiriyor: (1) yerel
+    tepe/dip (swing high/low) tespiti ile yatay destek/direnç
+    seviyelerinin otomatik bulunması, (2) MA20/MA50 kesişim durumunun
+    (Golden/Death Cross) programatik tespiti, (3) hacim ortalamasına
+    göre "onaylı kırılım" tespiti, (4) tüm bunları YUKARIDAKI şablona
+    dökecek bir metin üretim katmanı (şablon doldurma ya da LLM
+    çağrısı ile). Genel amaçlı olmalı - sadece kripto değil, BIST/
+    TEFAS/Döviz/Değerli Maden sayfalarındaki grafikler için de
+    çalışmalı.
+  - **DURUM: Sadece kaydedildi, henüz kapsam/tasarım netleşmedi ve
+    kod yazılmadı - bir sonraki oturumda (veya bu oturumda devam
+    edilirse) baştan ele alınmalı.**
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
