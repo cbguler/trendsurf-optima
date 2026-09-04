@@ -535,7 +535,19 @@ def _extract_fiyat_ve_iskonto(pdf_bytes: bytes) -> dict:
         # doğruluğun maliyetten önemli olduğunu belirtti - artık orta
         # sayfalarda da (ilk+son N sayfa taramasıyla AYNI şekilde)
         # metin katmanı yoksa OCR uygulanıyor, hiçbir sayfa atlanmıyor.
-        if temel.get("graham_degeri") is None and temel.get("carpan_bazli_deger") is None:
+        # v2.0.7.247 (2 Eylul 2026, Bahri'nin bulgusu - "sadece bir sirketin
+        # graham degeri cikiyor"): KESIN KOK NEDEN BULUNDU. Asagidaki kosul
+        # "VE" (and) kullaniyordu - yani orta sayfa taramasi SADECE Graham
+        # HEM DE Carpan ikisi de eksikse tetikleniyordu. Ama TERA85/Kapeks/
+        # VEYAS gibi raporlarda Carpan zaten ilk+son 15 sayfada bulunmustu
+        # (None DEGIL) - bu yuzden Graham hala eksik olsa BILE kosul False
+        # oluyor, orta sayfa taramasi (ve dolayisiyla Format-7/Graham'in
+        # gormesi gereken Bilanco/Gelir Tablosu) HIC denenmiyordu. "VE"
+        # -> "VEYA" (or) yapildi: Graham VEYA Carpan'dan HERHANGI BIRI
+        # hala eksikse tarama denenir - asagidaki birlestirme mantigi zaten
+        # sadece EKSIK olan alanlari doldurdugu icin (bulunan carpan
+        # DEGISTIRILMEZ), bu degisiklik guvenli.
+        if temel.get("graham_degeri") is None or temel.get("carpan_bazli_deger") is None:
             try:
                 with pdfplumber.open(tmp_path) as pdf:
                     n = len(pdf.pages)

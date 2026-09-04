@@ -318,6 +318,20 @@ def init_db():
         purchase_date TEXT    DEFAULT '',
         unit_type     TEXT    DEFAULT 'Adet'
     )""")
+    # v2.0.7.246 (2 Eylul 2026, Bahri'nin bulgusu - "pop-up'lar tercih
+    # yapmama ragmen yine de uzun sureyle ekranda kaliyorlar", genel
+    # yavasligin UCUNCU bir kaynagi): app.py'deki `load_portfolio()`
+    # fonksiyonu HER TEK cagrisinda (yani Portfoyum sayfasi her acildiginda/
+    # yenilendiginde) bu IKI ALTER TABLE komutunu (try/except icinde,
+    # "zaten var" hatasini yutarak) YENIDEN calistiriyordu - CREATE TABLE
+    # zaten bu sutunlari icerdigi icin (yukarida) bu satirlar SADECE eski,
+    # sutunlarin YENI eklendigi donemden kalma bir migration'in kalintisiydi,
+    # gercekte HICBIR ISLEV GORMUYORDU ama HER SEFERINDE Supabase'e 2 fazla
+    # round-trip yaptiriyordu. Idempotent (IF NOT EXISTS) hali BURAYA (init_db,
+    # sadece oturum basina 1 kez calisir) tasindi, load_portfolio()'daki
+    # tekrarlayan try/except versiyonlari KALDIRILDI (asagida bkz).
+    c.execute("ALTER TABLE portfolio ADD COLUMN IF NOT EXISTS purchase_date TEXT DEFAULT ''")
+    c.execute("ALTER TABLE portfolio ADD COLUMN IF NOT EXISTS unit_type TEXT DEFAULT 'Adet'")
 
     # v2.0.7.156 (Bahri'nin talebi, 18 Ağustos 2026 — KRİTİK tasarım
     # düzeltmesi): "hemen otomatik uygula" YANLIŞ anlaşılmıştı/yanlış

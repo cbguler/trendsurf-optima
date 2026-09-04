@@ -1695,17 +1695,11 @@ def load_portfolio(user_id: int = None) -> list:
             pass
 
     conn = get_conn()
-    # purchase_date sütunu yoksa ekle (migration)
-    try:
-        conn.execute("ALTER TABLE portfolio ADD COLUMN purchase_date TEXT DEFAULT ''")
-        conn.commit()
-    except Exception:
-        pass
-    try:
-        conn.execute("ALTER TABLE portfolio ADD COLUMN unit_type TEXT DEFAULT 'Adet'")
-        conn.commit()
-    except Exception:
-        pass
+    # v2.0.7.246: purchase_date/unit_type migration artik init_db()'de
+    # (oturum basina 1 kez) yapiliyor - bkz. db.py'deki not. Burada HER
+    # SAYFA YENILEMESINDE tekrar denenmesi Supabase'e gereksiz 2 ekstra
+    # round-trip yaptiriyordu, ki bu "popup onaylandiktan/reddedildikten
+    # sonra uzun bekleme" sikayetinin bir baska katkida bulunani idi.
     rows = conn.execute(
         "SELECT id, asset_type, ticker, quantity, avg_cost, note, added_at, "
         "COALESCE(purchase_date,'') as purchase_date, "

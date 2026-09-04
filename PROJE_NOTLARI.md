@@ -5130,5 +5130,71 @@ tamam, canlı doğrulama BEKLİYOR):**
     kod yazılmadı - bir sonraki oturumda (veya bu oturumda devam
     edilirse) baştan ele alınmalı.**
 
+- **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.246 (2 Eylül
+  2026, Bahri'nin bulgusu — "Son dakika haber pop-upları... tercih
+  yapmama rağmen yine de uzun süreyle ekranda kalıyorlar"): GENEL
+  YAVAŞLIĞIN ÜÇÜNCÜ KAYNAĞI BULUNDU - `load_portfolio()` HER ÇAĞRIDA
+  2 GEREKSİZ ALTER TABLE ÇALIŞTIRIYORDU.**
+  - **Önce doğrulandı:** v2.0.7.242 ve v2.0.7.244'ün İKİSİ DE gerçekten
+    push edilmiş ve `git log`'da görünüyordu (v2.0.7.245/Graham'ın aksine
+    - o hâlâ push edilmemiş çıkmıştı, ayrı bir mesajda düzeltildi) - yani
+    bu, ÖNCEKİ iki düzeltmenin eksikliği DEĞİL, gerçekten ÜÇÜNCÜ bir
+    kaynak.
+  - **Kök neden:** `app.py`'deki `load_portfolio()` - Portföyüm sayfası
+    her açıldığında/yenilendiğinde (ki bir tespit pop-up'ını onayla/
+    reddet sonrası TAM DA BÖYLE BİR YENİLEME olur) çağrılıyor - HER
+    ÇAĞRIDA "ALTER TABLE portfolio ADD COLUMN purchase_date..." ve
+    "...unit_type..." komutlarını (try/except içinde, "zaten var"
+    hatasını yutarak) YENİDEN çalıştırıyordu. Bu satırlar, bu sütunların
+    tabloya SONRADAN eklendiği eski bir migration döneminden kalmaydı -
+    `CREATE TABLE portfolio` ifadesi artık bu sütunları zaten İÇERİYOR,
+    yani bu ALTER TABLE'lar GERÇEKTE HİÇBİR İŞLEV GÖRMÜYORDU, sadece
+    HER SAYFA YENİLEMESİNDE Supabase'e 2 FAZLADAN round-trip
+    yaptırıyordu.
+  - **Çözüm:** İdempotent (`ADD COLUMN IF NOT EXISTS`) hâlleri `init_db()`
+    içine taşındı (oturum başına SADECE 1 kez çalışır - `db.py`'de zaten
+    kurulu olan AYNI desen, ör. `users`/`haber_akisi` tablolarında
+    kullanılan). `load_portfolio()`'daki tekrarlayan try/except
+    versiyonları TAMAMEN KALDIRILDI.
+  - **AÇIK:** Push + canlı doğrulama bekliyor - bu üçü (v2.0.7.242,
+    v2.0.7.244, v2.0.7.246) birlikte genel yavaşlığı gerçekten
+    çözüyor mu, yoksa hâlâ başka bir kaynak mı var, bir sonraki
+    kontrolde netleşecek.
+
+- **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.247 (2 Eylül
+  2026, Bahri'nin bulgusu — "Sadece bir şirketin graham değeri
+  çıkıyor"): GRAHAM DEĞERİ'NİN NEREDEYSE HİÇ ÇALIŞMAMASININ KESİN KÖK
+  NEDENİ BULUNDU - "VE" OLMASI GEREKEN YERDE "VEYA" KULLANILMIŞTI.**
+  - **Bulgu:** v2.0.7.245 (Graham) push edilip canlıda denendiğinde,
+    SADECE BLS için Graham Değeri (20,61) geldi - TERA85/Kapeks/VEYAS
+    (hepsi v2.0.7.245'in yerel testinde BAŞARILI olmuştu) hâlâ boş
+    kaldı.
+  - **Kök neden:** `upcoming_ipo_client.py`'de orta sayfaların (Format-2
+    ve şimdi Format-7/Graham'ın ihtiyaç duyduğu Bilanço/Gelir Tablosu
+    bölümlerinin genelde bulunduğu yer) taranıp taranmayacağına karar
+    veren koşul **"VE"** (and) kullanıyordu: sadece Graham HEM DE Çarpan
+    İKİSİ DE eksikse orta sayfalar taranıyordu. TERA85/Kapeks/VEYAS'ta
+    Çarpan zaten "ilk+son 15 sayfa" ile bulunmuştu (None DEĞİL) - bu
+    yüzden Graham hâlâ eksik olsa BİLE koşul False oluyor, orta sayfa
+    taraması (ve Format-7'nin görmesi gereken veri) HİÇ denenmiyordu.
+    Sadece BLS'te Çarpan da ilk+son'da bulunamadığı için orta sayfa
+    taraması zaten (Format-2/Çarpan için) tetikleniyordu - Graham da
+    o sırada "bedavadan" aynı taramadan faydalanmıştı.
+  - **Doğrulama:** VEYAS'ın "ilk+son" metniyle (`VKY_ilkson.txt`)
+    `_f7_graham_hesapla()` doğrudan test edildi - `None` döndü,
+    hipotezi doğruladı. Tam metinle (orta sayfalar dahil) zaten daha
+    önce 60,95 TL verdiği biliniyordu.
+  - **Çözüm:** Koşul "VE" yerine **"VEYA"** (or) yapıldı - Graham VEYA
+    Çarpan'dan HERHANGİ BİRİ hâlâ eksikse orta sayfa taraması denenir.
+    Sonuç birleştirme mantığı zaten SADECE eksik alanları dolduruyor
+    (bulunan Çarpan asla değiştirilmiyor) - bu değişiklik güvenli.
+  - **Maliyet notu:** Bu, orta sayfa OCR taramasının artık DAHA SIK
+    tetikleneceği anlamına geliyor (Çarpan bulunsa bile Graham için)
+    - OCR.space saatlik kotasını daha hızlı tüketebilir. Bahri
+    "doğruluk maliyetten önemli" demişti (v2.0.7.221), bu değişiklik
+    o tercihle tutarlı.
+  - **AÇIK:** Bir sonraki "Veri Güncelle" çalıştırmasında TERA85/
+    Kapeks/VEYAS için de Graham Değeri'nin geldiği canlı doğrulanmalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
