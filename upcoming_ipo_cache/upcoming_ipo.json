@@ -38,7 +38,7 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1645144",
     "Arz_Fiyati": 85.4,
     "Iskonto_Orani": 20.03,
-    "Graham_Degeri": null,
+    "Graham_Degeri": 32.09551417864623,
     "Carpan_Bazli_Deger": 81.31630099
   },
   {
@@ -52,7 +52,7 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1645057",
     "Arz_Fiyati": 94.0,
     "Iskonto_Orani": 20.0,
-    "Graham_Degeri": null,
+    "Graham_Degeri": 53.73456757975423,
     "Carpan_Bazli_Deger": 80.58
   },
   {
@@ -66,7 +66,7 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1644893",
     "Arz_Fiyati": 136.0,
     "Iskonto_Orani": 20.0,
-    "Graham_Degeri": null,
+    "Graham_Degeri": 60.94930500979787,
     "Carpan_Bazli_Deger": 188.63101510328607
   },
   {
@@ -80,7 +80,7 @@
     "Fiyat_Tespit_URL": "https://www.kap.org.tr/tr/Bildirim/1644893",
     "Arz_Fiyati": 136.0,
     "Iskonto_Orani": 20.0,
-    "Graham_Degeri": null,
+    "Graham_Degeri": 60.94930500979787,
     "Carpan_Bazli_Deger": 188.63101510328607
   }
 ]
