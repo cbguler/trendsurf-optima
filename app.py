@@ -2129,7 +2129,19 @@ with st.sidebar:
         if _uid_for_alert is None:
             st.warning("Kullanıcı bilgisi alınamadı.")
         else:
-            _acfg = load_alert_settings(_uid_for_alert)
+            # v2.0.7.248 (4 Eylul 2026, Bahri'nin bulgusu - "pop-up hala
+            # cok yavas kayboluyor", genel yavasligin DORDUNCU kaynagi):
+            # load_alert_settings() bu noktada HER PORTFOYUM RENDER'INDA
+            # (expander kapali olsa BILE - Streamlit expander icerigini
+            # hep calistirir, sadece gorsel olarak gizler) YENI bir
+            # Supabase baglantisi aciyordu - v2.0.7.244'teki get_current_
+            # user() ile AYNI sinif sorun. 15 saniyelik onbellek eklendi
+            # (kaydet butonuna basilinca hemen temizleniyor - asagida bkz).
+            @st.cache_data(ttl=15, show_spinner=False)
+            def _uyari_ayarlari_onbellekli(_uid):
+                return load_alert_settings(_uid)
+
+            _acfg = _uyari_ayarlari_onbellekli(_uid_for_alert)
 
             # Sistem aktif/pasif
             a_enabled = st.checkbox(
@@ -2232,6 +2244,7 @@ with st.sidebar:
                         "enabled":            bool(a_enabled),
                     })
                     if ok:
+                        _uyari_ayarlari_onbellekli.clear()  # v2.0.7.248: yeni kaydedilen ayarlar hemen yansisin
                         st.success("Uyarı ayarları kaydedildi. (Supabase'de kalıcı)")
                     else:
                         st.error("Kaydetme hatası — loglara bakın.")

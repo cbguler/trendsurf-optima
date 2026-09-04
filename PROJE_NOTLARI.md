@@ -5203,5 +5203,34 @@ tamam, canlı doğrulama BEKLİYOR):**
     Çarpan/Kapeks-Bewen konu zinciri (v2.0.7.221'den v2.0.7.247'ye
     kadar) tamamen sonuçlandı.
 
+- **[UYGULANDI, GÜVENLİK RİSKİ FARK EDİLDİ VE BİLEREK ERTELENDİ - PUSH
+  BEKLİYOR] v2.0.7.248 (4 Eylül 2026, Bahri'nin bulgusu — "Açılan
+  pop-up hâlâ verdiğim komuttan sonra çok yavaş kayboluyor"): GENEL
+  YAVAŞLIĞIN DÖRDÜNCÜ KAYNAĞI BULUNDU VE DÜZELTİLDİ - `load_alert_
+  settings()` de HER RENDER'DA yeni bağlantı açıyordu.**
+  - **Kök neden:** `app.py`'de "Uyarı Ayarları" expander'ının İÇİNDE
+    (expander KAPALI olsa BİLE - Streamlit expander içeriğini hep
+    çalıştırır, sadece görsel olarak gizler) `load_alert_settings()`
+    çağrılıyordu - HER Portföyüm render'ında (ki bir tespit pop-up'ını
+    onayla/reddet sonrası TAM DA BÖYLE BİR RENDER olur) yeni bir
+    Supabase bağlantısı açılıyordu. `get_current_user()` (v2.0.7.244)
+    ile TAM AYNI SINIF sorun.
+  - **Çözüm:** 15 saniyelik `st.cache_data` önbelleği eklendi ("Uyarı
+    Ayarlarını Kaydet" butonuna basılınca hemen `.clear()` ediliyor -
+    yeni kaydedilen ayarlar beklemeden yansır).
+  - **ÖNEMLİ - bilerek YAPILMAYAN bir ek düzeltme:** Aynı taramada
+    `load_portfolio()`'nun da (ana Portföyüm tablosunu çeken fonksiyon)
+    önbelleksiz olduğu bulundu - AMA bu fonksiyon `user_id=None`
+    geldiğinde İÇERİDE global `_cur_user["id"]`'ye düşüyor, FONKSİYON
+    PARAMETRESİ olarak DEĞİL. Bunu olduğu gibi `@st.cache_data` ile
+    süslemek, önbelleğin SADECE `None` argümanına göre anahtarlanmasına
+    yol açar - yani **TÜM KULLANICILAR AYNI ÖNBELLEĞE DÜŞÜP BİRBİRİNİN
+    PORTFÖYÜNÜ GÖREBİLİR** (ciddi bir gizlilik riski). Bu yüzden
+    BİLEREK ERTELENDİ - hız için aceleye getirilmeyecek, çağrı
+    noktalarının önce gerçek user_id'yi AÇIKÇA geçecek şekilde
+    düzenlenmesi gerekiyor (bkz. `_bekleyen_tespitler_onbellekli`'nin
+    `_kid` parametresi deseni). SONRAKİ OTURUMDA dikkatli ele alınmalı.
+  - **AÇIK:** Push + canlı doğrulama bekliyor.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
