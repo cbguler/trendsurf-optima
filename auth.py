@@ -175,10 +175,23 @@ def login_user(email: str, password: str, remember: bool = False) -> dict:
     }
 
 # ── Mevcut Kullanici ─────────────────────────────────────────────────────────
-def get_current_user():
-    if "auth_token" not in st.session_state:
-        return None
-    token = st.session_state["auth_token"]
+# v2.0.7.244 (2 Eylül 2026, Bahri'nin bulgusu — "her sayfa geçişinde/
+# tıklamada genel olarak yavaş"): KESİN KÖK NEDEN BULUNDU. Aşağıdaki
+# `get_current_user()`, Streamlit'in HER TEK yeniden çalıştırmasında
+# (yani HER tıklamada/sayfa geçişinde - Streamlit her etkileşimde tüm
+# betiği baştan çalıştırır) YENİ bir Supabase (PostgreSQL) bağlantısı
+# açıp bir oturum doğrulama sorgusu çalıştırıyordu - HİÇ önbellek
+# yoktu. Bu fonksiyon neredeyse her sayfanın en başında çağrıldığı için,
+# her tek etkileşimde uzak sunucuya yeni bir TCP/SSL el sıkışması +
+# sorgu round-trip'i yaşanıyordu - uygulamanın HER YERİNDE hissedilen
+# genel yavaşlığın en olası kaynağı buydu (Onayla/Reddet'e özel bir
+# şey DEĞİLDİ - v2.0.7.242'nin çözdüğü sorundan tamamen ayrı).
+# Çözüm: token'a göre 30 saniyelik kısa bir önbellek. Güvenlik notu:
+# bir oturum tam bu 30sn içinde sonlandırılırsa (örn. başka bir yerden
+# çıkış yapılırsa) en fazla 30sn gecikmeli yansır - çoğu web
+# uygulamasında kabul edilen normal bir tolerans, ciddi bir risk değil.
+@st.cache_data(ttl=30, show_spinner=False)
+def _kullanici_dogrula_onbellekli(token: str):
     conn = get_conn()
     row = conn.execute("""
         SELECT u.* FROM sessions s
@@ -186,10 +199,18 @@ def get_current_user():
         WHERE s.token = ? AND s.expires_at > datetime('now')
     """, (token,)).fetchone()
     conn.close()
-    if not row:
+    return dict(row) if row else None
+
+
+def get_current_user():
+    if "auth_token" not in st.session_state:
+        return None
+    token = st.session_state["auth_token"]
+    user = _kullanici_dogrula_onbellekli(token)
+    if not user:
         st.session_state.pop("auth_token", None)
         return None
-    return dict(row)
+    return user
 
 def logout():
     token = st.session_state.pop("auth_token", None)

@@ -4983,5 +4983,45 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **✅ CANLI DOĞRULANDI (2 Eylül 2026):** Bahri test e-postasını aldı,
     mobilde "gayet güzel okunuyor" onayı verdi. DURUM: KAPANDI.
 
+- **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.244 (2 Eylül
+  2026, Bahri'nin bulgusu — v2.0.7.242'den SONRA "az önce 2 popup'ı
+  reddettim, yine uzun süre bekledim, hâlâ çok yavaş" + netleştirme
+  sorusuna cevabı "her sayfa geçişinde/tıklamada genel olarak yavaş"):
+  DAHA GENEL VE OLASILIKLA ASIL KÖK NEDEN BULUNDU - `get_current_user()`
+  HER TEK ETKİLEŞİMDE YENİ BİR SUPABASE BAĞLANTISI AÇIYORDU.**
+  - **Netleştirme:** v2.0.7.242, SADECE onaylanan bir tespitin BIST/
+    Döviz/Maden skorlarını doldurduğu dar bir senaryoyu düzeltmişti.
+    Bahri'nin "Reddet" sonrası da yavaşlık yaşaması VE bunun
+    popup'lardan bağımsız, UYGULAMA GENELİNDE olduğunu belirtmesi,
+    v2.0.7.242'nin hedeflediği sorunun aslında bu şikayetin KÜÇÜK bir
+    parçası olduğunu, çok daha genel bir sorunun var olduğunu gösterdi.
+  - **Kök neden:** `auth.py`'deki `get_current_user()` - Streamlit'in
+    HER TEK yeniden çalıştırmasında (Streamlit her tıklamada/sayfa
+    geçişinde TÜM betiği baştan çalıştırır ve bu fonksiyon neredeyse
+    her sayfanın en başında oturum kontrolü için çağrılır) YENİ bir
+    Supabase (uzak PostgreSQL) bağlantısı açıp bir JOIN sorgusu
+    çalıştırıyordu - HİÇ önbellek yoktu. Uzak sunucuya her etkileşimde
+    yeni TCP/SSL el sıkışması + sorgu round-trip'i - uygulamanın HER
+    YERİNDE hissedilen genel yavaşlığın en olası kaynağı.
+  - **ÖNEMLİ - dikkatli davranıldı:** `db.py`'de `get_conn()`'ün kendisi
+    İNCELENDİ ama BİLEREK DOKUNULMADI - modül başı not, v2.0.7.142'de
+    (11 Ağustos) bağlantı HAVUZLAMASININ art arda İKİ FARKLI çökmeye
+    (havuz tükenmesi + Supabase pooler'ının sunucu tarafında sessizce
+    düşürdüğü "açık görünen" bağlantılar) yol açıp BİLEREK kaldırıldığını
+    belgeliyordu. Bu geçmiş, bağlantı seviyesinde tekrar oynamayı riskli
+    kılıyor. **Bu düzeltme farklı bir katmanda çalışıyor:** bağlantı
+    NESNESİ hiç tutulmuyor/yeniden kullanılmıyor (`get_conn()` her
+    zamanki gibi her çağrıda sıfırdan yeni bağlantı açıp kapatıyor) -
+    SADECE sorgu SONUCU (doğrulanmış kullanıcı dict'i) token'a göre
+    30 saniyeliğine önbelleğe alınıyor. Bu, geçmişteki "sunucu tarafında
+    sessizce düşürülmüş bağlantı" çökme türünü tetikleyemez - hiçbir
+    bağlantı canlı tutulmuyor.
+  - **Güvenlik notu:** Bir oturum bu 30sn içinde başka bir yerden
+    sonlandırılırsa, en fazla 30sn gecikmeli yansır - çoğu web
+    uygulamasında kabul edilen normal bir tolerans.
+  - **AÇIK:** Bu, MUHTEMELEN asıl kaynak ama TEK kaynak olmayabilir -
+    push sonrası Bahri'nin genel hızı tekrar değerlendirmesi gerekiyor;
+    hâlâ yavaşsa, başka sayfa-özel uncached DB çağrıları aranmalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
