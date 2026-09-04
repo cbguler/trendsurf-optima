@@ -516,6 +516,102 @@ def _format6_hesapla(metin: str) -> Optional["DonemDegerleme"]:
     return dv
 
 
+# ── v2.0.7.245: GRAHAM SAYISI - BAGIMSIZ, Format 2-6'dan AYRI ────────────────
+# Bahri'nin bulgusu (2 Eylul 2026, Halka Arz sayfasi ekran goruntusu):
+# Format 2-6'nin hicbiri Graham Degeri hesaplamiyordu (bilerek - Carpan/INA
+# yontemleriyle KARISTIRILMASIN diye). Ama Graham Sayisi aslinda TAMAMEN
+# BASKA bir veri kaynagina dayanir (Bilanco: Ozkaynaklar + Gelir Tablosu:
+# Net Kar) - degerleme ozeti kutusundan BAGIMSIZDIR, bu yuzden Format
+# 2-6'nin hangisi (varsa) calistigindan BAGIMSIZ olarak AYRICA denenir.
+# VEYAS ornegiyle bulundu: "Ozkaynaklar" ve "Odenmis sermaye" genelde
+# TEMIZ, coklu-donem (2023/2024/2025/en guncel) bir tabloda bulunuyor
+# (_etiketten_sonraki_sayilar yardimcisi - ozet kutusu icin zaten var olan
+# ayni fonksiyon - burada da calisiyor), ama "Net Kar" bolumu duz metin
+# CUMLESI icinde ("...2023 yilinda X bin TL olan net donem kari, 2024
+# yilinda ... Y bin TL'ye gerilemistir... 2025 yilinda ise ... Z bin TL
+# olarak gerceklesmistir.") - bu yuzden LABEL + SIRALI BUYUK SAYILARI
+# TOPLAMA yaklasimi kullaniliyor (kesin bir TL/donem eslestirmesi degil,
+# ama pratikte dogru sirada cikiyor).
+_F7_OZKAYNAKLAR_BASLIK = r"(?<!ait )(?:Toplam\s+)?Ozkaynaklar(?!\s*/)"
+# v2.0.7.245 (devam - BLS/TERA85 testinde bulundu): Pay adedi ve Net Kar
+# etiketleri araci kuruma gore FARKLI - birden fazla varyasyon sirayla
+# denenecek (ilk eslesen kazanir).
+_F7_SERMAYE_ETIKETLERI = [
+    r"Odenmis\s+sermaye(?!\s*duzeltme)",
+    r"Cikarilmis\s+Sermaye",
+]
+_F7_NET_KAR_TABLO_ETIKETLERI = [
+    r"Net\s*Donem\s*Kari(?!\s*Vergi)",
+    r"Donem\s*Kari\s*/\s*\(Zarari\)",
+]
+_F7_NET_KAR_BASLIK = r"Net\s*Kar\b"
+
+
+def _f7_graham_hesapla(metin: str) -> Optional[float]:
+    """Ozet kutusu (Format-1) formatinda OLMAYAN raporlarda, Graham
+    Sayisi'ni raporun TAM Bilanco/Gelir Tablosu bolumlerinden BAGIMSIZ
+    olarak hesaplamaya calisir. Herhangi bir parca eksikse veya EPS/BVPS
+    negatifse SESSIZCE None doner - UYDURMA YOK."""
+    norm = metin.translate(_F2_TR_MAP)
+
+    ozkaynak_serisi = _etiketten_sonraki_sayilar(
+        norm, _F7_OZKAYNAKLAR_BASLIK, pencere=250, adet=5)
+    if not ozkaynak_serisi:
+        return None
+    ozkaynak_guncel = ozkaynak_serisi[-1]
+    if not ozkaynak_guncel or ozkaynak_guncel <= 0:
+        return None
+
+    hisse_sayisi = None
+    for _etiket in _F7_SERMAYE_ETIKETLERI:
+        # v2.0.7.245 NOT (BLS testinde bulundu): bu etiketler COKLU-DONEM
+        # bir seri DEGIL, TEK bir guncel deger - _tek_sayi_bul kullanilmali.
+        # Cok-degerli arama ("_etiketten_sonraki_sayilar" + seri[-1])
+        # kullanilinca, "Cikarilmis Sermaye 130.000.000" hemen ardindan
+        # gelen "1 Adet Pay Basina..." satirindaki yalniz "1" rakamini DA
+        # sayi sanip YANLISLIKLA onu (son deger) aliyordu - hisse sayisi
+        # 130 milyon yerine 1 okunup Graham'i milyarlarca TL'ye sisiriyordu.
+        deger = _tek_sayi_bul(norm, _etiket, pencere=60)
+        if deger and deger > 0:
+            hisse_sayisi = deger
+            break
+    if not hisse_sayisi:
+        return None
+
+    # Net Kar - once TEMIZ TABLO etiketlerini dene (satir hemen sayilarla
+    # basliyorsa _etiketten_sonraki_sayilar zaten bunu ayirt eder), BLS
+    # tarzi ("Donem Kari / (Zarari)") 5 sutunlu (2023/2024/2025/Q1-onceki/
+    # Q1-guncel) olabilir - en son TAM YILI (index 2) tercih et.
+    net_kar_son = None
+    for _etiket in _F7_NET_KAR_TABLO_ETIKETLERI:
+        seri = _etiketten_sonraki_sayilar(norm, _etiket, pencere=250, adet=5)
+        if seri:
+            net_kar_son = seri[min(2, len(seri) - 1)]
+            break
+
+    # Tablo bulunamadiysa DUZ METIN CUMLESI tarzina (VEYAS gibi) dus -
+    # "Net Kar" basligindan sonraki buyuk (>1000) sayilari sirayla topla.
+    if net_kar_son is None:
+        m_baslik = re.search(_F7_NET_KAR_BASLIK, norm, re.IGNORECASE)
+        if m_baslik:
+            pencere_metin = norm[m_baslik.end(): m_baslik.end() + 700]
+            buyuk_sayilar_ham = re.findall(r"\d{1,3}(?:\.\d{3})+", pencere_metin)
+            degerler = [_tr_sayi_to_float(s) for s in buyuk_sayilar_ham]
+            degerler = [d for d in degerler if d and abs(d) > 1000]
+            if degerler:
+                net_kar_son = degerler[min(2, len(degerler) - 1)]
+
+    if net_kar_son is None or net_kar_son <= 0:
+        return None
+
+    bvps = ozkaynak_guncel / hisse_sayisi
+    eps = net_kar_son / hisse_sayisi
+    if eps <= 0 or bvps <= 0:
+        return None
+
+    return math.sqrt(22.5 * eps * bvps)
+
+
 @dataclass
 class DonemDegerleme:
     donem_etiketi: str
@@ -673,6 +769,37 @@ def hedef_fiyat_hesapla(metin: str, arz_fiyati: Optional[float] = None) -> list:
         f6 = _format6_hesapla(metin)
         if f6 is not None:
             sonuclar.append(f6)
+
+    # ── v2.0.7.245: GRAHAM SAYISI - BAGIMSIZ EK ADIM ─────────────────────
+    # Format 2-6'nin HANGISI (varsa) calistigindan TAMAMEN BAGIMSIZ olarak
+    # HER ZAMAN denenir - Graham, Bilanco/Gelir Tablosu'na dayanir, Carpan/
+    # INA yontemlerinden farkli bir veri kaynagi kullanir. sonuclar'da zaten
+    # graham_degeri OLAN bir donem varsa (ozet kutusu/Format-1 basariliysa)
+    # DOKUNULMAZ - o zaten daha guvenilir (donem-eslesmis) bir hesaplama.
+    if not any(d.graham_degeri is not None for d in sonuclar):
+        graham = _f7_graham_hesapla(metin)
+        if graham is not None and graham > 0:
+            if sonuclar:
+                # Zaten bir Carpan/INA sonucu varsa (Format 2-6), Graham'i
+                # AYNI satira ekle - Halka Arz sayfasinda TEK satirda
+                # her iki deger de gorunsun.
+                sonuclar[-1].graham_degeri = graham
+                sonuclar[-1].notlar.append(
+                    "Graham: raporun Bilanco (Ozkaynaklar) ve Gelir Tablosu "
+                    "(Net Kar) bolumlerinden BAGIMSIZ turetildi - Carpan/INA "
+                    "yontemiyle AYNI kaynaktan DEGIL")
+            else:
+                # Hicbir Carpan/INA sonucu yoksa (orn. GYO/INM gibi NAD
+                # yontemi kullanan raporlar) BILE Graham kendi basina
+                # anlamli olabilir - Graham herhangi bir sirket icin
+                # gecerli, genel bir formuldur.
+                dv = DonemDegerleme(donem_etiketi="Rapor Ozeti (Graham)")
+                dv.graham_degeri = graham
+                dv.notlar.append(
+                    "Sadece Graham Sayisi hesaplanabildi (Bilanco/Gelir "
+                    "Tablosu'ndan) - raporun kendi Carpan/INA degerleme "
+                    "yontemi bu formatta bulunamadi")
+                sonuclar.append(dv)
 
     return sonuclar
 
