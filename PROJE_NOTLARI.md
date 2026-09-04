@@ -4916,7 +4916,8 @@ tamam, canlı doğrulama BEKLİYOR):**
     istemcide (Gmail uygulaması vb.) henüz CANLI görsel doğrulama
     yapılmadı - bir sonraki gerçek uyarı e-postasında Bahri'nin
     kontrol etmesi gerekiyor.
-  - **DURUM: Kod hazır, canlı mobil doğrulama bekliyor.**
+  - **DURUM: ✅ CANLI DOĞRULANDI (2 Eylül 2026) - Bahri test e-postasını
+    mobilde gördü, "gayet güzel okunuyor" onayı verdi. KAPANDI.**
 
 - **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.242 (2 Eylül
   2026, Bahri'nin bulgusu — "Bunu onayladıktan sonra neden çok uzun
@@ -4975,9 +4976,12 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Doğrulama:** `test_mode=True` ile üretilen HTML'de "ÖRNEK/TEST"
     şeridinin bulunduğu, `test_mode=False` (normal/gerçek uyarı) ile
     üretilende BULUNMADIĞI simülasyonla doğrulandı - regresyon yok.
-  - **AÇIK - Bahri'nin yapması gereken:** Push sonrası uygulamada
-    Portföyüm → Uyarı Ayarları → "Test E-postası Gönder" düğmesine
-    basıp gerçek e-postayı mobilde/masaüstünde görmesi gerekiyor.
+  - **Küçük bir engel, çözüldü:** İlk denemede `TypeError` alındı -
+    Streamlit Cloud yeni kodu (test_mode parametresini) yüklememişti
+    (bilinen bir davranış - bkz. dosya genelinde tekrar eden not).
+    "Manage app > Reboot app" ile çözüldü.
+  - **✅ CANLI DOĞRULANDI (2 Eylül 2026):** Bahri test e-postasını aldı,
+    mobilde "gayet güzel okunuyor" onayı verdi. DURUM: KAPANDI.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
