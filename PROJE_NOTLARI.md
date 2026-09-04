@@ -4951,5 +4951,33 @@ tamam, canlı doğrulama BEKLİYOR):**
     gerekiyor.
   - **DURUM: Kod hazır, canlı hız iyileşmesi doğrulaması bekliyor.**
 
+- **[UYGULANDI, SİMÜLASYONLA DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.243
+  (2 Eylül 2026, Bahri'nin talebi — "Bir örnek posta gönder de görelim"):
+  "TEST E-POSTASI GÖNDER" ÖZELLİĞİ EKLENDİ - mobil kart tasarımını
+  (v2.0.7.241) GERÇEK bir düşüş beklemeden canlı e-postada önizlemek
+  için.**
+  - **Neden gerekli oldu:** Claude'un kendisi doğrudan e-posta
+    gönderemiyor (SMTP bilgileri sadece GitHub Actions/Streamlit Cloud
+    Secrets'ta, sandbox'ta değil) VE mevcut "Bekleyen Uyarıları Mail
+    Gönder" düğmesi sadece GERÇEK bir bekleyen uyarı varken çalışıyor
+    (şu an yok). Bahri'nin kendi adına, istediği an, örnek veriyle
+    gerçek bir e-posta göndermesini sağlayan bir yol gerekiyordu.
+  - **Uygulama:** `send_peak_alert()` ve `_build_alert_html()`'e
+    `test_mode: bool = False` parametresi eklendi. `test_mode=True`
+    olduğunda: (1) konu satırına "(TEST)" ön eki eklenir, (2) e-posta
+    gövdesine açıkça görünür sarı bir "ÖRNEK/TEST E-POSTASI" şeridi
+    eklenir - gerçek bir uyarıyla KARIŞTIRILMASINI önlemek için ÇİFT
+    güvence, (3) `mark_alert_sent` HİÇ çağrılmaz - örnek (BAG/MTG/CVL)
+    ticker'lar gerçek `peaks` tablosuna yazılmaz, portföy/uyarı durumu
+    ETKİLENMEZ. `app.py`'nin "Uyarı Ayarları" bölümüne, kayıt
+    düğmesinin hemen altına "Test E-postası Gönder (Örnek Veriyle)"
+    düğmesi eklendi.
+  - **Doğrulama:** `test_mode=True` ile üretilen HTML'de "ÖRNEK/TEST"
+    şeridinin bulunduğu, `test_mode=False` (normal/gerçek uyarı) ile
+    üretilende BULUNMADIĞI simülasyonla doğrulandı - regresyon yok.
+  - **AÇIK - Bahri'nin yapması gereken:** Push sonrası uygulamada
+    Portföyüm → Uyarı Ayarları → "Test E-postası Gönder" düğmesine
+    basıp gerçek e-postayı mobilde/masaüstünde görmesi gerekiyor.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -99,10 +99,13 @@ def _fmt_tr_pct(v: float) -> str:
 
 
 def _build_alert_html(user_email: str, alerts_pending: list,
-                      settings: dict) -> str:
+                      settings: dict, test_mode: bool = False) -> str:
     """Uyari mailinin HTML govdesini olustur.
 
     Tek bir mail icinde tum uyariyan tickerlar tablo halinde yer alir.
+    test_mode=True ise govdeye acikca gorunur bir "ORNEK/TEST" seridi
+    eklenir (v2.0.7.243) - konu satirindaki "(TEST)" on ekiyle birlikte,
+    gercek bir uyariyla KARISTIRILMAMASI icin cift guvence.
     """
     now_str = _tr_now().strftime("%d.%m.%Y %H:%M")
     threshold_str = _fmt_tr_pct(settings.get("threshold_pct", 3.0))
@@ -212,6 +215,14 @@ def _build_alert_html(user_email: str, alerts_pending: list,
         </div>
 
         <div style="padding:24px 30px;">
+            {"" if not test_mode else '''
+            <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;
+                        padding:12px 16px;margin-bottom:18px;font-size:14px;
+                        font-weight:700;color:#92400e;text-align:center;">
+                ÖRNEK / TEST E-POSTASI - gerçek bir uyarı değildir, sadece
+                tasarımı önizlemek için gönderildi.
+            </div>
+            '''}
             <p style="margin:0 0 14px;font-size:15px;color:#1b2a4a;line-height:1.5;">
                 Sayın yatırımcı, portföyünüzdeki aşağıdaki <strong>{len(alerts_pending)} varlık</strong>
                 için peak fiyatından <strong>{threshold_str}</strong> veya daha fazla düşüş tespit edildi.
@@ -253,19 +264,24 @@ def _build_alert_html(user_email: str, alerts_pending: list,
 
 
 def send_peak_alert(user_id: int, alerts_pending: list,
-                    settings: dict) -> dict:
+                    settings: dict, test_mode: bool = False) -> dict:
     """Bekleyen uyarilari kullanicinin email'ine HTML mail olarak gonder.
 
     Args:
         user_id: Kullanici ID
         alerts_pending: peak_tracker.evaluate_user_alerts'in dondurdugu liste
         settings: alert_settings.load_alert_settings'in dondurdugu dict
+        test_mode: v2.0.7.243 (2 Eylul 2026, Bahri'nin talebi - "Bir ornek
+            posta gonder de gorelim") - True ise konu satirina "(TEST)"
+            eklenir VE mark_alert_sent HIC cagrilmaz (ornek/uydurma
+            ticker'lar gercek peaks tablosuna YAZILMAZ - gercek uyari
+            durumunu bozmamak icin).
 
     Returns:
       {"sent": bool, "to": str, "count": int, "reason": str (hata varsa)}
 
-    Mail basarili gonderildikten sonra her ticker icin
-    peak_tracker.mark_alert_sent cagrilir (flag set edilir).
+    Mail basarili gonderildikten sonra (test_mode=False ise) her ticker
+    icin peak_tracker.mark_alert_sent cagrilir (flag set edilir).
     """
     if not alerts_pending:
         return {"sent": False, "reason": "alerts_pending bos", "count": 0}
@@ -281,11 +297,12 @@ def send_peak_alert(user_id: int, alerts_pending: list,
                 "count": 0}
 
     try:
-        html = _build_alert_html(user_email, alerts_pending, settings)
+        html = _build_alert_html(user_email, alerts_pending, settings, test_mode=test_mode)
 
         msg = MIMEMultipart("alternative")
+        _konu_on_eki = "(TEST) " if test_mode else ""
         msg["Subject"] = (
-            f"TrendSurf Optima - Kar Realizasyonu Uyarisi "
+            f"{_konu_on_eki}TrendSurf Optima - Kar Realizasyonu Uyarisi "
             f"({len(alerts_pending)} varlik)"
         )
         msg["From"] = cfg["smtp_user"]
@@ -298,16 +315,19 @@ def send_peak_alert(user_id: int, alerts_pending: list,
             s.login(cfg["smtp_user"], cfg["smtp_pass"])
             s.sendmail(cfg["smtp_user"], user_email, msg.as_string())
 
-        # Mail gonderildi - her ticker icin flag set
-        from peak_tracker import mark_alert_sent
+        # Mail gonderildi - her ticker icin flag set (test_mode'da ATLANIR -
+        # ornek/uydurma ticker'lar gercek peaks tablosuna yazilmamali)
         marked = 0
-        for a in alerts_pending:
-            if mark_alert_sent(user_id, a["ticker"], a["current_price"]):
-                marked += 1
+        if not test_mode:
+            from peak_tracker import mark_alert_sent
+            for a in alerts_pending:
+                if mark_alert_sent(user_id, a["ticker"], a["current_price"]):
+                    marked += 1
 
         sys.stderr.write(
             f"[peak_alert_emailer] mail gonderildi user={user_id} "
-            f"to={user_email} count={len(alerts_pending)} marked={marked}\n"
+            f"to={user_email} count={len(alerts_pending)} marked={marked} "
+            f"test_mode={test_mode}\n"
         )
         sys.stderr.flush()
 

@@ -2244,6 +2244,56 @@ with st.sidebar:
 
             st.divider()
 
+            # v2.0.7.243 (2 Eylül 2026, Bahri'nin talebi — "Bir örnek posta
+            # gönder de görelim"): mobil kart tasarımını (v2.0.7.241) canlı
+            # e-posta ile önizlemek için, GERÇEK bir düşüş beklemeden örnek
+            # veriyle test maili gönderme düğmesi. `send_peak_alert`'e
+            # `test_mode=True` verilir - bu hem konu satırına "(TEST)" hem
+            # de gövdeye açık bir "ÖRNEK/TEST" şeridi ekler VE
+            # `mark_alert_sent` HİÇ çağrılmaz (örnek ticker'lar gerçek
+            # peaks tablosuna yazılmaz) - portföy/uyarı durumunu etkilemez.
+            st.caption(
+                "**Test E-postası Gönder** — Gerçek bir düşüş beklemeden, "
+                "örnek (uydurma) veriyle uyarı e-postasının nasıl "
+                "göründüğünü kendi adresinize gönderir. E-posta açıkça "
+                "'ÖRNEK/TEST' olarak işaretlenir; portföyünüzü veya peak "
+                "kayıtlarınızı ETKİLEMEZ."
+            )
+            if st.button("Test E-postası Gönder (Örnek Veriyle)",
+                         key="alert_test_mail", width='stretch'):
+                with st.spinner("Test e-postası gönderiliyor..."):
+                    _ornek_alerts = [
+                        {"ticker": "BAG", "asset_type": "TEFAS",
+                         "alish_fiyat": 1.0036, "peak_price": 1.0018,
+                         "current_price": 0.9812, "drop_pct": 2.06,
+                         "tavsiye_fiyat": 0.9818, "miktar": 3985.0,
+                         "unit_type": "Pay", "toplam_deger": 3910.08},
+                        {"ticker": "MTG", "asset_type": "TEFAS",
+                         "alish_fiyat": 1.668877, "peak_price": 1.85,
+                         "current_price": 1.719344, "drop_pct": 7.06,
+                         "tavsiye_fiyat": 1.813, "miktar": 7119.0,
+                         "unit_type": "Pay", "toplam_deger": 12240.01},
+                        {"ticker": "CVL", "asset_type": "TEFAS",
+                         "alish_fiyat": 1.304412, "peak_price": 1.65,
+                         "current_price": 1.595447, "drop_pct": 3.31,
+                         "tavsiye_fiyat": 1.617, "miktar": 3066.0,
+                         "unit_type": "Pay", "toplam_deger": 4891.64},
+                    ]
+                    _test_settings = load_alert_settings(_uid_for_alert)
+                    _test_res = send_peak_alert(
+                        _uid_for_alert, _ornek_alerts, _test_settings,
+                        test_mode=True)
+                if _test_res.get("sent"):
+                    st.success(
+                        f"Test e-postası gönderildi: {_test_res.get('to')} "
+                        f"— gelen kutunuzu (ve spam/gereksiz klasörünü) "
+                        f"kontrol edin."
+                    )
+                else:
+                    st.error(f"Gönderilemedi: {_test_res.get('reason')}")
+
+            st.divider()
+
             # v2.0 asama 3a.2 - Manuel Test (autorefresh-safe)
             # streamlit-autorefresh her 60 sn sayfayi yeniliyor. Buton state
             # Streamlit'te sadece basildigi turda True doner, sonraki rerunlarda
