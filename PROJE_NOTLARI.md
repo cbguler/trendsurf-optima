@@ -5554,5 +5554,22 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **AÇIK:** Push + canlı doğrulama bekliyor - artık basit bir CSS
     değişikliği olduğu için önceki 3 turdan çok daha az risk taşıyor.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.260
+  (5 Eylül 2026, Bahri'nin bulgusu — "risk toleransı ayarının yazıları
+  aşağıdan yukarı olmuş"): SLIDER ETİKETLERİ DİKEY HARF HARF
+  DİZİLİYORDU - DÜZELTİLDİ.**
+  - **Kök neden:** v2.0.7.257'nin genel `white-space:nowrap` kuralı
+    (sidebar dar haldeyken TÜM metni gizlemek için) TÜM alt öğelere
+    (`*`) uygulanıyordu - bu, Risk Toleransı/Max Varlık Sayısı
+    kaydırıcılarının KENDİ İÇ etiketleriyle çakışıp harf harf dikey
+    dizilmelerine yol açtı.
+  - **Çözüm:** Slider bileşenleri (`[data-testid="stSlider"]`) genel
+    nowrap kuralının DIŞINDA tutuldu - kendi iç yapıları normal
+    kalıyor (zaten çok kısa etiketler kullanıyorlar, dar halde
+    sorun çıkarmıyorlar).
+  - **Doğrulama:** `python3 -m py_compile` temiz. Önceki turda
+    yanlışlıkla silinen bir CSS kuralı (`:hover` durumunda
+    `overflow:visible`) da fark edilip geri eklendi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

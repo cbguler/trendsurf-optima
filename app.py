@@ -2037,6 +2037,15 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] * {
         white-space: nowrap !important;
     }
+    /* v2.0.7.260 (5 Eylul 2026, Bahri'nin bulgusu - "risk toleransi
+    ayarinin yazilari asagidan yukari olmus"): Slider bilesenlerinin
+    (Risk Toleransi, Max Varlik Sayisi) KENDI ic etiketleri, genel
+    nowrap kuraliyla CAKISIP harf harf DIKEY dizilmeye baslamisti -
+    slider'lar BU KURALIN DISINDA tutuluyor (kendi ic yapilarini
+    normal birakiyoruz, zaten cok kisa etiketler kullaniyorlar). */
+    [data-testid="stSidebar"] [data-testid="stSlider"] * {
+        white-space: normal !important;
+    }
     [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
         overflow: visible;
     }
