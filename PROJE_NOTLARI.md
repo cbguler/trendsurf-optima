@@ -5617,5 +5617,32 @@ tamam, canlı doğrulama BEKLİYOR):**
     sidebar dar halde biraz taşsa bile) daha da basit bir çözüme
     geçilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.263
+  (5 Eylül 2026, Bahri'nin bulgusu — "Reboot da yaptığım halde olmadı"
+  + terminal ekran görüntüsüyle push'un GERÇEKTEN gittiğini kanıtladı):
+  DÜZELTME - BİR ÖNCEKİ NOT YANLIŞTI, "KAYNAKTAN HARİÇ TUTMA"
+  YAKLAŞIMI (v2.0.7.262, sadece `data-testid` tabanlı) GERÇEKTEN CANLI
+  TEST EDİLDİ VE GERÇEKTEN BAŞARISIZ OLDU.**
+  - Bir önceki not ("v2.0.7.262 hiç push edilmemişti") YANLIŞ ÇIKTI -
+    Bahri commit `9e22792`'nin gerçekten push edildiğini gösteren bir
+    terminal ekran görüntüsü paylaştı (`e0ffd47..9e22792 main -> main`).
+    Sandbox'taki `git log` kontrolümün Bahri'nin push'undan ÖNCE bir
+    ana yapıldığı anlaşılıyor - hatalı bir sonuca vardım, bunu Bahri'ye
+    açıkça düzelttim/özür diledim.
+  - **Gerçek durum:** `:not([data-testid="stSlider"] *):not([data-
+    testid="stSlider"])` yaklaşımı (SADECE testid tabanlı, doğru
+    sözdizimiyle, tek satırda) CANLIDA DENENDİ ve İŞE YARAMADI - bu
+    gerçek, doğrulanmış bir bulgu (4. gerçek başarısız deneme).
+  - **Bu turda YAPILAN (v2.0.7.262'nin devamı, versiyon numarası
+    v2.0.7.263 olarak ilerletildi):** Aynı hariç tutma mantığına,
+    dosyada ZATEN KANITLANMIŞ ÇALIŞAN bir seçici (`.stSlider` CSS
+    sınıfı - satır 69'daki renklendirme kuralı bunu kullanıyor) da
+    eklendi - hem `data-testid` hem `class` tabanlı hariç tutma AYNI
+    ANDA uygulanıyor. Ayrıca yazarken fark edilen bir sözdizimi hatası
+    (`:not()` zincirinin satır sonuyla yanlışlıkla bölünmesi -
+    CSS'te bu "alt öge" ilişkisine dönüşür) düzeltildi.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Bu, `.stSlider`
+    sınıf tabanlı hariç tutmanın CANLIDA test edileceği İLK deneme.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

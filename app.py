@@ -2034,7 +2034,12 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         overflow: hidden;
     }
-    /* v2.0.7.262 (5 Eylul 2026, Bahri'nin bulgusu - uc kez denenen
+    /* v2.0.7.263 (5 Eylul 2026 - v2.0.7.262'nin devami, o surum canlida
+    GERCEKTEN denendi ve basarisiz oldu - terminal ekran goruntusuyle
+    push'un gittigi kanitlandi): testid tabanli haric tutma tek basina
+    yetersiz kaldi, ayni mantiga KANITLANMIS calisan .stSlider CSS
+    sinifi (satir 69) da eklendi.
+    Eski not (uc kez denenen
     "sonradan gecersiz kil" yaklasimi calismadi, hala bozuktu):
     TEMIZ COZUM - slider'i (ve TUM alt elemanlarini) genel nowrap
     kuralinin KAYNAGINDAN haric tutuyoruz (":not()" ile), sonradan
@@ -2043,8 +2048,7 @@ with st.sidebar:
     render mantigi aynen calisiyor. Sidebar dar haldeyken slider zaten
     ust konteynerin overflow:hidden'i sayesinde GORUNMEZ oluyor -
     genislik/nowrap ile ayrica ugrasmaya HIC GEREK YOK. */
-    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
-        *:not([data-testid="stSlider"] *):not([data-testid="stSlider"]) {
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] *:not([data-testid="stSlider"] *):not([data-testid="stSlider"]):not(.stSlider *):not(.stSlider) {
         white-space: nowrap !important;
     }
     [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
