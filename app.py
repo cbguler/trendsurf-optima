@@ -2011,55 +2011,19 @@ with st.sidebar:
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
 
-    # v2.0.7.259 (5 Eylul 2026, Bahri'nin talebi - "Yok olmadi hersey
-    # geri al baslamadigimiz sekle geri donelim, sadece sol bar kaybolan
-    # sekilde olsun yeter, oynadikca daha da kotu olmaya basladi"):
-    # v2.0.7.256-258'de denenen st.pills + Material Symbols ikon
-    # yaklasimi (Instagram tarzi ikon menusu) TAMAMEN GERI ALINDI -
-    # normal st.radio'ya donuldu. SADECE en basit istek korunuyor:
-    # sidebar dar dursun, imlec uzerine gelince genissin. Metin icerigi
-    # dar haldeyken GORUNMEZ olur (v2.0.7.257'nin CSS'i - bu kisim
-    # sikayet konusu OLMAMISTI, sadece ikon/pills kismi sorunluydu).
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] {
-        min-width: 74px !important;
-        max-width: 74px !important;
-        transition: min-width 0.22s ease, max-width 0.22s ease;
-    }
-    [data-testid="stSidebar"]:hover {
-        min-width: 300px !important;
-        max-width: 300px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        overflow: hidden;
-    }
-    /* v2.0.7.263 (5 Eylul 2026 - v2.0.7.262'nin devami, o surum canlida
-    GERCEKTEN denendi ve basarisiz oldu - terminal ekran goruntusuyle
-    push'un gittigi kanitlandi): testid tabanli haric tutma tek basina
-    yetersiz kaldi, ayni mantiga KANITLANMIS calisan .stSlider CSS
-    sinifi (satir 69) da eklendi.
-    Eski not (uc kez denenen
-    "sonradan gecersiz kil" yaklasimi calismadi, hala bozuktu):
-    TEMIZ COZUM - slider'i (ve TUM alt elemanlarini) genel nowrap
-    kuralinin KAYNAGINDAN haric tutuyoruz (":not()" ile), sonradan
-    "duzeltmeye" CALISMIYORUZ. Boylece slider HICBIR OZEL KURALA
-    MARUZ KALMIYOR - Streamlit'in kendi ORIJINAL (hic dokunulmamis)
-    render mantigi aynen calisiyor. Sidebar dar haldeyken slider zaten
-    ust konteynerin overflow:hidden'i sayesinde GORUNMEZ oluyor -
-    genislik/nowrap ile ayrica ugrasmaya HIC GEREK YOK. */
-    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] *:not([data-testid="stSlider"] *):not([data-testid="stSlider"]):not(.stSlider *):not(.stSlider) {
-        white-space: nowrap !important;
-    }
-    [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
-        overflow: visible;
-    }
-    [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] * {
-        white-space: normal !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
+    # v2.0.7.264 (5 Eylul 2026, Bahri'nin talebi - "Neden ilk haline
+    # donmuyoruz? Ilk hali sorunsuz calisiyordu, cok sinir bozucu..."):
+    # v2.0.7.256-263 arasinda denenen TUM sidebar "otomatik gizlenme/
+    # hover ile genisleme" ozelligi TAMAMEN KALDIRILDI - bes ayri canli
+    # denemede (256, 257, 258, 259/260, 261, 262, 263) hep YENI bir
+    # gorsel sorun cikti (ikon izgarasi, metin dagilmasi, slider
+    # etiketlerinin dikey siralanmasi - bu SONUNCUSU tek basina 5 farkli
+    # CSS yaklasimiyla denendi, hicbiri tutmadi). Sidebar artik
+    # Streamlit'in TAMAMEN VARSAYILAN, HICBIR OZEL CSS ICERMEYEN
+    # davranisina donuyor - sabit genislikte, her zaman tam gorunur,
+    # hic collapse/hover efekti YOK. Bu, "otomatik gizlenme" ozelligi
+    # olmadan once (bugunku oturumdan ONCE) hep boyle calisiyordu ve
+    # sorunsuzdu.
     _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()

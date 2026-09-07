@@ -5644,5 +5644,43 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Doğrulama:** `python3 -m py_compile` temiz. Bu, `.stSlider`
     sınıf tabanlı hariç tutmanın CANLIDA test edileceği İLK deneme.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.264
+  (5 Eylül 2026, Bahri'nin talebi — "Neden ilk haline dönmüyoruz? İlk
+  hali sorunsuz çalışıyordu, çok sinir bozucu..."): SIDEBAR "OTOMATİK
+  GİZLENME/HOVER İLE GENİŞLEME" ÖZELLİĞİ TAMAMEN TERK EDİLDİ - TÜM
+  ÖZEL CSS KALDIRILDI, STREAMLIT'İN VARSAYILAN DAVRANIŞINA DÖNÜLDÜ.**
+  - **Özet - bugünkü sidebar serüveni (v2.0.7.256'dan 263'e, 8 sürüm):**
+    (256) İkon+pills+Instagram-stil deneme → ızgara dizilimi sorunu.
+    (257) Metin gizleme genişletildi → slider etiketleri bozuldu.
+    (258) Instagram sade görünüm denemesi → aynı temel sorunlar.
+    (259) İkon/pills TAMAMEN geri alındı, sadece basit collapse
+    korundu → slider sorunu YİNE çıktı.
+    (260, 261, 262, 263) Slider sorununu düzeltmek için DÖRT AYRI
+    CSS yaklaşımı denendi (genel istisna, width zorlama, kaynaktan
+    `:not()` hariç tutma, `.stSlider` sınıfı eklenmesi) - HEPSİ canlıda
+    GERÇEKTEN test edildi (terminal ekran görüntüleriyle push'lar
+    doğrulandı) ve HİÇBİRİ sorunu çözmedi.
+  - **Karar:** 8 sürüm ve 5+ gerçek canlı deneme sonrası, bu özellik
+    için harcanan çaba/risk oranı makul değildi. Bahri'nin net talebi
+    doğrultusunda TÜM özel sidebar CSS'i (genişlik daraltma, hover
+    genişletme, metin gizleme, slider istisnaları) KALDIRILDI - sidebar
+    artık Streamlit'in TAMAMEN VARSAYILAN (bugünkü oturumdan ÖNCEKİ,
+    kanıtlanmış sorunsuz) davranışına döndü: sabit genişlik, her zaman
+    tam görünür, hiçbir collapse/hover efekti yok.
+  - **Doğrulama:** `python3 -m py_compile` temiz, sidebar collapse
+    CSS'ine ait hiçbir kalıntı (`stSidebarUserContent`, `min-width:
+    74px` vb.) kalmadığı grep ile doğrulandı.
+  - **DERS (gelecek oturumlar için):** Streamlit'in sidebar/widget
+    içi DOM yapısı, farklı Streamlit sürümlerinde CSS testid/class
+    tabanlı hedefleme için YETERİNCE KARARLI/ÖNGÖRÜLEBİLİR değil -
+    bu tür "collapse on hover" gibi karmaşık, çok bileşenli CSS
+    efektleri bu proje için YÜKSEK RİSKLİ/DÜŞÜK GÜVENİLİRLİKTE.
+    Benzer bir istek tekrar gelirse, muhtemelen customComponent
+    (iframe tabanlı, kendi CSS'i tam kontrol edilebilen) bir
+    çözüm daha güvenilir olabilir - ama bu da bugün elenen
+    `streamlit-option-menu` gibi seçeneklerin hover-collapse için
+    dıştan erişilemez olma sorununu taşıyabilir, dikkatli
+    değerlendirilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
