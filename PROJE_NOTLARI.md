@@ -5571,5 +5571,27 @@ tamam, canlı doğrulama BEKLİYOR):**
     yanlışlıkla silinen bir CSS kuralı (`:hover` durumunda
     `overflow:visible`) da fark edilip geri eklendi.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.261
+  (5 Eylül 2026, Bahri'nin bulgusu — "düzelmedi?", ikinci ekran
+  görüntüsü): SLIDER ETİKETİ SORUNU DEVAM EDİYORDU - DAHA KÖKTEN BİR
+  ÇÖZÜME GEÇİLDİ.**
+  - v2.0.7.260'ın genel `white-space:normal` düzeltmesi YETERSİZ
+    kaldı - Risk Toleransı kısmen düzeldi ama Max Varlık Sayısı hâlâ
+    bozuktu. Kök neden daha net anlaşıldı: sorun sadece `white-space`
+    DEĞİL, `stTickBarMin`/`stTickBarMax` (min/max uç etiketleri)
+    elemanlarının KENDİ GENİŞLİK hesaplamasının, daralan sidebar'a
+    göre çok dar kalması - dar bir kutuda `white-space:normal` bile
+    harf harf sarabiliyor.
+  - **İki katmanlı çözüm:** (1) `stTickBarMin`/`stTickBarMax`'a açıkça
+    `nowrap` + `width:auto` + `overflow:visible` verildi (kısa
+    etiketler zaten tek satıra sığar, sarılmalarına hiç gerek yok).
+    (2) DAHA KÖKTEN: slider'ın TAMAMINA (`stSlider`) sabit bir
+    `min-width:250px` verildi - böylece slider HİÇBİR ZAMAN dar bir
+    alanda "hesaplama yapmıyor", dış konteynerin `overflow:hidden`'i
+    ile ya tam genişliğinde doğru görünüyor ya da (sidebar kapalıyken)
+    tamamen gizleniyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Bu üçüncü deneme -
+    canlı sonucun bu sefer tam çözüp çözmediği kontrol edilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

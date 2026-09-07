@@ -2046,6 +2046,34 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stSlider"] * {
         white-space: normal !important;
     }
+    /* v2.0.7.261 (5 Eylul 2026, Bahri'nin bulgusu - hala duzelmedi,
+    ikinci ekran goruntusu): v2.0.7.260 yeterli olmadi - asil sorun
+    "stTickBarMin"/"stTickBarMax" (min/max uc etiketleri, ornek "Cok
+    Dusuk"/"Cok Yuksek") elemanlarinin KENDI GENISLIGININ, daralan
+    sidebar'a gore hesaplanip cok dar kalmasiydi (white-space:normal
+    tek basina yetersizdi - dar bir kutuda "normal" bile harf harf
+    sarabiliyor). Bu iki elemana ACIKCA nowrap + genislik serbestligi
+    veriliyor - kisa etiketler zaten TEK SATIRA sigar, sarilmalarina
+    hic gerek yok. */
+    /* v2.0.7.261 (devam): Kok neden aslinda SLIDER'IN KENDISI (sadece
+    etiketleri degil) - dar konteynerde ic genislik hesaplamasi
+    bozuluyor, bu da :hover ile genisleyince BILE etiketlerin yanlis
+    konumlanmasina yol acabiliyor. Daha saglam cozum: slider'in
+    TAMAMINA sabit bir minimum genislik verilip, dar haldeyken DIS
+    konteynerin (stSidebarUserContent) overflow:hidden'i ile TAMAMEN
+    GIZLENMESI saglaniyor - boylece slider HICBIR ZAMAN dar bir alanda
+    "hesaplama yapmiyor", ya tam genisliginde dogru gorunuyor ya da
+    hic gorunmuyor. */
+    [data-testid="stSidebar"] [data-testid="stSlider"] {
+        min-width: 250px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stTickBarMin"],
+    [data-testid="stSidebar"] [data-testid="stTickBarMax"] {
+        white-space: nowrap !important;
+        width: auto !important;
+        max-width: none !important;
+        overflow: visible !important;
+    }
     [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
         overflow: visible;
     }
