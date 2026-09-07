@@ -5370,5 +5370,20 @@ tamam, canlı doğrulama BEKLİYOR):**
     fonksiyonunun imzası (`kullanici_id, tespit_id`) mevcut kullanımla
     uyumlu doğrulandı. Gerçek Streamlit ortamında canlı test edilmedi.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.253
+  (5 Eylül 2026, Bahri'nin talebi — "Butonları makul ölçüde, en az yer
+  kaplayacak ve yazıları okunacak şekilde küçült ve sola yanaştır"):
+  "Tümünü Onayla" / "Tümünü Reddet" DÜĞMELERİ DARALTILDI.**
+  - Eskiden 2 eşit (%50/%50) sütuna, tam genişliğe yayılıyorlardı - bu
+    ekran görüntüsünde gereksiz derecede geniş/boşluklu görünüyordu.
+  - Artık 3 sütunlu bir düzen kullanılıyor: Onayla (~%42 oran), Reddet
+    (~%18 oran), kalan genişlik BOŞ bir 3. sütuna (spacer) bırakılıyor -
+    bu, iki düğmeyi de sola yanaştırıp gereksiz boşluğu ortadan kaldırıyor.
+    Oranlar metin uzunluklarına göre tahmini seçildi (Onayla metni çok
+    daha uzun); gerekirse ince ayar yapılabilir.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Gerçek görsel sonuç
+    canlı ortamda görülmeden kesinleşemez - push sonrası kontrol
+    edilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

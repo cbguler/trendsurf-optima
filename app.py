@@ -4105,7 +4105,13 @@ if page=="Ana Sayfa":
                 return False
             return True
 
-        _col_onay_toplu, _col_red_toplu = st.columns(2)
+        # v2.0.7.253 (5 Eylul 2026, Bahri'nin talebi - "en az yer kaplayacak
+        # ve yazilari okunacak sekilde kucult ve sola yanastir"): Esit 2
+        # sutuna (%50/%50, tam genislik) yayilmak yerine, dugmeler kendi
+        # metin uzunluklarina yakin oranli DAR sutunlara alindi, kalan
+        # genislik BOS bir 3. sutuna (spacer) birakildi - bu, iki dugmeyi
+        # de sola yanastirip gereksiz genis bosluklari ortadan kaldirir.
+        _col_onay_toplu, _col_red_toplu, _col_bosluk_toplu = st.columns([2.3, 1, 2.2])
         with _col_onay_toplu:
             _onayla_toplu_tiklandi = st.button(
                 "Tümünü Onayla (kriterleri karşılayanlar)",
