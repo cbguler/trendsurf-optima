@@ -5421,5 +5421,16 @@ tamam, canlı doğrulama BEKLİYOR):**
     birkaç sayfa gezindikten sonra) "İstatistikler" düğmesi kontrol
     edilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.255
+  (5 Eylül 2026, Bahri'nin talebi): "Tümünü Onayla" düğmesinin metni
+  sadeleştirildi ve iki düğme eşitlendi.**
+  - Düğme metni "Tümünü Onayla (kriterleri karşılayanlar)" → sadece
+    "Tümünü Onayla" (kriter davranışının kendisi DEĞİŞMEDİ - altındaki
+    açıklama satırı zaten bunu anlatıyor).
+  - Metin kısaldığı için artık "Tümünü Reddet" ile yaklaşık eşit
+    uzunlukta - sütun oranları `[2.3, 1, 2.2]`'den eşit `[1, 1, 4]`'e
+    değiştirildi, iki düğme de aynı boyutta ve sola yanaşık.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

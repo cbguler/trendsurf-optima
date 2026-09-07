@@ -4119,16 +4119,16 @@ if page=="Ana Sayfa":
                 return False
             return True
 
-        # v2.0.7.253 (5 Eylul 2026, Bahri'nin talebi - "en az yer kaplayacak
-        # ve yazilari okunacak sekilde kucult ve sola yanastir"): Esit 2
-        # sutuna (%50/%50, tam genislik) yayilmak yerine, dugmeler kendi
-        # metin uzunluklarina yakin oranli DAR sutunlara alindi, kalan
-        # genislik BOS bir 3. sutuna (spacer) birakildi - bu, iki dugmeyi
-        # de sola yanastirip gereksiz genis bosluklari ortadan kaldirir.
-        _col_onay_toplu, _col_red_toplu, _col_bosluk_toplu = st.columns([2.3, 1, 2.2])
+        # v2.0.7.255 (5 Eylul 2026, Bahri'nin talebi - "Tumunu Onayla
+        # butonunun yazisindaki parantez ici yaziyi kaldir, butonu
+        # kucülterek Tümünü Reddet ile esit boyutlandir, sola yanastir"):
+        # Metin kisaldigi icin (parantez kismi kaldirildi) iki dugme
+        # artik esit uzunlukta - esit dar sutunlara alindi, kalan genislik
+        # BOS bir 3. sutuna (spacer) birakildi.
+        _col_onay_toplu, _col_red_toplu, _col_bosluk_toplu = st.columns([1, 1, 4])
         with _col_onay_toplu:
             _onayla_toplu_tiklandi = st.button(
-                "Tümünü Onayla (kriterleri karşılayanlar)",
+                "Tümünü Onayla",
                 key="tumunu_onayla_kriterli", use_container_width=True)
         with _col_red_toplu:
             # v2.0.7.252 (5 Eylul 2026, Bahri'nin talebi): "Tumunu Onayla"nin
