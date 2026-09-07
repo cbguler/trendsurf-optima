@@ -5528,5 +5528,31 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Doğrulama:** `python3 -m py_compile` temiz. Görsel sonuç yine
     canlı ortamda kontrol edilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.259
+  (5 Eylül 2026, Bahri'nin talebi — "Yok olmadı hepsini geri al,
+  başladığımız şekle geri dönelim, sadece sol bar kaybolan şekilde
+  olsun yeter, oynadıkça daha da kötü olmaya başladı"): İKON MENÜSÜ
+  DENEYİ (v2.0.7.256-258) TAMAMEN GERİ ALINDI - SADECE BASİT HOVER-
+  COLLAPSE KORUNDU.**
+  - **Karar:** Üç turluk (256/257/258) ikon+pills+Instagram-stil
+    denemesi, her turda yeni bir görsel sorun çıkardığı için (ızgara
+    dizilimi, metin dağılması, "hap" görünümü) TAMAMEN TERK EDİLDİ.
+    Navigasyon eski, kanıtlanmış `st.radio`'ya (düz metin, ikonsuz)
+    geri döndü.
+  - **KORUNAN tek şey:** Sidebar'ın kendisinin dar durup imleç üzerine
+    gelince genişlemesi (basit CSS: `min/max-width` + `:hover` +
+    `transition`) VE dar haldeyken TÜM metnin görünmez olması
+    (`white-space:nowrap` + `overflow:hidden`, hover'da normale
+    dönüyor) - bu ikinci kısım (v2.0.7.257'nin CSS'i) hiç şikayet
+    konusu OLMAMIŞTI, sadece ikon/pills kısmı sorunluydu, o yüzden
+    aynen bırakıldı.
+  - `requirements.txt`'teki Streamlit sürüm zorunluluğu da `st.pills`
+    artık kullanılmadığı için `>=1.40.0`'dan `>=1.37.0`'a GERİ ALINDI.
+  - **Doğrulama:** `python3 -m py_compile` temiz, `_ikonlu_to_temiz`/
+    `_SAYFA_IKONLARI`/`_page_secim_ikonlu` gibi kaldırılan değişkenlere
+    hiçbir yerde artık referans kalmadığı (grep ile) doğrulandı.
+  - **AÇIK:** Push + canlı doğrulama bekliyor - artık basit bir CSS
+    değişikliği olduğu için önceki 3 turdan çok daha az risk taşıyor.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

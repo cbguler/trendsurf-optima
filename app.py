@@ -2009,35 +2009,17 @@ with st.sidebar:
     st.divider()
 
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
-    _pages_display_temiz = PAGES[:-1] + [_yardim_etiket]
+    _pages_display = PAGES[:-1] + [_yardim_etiket]
 
-    # v2.0.7.256 (5 Eylul 2026, Bahri'nin talebi - "sol menu barini
-    # automatically hide yapmak istiyorum... Instagram uygulamasindaki
-    # gibi buyuk ikonlar... bar kapali oldugunda ikonlar gorunsun,
-    # imlec ile uzerine gelindiginde bar normale donsun"): Streamlit'in
-    # KENDI yerlesik Material Symbols ikon destegi kullanildi
-    # (":material/isim:" sozdizimi) - emoji DEGIL (kalici kural),
-    # ucuncu parti bir bilesen de DEGIL (streamlit-option-menu gibi
-    # secenekler kendi izole iframe'inde calisiyor, disaridan hover/
-    # collapse CSS'i ile erisilemiyor - bu yuzden bilerek KULLANILMADI).
-    # Asagidaki CSS, sidebar'i varsayilan olarak DAR (sadece ikonlar
-    # gorunecek kadar) tutuyor, imlec uzerine gelince (:hover) tam
-    # genisliğe (metinler dahil) genisliyor.
-    _SAYFA_IKONLARI = {
-        "Ana Sayfa": "home", "Portföyüm": "account_balance_wallet",
-        "BIST": "candlestick_chart", "TEFAS": "savings",
-        "Döviz": "currency_exchange", "Değerli Madenler": "diamond",
-        "Kriptolar": "currency_bitcoin", "Halka Arz": "rocket_launch",
-        "Temettü": "payments", "Makro Göstergeler": "monitoring",
-        "SonDakika Haberleri": "newspaper", "Abonelik": "card_membership",
-        "Admin El Kitabı": "menu_book", "Kullanıcı El Kitabı": "menu_book",
-    }
-    _pages_display = [
-        f":material/{_SAYFA_IKONLARI.get(_p, 'circle')}: {_p}"
-        for _p in _pages_display_temiz
-    ]
-    _ikonlu_to_temiz = dict(zip(_pages_display, _pages_display_temiz))
-
+    # v2.0.7.259 (5 Eylul 2026, Bahri'nin talebi - "Yok olmadi hersey
+    # geri al baslamadigimiz sekle geri donelim, sadece sol bar kaybolan
+    # sekilde olsun yeter, oynadikca daha da kotu olmaya basladi"):
+    # v2.0.7.256-258'de denenen st.pills + Material Symbols ikon
+    # yaklasimi (Instagram tarzi ikon menusu) TAMAMEN GERI ALINDI -
+    # normal st.radio'ya donuldu. SADECE en basit istek korunuyor:
+    # sidebar dar dursun, imlec uzerine gelince genissin. Metin icerigi
+    # dar haldeyken GORUNMEZ olur (v2.0.7.257'nin CSS'i - bu kisim
+    # sikayet konusu OLMAMISTI, sadece ikon/pills kismi sorunluydu).
     st.markdown("""
     <style>
     [data-testid="stSidebar"] {
@@ -2049,18 +2031,6 @@ with st.sidebar:
         min-width: 300px !important;
         max-width: 300px !important;
     }
-
-    /* v2.0.7.257 (5 Eylul 2026, Bahri'nin bulgusu - ekran goruntusu:
-    "1- Butonlar icice olmadi yine alt alta olsun... 2- Sol bardaki
-    yazilar bar kapaninca birbirine giriyorlar, yazili ayarlarin bar
-    kapaliyken kaybolmasi gerekir"): ONCEKI (v2.0.7.256) surum SADECE
-    navigasyon pills'ine dokunuyordu - butce/risk/admin gibi DIGER
-    ogeler dar alanda SARILIP dagiliyordu (kotu gorunum). Bahri'nin
-    net tercihi: kapaliyken TUM METIN kaybolsun, acilinca HER SEY eski
-    haline donsun. Cozum: TUM sidebar icerigine "white-space:nowrap +
-    overflow:hidden" varsayilan olarak uygulaniyor (tasan kisim
-    GORUNMEZ - sarilip dagilmiyor), :hover durumunda "white-space:
-    normal + overflow:visible" ile HER SEY normal davranisina donuyor. */
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         overflow: hidden;
     }
@@ -2073,57 +2043,10 @@ with st.sidebar:
     [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] * {
         white-space: normal !important;
     }
-
-    /* Navigasyon (st.pills) HER ZAMAN dikey, tek sutun, tam genislikte
-    dursun - v2.0.7.256'da denenen "flex-direction:column" tek basina
-    yetmedi (pills 2-3'lu izgara halinde dizilmeye devam etti) - bu
-    sefer HEM konteynerin HEM her bir pill'in kendi flex davranisi
-    ACIKCA (daha yuksek ozgullukte) zorlanıyor. */
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] {
-        display: flex !important;
-        flex-direction: column !important;
-        flex-wrap: nowrap !important;
-        align-items: stretch !important;
-        gap: 4px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] > * {
-        width: 100% !important;
-        flex: 1 0 auto !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
-        justify-content: flex-start !important;
-        width: 100% !important;
-        /* v2.0.7.258 (5 Eylul 2026, Bahri'nin talebi - "istemis oldugum
-        duzen aynen Instagram'da oldugu gibi olmali", gercek Instagram
-        ekran goruntusu referans verildi): Instagram'in nav ogelerinde
-        ARKA PLAN/CERCEVE YOK - duz ikon+metin, sadece hover'da hafif
-        bir vurgu var. st.pills'in varsayilan "hap" (rounded pill,
-        renkli arka plan) gorunumu KALDIRILIYOR. */
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 10px 12px !important;
-        font-weight: 400 !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button:hover {
-        background: rgba(49, 51, 63, 0.08) !important;
-    }
-    /* Secili (aktif) sayfa - Instagram'daki gibi KALIN yazi ile
-    vurgulaniyor, renkli dolgu YOK (kendi tema renklerimizle tutarli,
-    lacivert/mavi tonlarina yakin hafif bir arka plan tercih edildi). */
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button[data-selected="true"] {
-        background: rgba(49, 51, 63, 0.12) !important;
-        font-weight: 700 !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
-    _page_secim_ikonlu = st.pills(
-        "", _pages_display, selection_mode="single", required=True,
-        default=_pages_display[0], key="_nav_pills_secim",
-        label_visibility="collapsed", width='stretch')
-    _page_secim = _ikonlu_to_temiz.get(_page_secim_ikonlu, _page_secim_ikonlu)
+    _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()
 

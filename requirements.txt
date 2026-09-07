@@ -1,7 +1,8 @@
-streamlit>=1.40.0
-# v2.0.7.256 (5 Eylul 2026): alt sinir 1.37.0 -> 1.40.0. Sebep: sol
-# menu artik ikon destekli st.pills kullaniyor (Instagram tarzi
-# hover-genislet sidebar), st.pills 1.40.0'da (6 Kasim 2024) tanitildi.
+streamlit>=1.37.0
+# v2.0.7.259 (5 Eylul 2026): alt sinir 1.40.0 -> 1.37.0 GERI ALINDI -
+# v2.0.7.256-258'de denenen st.pills (Instagram tarzi ikon menusu)
+# tamamen geri alindi, normal st.radio'ya donuldu - 1.40.0 zorunlulugu
+# artik gecerli degil.
 # v2.0.7.159 (19 Agustos 2026): alt sinir 1.35.0 -> 1.37.0. Sebep: onay
 # bekleyen otomatik tespitleri gosteren modal kutu st.dialog kullaniyor,
 # st.dialog 1.37.0'da genel kullanima acildi. app.py yine de hasattr ile
