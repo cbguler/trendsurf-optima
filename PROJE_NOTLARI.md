@@ -5232,5 +5232,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     `_kid` parametresi deseni). SONRAKİ OTURUMDA dikkatli ele alınmalı.
   - **AÇIK:** Push + canlı doğrulama bekliyor.
 
+- **[UYGULANDI, SÖZDİZİMİ VE ÇAĞRI NOKTALARI DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.249 (5 Eylül 2026, Bahri'nin bulgusu - ekran görüntüsü):
+  KRİTİK ÇÖKME - "Onay Bekleyen Otomatik Tespitler" (Ana Sayfa) listesi
+  `NameError: _cok_kaynakli_cumle_olustur` HATASIYLA ÇÖKÜYORDU.**
+  - **Kök neden:** v2.0.7.217/240'ta eklenen üç yardımcı fonksiyon
+    (`_turkce_liste_birlestir`, `_cok_kaynakli_cumle_olustur`,
+    `_kaynak_bolumu_goster`) - kendi docstring'lerinde AÇIKÇA "hem
+    modal hem Ana Sayfa listesi için" diye belirtilmesine rağmen -
+    SADECE modal'ı (`@st.dialog`) içeren dış fonksiyonun kapsamına
+    (scope) iç içe (nested) tanımlanmıştı. Ana Sayfa'daki "Onay
+    Bekleyen Otomatik Tespitler" bölümü TAMAMEN FARKLI bir kod
+    bloğunda olduğu için bu isimlere hiç erişemiyordu - modal üzerinden
+    hiç sorun çıkmıyordu (aynı kapsamda), ama Ana Sayfa'dan HER
+    ZAMAN çöküyordu.
+  - **Çözüm:** Üç fonksiyon da MODÜL SEVİYESİNE taşındı - hiçbiri
+    dışarıdaki değişkenlere bağımlı değildi (tüm girdilerini parametre
+    olarak alıyorlar), bu yüzden taşıma güvenli. Artık modal VE Ana
+    Sayfa'nın DÖRT çağrı noktası da (2716, 2740, 4118, 4133) aynı, tek
+    tanımdan besleniyor.
+  - **İkinci bir çökme İKİNCİ kez tetiklenmeden bulundu:**
+    `_kaynak_bolumu_goster`'ın da Ana Sayfa'da (4133. satır)
+    çağrıldığı fark edildi - ilk hata (satır 4118) düzeltilip tek
+    başına push edilseydi, hemen ardından AYNI TÜR bir NameError bu
+    sefer 4133'te çıkacaktı. İkisi de TEK seferde düzeltildi.
+  - **Doğrulama:** `python3 -m py_compile` temiz, tüm 4 çağrı noktası
+    artık modül seviyesindeki tanımlara referans veriyor (grep ile
+    doğrulandı). Gerçek Streamlit ortamında canlı test edilmedi -
+    push sonrası Ana Sayfa'da "Onay Bekleyen Otomatik Tespitler"
+    bölümünün artık çökmeden yüklendiği doğrulanmalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

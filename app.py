@@ -2609,100 +2609,100 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
         return [(_ad_o.get(_k_o, _k_o), _p_o * _carpan_o)
                 for _k_o, _p_o in _KALIP_TABLOSU.get(_kalip_key_o, {}).items()]
 
-    # v2.0.7.215 (Bahri'nin talebi, 29 Ağustos 2026 — "ikinci kaynağı
-    # sadece 'Ayrıca...' yazısında değil, ana cümlenin başında ve
-    # Kaynak listesinde numaralı olarak görmek istiyorum"): AI'nın
-    # ürettiği cümle SADECE birincil kaynakla üretiliyor (teyit,
-    # AI çağrısından SONRA, ayrı bir veritabanı sorgusuyla tespit
-    # ediliyor) - bu yüzden AI'ya tekrar sormak yerine, cümledeki
-    # "{kaynak} kaynağından alınan habere göre" ifadesini basit bir
-    # metin ikamesiyle "{kaynak}'den alınan ve {teyit_kaynak}
-    # kaynağından da tespit edilen habere göre" haline getiriyoruz.
-    # ÖNEMLİ: Bu iki yardımcı fonksiyon, @st.dialog dekoratörlü
-    # _tespit_onay_modali'DEN AYRI, sıradan (dekoratörsüz) fonksiyonlar
-    # olarak BİLEREK burada, dekoratörden ÖNCE tanımlanıyor - dekoratör
-    # yanlışlıkla bu fonksiyonlardan birine değil, doğrudan
-    # _tespit_onay_modali'ye uygulanmalı.
-    def _turkce_liste_birlestir(ogeler):
-        """v2.0.7.217: ['A'] -> 'A', ['A','B'] -> 'A ve B',
-        ['A','B','C'] -> 'A, B ve C' - dogal Turkce liste birlestirme."""
-        if not ogeler:
-            return ""
-        if len(ogeler) == 1:
-            return ogeler[0]
-        return ", ".join(ogeler[:-1]) + " ve " + ogeler[-1]
+# v2.0.7.249 (5 Eylul 2026, Bahri'nin bulgusu - NameError: 
+# _cok_kaynakli_cumle_olustur tanimli degil, Ana Sayfa'daki 'Onay Bekleyen
+# Otomatik Tespitler' listesi): KESIN KOK NEDEN BULUNDU. Bu uc yardimci
+# fonksiyon (_turkce_liste_birlestir, _cok_kaynakli_cumle_olustur,
+# _kaynak_bolumu_goster) HEM modal (@st.dialog) HEM Ana Sayfa listesi
+# icin kullanilmasi GEREKIYORDU (kendi docstring'leri bunu acikca
+# soyluyordu), AMA bir onceki (ic ice/nested) konumlarinda SADECE
+# modal'i iceren dis fonksiyonun kapsamina (scope) dahildiler - Ana
+# Sayfa'nin kod blogu FARKLI bir kapsam oldugu icin bu isimlere hic
+# erisemiyor, NameError firlatiyordu. Cozum: ucu de MODUL SEVIYESINE
+# (disariya) tasindi - hicbiri disaridaki degiskenlere bagimli degildi
+# (hepsi tum girdilerini parametre olarak aliyor), bu yuzden tasima
+# guvenli. Artik HER İKİ cagri yeri (modal + Ana Sayfa) ayni, tek
+# tanimdan besleniyor.
+def _turkce_liste_birlestir(ogeler):
+    """v2.0.7.217: ['A'] -> 'A', ['A','B'] -> 'A ve B',
+    ['A','B','C'] -> 'A, B ve C' - dogal Turkce liste birlestirme."""
+    if not ogeler:
+        return ""
+    if len(ogeler) == 1:
+        return ogeler[0]
+    return ", ".join(ogeler[:-1]) + " ve " + ogeler[-1]
 
-    def _cok_kaynakli_cumle_olustur(ai_gerekce, haber_kaynak, teyit_listesi):
-        """v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
-        olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
-        TEK BİR teyit_kaynak DEĞİL, `teyit_listesi` (sözlük listesi)
-        alıyor - kaç tane teyit eden kaynak varsa hepsi doğal bir
-        Türkçe listede ("X, Y ve Z kaynaklarından da teyit edilen")
-        cümleye ekleniyor.
+def _cok_kaynakli_cumle_olustur(ai_gerekce, haber_kaynak, teyit_listesi):
+    """v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
+    olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
+    TEK BİR teyit_kaynak DEĞİL, `teyit_listesi` (sözlük listesi)
+    alıyor - kaç tane teyit eden kaynak varsa hepsi doğal bir
+    Türkçe listede ("X, Y ve Z kaynaklarından da teyit edilen")
+    cümleye ekleniyor.
 
-        v2.0.7.240 (Bahri'nin bulgusu, 2 Eylül 2026 — pop-up'ta üstteki
-        cümle hep TEK kaynak gösteriyordu, alttaki "Kaynaklar:" listesi
-        3 kaynak gösterse bile): KESİN KÖK NEDEN BULUNDU. AI (Gemini),
-        prompt şablonundaki "[Kaynak] kaynağından alınan habere göre"
-        örneğindeki köşeli parantezleri bazen YER TUTUCU işareti olarak
-        değil, ÇIKTININ BİR PARÇASI olarak yorumluyor - "[Investing.com
-        TR] kaynağından alınan habere göre..." gibi PARANTEZLİ üretiyor.
-        Eski `eski_ifade` ise PARANTEZSİZ ("Investing.com TR
-        kaynağından...") arıyordu - metin İÇİNDE hiç bulunamıyordu,
-        `if eski_ifade not in ai_gerekce: return ai_gerekce` güvenli
-        geri dönüşü SESSİZCE devreye giriyordu. Düzeltme: sabit metin
-        arama yerine, kaynak adının etrafında OPSİYONEL köşeli parantez
-        toleranslı bir regex kullanılıyor - parantezli/parantezsiz
-        HER İKİ hâli de yakalanıp DOĞRU (parantezsiz, tutarlı) yeni
-        ifadeyle değiştiriliyor."""
-        if not ai_gerekce or not teyit_listesi or not haber_kaynak:
-            return ai_gerekce
-        import re
-        desen = r"\[?" + re.escape(haber_kaynak) + r"\]?\s*kaynağından alınan habere göre"
-        if not re.search(desen, ai_gerekce):
-            return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
-        _teyit_isimleri = [t.get("kaynak", "") for t in teyit_listesi if t.get("kaynak")]
-        if not _teyit_isimleri:
-            return ai_gerekce
-        _isim_metni = _turkce_liste_birlestir(_teyit_isimleri)
-        # v2.0.7.216: "tespit edilen" -> "teyit edilen" (Bahri'nin
-        # talebi - anlamsal olarak daha doğru kelime).
-        _kaynak_ek = "kaynağından" if len(_teyit_isimleri) == 1 else "kaynaklarından"
-        yeni_ifade = (f"{haber_kaynak}'den alınan ve {_isim_metni} "
-                      f"{_kaynak_ek} da teyit edilen habere göre")
-        return re.sub(desen, yeni_ifade, ai_gerekce, count=1)
+    v2.0.7.240 (Bahri'nin bulgusu, 2 Eylül 2026 — pop-up'ta üstteki
+    cümle hep TEK kaynak gösteriyordu, alttaki "Kaynaklar:" listesi
+    3 kaynak gösterse bile): KESİN KÖK NEDEN BULUNDU. AI (Gemini),
+    prompt şablonundaki "[Kaynak] kaynağından alınan habere göre"
+    örneğindeki köşeli parantezleri bazen YER TUTUCU işareti olarak
+    değil, ÇIKTININ BİR PARÇASI olarak yorumluyor - "[Investing.com
+    TR] kaynağından alınan habere göre..." gibi PARANTEZLİ üretiyor.
+    Eski `eski_ifade` ise PARANTEZSİZ ("Investing.com TR
+    kaynağından...") arıyordu - metin İÇİNDE hiç bulunamıyordu,
+    `if eski_ifade not in ai_gerekce: return ai_gerekce` güvenli
+    geri dönüşü SESSİZCE devreye giriyordu. Düzeltme: sabit metin
+    arama yerine, kaynak adının etrafında OPSİYONEL köşeli parantez
+    toleranslı bir regex kullanılıyor - parantezli/parantezsiz
+    HER İKİ hâli de yakalanıp DOĞRU (parantezsiz, tutarlı) yeni
+    ifadeyle değiştiriliyor."""
+    if not ai_gerekce or not teyit_listesi or not haber_kaynak:
+        return ai_gerekce
+    import re
+    desen = r"\[?" + re.escape(haber_kaynak) + r"\]?\s*kaynağından alınan habere göre"
+    if not re.search(desen, ai_gerekce):
+        return ai_gerekce  # beklenen kalıpta değilse dokunma - guvenli geri donus
+    _teyit_isimleri = [t.get("kaynak", "") for t in teyit_listesi if t.get("kaynak")]
+    if not _teyit_isimleri:
+        return ai_gerekce
+    _isim_metni = _turkce_liste_birlestir(_teyit_isimleri)
+    # v2.0.7.216: "tespit edilen" -> "teyit edilen" (Bahri'nin
+    # talebi - anlamsal olarak daha doğru kelime).
+    _kaynak_ek = "kaynağından" if len(_teyit_isimleri) == 1 else "kaynaklarından"
+    yeni_ifade = (f"{haber_kaynak}'den alınan ve {_isim_metni} "
+                  f"{_kaynak_ek} da teyit edilen habere göre")
+    return re.sub(desen, yeni_ifade, ai_gerekce, count=1)
 
-    def _kaynak_bolumu_goster(satir):
-        """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
-        gosterimi.
+def _kaynak_bolumu_goster(satir):
+    """Hem modal hem Ana Sayfa listesi icin AYNI numarali kaynak
+    gosterimi.
 
-        v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
-        olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
-        SINIRSIZ SAYIDA teyit eden kaynak destekleniyor - eskiden
-        `teyit_kaynak` tekil bir alandı (en fazla 1 teyit
-        gösterilebiliyordu, `db.py`'deki eşleştirme mantığı da ilk
-        eşleşmede duruyordu). Şimdi `teyit_listesi` bir DİZİ - kaç
-        tane bağımsız kaynak aynı olayı doğruladıysa hepsi 2, 3, 4...
-        şeklinde numaralanarak gösteriliyor.
+    v2.0.7.217 (Bahri'nin sorusu — "üç, dört, beş, altı kaynak
+    olması halinde pop-up bunları da gösterebilecek mi?"): ARTIK
+    SINIRSIZ SAYIDA teyit eden kaynak destekleniyor - eskiden
+    `teyit_kaynak` tekil bir alandı (en fazla 1 teyit
+    gösterilebiliyordu, `db.py`'deki eşleştirme mantığı da ilk
+    eşleşmede duruyordu). Şimdi `teyit_listesi` bir DİZİ - kaç
+    tane bağımsız kaynak aynı olayı doğruladıysa hepsi 2, 3, 4...
+    şeklinde numaralanarak gösteriliyor.
 
-        v2.0.7.216: teyit eden bir kaynağın `haber_url`'i boşsa link
-        yerine düz metin olarak gösteriliyor - kaynak GENE DE
-        listeden tamamen gizlenmiyor."""
-        if not satir.get("haber_url"):
-            return
-        _tum_maddeler = [f"[{satir.get('haber_kaynak','')} — {satir.get('haber_basligi','')}]({satir.get('haber_url')})"]
-        for _t in satir.get("teyit_listesi") or []:
-            if _t.get("url"):
-                _tum_maddeler.append(f"[{_t.get('kaynak','')} — {_t.get('baslik','')}]({_t.get('url')})")
-            else:
-                # url yoksa duz metin olarak goster - kaynak GENE DE
-                # gorunur kalsin, tamamen gizlenmesin (v2.0.7.216).
-                _tum_maddeler.append(f"{_t.get('kaynak','')} — {_t.get('baslik','')}")
-        if len(_tum_maddeler) == 1:
-            st.caption(f"Kaynak: {_tum_maddeler[0]}")
+    v2.0.7.216: teyit eden bir kaynağın `haber_url`'i boşsa link
+    yerine düz metin olarak gösteriliyor - kaynak GENE DE
+    listeden tamamen gizlenmiyor."""
+    if not satir.get("haber_url"):
+        return
+    _tum_maddeler = [f"[{satir.get('haber_kaynak','')} — {satir.get('haber_basligi','')}]({satir.get('haber_url')})"]
+    for _t in satir.get("teyit_listesi") or []:
+        if _t.get("url"):
+            _tum_maddeler.append(f"[{_t.get('kaynak','')} — {_t.get('baslik','')}]({_t.get('url')})")
         else:
-            _numarali = "  \n".join(f"{i+1}- {m}" for i, m in enumerate(_tum_maddeler))
-            st.caption(f"Kaynaklar: {_numarali}")
+            # url yoksa duz metin olarak goster - kaynak GENE DE
+            # gorunur kalsin, tamamen gizlenmesin (v2.0.7.216).
+            _tum_maddeler.append(f"{_t.get('kaynak','')} — {_t.get('baslik','')}")
+    if len(_tum_maddeler) == 1:
+        st.caption(f"Kaynak: {_tum_maddeler[0]}")
+    else:
+        _numarali = "  \n".join(f"{i+1}- {m}" for i, m in enumerate(_tum_maddeler))
+        st.caption(f"Kaynaklar: {_numarali}")
 
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():
