@@ -2034,45 +2034,18 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         overflow: hidden;
     }
-    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] * {
+    /* v2.0.7.262 (5 Eylul 2026, Bahri'nin bulgusu - uc kez denenen
+    "sonradan gecersiz kil" yaklasimi calismadi, hala bozuktu):
+    TEMIZ COZUM - slider'i (ve TUM alt elemanlarini) genel nowrap
+    kuralinin KAYNAGINDAN haric tutuyoruz (":not()" ile), sonradan
+    "duzeltmeye" CALISMIYORUZ. Boylece slider HICBIR OZEL KURALA
+    MARUZ KALMIYOR - Streamlit'in kendi ORIJINAL (hic dokunulmamis)
+    render mantigi aynen calisiyor. Sidebar dar haldeyken slider zaten
+    ust konteynerin overflow:hidden'i sayesinde GORUNMEZ oluyor -
+    genislik/nowrap ile ayrica ugrasmaya HIC GEREK YOK. */
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
+        *:not([data-testid="stSlider"] *):not([data-testid="stSlider"]) {
         white-space: nowrap !important;
-    }
-    /* v2.0.7.260 (5 Eylul 2026, Bahri'nin bulgusu - "risk toleransi
-    ayarinin yazilari asagidan yukari olmus"): Slider bilesenlerinin
-    (Risk Toleransi, Max Varlik Sayisi) KENDI ic etiketleri, genel
-    nowrap kuraliyla CAKISIP harf harf DIKEY dizilmeye baslamisti -
-    slider'lar BU KURALIN DISINDA tutuluyor (kendi ic yapilarini
-    normal birakiyoruz, zaten cok kisa etiketler kullaniyorlar). */
-    [data-testid="stSidebar"] [data-testid="stSlider"] * {
-        white-space: normal !important;
-    }
-    /* v2.0.7.261 (5 Eylul 2026, Bahri'nin bulgusu - hala duzelmedi,
-    ikinci ekran goruntusu): v2.0.7.260 yeterli olmadi - asil sorun
-    "stTickBarMin"/"stTickBarMax" (min/max uc etiketleri, ornek "Cok
-    Dusuk"/"Cok Yuksek") elemanlarinin KENDI GENISLIGININ, daralan
-    sidebar'a gore hesaplanip cok dar kalmasiydi (white-space:normal
-    tek basina yetersizdi - dar bir kutuda "normal" bile harf harf
-    sarabiliyor). Bu iki elemana ACIKCA nowrap + genislik serbestligi
-    veriliyor - kisa etiketler zaten TEK SATIRA sigar, sarilmalarina
-    hic gerek yok. */
-    /* v2.0.7.261 (devam): Kok neden aslinda SLIDER'IN KENDISI (sadece
-    etiketleri degil) - dar konteynerde ic genislik hesaplamasi
-    bozuluyor, bu da :hover ile genisleyince BILE etiketlerin yanlis
-    konumlanmasina yol acabiliyor. Daha saglam cozum: slider'in
-    TAMAMINA sabit bir minimum genislik verilip, dar haldeyken DIS
-    konteynerin (stSidebarUserContent) overflow:hidden'i ile TAMAMEN
-    GIZLENMESI saglaniyor - boylece slider HICBIR ZAMAN dar bir alanda
-    "hesaplama yapmiyor", ya tam genisliginde dogru gorunuyor ya da
-    hic gorunmuyor. */
-    [data-testid="stSidebar"] [data-testid="stSlider"] {
-        min-width: 250px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stTickBarMin"],
-    [data-testid="stSidebar"] [data-testid="stTickBarMax"] {
-        white-space: nowrap !important;
-        width: auto !important;
-        max-width: none !important;
-        overflow: visible !important;
     }
     [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
         overflow: visible;

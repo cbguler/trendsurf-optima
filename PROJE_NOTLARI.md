@@ -5593,5 +5593,29 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **Doğrulama:** `python3 -m py_compile` temiz. Bu üçüncü deneme -
     canlı sonucun bu sefer tam çözüp çözmediği kontrol edilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.262
+  (5 Eylül 2026, Bahri'nin bulgusu — "Hayır olmadı alttaki slider da
+  bozuk", üçüncü kez): SLIDER SORUNUNA TEMİZ (KAYNAKTAN HARİÇ TUTMA)
+  ÇÖZÜM - ÜÇ "SONRADAN DÜZELTME" DENEMESİ BAŞARISIZ OLDUKTAN SONRA.**
+  - v2.0.7.260 ve v2.0.7.261'in İKİSİ DE "önce genel kuralı uygula,
+    sonra slider için ÖZEL BİR İSTİSNA/DÜZELTME ekleyerek üzerine
+    yaz" yaklaşımını denedi - İKİSİ DE canlı ortamda başarısız oldu
+    (Risk Toleransı'nın "Çok Yüksek" etiketi hâlâ dikey harf harf
+    dizilmeye devam etti).
+  - **Yeni yaklaşım - kaynaktan hariç tutma:** Genel nowrap kuralının
+    KENDİSİ artık `:not([data-testid="stSlider"] *):not([data-testid=
+    "stSlider"])` ile slider'ı ve TÜM alt elemanlarını EN BAŞTAN
+    kapsam DIŞINDA bırakıyor - sonradan "düzeltmeye" ÇALIŞMIYOR.
+    Slider artık HİÇBİR özel kurala maruz kalmıyor, Streamlit'in
+    kendi ORİJİNAL (hiç dokunulmamış) render mantığı aynen çalışıyor.
+    Sidebar dar haldeyken slider zaten üst konteynerin
+    `overflow:hidden`'i sayesinde görünmez oluyor - genişlik/nowrap
+    ile ayrıca uğraşmaya hiç gerek kalmadı.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Bu dördüncü deneme -
+    eğer bu da çözmezse, muhtemelen sliderları TAMAMEN GİZLEME
+    davranışından da hariç tutup (her zaman görünür bırakarak,
+    sidebar dar halde biraz taşsa bile) daha da basit bir çözüme
+    geçilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
