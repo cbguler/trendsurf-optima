@@ -5352,5 +5352,23 @@ tamam, canlı doğrulama BEKLİYOR):**
     modal bloğunun içinde KALAN başka bir "if içinde def" kalıbı vardır -
     aynı yaklaşım (modül seviyesine taşı) uygulanmalı.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.252
+  (5 Eylül 2026, Bahri'nin talebi - modal ve liste artık çökmeden
+  çalıştığı ekran görüntüleriyle onaylandıktan sonra): İKİ KÜÇÜK UI
+  İYİLEŞTİRMESİ.**
+  - **"Daha sonra bak" → "Daha sonra incele"**: Modal dialogdaki erteleme
+    düğmesinin adı değiştirildi (hem düğme metni hem açıklama satırı
+    hem ilgili kod yorumu güncellendi).
+  - **"Tümünü Reddet" düğmesi eklendi**: Ana Sayfa'daki "Onay Bekleyen
+    Otomatik Tespitler" bölümünde, mevcut "Tümünü Onayla (kriterleri
+    karşılayanlar)" düğmesinin yanına (aynı satırda, 2 sütunlu düzen)
+    eklendi. Bu düğme, kriter filtresi UYGULAMADAN, bekleyen TÜM
+    tespitleri tek seferde reddeder - "Tümünü Onayla"nın aksine hiçbir
+    koşul kontrolü yapmıyor (Bahri'nin isteği: "aşağıda bekleyen tüm
+    onayları iptal etsin").
+  - **Doğrulama:** `python3 -m py_compile` temiz, `tespit_reddet()`
+    fonksiyonunun imzası (`kullanici_id, tespit_id`) mevcut kullanımla
+    uyumlu doğrulandı. Gerçek Streamlit ortamında canlı test edilmedi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

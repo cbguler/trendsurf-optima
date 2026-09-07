@@ -2583,7 +2583,7 @@ if _bekleyen_tespitler:
 #     "1 / N" sayacı var. Onayla/Reddet sonrası rerun ile bir sonraki açılır.
 #  3. Uygulamada 5 dakikada bir sessiz autorefresh var - önlem alınmazsa
 #     modal kullanıcı okurken tekrar tekrar önüne düşer. Bu yüzden
-#     "Daha sonra bak" düğmesi oturum boyunca modalı susturur
+#     "Daha sonra incele" düğmesi oturum boyunca modalı susturur
 #     (`tespit_modal_ertelendi`); üstteki uyarı şeridi kalmaya devam eder.
 _MODAL_ERTELE_KEY = "tespit_modal_ertelendi"
 
@@ -2827,13 +2827,13 @@ if (_bekleyen_tespitler and hasattr(st, "dialog")
                             "oldu (sunucu loglarına bakılmalı). Tekrar "
                             "deneyin, sürerse Bahri'ye bildirin.")
 
-        if st.button("Daha sonra bak", key="modal_tespit_ertele",
+        if st.button("Daha sonra incele", key="modal_tespit_ertele",
                      use_container_width=True):
             st.session_state[_MODAL_ERTELE_KEY] = True
             st.rerun()
         st.caption(
             "Kutuyu kapatırsanız sayfa yenilendiğinde tekrar açılır. "
-            "Bu oturumda bir daha çıkmasın isterseniz 'Daha sonra bak' "
+            "Bu oturumda bir daha çıkmasın isterseniz 'Daha sonra incele' "
             "düğmesini kullanın - tespit silinmez, Ana Sayfa'daki listede "
             "durmaya devam eder.")
 
@@ -4105,8 +4105,20 @@ if page=="Ana Sayfa":
                 return False
             return True
 
-        if st.button("Tümünü Onayla (kriterleri karşılayanlar)",
-                     key="tumunu_onayla_kriterli"):
+        _col_onay_toplu, _col_red_toplu = st.columns(2)
+        with _col_onay_toplu:
+            _onayla_toplu_tiklandi = st.button(
+                "Tümünü Onayla (kriterleri karşılayanlar)",
+                key="tumunu_onayla_kriterli", use_container_width=True)
+        with _col_red_toplu:
+            # v2.0.7.252 (5 Eylul 2026, Bahri'nin talebi): "Tumunu Onayla"nin
+            # yanina, ASAGIDA bekleyen TUM tespitleri (kriter filtresi
+            # OLMADAN, hepsini) tek seferde reddeden bir dugme.
+            _reddet_toplu_tiklandi = st.button(
+                "Tümünü Reddet", key="tumunu_reddet_hepsi",
+                use_container_width=True)
+
+        if _onayla_toplu_tiklandi:
             from db import tespit_onayla as _to_toplu, tespit_reddet as _tr_toplu
             _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
             for _t_toplu in _bekleyen_tespitler:
@@ -4126,11 +4138,27 @@ if page=="Ana Sayfa":
                 f"onaylandı, {_reddedilen_sayisi} tespit kriterleri "
                 f"karşılamadığı için otomatik reddedildi.")
             st.rerun()
+
+        if _reddet_toplu_tiklandi:
+            from db import tespit_reddet as _tr_hepsi
+            _reddedilen_hepsi_sayisi = 0
+            for _t_hepsi in _bekleyen_tespitler:
+                if _tr_hepsi(_cur_user["id"] if _cur_user else None, _t_hepsi["id"]):
+                    _reddedilen_hepsi_sayisi += 1
+            try:
+                _bekleyen_tespitler_onbellekli.clear()
+                _onaylanmis_tespitler_onbellekli.clear()
+            except Exception:
+                st.cache_data.clear()
+            st.success(f"{_reddedilen_hepsi_sayisi} bekleyen tespitin tümü reddedildi.")
+            st.rerun()
+
         st.caption(
             "Kriterler: Şiddet=Yüksek + son 24 saatte farklı bir "
             "kaynaktan teyit + kalıbın istatistiksel dayanağı olması "
             "(Admin Panel'den ayarlanır). Karşılamayanlar otomatik "
-            "reddedilir, skoru etkilemez.")
+            "reddedilir, skoru etkilemez. \"Tümünü Reddet\" ise kritersiz, "
+            "bekleyen HEPSİNİ doğrudan reddeder.")
 
         for _tespit in _bekleyen_tespitler:
             _tk2 = _tespit["kalip_key"]
