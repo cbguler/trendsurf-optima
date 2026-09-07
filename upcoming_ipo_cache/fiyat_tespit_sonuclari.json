@@ -90,13 +90,6 @@
     "graham_degeri": 20.607317775451598,
     "carpan_bazli_deger": 73.69115395427077
   },
-  "1654229": {
-    "arz_fiyati": 12.93,
-    "iskonto_orani": 10.0,
-    "tip": "C",
-    "graham_degeri": null,
-    "carpan_bazli_deger": null
-  },
   "1645144": {
     "arz_fiyati": 85.4,
     "iskonto_orani": 20.03,
@@ -117,5 +110,19 @@
     "tip": "C",
     "graham_degeri": 60.94930500979787,
     "carpan_bazli_deger": 188.63101510328607
+  },
+  "1659236": {
+    "arz_fiyati": 20.0,
+    "iskonto_orani": 20.0,
+    "tip": "B",
+    "graham_degeri": null,
+    "carpan_bazli_deger": null
+  },
+  "1654229": {
+    "arz_fiyati": 12.93,
+    "iskonto_orani": 10.0,
+    "tip": "C",
+    "graham_degeri": null,
+    "carpan_bazli_deger": null
   }
 }
