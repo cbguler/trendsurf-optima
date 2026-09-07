@@ -5511,5 +5511,22 @@ tamam, canlı doğrulama BEKLİYOR):**
     sandbox'ta doğrulanamıyor - push + reboot sonrası ekran
     görüntüsüyle kontrol edilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - CANLI GÖRSEL DOĞRULAMA BEKLİYOR]
+  v2.0.7.258 (5 Eylül 2026, Bahri'nin talebi — gerçek Instagram ekran
+  görüntüleri referans verilerek "istemiş olduğum düzen aynen
+  Instagram'da olduğu gibi olmalı"): NAVİGASYON ÖĞELERİ INSTAGRAM'IN
+  SADE ("HAP" ARKA PLANI OLMAYAN) GÖRÜNÜMÜNE YAKINLAŞTIRILDI.**
+  - Instagram'ın kendi arayüzünde nav öğelerinin arka planı/çerçevesi
+    YOK - düz ikon+metin, sadece hover'da hafif bir vurgu var.
+    `st.pills`'in varsayılan "hap" (yuvarlak köşeli, dolgulu buton)
+    görünümü CSS ile kaldırıldı: `background: transparent`,
+    `border: none`, hover'da hafif gri vurgu (`rgba(49,51,63,0.08)`).
+  - Seçili (aktif) sayfa için: doğru DOM özniteliği bulundu -
+    `data-selected="true"` (ilk tahminim `aria-checked` yanlış çıktı,
+    JS paketinden doğrulanarak düzeltildi) - kalın yazı + hafif dolgu
+    ile vurgulanıyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Görsel sonuç yine
+    canlı ortamda kontrol edilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

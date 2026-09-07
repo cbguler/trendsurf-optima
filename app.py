@@ -2093,6 +2093,28 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
         justify-content: flex-start !important;
         width: 100% !important;
+        /* v2.0.7.258 (5 Eylul 2026, Bahri'nin talebi - "istemis oldugum
+        duzen aynen Instagram'da oldugu gibi olmali", gercek Instagram
+        ekran goruntusu referans verildi): Instagram'in nav ogelerinde
+        ARKA PLAN/CERCEVE YOK - duz ikon+metin, sadece hover'da hafif
+        bir vurgu var. st.pills'in varsayilan "hap" (rounded pill,
+        renkli arka plan) gorunumu KALDIRILIYOR. */
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 8px !important;
+        padding: 10px 12px !important;
+        font-weight: 400 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button:hover {
+        background: rgba(49, 51, 63, 0.08) !important;
+    }
+    /* Secili (aktif) sayfa - Instagram'daki gibi KALIN yazi ile
+    vurgulaniyor, renkli dolgu YOK (kendi tema renklerimizle tutarli,
+    lacivert/mavi tonlarina yakin hafif bir arka plan tercih edildi). */
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button[data-selected="true"] {
+        background: rgba(49, 51, 63, 0.12) !important;
+        font-weight: 700 !important;
     }
     </style>
     """, unsafe_allow_html=True)
