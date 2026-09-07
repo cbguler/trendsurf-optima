@@ -5432,5 +5432,56 @@ tamam, canlı doğrulama BEKLİYOR):**
     değiştirildi, iki düğme de aynı boyutta ve sola yanaşık.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, TESTAPP İLE DOĞRULANDI (ÇÖKME YOK) - CANLI GÖRSEL
+  DOĞRULAMA BEKLİYOR] v2.0.7.256 (5 Eylül 2026, Bahri'nin talebi —
+  "sol menü barını automatically hide yapmak istiyorum, Instagram
+  uygulamasındaki gibi büyük ikonlar... bar kapalı olduğunda ikonlar
+  görünsün, imleç ile üzerine gelindiğinde bar normale dönsün"): SOL
+  MENÜ INSTAGRAM TARZI HOVER-GENİŞLEYEN İKON ÇUBUĞUNA ÇEVRİLDİ.**
+  - **Araştırma - iki yaklaşım elendi:** (1) `streamlit-option-menu`
+    (üçüncü parti paket, ikon desteği zaten var) - AMA kendi izole
+    `iframe`'i içinde çalışıyor, dıştan hover/collapse CSS'i ile
+    ERİŞİLEMİYOR - elendi. (2) Emoji Unicode sembolleri (⌂, ★ vb.) -
+    projenin "emoji yok" KALICI kuralına aykırı DÜŞEBİLİR (birçok
+    işletim sistemi bunları renkli emoji fontuyla render ediyor) -
+    elendi.
+  - **Bulunan çözüm:** Streamlit'in KENDİ yerleşik Material Symbols
+    ikon desteği (`:material/isim:` söz dizimi) - ama BULUNAN önemli
+    bir kısıtlama: `st.radio`'nun frontend'i (`Radio.*.js`) bu söz
+    dizimini HİÇ İŞLEMİYOR (kod içinde doğrulandı - `DynamicIcon`
+    bileşenini kullanmıyor) - kullanılsaydı ekranda kırık, düz metin
+    (":material/home: Ana Sayfa") görünürdü. Çözüm: `st.pills`
+    (`button_group.py` altyapısı) KULLANILDI - bu widget'ın ikon
+    çıkarma mantığı doğrulandı (`extract_leading_icon` çağrısı,
+    dokümantasyonda `":material/add:"` gibi örnekler var).
+  - **Bulunan bir UYUMLULUK sorunu, düzeltildi:** `st.pills`,
+    Streamlit 1.40.0'da (6 Kasım 2024) tanıtıldı - `requirements.txt`
+    alt sınırı `>=1.37.0` idi, bu versiyon aralığında `st.pills`
+    HİÇ YOK, `AttributeError` ile çökerdi. Alt sınır `>=1.40.0`'a
+    yükseltildi.
+  - **Uygulama:** 13 sayfanın (Ana Sayfa, Portföyüm, BIST, TEFAS,
+    Döviz, Değerli Madenler, Kriptolar, Halka Arz, Temettü, Makro
+    Göstergeler, SonDakika Haberleri, Abonelik, El Kitabı) her birine
+    bir Material Symbol atandı. Sidebar'a eklenen CSS: varsayılan
+    genişlik 74px (sadece ikon), `:hover` ile 300px'e genişliyor
+    (metin dahil tam görünüm) - `transition` ile yumuşak geçiş.
+    Metin gizleme SADECE navigasyon grubuna (`stButtonGroup`)
+    uygulanıyor - bütçe girişi, risk kaydırıcısı, Admin/Çıkış
+    düğmeleri gibi diğer sidebar öğeleri ETKİLENMİYOR, her zaman
+    normal boyutlarında kalıyor.
+  - **Doğrulama (sınırlı, sandbox'ta tarayıcı YOK):** Streamlit'in
+    kendi `AppTest` çerçevesiyle widget'ın GERÇEKTEN çökmediği ve
+    doğru değeri (`:material/home: Ana Sayfa` → "Ana Sayfa" eşlemesi)
+    döndürdüğü doğrulandı - bu, FONKSİYONEL doğrulama, GÖRSEL
+    doğrulama DEĞİL (ikonların gerçekten göründüğü, hover efektinin
+    yumuşak çalıştığı, pills'in düzgün dikey sıralandığı ANCAK canlı
+    tarayıcıda görülebilir).
+  - **AÇIK - Bahri'nin yapması gereken:** Push + Reboot sonrası
+    canlı ortamda GÖRSEL olarak kontrol edilmeli - ikonlar doğru
+    görünüyor mu, hover ile genişleme yumuşak mı, pills dikey bir
+    liste gibi mi duruyor. İlk denemede istenen görünüme tam
+    ulaşılamazsa (olası, bu tür CSS/widget kombinasyonları genelde
+    ince ayar gerektirir) ekran görüntüsüyle bildirilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

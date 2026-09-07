@@ -2009,8 +2009,69 @@ with st.sidebar:
     st.divider()
 
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
-    _pages_display = PAGES[:-1] + [_yardim_etiket]
-    _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
+    _pages_display_temiz = PAGES[:-1] + [_yardim_etiket]
+
+    # v2.0.7.256 (5 Eylul 2026, Bahri'nin talebi - "sol menu barini
+    # automatically hide yapmak istiyorum... Instagram uygulamasindaki
+    # gibi buyuk ikonlar... bar kapali oldugunda ikonlar gorunsun,
+    # imlec ile uzerine gelindiginde bar normale donsun"): Streamlit'in
+    # KENDI yerlesik Material Symbols ikon destegi kullanildi
+    # (":material/isim:" sozdizimi) - emoji DEGIL (kalici kural),
+    # ucuncu parti bir bilesen de DEGIL (streamlit-option-menu gibi
+    # secenekler kendi izole iframe'inde calisiyor, disaridan hover/
+    # collapse CSS'i ile erisilemiyor - bu yuzden bilerek KULLANILMADI).
+    # Asagidaki CSS, sidebar'i varsayilan olarak DAR (sadece ikonlar
+    # gorunecek kadar) tutuyor, imlec uzerine gelince (:hover) tam
+    # genisliğe (metinler dahil) genisliyor.
+    _SAYFA_IKONLARI = {
+        "Ana Sayfa": "home", "Portföyüm": "account_balance_wallet",
+        "BIST": "candlestick_chart", "TEFAS": "savings",
+        "Döviz": "currency_exchange", "Değerli Madenler": "diamond",
+        "Kriptolar": "currency_bitcoin", "Halka Arz": "rocket_launch",
+        "Temettü": "payments", "Makro Göstergeler": "monitoring",
+        "SonDakika Haberleri": "newspaper", "Abonelik": "card_membership",
+        "Admin El Kitabı": "menu_book", "Kullanıcı El Kitabı": "menu_book",
+    }
+    _pages_display = [
+        f":material/{_SAYFA_IKONLARI.get(_p, 'circle')}: {_p}"
+        for _p in _pages_display_temiz
+    ]
+    _ikonlu_to_temiz = dict(zip(_pages_display, _pages_display_temiz))
+
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {
+        min-width: 74px !important;
+        max-width: 74px !important;
+        transition: min-width 0.22s ease, max-width 0.22s ease;
+    }
+    [data-testid="stSidebar"]:hover {
+        min-width: 300px !important;
+        max-width: 300px !important;
+    }
+    /* v2.0.7.256: metin gizleme SADECE navigasyon (st.pills) grubuna
+    uygulaniyor - butce girisi, risk kaydiricisi, Admin/Cikis dugmeleri
+    gibi DIGER sidebar ogeleri normal genisliklerinde kalsin diye.
+    flex-direction:column ile pills HER ZAMAN dikey bir liste gibi
+    dursun (genis/dar farketmeksizin, yatay yan yana dizilmesin). */
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] {
+        overflow: hidden;
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
+        white-space: nowrap;
+        justify-content: flex-start !important;
+        width: 100%;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _page_secim_ikonlu = st.pills(
+        "", _pages_display, selection_mode="single", required=True,
+        default=_pages_display[0], key="_nav_pills_secim",
+        label_visibility="collapsed", width='stretch')
+    _page_secim = _ikonlu_to_temiz.get(_page_secim_ikonlu, _page_secim_ikonlu)
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()
 
