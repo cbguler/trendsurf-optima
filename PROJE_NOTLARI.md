@@ -5304,5 +5304,53 @@ tamam, canlı doğrulama BEKLİYOR):**
     hatası tamamen ortadan kalkmayabilir (bizim kontrolümüzde değil),
     ama artık uygulamayı ÇÖKERTMEYECEK.
 
+- **[UYGULANDI, SÖZDİZİMİ VE YAPI DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.251
+  (5 Eylül 2026, Bahri'nin bulgusu — modal başarıyla açıldıktan HEMEN
+  SONRA "1/11 bekleyen tespit" gösterip yeni bir `NameError:
+  _tespit_puan_onizleme` ile çöktü): ÜÇÜNCÜ AYNI SINIF ÇÖKME BULUNDU
+  VE DÜZELTİLDİ - AYRICA REFAKTORÜN KENDİSİ BİR IndentationError'A
+  YOL AÇTI, O DA DÜZELTİLDİ.**
+  - **Bağlam:** v2.0.7.250'nin try/except örtüsü işe yaradı - modal
+    artık gerçekten AÇILIYOR ("1/11" sayacı + AI cümlesi başarıyla
+    gösterildi). Bu, kodun DAHA DA ilerlemesini sağladı ve modalın
+    KENDİ GÖVDESİNDEKİ üçüncü bir gizli NameError'ı ortaya çıkardı.
+  - **Kök neden:** `_tespit_puan_onizleme` - v2.0.7.249'daki 3
+    fonksiyonla AYNI kalıp: düz bir `if (_bekleyen_tespitler and
+    hasattr(st, "dialog") ...)` bloğunun İÇİNDE tanımlıydı. Python'un
+    kendi kuralına göre `if` blokları scope oluşturmaz (fonksiyonun
+    aksine), yani teorik olarak modül seviyesinde bir isim olması
+    gerekirdi - AMA `@st.dialog`'un "fragment" davranışı (dialog
+    gövdesini script'in geri kalanından yarı-bağımsız çalıştırması)
+    bu tür "if bloğu içinde tanımlı" isimlere modal içinden GÜVENİLİR
+    şekilde erişemiyor. Modal, kendi başlık/mesajını göstermeyi
+    BAŞARDIKTAN hemen sonra, bir sonraki adımda (`_tespit_puan_
+    onizleme` çağrısında) çöküyordu.
+  - **Yanlış alarm (araştırma sırasında bulunup elenen):** Fonksiyonun
+    içindeki `risk` değişkeni İLK BAKIŞTA bir hata gibi göründü
+    (fonksiyonun kendi parametresi `_siddet_o` iken `risk` kullanılması)
+    - ama araştırıldığında `risk`'in GERÇEKTEN VAR OLAN, sidebar'daki
+    "Risk Toleransı" kaydırıcısından (satır ~2050) gelen KASITLI bir
+    değişken olduğu doğrulandı - bu BİR HATA DEĞİLDİ, olduğu gibi
+    bırakıldı.
+  - **Çözüm:** v2.0.7.249 ile AYNI yaklaşım - fonksiyon KOŞULSUZ modül
+    seviyesine taşındı (kendi `risk`e olan bağımlılığı korundu - `risk`
+    zaten yukarıda, bu yeni konumdan ÖNCE tanımlanmış oluyor).
+  - **Refaktörün kendi yan etkisi, hemen fark edilip düzeltildi:**
+    `_tespit_puan_onizleme`'yi taşıyınca, onu İÇİNDE barındıran `if
+    (_bekleyen_tespitler...)` bloğu TAMAMEN BOŞ kaldı (v2.0.7.249 zaten
+    3 fonksiyonu daha oradan taşımıştı) - bu `IndentationError`'a yol
+    açtı. Çözüm: boş kalan `if` ifadesi kaldırıldı, AYNI koşul gerçekten
+    korunması gereken kısmın (`@st.dialog` tanımı + çağrısı) hemen
+    önüne taşındı - davranış değişmedi, sadece kod yapısı toparlandı.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Gerçek Streamlit
+    ortamında canlı test edilmedi - push sonrası modalın "Onaylıyor
+    musunuz?" sorusuna kadar (puan önizleme tablosu dahil) çökmeden
+    ilerlediği doğrulanmalı.
+  - **Genel not:** Bu, art arda üçüncü kez aynı KALIPTA (if-bloğu-
+    içinde-tanımlı-fonksiyon + @st.dialog'un fragment davranışı) çıkan
+    bir hata sınıfı. Eğer BAŞKA bir NameError daha çıkarsa, muhtemelen
+    modal bloğunun içinde KALAN başka bir "if içinde def" kalıbı vardır -
+    aynı yaklaşım (modül seviyesine taşı) uygulanmalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

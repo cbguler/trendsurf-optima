@@ -2587,27 +2587,40 @@ if _bekleyen_tespitler:
 #     (`tespit_modal_ertelendi`); üstteki uyarı şeridi kalmaya devam eder.
 _MODAL_ERTELE_KEY = "tespit_modal_ertelendi"
 
-if (_bekleyen_tespitler and hasattr(st, "dialog")
-        and not st.session_state.get(_MODAL_ERTELE_KEY)):
+# v2.0.7.251 (5 Eylul 2026, Bahri'nin bulgusu - ikinci NameError:
+# _tespit_puan_onizleme, modalin ICINDE): v2.0.7.249 ile AYNI SINIF hata,
+# bu sefer modalin kendi govdesinde. Bu fonksiyon asagidaki "if
+# (_bekleyen_tespitler and hasattr(st, 'dialog') ...)" blogunun ICINDE
+# tanimliydi - bu bir "if" oldugu icin (bir "def" DEGIL) Python'un scope
+# kurallarina gore teorik olarak modul seviyesinde bir isim olmasi
+# gerekirdi, AMA @st.dialog'un "fragment" davranisi (dialog govdesini
+# script'in geri kalanindan YARI-BAGIMSIZ calistirmasi) bu tur "if
+# blogu icinde tanimli" isimlere modal icinden GUVENILIR sekilde
+# erisemiyor - modal baslik/mesaji basariyla gosterdikten HEMEN SONRA,
+# bir sonraki adimda (_tespit_puan_onizleme cagrisinda) coktu. Cozum:
+# v2.0.7.249'daki AYNI yaklasim - fonksiyon KOSULSUZ modul seviyesine
+# tasindi (asagidaki "risk" degiskenine bagimliligini KORUYOR - risk,
+# yukarida (satir ~2050, sidebar'daki "Risk Toleransi" kaydiricisi)
+# zaten tanimlanmis oluyor, bu tasima o bagimliligi bozmuyor).
+def _tespit_puan_onizleme(_kalip_key_o, _siddet_o):
+    """Tespit ONAYLANIRSA hangi kategoriye kaç puan gideceğini önceden
+    hesaplar - aşağıdaki asıl uygulama bloğuyla AYNI çarpanları kullanır
+    (şiddet x risk toleransı). İki yer birbirinden ayrışırsa kullanıcıya
+    gösterilen sayı ile gerçekte uygulanan sayı tutmaz - değiştirirken
+    ikisini birlikte güncelle."""
+    _sc_o = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}.get(_siddet_o, 1.0)
+    _rc_o = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
+             "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
+    # DİKKAT: çarpım sırası asıl blokla BİREBİR aynı olmalı - önce
+    # (şiddet x risk) çarpanı, SONRA puan ile çarpım. Ters sırada
+    # (puan x şiddet) x risk yazılırsa kayan nokta aritmetiği yüzünden
+    # 90 kombinasyonun 16'sında bit düzeyinde farklı sonuç çıkar.
+    _carpan_o = _sc_o * _rc_o
+    _ad_o = {"MADEN": "Değerli Maden", "DOVIZ": "Döviz",
+             "BIST": "BIST", "KRIPTO": "Kripto"}
+    return [(_ad_o.get(_k_o, _k_o), _p_o * _carpan_o)
+            for _k_o, _p_o in _KALIP_TABLOSU.get(_kalip_key_o, {}).items()]
 
-    def _tespit_puan_onizleme(_kalip_key_o, _siddet_o):
-        """Tespit ONAYLANIRSA hangi kategoriye kaç puan gideceğini önceden
-        hesaplar - aşağıdaki asıl uygulama bloğuyla AYNI çarpanları kullanır
-        (şiddet x risk toleransı). İki yer birbirinden ayrışırsa kullanıcıya
-        gösterilen sayı ile gerçekte uygulanan sayı tutmaz - değiştirirken
-        ikisini birlikte güncelle."""
-        _sc_o = {"Düşük": 0.5, "Orta": 1.0, "Yüksek": 1.5}.get(_siddet_o, 1.0)
-        _rc_o = {"Çok Düşük": 0.4, "Düşük": 0.7, "Orta": 1.0,
-                 "Yüksek": 1.3, "Çok Yüksek": 1.6}.get(risk, 1.0)
-        # DİKKAT: çarpım sırası asıl blokla BİREBİR aynı olmalı - önce
-        # (şiddet x risk) çarpanı, SONRA puan ile çarpım. Ters sırada
-        # (puan x şiddet) x risk yazılırsa kayan nokta aritmetiği yüzünden
-        # 90 kombinasyonun 16'sında bit düzeyinde farklı sonuç çıkar.
-        _carpan_o = _sc_o * _rc_o
-        _ad_o = {"MADEN": "Değerli Maden", "DOVIZ": "Döviz",
-                 "BIST": "BIST", "KRIPTO": "Kripto"}
-        return [(_ad_o.get(_k_o, _k_o), _p_o * _carpan_o)
-                for _k_o, _p_o in _KALIP_TABLOSU.get(_kalip_key_o, {}).items()]
 
 # v2.0.7.249 (5 Eylul 2026, Bahri'nin bulgusu - NameError: 
 # _cok_kaynakli_cumle_olustur tanimli degil, Ana Sayfa'daki 'Onay Bekleyen
@@ -2703,6 +2716,9 @@ def _kaynak_bolumu_goster(satir):
     else:
         _numarali = "  \n".join(f"{i+1}- {m}" for i, m in enumerate(_tum_maddeler))
         st.caption(f"Kaynaklar: {_numarali}")
+
+if (_bekleyen_tespitler and hasattr(st, "dialog")
+        and not st.session_state.get(_MODAL_ERTELE_KEY)):
 
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():
