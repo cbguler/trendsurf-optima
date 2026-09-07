@@ -2014,6 +2014,20 @@ with st.sidebar:
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()
 
+    # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
+    # abone kullanim istatistikleri): sadece sayfa GERCEKTEN degistiginde
+    # (session_state'teki bir onceki sayfayla KARSILASTIRILARAK) bir
+    # kayit yazilir - her tiklamada/widget etkilesiminde DEGIL. Bu,
+    # bugunku oturumda defalarca bulunan "her renderda gereksiz Supabase
+    # baglantisi" hatasindan BILEREK KACINIYOR.
+    if _cur_user and st.session_state.get("_son_izlenen_sayfa") != page:
+        st.session_state["_son_izlenen_sayfa"] = page
+        try:
+            from db import sayfa_ziyareti_kaydet
+            sayfa_ziyareti_kaydet(_cur_user["id"], page)
+        except Exception:
+            pass
+
     st.markdown("**Bütçe (TL)**")
     # v2.0.7.197 (Bahri'nin talebi, 25 Ağustos 2026 — "uygulama ilk
     # açıldığında 25.000 TL bütçe default olarak girilmiş olsun"):

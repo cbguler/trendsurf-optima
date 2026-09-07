@@ -41,7 +41,7 @@ def render_admin_panel():
     active = [u for u in users if u["is_active"]]
     st.subheader(f"Aktif Kullanicilar ({len(active)})")
     for u in active:
-        c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
+        c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1.3])
         prefix = "[Admin] " if u["is_admin"] else ""
         c1.markdown(f"**{prefix}{u['full_name']}**  `{u['email']}`")
         new_plan = c2.selectbox(
@@ -55,6 +55,15 @@ def render_admin_panel():
         if not u["is_admin"] and c4.button("Sil", key=f"del_{u['id']}"):
             _delete_user(u["id"])
             st.rerun()
+        # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi): abonenin uygulamayi
+        # NE ZAMAN kullandigini, HANGI sayfalara baktigini, NE SURE
+        # kaldigini gosteren bir istatistik butonu - her kullanicinin
+        # kendi satirinda, ac/kapa (toggle) seklinde.
+        _istat_key = f"_istat_ac_{u['id']}"
+        if c5.button("İstatistikler", key=f"istat_btn_{u['id']}"):
+            st.session_state[_istat_key] = not st.session_state.get(_istat_key, False)
+        if st.session_state.get(_istat_key):
+            _render_kullanici_istatistikleri(u["id"], f"{prefix}{u['full_name']}")
     st.divider()
     _render_haber_akisi_bakim()
     st.divider()
@@ -65,6 +74,91 @@ def render_admin_panel():
 # haberler hâlâ İngilizce"): eski satırlar YAZILDIKLARI ANDA dondurulmuş
 # eslesen_kalip/baslik_tr taşır - filtre/çeviri mantığı sonradan düzelse
 # bile bu satırlar KENDİLİĞİNDEN yeniden değerlendirilmez. ─────────────
+# ── v2.0.7.254: Kullanici Aktivite/Sayfa Ziyaret Istatistikleri ─────────────
+# (Bahri'nin talebi, 5 Eylul 2026 — "abonelerin ne zaman uygulamaya
+# girdiklerini, hangi sayfalara baktiklarini, ne surede kaldiklarini
+# gosteren bir istatistik fonksiyonu"). Ham veri (sadece giris zamani +
+# sayfa adi) app.py tarafindan her SAYFA DEGISIKLIGINDE (bkz. o dosyadaki
+# not) sayfa_ziyaretleri tablosuna yaziliyor - "sure" ayri bir sutun
+# DEGIL, iki ARDISIK ziyaret arasindaki fark olarak BURADA turetiliyor.
+_OTURUM_BOSLUGU_DK = 30  # bu kadar dakika hicbir sayfa gorulmezse YENI oturum sayilir
+
+
+def _render_kullanici_istatistikleri(user_id: int, ad: str):
+    from db import kullanici_ziyaret_gecmisi
+    from datetime import datetime, timedelta
+
+    ziyaretler = kullanici_ziyaret_gecmisi(user_id, limit=500)
+    if not ziyaretler:
+        st.info(f"{ad} için henüz kayıtlı bir sayfa ziyareti yok.")
+        return
+
+    # Ham veri EN YENIDEN EN ESKIYE geliyor - oturum/sure hesaplamasi icin
+    # KRONOLOJIK (eskiden yeniye) siraya cevir.
+    def _zaman_ayristir(v):
+        if isinstance(v, datetime):
+            return v
+        try:
+            return datetime.fromisoformat(str(v))
+        except Exception:
+            return None
+
+    kayitlar = []
+    for z in reversed(ziyaretler):
+        t = _zaman_ayristir(z.get("giris_zamani"))
+        if t is not None:
+            kayitlar.append({"sayfa": z.get("sayfa", "?"), "zaman": t})
+    if not kayitlar:
+        st.info("Ziyaret kayıtları okunamadı (zaman damgası biçimi tanınmadı).")
+        return
+
+    # Oturumlara ayir: ardisik iki ziyaret arasi > 30 dk ise YENI oturum.
+    oturumlar = [[kayitlar[0]]]
+    for onceki, simdi in zip(kayitlar, kayitlar[1:]):
+        if simdi["zaman"] - onceki["zaman"] > timedelta(minutes=_OTURUM_BOSLUGU_DK):
+            oturumlar.append([])
+        oturumlar[-1].append(simdi)
+
+    en_son = kayitlar[-1]["zaman"]
+    sayfa_sayaci: dict = {}
+    for k in kayitlar:
+        sayfa_sayaci[k["sayfa"]] = sayfa_sayaci.get(k["sayfa"], 0) + 1
+    en_cok_bakilan = sorted(sayfa_sayaci.items(), key=lambda x: -x[1])[:5]
+
+    with st.container(border=True):
+        st.markdown(f"**{ad} — Kullanım İstatistikleri**")
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("Son Giriş", en_son.strftime("%d.%m.%Y %H:%M"))
+        _c2.metric("Toplam Oturum", len(oturumlar))
+        _c3.metric("Toplam Sayfa Görüntüleme", len(kayitlar))
+
+        st.caption("**En çok bakılan sayfalar:** " + ", ".join(
+            f"{s} ({n})" for s, n in en_cok_bakilan))
+
+        st.caption(
+            "**Son oturumlar** (en yeniden eskiye - bir sayfada geçirilen "
+            "süre, o sayfadan SONRAKİ sayfaya geçiş anına göre tahmin "
+            "edilir; bir oturumun EN SON sayfasında ne kadar kalındığı "
+            "bilinemez, \"— (hâlâ açık/bilinmiyor)\" olarak gösterilir).")
+        for oturum in reversed(oturumlar[-10:]):
+            _baslangic = oturum[0]["zaman"]
+            _bitis = oturum[-1]["zaman"]
+            _sure_dk = (_bitis - _baslangic).total_seconds() / 60
+            with st.expander(
+                f"{_baslangic.strftime('%d.%m.%Y %H:%M')} — "
+                f"{len(oturum)} sayfa, ~{_sure_dk:.0f} dk"
+            ):
+                for i, ziyaret in enumerate(oturum):
+                    if i + 1 < len(oturum):
+                        _fark_dk = (oturum[i + 1]["zaman"] - ziyaret["zaman"]).total_seconds() / 60
+                        _sure_metni = f"{_fark_dk:.1f} dk"
+                    else:
+                        _sure_metni = "— (hâlâ açık/bilinmiyor)"
+                    st.write(
+                        f"`{ziyaret['zaman'].strftime('%H:%M:%S')}` "
+                        f"**{ziyaret['sayfa']}** — {_sure_metni}")
+
+
 def _render_haber_akisi_bakim():
     from db import haber_akisi_ve_islenmis_sifirla, tum_onaylanan_etkileri_sifirla
 

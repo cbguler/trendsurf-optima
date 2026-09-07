@@ -5385,5 +5385,41 @@ tamam, canlı doğrulama BEKLİYOR):**
     canlı ortamda görülmeden kesinleşemez - push sonrası kontrol
     edilmeli.
 
+- **[UYGULANDI, MANTIK TEST EDİLDİ - PUSH BEKLİYOR] v2.0.7.254 (5 Eylül
+  2026, Bahri'nin talebi — "abonelerin ne zaman uygulamaya girdiklerini,
+  hangi sayfalara baktıklarını, ne sürede kaldıklarını gösteren bir
+  istatistik fonksiyonu"): YENİ ÖZELLİK - ADMIN PANELİ KULLANICI
+  AKTİVİTE İSTATİSTİKLERİ.**
+  - **Yeni tablo:** `sayfa_ziyaretleri` (id, user_id, sayfa,
+    giriş_zamanı) - `init_db()`'ye eklendi, RLS listesine dahil edildi
+    (bugünkü RLS dersleri korunarak - yeni tablo eklenirken unutulmadı).
+  - **Düşük maliyetli kayıt (BİLEREK):** `app.py`'de sayfa seçimi
+    (`page` değişkeni) belirlendiği yerin hemen altına, sadece sayfa
+    `st.session_state`'teki bir öncekinden GERÇEKTEN FARKLIYSA bir
+    satır yazan bir kanca eklendi - HER tıklamada/widget etkileşiminde
+    DEĞİL. Bu, bugünkü oturumda defalarca bulunup düzeltilen "her
+    render'da gereksiz Supabase bağlantısı" hatasından BİLİNÇLİ olarak
+    kaçınıyor.
+  - **Görüntüleme:** Admin Paneli'nde her aktif kullanıcının satırına
+    bir "İstatistikler" düğmesi eklendi (aç/kapa - tekrar basınca
+    gizlenir). Gösterilenler: son giriş zamanı, toplam oturum sayısı,
+    toplam sayfa görüntüleme, en çok bakılan 5 sayfa, ve son 10
+    oturumun (genişletilebilir) detaylı dökümü (hangi sayfa, ne zaman,
+    ne kadar sürdü).
+  - **Oturum/süre hesaplama mantığı:** Ayrı bir "süre" sütunu YOK -
+    ardışık iki sayfa ziyareti arasındaki fark olarak türetiliyor.
+    30 dakikadan uzun bir boşluk varsa YENİ bir oturum sayılıyor. Her
+    oturumun EN SON sayfasında ne kadar kalındığı doğası gereği
+    bilinemez (bir sonraki ziyaret gelmediği için) - "— (hâlâ açık/
+    bilinmiyor)" olarak dürüstçe gösteriliyor, uydurma bir süre
+    YAZILMIYOR.
+  - **Doğrulama:** `python3 -m py_compile` (db.py, app.py, admin.py)
+    temiz. Oturum gruplama + süre hesaplama mantığı sentetik verilerle
+    (2 oturum, 45 dk boşluklu) test edildi - doğru ayrıştı, doğru
+    süreler hesaplandı. Gerçek Supabase verisiyle/Streamlit ortamında
+    canlı test edilmedi - push sonrası veri BİRİKMEYE BAŞLADIKÇA (yani
+    birkaç sayfa gezindikten sonra) "İstatistikler" düğmesi kontrol
+    edilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

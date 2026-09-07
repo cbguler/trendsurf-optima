@@ -569,6 +569,25 @@ def init_db():
         PRIMARY KEY (user_id, rate_name)
     )""")
 
+    # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
+    # abonelerin uygulama kullanim istatistiklerini gormek): her SAYFA
+    # DEGISIKLIGINDE (her tiklamada DEGIL - bkz. app.py'deki kayit
+    # noktasi, bugunku "her renderda gereksiz baglanti" derslerinden
+    # kacinmak icin bilerek SADECE sayfa GERCEKTEN degistiginde yaziyor)
+    # bir satir eklenir. Sure/oturum hesaplamasi bu HAM ziyaret
+    # zaman damgalarindan (admin.py'de) turetilir - ayri bir "sure"
+    # sutunu YOK, cunku bir sayfada ne kadar kalindigi ancak BIR SONRAKI
+    # sayfaya gecildiginde belli olur.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS sayfa_ziyaretleri (
+        id            SERIAL    PRIMARY KEY,
+        user_id       INTEGER   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        sayfa         TEXT      NOT NULL,
+        giris_zamani  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sayfa_ziyaretleri_user "
+              "ON sayfa_ziyaretleri(user_id, giris_zamani)")
+
     # v2.0.7.117 - KRITIK VERI DUZELTMESI (Bahri'nin bulgusu, HTS ornegi,
     # 31 Temmuz 2026: Duzelt formuyla maliyeti 56,630841 yapmaya calisti,
     # UPDATE hatasiz calisti ama yazdiktan hemen sonra okundugunda deger
@@ -668,7 +687,7 @@ def init_db():
     for _rls_tablo in ("beklenti_otomatik_tespit", "kullanici_tespit_karari",
                        "haber_islenmis", "haber_akisi", "ai_cagri_butcesi",
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
-                       "ipo_valuations"):
+                       "ipo_valuations", "sayfa_ziyaretleri"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -1476,6 +1495,50 @@ def tespit_reddet(kullanici_id, tespit_id: int):
     except Exception as e:
         print(f"[db] tespit_reddet hata: {e}", file=sys.stderr)
         return False
+
+
+# ── v2.0.7.254: Kullanici Aktivite/Sayfa Ziyaret Takibi (Admin Paneli) ───────
+def sayfa_ziyareti_kaydet(kullanici_id, sayfa: str) -> bool:
+    """Bir SAYFA DEGISIKLIGINI kaydeder - app.py TARAFINDAN SADECE sayfa
+    GERCEKTEN degistiginde cagrilir (her tiklamada/rerun'da DEGIL) - bu
+    yuzden yazma sikligi dogal olarak dusuk kalir, bugunku "her renderda
+    gereksiz Supabase baglantisi" derslerine aykiri bir yavaslik
+    kaynagi YARATMAZ. Hata durumunda SESSIZCE False doner - istatistik
+    kaydinin basarisiz olmasi kullanicinin asil islemini ASLA
+    engellememeli."""
+    if not kullanici_id or not sayfa:
+        return False
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO sayfa_ziyaretleri (user_id, sayfa, giris_zamani) "
+            "VALUES (?, ?, now())",
+            (kullanici_id, sayfa))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] sayfa_ziyareti_kaydet hata: {e}", file=sys.stderr)
+        return False
+
+
+def kullanici_ziyaret_gecmisi(kullanici_id, limit: int = 500) -> list:
+    """Bir kullanicinin en SON `limit` sayfa ziyaretini, EN YENIDEN EN
+    ESKIYE dogru sirali dondurur. admin.py bunu oturum/sure hesaplamak
+    icin kullanir - HAM veri, hesaplama admin.py tarafinda yapilir."""
+    if not kullanici_id:
+        return []
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT sayfa, giris_zamani FROM sayfa_ziyaretleri "
+            "WHERE user_id = ? ORDER BY giris_zamani DESC LIMIT ?",
+            (kullanici_id, limit)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[db] kullanici_ziyaret_gecmisi hata: {e}", file=sys.stderr)
+        return []
 
 
 def tum_onaylanan_etkileri_sifirla(kullanici_id) -> int:
