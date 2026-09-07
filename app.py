@@ -2049,20 +2049,50 @@ with st.sidebar:
         min-width: 300px !important;
         max-width: 300px !important;
     }
-    /* v2.0.7.256: metin gizleme SADECE navigasyon (st.pills) grubuna
-    uygulaniyor - butce girisi, risk kaydiricisi, Admin/Cikis dugmeleri
-    gibi DIGER sidebar ogeleri normal genisliklerinde kalsin diye.
-    flex-direction:column ile pills HER ZAMAN dikey bir liste gibi
-    dursun (genis/dar farketmeksizin, yatay yan yana dizilmesin). */
-    [data-testid="stSidebar"] [data-testid="stButtonGroup"] {
+
+    /* v2.0.7.257 (5 Eylul 2026, Bahri'nin bulgusu - ekran goruntusu:
+    "1- Butonlar icice olmadi yine alt alta olsun... 2- Sol bardaki
+    yazilar bar kapaninca birbirine giriyorlar, yazili ayarlarin bar
+    kapaliyken kaybolmasi gerekir"): ONCEKI (v2.0.7.256) surum SADECE
+    navigasyon pills'ine dokunuyordu - butce/risk/admin gibi DIGER
+    ogeler dar alanda SARILIP dagiliyordu (kotu gorunum). Bahri'nin
+    net tercihi: kapaliyken TUM METIN kaybolsun, acilinca HER SEY eski
+    haline donsun. Cozum: TUM sidebar icerigine "white-space:nowrap +
+    overflow:hidden" varsayilan olarak uygulaniyor (tasan kisim
+    GORUNMEZ - sarilip dagilmiyor), :hover durumunda "white-space:
+    normal + overflow:visible" ile HER SEY normal davranisina donuyor. */
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         overflow: hidden;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] * {
+        white-space: nowrap !important;
+    }
+    [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] {
+        overflow: visible;
+    }
+    [data-testid="stSidebar"]:hover [data-testid="stSidebarUserContent"] * {
+        white-space: normal !important;
+    }
+
+    /* Navigasyon (st.pills) HER ZAMAN dikey, tek sutun, tam genislikte
+    dursun - v2.0.7.256'da denenen "flex-direction:column" tek basina
+    yetmedi (pills 2-3'lu izgara halinde dizilmeye devam etti) - bu
+    sefer HEM konteynerin HEM her bir pill'in kendi flex davranisi
+    ACIKCA (daha yuksek ozgullukte) zorlanıyor. */
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] {
+        display: flex !important;
         flex-direction: column !important;
+        flex-wrap: nowrap !important;
         align-items: stretch !important;
+        gap: 4px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButtonGroup"] > * {
+        width: 100% !important;
+        flex: 1 0 auto !important;
     }
     [data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
-        white-space: nowrap;
         justify-content: flex-start !important;
-        width: 100%;
+        width: 100% !important;
     }
     </style>
     """, unsafe_allow_html=True)

@@ -5483,5 +5483,33 @@ tamam, canlı doğrulama BEKLİYOR):**
     ulaşılamazsa (olası, bu tür CSS/widget kombinasyonları genelde
     ince ayar gerektirir) ekran görüntüsüyle bildirilmeli.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - CANLI GÖRSEL DOĞRULAMA BEKLİYOR]
+  v2.0.7.257 (5 Eylül 2026, Bahri'nin bulgusu - ekran görüntüleri):
+  İKON SİDEBAR'IN İKİ GÖRSEL SORUNU DÜZELTİLDİ.**
+  - **İyi haber:** İkonlar GERÇEKTEN göründü ve doğru eşleşti (ev,
+    çanta, mum grafiği, elmas, bitcoin, roket vb.) - v2.0.7.256'nın
+    temel yaklaşımı (st.pills + Material Symbols) ÇALIŞIYOR.
+  - **Sorun 1 - "Butonlar içiçe olmadı yine alt alta olsun":**
+    v2.0.7.256'daki `flex-direction:column` TEK BAŞINA yetersiz
+    kaldı - pills 2-3'lü bir ızgara halinde dizilmeye devam etti.
+    Çözüm: hem konteynerin (`flex-wrap:nowrap`, `gap`) hem HER BİR
+    pill'in kendi davranışının (`width:100% !important`,
+    `flex:1 0 auto !important`) daha yüksek özgüllükte, açıkça
+    zorlandığı bir CSS'e geçildi.
+  - **Sorun 2 - "Sol bardaki yazılar bar kapanınca birbirine
+    giriyorlar, yazılı ayarların kaybolması gerekir":** v2.0.7.256
+    BİLEREK sadece navigasyona dokunmuştu (diğer widget'ları bozma
+    endişesiyle) - ama gerçek sonuç DAHA KÖTÜYDÜ: bütçe/risk gibi
+    metinler dar alanda SARILIP harf harf dağılıyordu. Bahri'nin net
+    tercihi doğrultusunda kapsam GENİŞLETİLDİ: artık TÜM sidebar
+    içeriğine varsayılan olarak `white-space:nowrap + overflow:hidden`
+    uygulanıyor (taşan kısım GÖRÜNMEZ olur, dağılmaz), `:hover`
+    durumunda TAMAMEN normale (`white-space:normal + overflow:visible`)
+    dönüyor.
+  - **Doğrulama:** `python3 -m py_compile` ve AST ayrıştırma temiz.
+    CSS-ağırlıklı bir değişiklik olduğu için GÖRSEL sonuç yine
+    sandbox'ta doğrulanamıyor - push + reboot sonrası ekran
+    görüntüsüyle kontrol edilmeli.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
