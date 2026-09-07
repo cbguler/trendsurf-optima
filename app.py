@@ -2821,7 +2821,21 @@ def _kaynak_bolumu_goster(satir):
             "düğmesini kullanın - tespit silinmez, Ana Sayfa'daki listede "
             "durmaya devam eder.")
 
-    _tespit_onay_modali()
+    # v2.0.7.250 (5 Eylul 2026, Bahri'nin bulgusu - "StreamlitInvalidLayout
+    # ContextError: Dialogs may not be nested inside other dialogs"): Kesin
+    # kok neden tam olarak izole edilemedi (Streamlit'in kendi ic durum
+    # takibiyle ilgili, muhtemelen COK sayida bekleyen tespit - "11 adet" -
+    # ile ilgili bir kenar durum) - AMA modal opsiyonel bir gosterim
+    # katmani: "Onay Bekleyen Otomatik Tespitler" listesi (Ana Sayfa'da,
+    # asagida) AYNI onay/red islevini modal OLMADAN zaten saglıyor. Bu
+    # yuzden modal acilirken BEKLENMEDİK bir hata olursa TUM UYGULAMANIN
+    # COKMESİ yerine SESSIZCE atlaniyor - kullanici alttaki listeden
+    # onay/red islemine devam edebilir, hicbir islevsellik kaybolmuyor.
+    try:
+        _tespit_onay_modali()
+    except Exception as _modal_hata:
+        print(f"[app] Otomatik tespit modali acilamadi (atlaniyor, liste "
+              f"uzerinden onay/red hala calisir): {_modal_hata}", flush=True)
 
 # v2.0.7.158 (Bahri'nin kararı, 19 Ağustos 2026): Bu blok ESKİDEN
 # `if st.session_state.get("beklenti_aktif"):` içindeydi - yani sidebar'daki

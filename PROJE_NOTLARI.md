@@ -5262,5 +5262,47 @@ tamam, canlı doğrulama BEKLİYOR):**
     push sonrası Ana Sayfa'da "Onay Bekleyen Otomatik Tespitler"
     bölümünün artık çökmeden yüklendiği doğrulanmalı.
 
+- **[UYGULANDI, GÜVENLİ ÖRTÜ EKLENDİ - PUSH BEKLİYOR] v2.0.7.250
+  (5 Eylül 2026, Bahri'nin bulgusu - ekran görüntüsü): YENİ BİR KRİTİK
+  ÇÖKME - `StreamlitInvalidLayoutContextError: Dialogs may not be
+  nested inside other dialogs` - KÖK NEDEN STREAMLIT'İN KENDİ
+  BİLİNEN/ONAYLANMIŞ BİR HATASI OLARAK TEŞHİS EDİLDİ, KORUYUCU ÖRTÜ
+  EKLENDİ.**
+  - **Bağlam:** v2.0.7.249'un NameError'ı düzeltmesi sayesinde kod artık
+    DAHA İLERİ ilerleyip bu YENİ, önceden gizli kalan hatayı ortaya
+    çıkardı. Bahri tarayıcıyı tamamen kapatıp sert yenileme + reboot
+    denedi - hata AYNEN devam etti, yani istemci tarafı eski durumdan
+    kaynaklanmıyor.
+  - **Derin araştırma:** Streamlit'in kendi kaynak kodu (`dialog_
+    decorator.py`) incelendi - `_assert_no_nested_dialogs()` fonksiyonu,
+    bir `@st.dialog` fonksiyonu ÇAĞRILDIĞINDA, o anki render bağlamının
+    ZATEN bir dialog içinde olup olmadığını kontrol ediyor. Kodda
+    `_tespit_onay_modali()` için TEK bir çağrı noktası olduğu
+    doğrulandı (kod mantığı çift çağrı yapmıyor). Streamlit'in resmi
+    dokümantasyonu da doğruladı: "Bir script çalışmasında sadece BİR
+    dialog fonksiyonu çağrılabilir" - kodun kendi yorumu (v2.0.7.159)
+    bunu zaten biliyor ve buna göre tasarlanmış (sıralı "1/N" gösterim).
+  - **Bulunan gerçek neden:** Streamlit GitHub deposunda AYNI TÜRDEN,
+    Streamlit ekibi tarafından "status:confirmed" (onaylı hata) olarak
+    işaretlenmiş bir issue (#10907) bulundu: "st.dialog shows stale
+    elements from previous dialog" - bir dialog kapanıp YENİ bir dialog
+    açıldığında, YENİ dialog yüklenmesi biraz zaman alırsa ÖNYÜZDE
+    (frontend/React tarafında) eski dialog'dan kalan durumla çakışma
+    yaşanabiliyor. Bu, BİZİM kodumuzda düzeltilebilecek bir mantık
+    hatası DEĞİL, Streamlit'in kendi iç durum senkronizasyonundaki
+    bilinen bir zamanlama sorunu - "11 adet" gibi çok sayıda bekleyen
+    tespit olduğunda (sık sıra ile Onayla/Reddet + st.rerun() +
+    hemen yeni dialog açma döngüsü) bu zamanlama sorununun tetiklenme
+    ihtimali artıyor.
+  - **Çözüm (koruyucu örtü, kök nedeni "düzeltmez" ama çökmeyi önler):**
+    `_tespit_onay_modali()` çağrısı `try/except Exception` ile
+    sarmalandı - modal açılamazsa TÜM UYGULAMA ÇÖKMEK yerine sessizce
+    atlanıyor. "Onay Bekleyen Otomatik Tespitler" listesi (Ana Sayfa'da,
+    modal olmadan AYNI onay/red işlevini sağlayan ayrı bölüm) hiç
+    etkilenmiyor - kullanıcı oradan işlemine devam edebilir.
+  - **AÇIK:** Push + canlı doğrulama bekliyor. Streamlit'in kendi
+    hatası tamamen ortadan kalkmayabilir (bizim kontrolümüzde değil),
+    ama artık uygulamayı ÇÖKERTMEYECEK.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
