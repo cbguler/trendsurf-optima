@@ -5744,5 +5744,33 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **AÇIK:** Push + bir sonraki "Veri Güncelle" + canlı Bütçe
     Optimizasyonu sayfası kontrolü gerekiyor.
 
+- **[ACİL DURUM DÜZELTMESİ, PUSH BEKLİYOR] v2.0.7.267 (8 Eylül 2026,
+  Bahri'nin bulgusu — "saatler geçti açılmıyor", "Error installing
+  requirements"): STREAMLIT CLOUD ALTYAPI SORUNU - UYGULAMA TAMAMEN
+  DÜŞMÜŞTÜ, GEÇİCİ ÇÖZÜMLE AYAĞA KALDIRILDI.**
+  - **Kök neden (bizim kodumuzda DEĞİL):** Streamlit Cloud'un derleme
+    sunucularında Debian'in kendi paket deposu (`bullseye-security`)
+    ile ilgili bir senkronizasyon sorunu: `E: Release file for
+    .../bullseye-security/InRelease is expired`. Bu, Streamlit'in
+    KENDİ resmi forumunda AYNI SAATLERDE, AYNI hatayla BAŞKA bir
+    kullanıcı tarafından da bağımsız olarak bildirildi
+    (discuss.streamlit.io, konu ID 122366) - bu bizim projemize özgü
+    DEĞİL, Streamlit Cloud'un platformunda o an yaşanan genel bir
+    altyapı sorunuydu. Reboot işe yaramıyordu çünkü sorun onların
+    derleme sunucusunun paket önbelleğindeydi, bizim kodumuzda değil.
+  - **Geçici çözüm:** `packages.txt` (sadece `tesseract-ocr` ve
+    `tesseract-ocr-tur` içeriyordu) GEÇİCİ OLARAK BOŞALTILDI (yorum
+    satırlarıyla neden/geri alma talimatı bırakıldı). Liste boşken
+    Streamlit'in derleme adımı `apt-get`'i hiç çalıştırmıyor, bu
+    yüzden kırık depoya hiç uğramadan uygulama ayağa kalkabiliyor.
+  - **Bedel:** Halka Arz sayfasındaki OCR tabanlı Fiyat Tespit Raporu
+    ayrıştırması (Format-1 "özet kutusu" bulunamayan raporlarda
+    devreye giren OCR.space yedeği) Streamlit bu sorunu düzeltene
+    kadar ÇALIŞMAZ. Uygulamanın geri kalanı (Portföyüm, BIST, TEFAS,
+    Döviz, Maden, Kripto, Temettü vb.) ETKİLENMEZ.
+  - **GERİ ALMA (Streamlit sorunu düzeltince):** `packages.txt`'teki
+    yorum satırlarının en altındaki iki satırı (`tesseract-ocr`,
+    `tesseract-ocr-tur`) yorumdan çıkarıp tekrar push et.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
