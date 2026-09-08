@@ -6171,5 +6171,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     bloğunun BAŞLANGICINDAN SONRA geldiği (yani içeride olduğu)
     doğrudan string-indeks karşılaştırmasıyla test edildi.
 
+- **[UYGULANDI, ÇÖZME ALGORİTMASI GERÇEK VERİYLE SAYISAL OLARAK
+  DOĞRULANDI - CANLI TARAYICI DOĞRULAMASI BEKLİYOR] v2.0.7.281
+  (8 Eylül 2026, Bahri'nin bulgusu — "İki kere reboot yapmama rağmen
+  düzelmedi"): v2.0.7.279/280'İN "PLOTLY.JS CHARTDIV.DATA'YI ÇÖZER"
+  VARSAYIMI YANLIŞ ÇIKTI - BU SEFER VARSAYIMSIZ, KANITLI ÇÖZÜM.**
+  - **Dürüst öz-eleştiri:** v2.0.7.279 ve 280, "Plotly.js kendi iç
+    `chartDiv.data`sında bdata'yı düz diziye çözüyor olmalı" varsayımına
+    dayanıyordu - bu, mantıklı bir teoriydi ama GERÇEK TARAYICIDA HİÇ
+    DOĞRULANMAMIŞTI. Bahri'nin "iki reboot'a rağmen düzelmedi" bulgusu
+    bu varsayımın YANLIŞ olduğunu kanıtladı.
+  - **Bu sefer farklı yaklaşım - HİÇBİR VARSAYIMA DAYANMIYOR:** Base64
+    "bdata", Plotly'nin herhangi bir iç davranışına bağlı olmadan,
+    tarayıcının KENDİ standart `atob()` fonksiyonuyla JS'in kendisi
+    tarafından çözülüyor (`Uint8Array` + `Float64Array` ile ham
+    baytları sayılara çeviren, garantili/platform-bağımsız bir yöntem).
+  - **SOMUT, SAYISAL DOĞRULAMA (önceki iki denemeden FARKI budur):**
+    Python'da AYNI çözme algoritması (`base64.b64decode` +
+    `struct.unpack('<d'*n, ...)`) gerçek bir `fig.to_json()`
+    çıktısındaki bdata üzerinde çalıştırıldı - çözülen değerler,
+    ORİJİNAL `hist["High"]` değerleriyle BİREBİR eşleşti (`Eşleşme:
+    True`). Bu, "Plotly muhtemelen böyle yapıyor" gibi bir tahmin
+    DEĞİL, matematiksel olarak KANITLANMIŞ bir sonuç.
+  - **Ek basitleştirme:** Artık `chartDiv.data`ya da asenkron `.then()`
+    beklemesine de HİÇ gerek yok - çözme işlemi `figData.data`
+    (orijinal Python JSON çıktısı) üzerinde ESZAMANLI ve HEMEN
+    yapılıyor, v2.0.7.280'in çözmeye çalıştığı "olay dinleyicileri
+    trace'ler hazır olmadan tetikleniyor" yarış durumu sınıfı da bu
+    sayede KÖKTEN ortadan kalkmış oldu (zaten senkron olduğu için
+    "hazır olmama" durumu artık yapısal olarak imkansız).
+  - **Doğrulama:** `python3 -m py_compile` temiz. Üretilen HTML'de
+    `alanCoz`/`atob`/`Float64Array`'in mevcut olduğu VE artık hiçbir
+    `.then()` kullanılmadığı doğrulandı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

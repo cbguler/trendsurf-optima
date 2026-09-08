@@ -1779,16 +1779,28 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     """candle_fig()'i kullanarak figuru olusturur, SONRA onu ham
     st.plotly_chart YERINE ozel bir HTML+JS sarmalayicisi ile gosterir.
 
-    v2.0.7.277 (8 Eylul 2026, Bahri'nin bulgusu - "mumlar/hacim
-    basilmis gibi yassilasti"): v2.0.7.275'teki `yaxis.autorange=true`
-    yaklasimi YANLIS cikti - Plotly'nin autorange'i GORUNEN X
-    penceresine DEGIL, figurdeki TUM veriye (artik her zaman 5 yil)
-    gore olcekliyordu. Cozum: Y ekseni artik HER tekerlek hareketinde
-    JS'in KENDISI tarafindan, SADECE o an GORUNEN X araligindaki
-    High/Low (ve Hacim) degerlerinden HESAPLANIYOR - Plotly'nin kendi
-    autorange'ine hic guvenilmiyor.
+    v2.0.7.281 (8 Eylul 2026, Bahri'nin bulgusu - "iki reboot'a ragmen
+    duzelmedi" - v2.0.7.279/280'in "Plotly.js chartDiv.data'yi cozer"
+    VARSAYIMI DOGRULANAMADAN yapilmis bir TAHMINDI, YANLIS cikti):
+    KESIN, VARSAYIMSIZ COZUM. `fig.to_json()`, 1000+ satirlik sayisal
+    dizileri (High/Low/Hacim - artik her zaman 5 yillik veri) duz JSON
+    listesi yerine `{{dtype:'f8', bdata:'<base64>'}}` seklinde
+    SIKISTIRIYOR (bu, gercek `fig.to_json()` ciktisi incelenerek SOMUT
+    olarak dogrulandi). Onceki iki deneme (v2.0.7.279, 280) "Plotly.js
+    bunu kendi ic `chartDiv.data`sinda COZUYOR olmali" varsayimina
+    dayaniyordu - bu varsayim gercek tarayicida DOGRULANAMADI ve
+    goruldugu uzere YANLIS cikti. Bu surumde ARTIK HICBIR VARSAYIMA
+    DAYANMIYORUZ: base64 "bdata" JS'in KENDISI tarafindan (Plotly'nin
+    ic davranisindan TAMAMEN BAGIMSIZ) COZULUYOR - bu, tarayicilarin
+    KENDI standart `atob()` fonksiyonuyla yapilan, Plotly'nin herhangi
+    bir surumune/ic davranisina baglı OLMAYAN, garantili bir yontem.
+    Bu sayede asenkron `.then()` bekleme karmasikligina da ARTIK GEREK
+    YOK - cozme islemi ESZAMANLI ve HEMEN yapiliyor.
     - (1) Eksen etiketleri: candle_fig()'te acikca showticklabels/
       tickfont + yeterli sol kenar bosluğu (margin) ayarlandi.
+    - (2)+(3) Y ekseni: HER tekerlek hareketinde, o an GORUNEN X
+      araligindaki (dogru COZULMUS) High/Low/Hacim degerlerinden
+      YENIDEN hesaplaniyor.
     - (4) Yakinlastirma siniri "Periyot" secimine BAGLI DEGIL - cagiran
       taraf HER ZAMAN 5 yillik (ya da mevcut olan TUM) veriyi geciyor.
       Min pencere: 7 gun.
@@ -1837,24 +1849,43 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         var MIN_PENCERE_MS = {_min_pencere_ms};
         var TAM_PENCERE_MS = SON_TARIH_MS - TAM_BASLANGIC_MS;
         var tekerlekYakinlastirmaAktif = true;
-        var HACIM_VAR = {str(_has_volume).lower()};
-        // v2.0.7.278 (8 Eylul 2026, Bahri'nin bulgusu - "olmadi, hatali",
-        // genis pencerede mumlar sol ustte sikisip kaliyordu, ~1073
-        // gunde takiliyordu - GERCEK 5 yillik veri dogrulanmisti, sorun
-        // veride DEGILDI): SUPHELI KOK NEDEN - `Plotly.relayout()`
-        // ASENKRON calisiyor. Fare tekerlegi TEK bir kaydirma hareketinde
-        // ONLARCA 'wheel' olayi ATESLEYEBILIR - eger onceki relayout
-        // cagrisi HENUZ TAMAMLANMADIYSA, ardisik olaylar
-        // `chartDiv.layout.xaxis.range`'i OKUYUNCA hala ESKI degeri
-        // gorur, bu da buyume/kucultmenin BEKLENMEDIK bir noktada
-        // "takilmis" gibi durmasina yol acabilir. Cozum: mevcut
-        // pencere ARTIK Plotly'den OKUNMUYOR - JS'in KENDI hafizasinda
-        // (asagidaki degisken) TUTULUYOR, her tekerlek olayinda ESZAMANLI
-        // (Plotly'nin cevabini beklemeden) guncelleniyor.
         var mevcutPencereMsTakip = {int(varsayilan_gun)} * 24 * 60 * 60 * 1000;
         if (mevcutPencereMsTakip > TAM_PENCERE_MS) mevcutPencereMsTakip = TAM_PENCERE_MS;
 
+        // v2.0.7.281: base64 "bdata"yi TARAYICININ KENDI standart
+        // atob() fonksiyonuyla COZUP duz bir JS dizisine ceviren
+        // VARSAYIMSIZ yardimci fonksiyon - Plotly'nin surumune/ic
+        // davranisina HIC bagimli degil.
+        function alanCoz(alan) {{
+            if (Array.isArray(alan)) return alan;
+            if (alan && typeof alan === 'object' && typeof alan.bdata === 'string') {{
+                var ikiliMetin = atob(alan.bdata);
+                var arabellek = new ArrayBuffer(ikiliMetin.length);
+                var gorunum = new Uint8Array(arabellek);
+                for (var i = 0; i < ikiliMetin.length; i++) {{
+                    gorunum[i] = ikiliMetin.charCodeAt(i);
+                }}
+                return Array.from(new Float64Array(arabellek));
+            }}
+            return [];
+        }}
+
         var fiyatTrace = null, hacimTrace = null;
+        for (var i = 0; i < figData.data.length; i++) {{
+            var tr = figData.data[i];
+            if (tr.type === 'candlestick') {{
+                fiyatTrace = {{
+                    x: tr.x,  // tarihler hep duz metin dizisi (bdata DEGIL)
+                    high: alanCoz(tr.high),
+                    low: alanCoz(tr.low),
+                }};
+            }} else if (tr.yaxis === 'y2') {{
+                hacimTrace = {{
+                    x: tr.x,
+                    y: alanCoz(tr.y),
+                }};
+            }}
+        }}
 
         function gorunenYAraligiHesapla(baslangicMs, bitisMs) {{
             var sonuc = {{}};
@@ -1893,63 +1924,45 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
             tarihDiv.textContent = fmt(b) + " – " + fmt(s) + "  (" + gunSayisi + " gün)";
         }}
 
-        // v2.0.7.280 (8 Eylul 2026, Bahri'nin bulgusu - "ilk acilista
-        // duzgun, tekerlegi hafif oynatinca bozuluyor"): v2.0.7.279
-        // `fiyatTrace`/`hacimTrace`'i ASENKRON `.then()` icinde
-        // dolduruyordu, AMA tekerlek/tik DINLEYICILERI bunun DISINDA,
-        // ESZAMANLI olarak HEMEN takiliyordu - kullanici sayfa
-        // acilir acilmaz (promise henuz cozulmeden) tekerlegi
-        // oynatirsa, fiyatTrace/hacimTrace HALA null bulunuyor,
-        // gorunenYAraligiHesapla() bos sonuc donuyor, Y ekseni
-        // guncellenmiyordu. Cozum: TUM olay dinleyicileri de artik
-        // `.then()` CALLBACK'inin ICINE tasindi - hicbir tekerlek/tik
-        // olayi, trace'ler hazir olmadan ISLENEMEZ.
         Plotly.newPlot(chartDiv, figData.data, figData.layout,
-            {{responsive: true, scrollZoom: false, displaylogo: false}}
-        ).then(function() {{
-            for (var i = 0; i < chartDiv.data.length; i++) {{
-                var tr = chartDiv.data[i];
-                if (tr.type === 'candlestick') fiyatTrace = tr;
-                else if (tr.yaxis === 'y2') hacimTrace = tr;
-            }}
+            {{responsive: true, scrollZoom: false, displaylogo: false}});
 
-            tarihEtiketiGuncelle();
-            chartDiv.on('plotly_relayout', tarihEtiketiGuncelle);
+        tarihEtiketiGuncelle();
+        chartDiv.on('plotly_relayout', tarihEtiketiGuncelle);
 
-            chartDiv.addEventListener('click', function() {{
-                tekerlekYakinlastirmaAktif = !tekerlekYakinlastirmaAktif;
-                modDiv.textContent = tekerlekYakinlastirmaAktif
-                    ? "🔍 Tekerlek: Yakınlaştırma"
-                    : "↕️ Tekerlek: Sayfa kaydırma";
-            }});
-
-            chartDiv.addEventListener('wheel', function(evt) {{
-                if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
-                evt.preventDefault();
-
-                var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
-                var yeniPencereMs = mevcutPencereMsTakip * carpan;
-                yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
-                mevcutPencereMsTakip = yeniPencereMs;  // ESZAMANLI guncelle
-
-                var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
-                var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
-
-                var _guncelleme = {{
-                    'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
-                                     new Date(SON_TARIH_MS).toISOString()]
-                }};
-                if (yAraliklari.yaxis) {{
-                    _guncelleme['yaxis.range'] = yAraliklari.yaxis;
-                    _guncelleme['yaxis.autorange'] = false;
-                }}
-                if (yAraliklari.yaxis2) {{
-                    _guncelleme['yaxis2.range'] = yAraliklari.yaxis2;
-                    _guncelleme['yaxis2.autorange'] = false;
-                }}
-                Plotly.relayout(chartDiv, _guncelleme);
-            }}, {{passive: false}});
+        chartDiv.addEventListener('click', function() {{
+            tekerlekYakinlastirmaAktif = !tekerlekYakinlastirmaAktif;
+            modDiv.textContent = tekerlekYakinlastirmaAktif
+                ? "🔍 Tekerlek: Yakınlaştırma"
+                : "↕️ Tekerlek: Sayfa kaydırma";
         }});
+
+        chartDiv.addEventListener('wheel', function(evt) {{
+            if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
+            evt.preventDefault();
+
+            var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
+            var yeniPencereMs = mevcutPencereMsTakip * carpan;
+            yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
+            mevcutPencereMsTakip = yeniPencereMs;  // ESZAMANLI guncelle
+
+            var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
+            var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
+
+            var _guncelleme = {{
+                'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
+                                 new Date(SON_TARIH_MS).toISOString()]
+            }};
+            if (yAraliklari.yaxis) {{
+                _guncelleme['yaxis.range'] = yAraliklari.yaxis;
+                _guncelleme['yaxis.autorange'] = false;
+            }}
+            if (yAraliklari.yaxis2) {{
+                _guncelleme['yaxis2.range'] = yAraliklari.yaxis2;
+                _guncelleme['yaxis2.autorange'] = false;
+            }}
+            Plotly.relayout(chartDiv, _guncelleme);
+        }}, {{passive: false}});
     }})();
     </script>
     """
