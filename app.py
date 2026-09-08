@@ -1623,6 +1623,25 @@ mutlaka ekle. En fazla 180 kelime."""
         return _grafik_yorumu_sablon(t, ticker, birim)
 
 
+@st.cache_resource(show_spinner=False)
+def _plotly_js_govde_yukle():
+    """v2.0.7.283 (8 Eylul 2026, Bahri'nin bulgusu - "grafik yine
+    gelmedi, bu KESINLIKLE cozulmeli, projenin en can alici tarafi"):
+    Plotly.js KUTUPHANESI ARTIK CDN'DEN DEGIL, repoya GOMULU yerel
+    dosyadan (`plotly_bundle.min.js`) okunuyor - boylece HERHANGI bir
+    ag/CDN/reklam-engelleyici sorunu bu grafigi ETKILEYEMEZ, kutuphane
+    HTML ile birlikte SEYAHAT EDER. `st.cache_resource` ile dosya
+    SADECE BIR KEZ diskten okunur (4.5MB), sonraki tum cagrilar
+    bellekten gelir - performans maliyeti ihmal edilebilir.
+    Bu TAM OLARAK ayni dosya - Playwright/Chromium ile gercek bir
+    tarayicida SVG uretip mouse tekerlegi simulasyonuyla dogru Y ekseni
+    guncellemesi yaptigi ONCEDEN DOGRULANMISTI (bkz. PROJE_NOTLARI.md
+    v2.0.7.282 notu) - CDN'den degil, sadece KAYNAGI degisiyor."""
+    _yol = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plotly_bundle.min.js")
+    with open(_yol, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 def candle_fig(hist, ticker, varsayilan_gun=90):
     """v2.0.3: Mum grafigi + opsiyonel hacim subplot.
 
@@ -1825,15 +1844,10 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
 
     _fig_json = fig.to_json()
     _div_id = f"ts_candle_{re.sub(r'[^a-zA-Z0-9]', '_', key)}"
+    _plotly_js = _plotly_js_govde_yukle()
 
     _html = f"""
     <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
-    <div id="{_div_id}_hata" style="display:none;padding:16px;background:#fef2f2;
-                color:#991b1b;border-radius:8px;font-size:13px;">
-        Grafik kütüphanesi yüklenemedi (ağ bağlantısı veya reklam engelleyici
-        sorunu olabilir) - sayfayı yenilemeyi deneyin. Bu arada "Periyot"
-        düğmeleri (1 Ay/3 Ay/...) normal şekilde çalışmaya devam eder.
-    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;
                 padding:8px 6px 2px 6px;">
         <span id="{_div_id}_tarih"
@@ -1842,31 +1856,15 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         <span id="{_div_id}_mod"
               style="font-size:12px;font-weight:600;color:#6c7a9c;">🔍 Tekerlek: Yakınlaştırma</span>
     </div>
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"
-            onerror="document.getElementById('{_div_id}_hata').style.display='block';
-                     document.getElementById('{_div_id}').style.display='none';"></script>
+    <script>
+    {_plotly_js}
+    </script>
     <script>
     (function() {{
-        // v2.0.7.282 (8 Eylul 2026, Bahri'nin bulgusu - "grafik tamamen
-        // gitti", KOK NEDEN gercek tarayicida (Playwright/Chromium ile
-        // sandbox'ta) test edilerek arastirildi): kodun KENDISI (JSON
-        // yapisi, base64 cozme mantigi, olay dinleyicileri) YEREL bir
-        // Plotly.js kopyasiyla test edildiginde MUKEMMEL calisiyordu (13
-        // SVG elemani, hicbir konsol hatasi) - yani ONCEKI TUM
-        // duzeltmeler (277-281) DOGRU. Sandbox'ta CDN'den Plotly
-        // yuklenirken bir SERTIFIKA hatasi alindi (bu SANDBOX'A OZGU bir
-        // kisitlama, Bahri'nin gercek tarayicisinda olmasi beklenmez) -
-        // ama HERHANGI bir nedenle (ag sorunu, reklam engelleyici,
-        // gecici CDN aksakligi) CDN yuklenemezse, kod SESSIZCE bos
-        // kaliyordu, hicbir hata gostermiyordu. Simdi HEM script
-        // etiketine "onerror" HEM de asagida bir savunma kontrolu
-        // eklendi - boylece boyle bir durumda kullanici en azindan NE
-        // OLDUGUNU gorebilecek (sessiz bosluk yerine).
-        if (typeof Plotly === 'undefined') {{
-            document.getElementById("{_div_id}_hata").style.display = 'block';
-            document.getElementById("{_div_id}").style.display = 'none';
-            return;
-        }}
+        // v2.0.7.283: Plotly.js artik YUKARIDA, CDN'den DEGIL,
+        // repoya gomulu yerel dosyadan (_plotly_js_govde_yukle())
+        // dogrudan gomuldu - bu script bloğu calistiginda Plotly
+        // HER ZAMAN hazir, hicbir ag/CDN riski yok.
         var figData = {_fig_json};
         var chartDiv = document.getElementById("{_div_id}");
         var tarihDiv = document.getElementById("{_div_id}_tarih");

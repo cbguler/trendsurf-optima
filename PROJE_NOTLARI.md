@@ -6243,5 +6243,38 @@ tamam, canlı doğrulama BEKLİYOR):**
     mesajı gizli kalıyor, CDN yapay olarak engellenince (`.invalid`
     alan adı) hata mesajı doğru şekilde görünür oluyor.
 
+- **[UYGULANDI, GERÇEK TARAYICIDA (PLAYWRIGHT/CHROMIUM), HİÇBİR AĞ
+  BAĞLANTISI OLMADAN, SIFIR HATA İLE DOĞRULANDI] v2.0.7.283 (8 Eylül
+  2026, Bahri'nin bulgusu — "Yok grafik yine gelmedi, bunu kesinlikle
+  yapmalıyız, bu projenin en can alıcı tarafı bu, çok çok önemli"):
+  PLOTLY.JS ARTIK CDN'DEN DEĞİL, REPOYA GÖMÜLÜ YEREL DOSYADAN
+  YÜKLENİYOR - HERHANGİ BİR AĞ/CDN BAĞIMLILIĞI TAMAMEN ORTADAN
+  KALKTI.**
+  - **v2.0.7.282'nin `onerror` güvenlik ağı yeterli değildi** - o sadece
+    CDN başarısız olduğunda bir HATA MESAJI gösteriyordu, sorunu
+    ÇÖZMÜYORDU. Bahri'nin "kesinlikle çözülmeli" vurgusu üzerine kökten
+    bir yaklaşım değişikliği yapıldı.
+  - **Yeni mimari:** `plotly_bundle.min.js` (4,558,696 bayt - Playwright
+    testlerinde ÇALIŞTIĞI ZATEN KANITLANMIŞ olan TAM OLARAK AYNI dosya)
+    artık repoya eklendi. `_plotly_js_govde_yukle()` fonksiyonu bu
+    dosyayı `st.cache_resource` ile SADECE BİR KEZ diskten okuyor.
+    `render_candle_interactive()` artık `<script src="https://cdn...">`
+    YERİNE bu içeriği DOĞRUDAN `<script>{içerik}</script>` olarak HTML'e
+    gömüyor - kütüphane artık HTML ile birlikte SEYAHAT EDİYOR, hiçbir
+    dış kaynağa bağımlı değil.
+  - **Doğrulama (bu sefer TAM anlamıyla gerçekçi - CDN/sertifika
+    sorunu yaşanma İHTİMALİ dahi YOK):** Üretilen HTML (~4.8MB, esas
+    olarak Plotly kütüphanesinin kendisi) gerçek Chromium'da açıldı -
+    SIFIR konsol mesajı/hatası, 13 SVG elemanı doğru oluştu, başlangıç
+    Y ekseni [9.80, 10.20] doğru, gerçek fare tekerleği simülasyonu
+    sonrası Y ekseni [6.99, 10.20]'ye doğru şekilde güncellendi.
+  - **Maliyet notu:** Her grafik artık ~4.5MB'lık ek veri taşıyor
+    (kütüphanenin kendisi) - bu, güvenilirlik için bilinçli bir
+    değiş tokuş. `st.cache_resource` sayesinde dosya sunucu tarafında
+    tekrar tekrar OKUNMUYOR, ama HER SAYFA YÜKLEMESİNDE tarayıcıya
+    gönderiliyor (CDN kullanılsaydı tarayıcı ONU kendi önbelleğinde
+    tutabilirdi - bu fark, güvenilirlik ugruna kabul edildi).
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
