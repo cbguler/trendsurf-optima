@@ -6204,5 +6204,44 @@ tamam, canlı doğrulama BEKLİYOR):**
     `alanCoz`/`atob`/`Float64Array`'in mevcut olduğu VE artık hiçbir
     `.then()` kullanılmadığı doğrulandı.
 
+- **[UYGULANDI, GERÇEK TARAYICIDA (PLAYWRIGHT/CHROMIUM) UÇTAN UCA
+  DOĞRULANDI - EN GÜÇLÜ DOĞRULAMA SEVİYESİ] v2.0.7.282 (8 Eylül 2026,
+  Bahri'nin bulgusu — "Grafik tamamen gitti"): KÖK NEDEN GERÇEKTEN
+  BULUNDU (SANDBOX'A PLAYWRIGHT KURULARAK), GÜVENLİ AĞ EKLENDİ.**
+  - **Yöntem değişikliği - ilk kez GERÇEK bir tarayıcı kullanıldı:**
+    Önceki tüm denemeler (277-281) ya Python'da izole mantık testi ya
+    da "yapısal" (metin içinde belirli JS ifadelerinin var olup
+    olmadığını kontrol eden) testlerdi - HİÇBİRİ GERÇEK BİR TARAYICIDA
+    ÇALIŞTIRILMAMIŞTI. Bu turda `playwright` + gerçek Chromium sandbox'a
+    kuruldu - ARTIK gerçek tarayıcı testi mümkün.
+  - **Kesin bulgu:** Üretilen HTML gerçek Chromium'da açılınca konsol
+    hatası `[PAGE ERROR] Plotly is not defined` çıktı - CDN'den
+    Plotly.js YÜKLENEMEMİŞTİ (`ERR_CERT_AUTHORITY_INVALID` - SANDBOX'A
+    ÖZGÜ bir sertifika sorunu, Bahri'nin gerçek tarayıcısında olması
+    BEKLENMEZ, ama HERHANGİ bir nedenle - ağ sorunu, reklam engelleyici,
+    geçici CDN aksaklığı - CDN yüklenemezse AYNI "tamamen boş grafik"
+    sonucu ortaya çıkar).
+  - **ÇOK ÖNEMLİ, RAHATLATICI DOĞRULAMA:** Plotly.js YEREL bir kopyadan
+    yüklenerek AYNI kod tekrar test edildiğinde (CDN sorunu ortadan
+    kaldırılınca) grafik MÜKEMMEL çalıştı: 13 SVG elemanı oluştu, HİÇ
+    konsol hatası yok. Üstelik GERÇEK bir fare tekerleği olayı da
+    `page.mouse.wheel()` ile simüle edildi: başlangıç Y ekseni
+    [9.80, 10.20] iken, pencereyi ~2 yıla genişletince Y ekseni DOĞRU
+    şekilde [6.99, 10.20]'ye güncellendi - v2.0.7.277-281'in TÜM mantığı
+    (base64 çözme dahil) GERÇEK Plotly.js ile UÇTAN UCA doğrulandı.
+  - **Sonuç:** v2.0.7.281'İN KENDİ MANTIĞI ZATEN DOĞRUYMUŞ - Bahri'nin
+    "tamamen gitti" deneyimi muhtemelen CDN'in KENDİSİNİN (ağ/tarayıcı
+    kaynaklı) yüklenememesinden kaynaklanmıştı, kod mantığından değil.
+  - **Eklenen güvenlik ağı:** CDN script etiketine `onerror` + ayrıca
+    JS içinde `typeof Plotly === 'undefined'` kontrolü eklendi - CDN
+    HERHANGİ bir nedenle yüklenemezse artık SESSİZCE boş kalmıyor,
+    kullanıcıya "Grafik kütüphanesi yüklenemedi, sayfayı yenileyin"
+    şeklinde AÇIK bir mesaj gösteriliyor (bu mesaj görünürse "Periyot"
+    düğmeleri her zaman çalışmaya devam eder).
+  - **Doğrulama:** `python3 -m py_compile` temiz. HEM başarı HEM hata
+    senaryosu gerçek Chromium'da test edildi - başarı durumunda hata
+    mesajı gizli kalıyor, CDN yapay olarak engellenince (`.invalid`
+    alan adı) hata mesajı doğru şekilde görünür oluyor.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

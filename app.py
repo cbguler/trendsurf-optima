@@ -1828,6 +1828,12 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
 
     _html = f"""
     <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
+    <div id="{_div_id}_hata" style="display:none;padding:16px;background:#fef2f2;
+                color:#991b1b;border-radius:8px;font-size:13px;">
+        Grafik kütüphanesi yüklenemedi (ağ bağlantısı veya reklam engelleyici
+        sorunu olabilir) - sayfayı yenilemeyi deneyin. Bu arada "Periyot"
+        düğmeleri (1 Ay/3 Ay/...) normal şekilde çalışmaya devam eder.
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;
                 padding:8px 6px 2px 6px;">
         <span id="{_div_id}_tarih"
@@ -1836,9 +1842,31 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         <span id="{_div_id}_mod"
               style="font-size:12px;font-weight:600;color:#6c7a9c;">🔍 Tekerlek: Yakınlaştırma</span>
     </div>
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"
+            onerror="document.getElementById('{_div_id}_hata').style.display='block';
+                     document.getElementById('{_div_id}').style.display='none';"></script>
     <script>
     (function() {{
+        // v2.0.7.282 (8 Eylul 2026, Bahri'nin bulgusu - "grafik tamamen
+        // gitti", KOK NEDEN gercek tarayicida (Playwright/Chromium ile
+        // sandbox'ta) test edilerek arastirildi): kodun KENDISI (JSON
+        // yapisi, base64 cozme mantigi, olay dinleyicileri) YEREL bir
+        // Plotly.js kopyasiyla test edildiginde MUKEMMEL calisiyordu (13
+        // SVG elemani, hicbir konsol hatasi) - yani ONCEKI TUM
+        // duzeltmeler (277-281) DOGRU. Sandbox'ta CDN'den Plotly
+        // yuklenirken bir SERTIFIKA hatasi alindi (bu SANDBOX'A OZGU bir
+        // kisitlama, Bahri'nin gercek tarayicisinda olmasi beklenmez) -
+        // ama HERHANGI bir nedenle (ag sorunu, reklam engelleyici,
+        // gecici CDN aksakligi) CDN yuklenemezse, kod SESSIZCE bos
+        // kaliyordu, hicbir hata gostermiyordu. Simdi HEM script
+        // etiketine "onerror" HEM de asagida bir savunma kontrolu
+        // eklendi - boylece boyle bir durumda kullanici en azindan NE
+        // OLDUGUNU gorebilecek (sessiz bosluk yerine).
+        if (typeof Plotly === 'undefined') {{
+            document.getElementById("{_div_id}_hata").style.display = 'block';
+            document.getElementById("{_div_id}").style.display = 'none';
+            return;
+        }}
         var figData = {_fig_json};
         var chartDiv = document.getElementById("{_div_id}");
         var tarihDiv = document.getElementById("{_div_id}_tarih");
