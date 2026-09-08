@@ -5900,6 +5900,20 @@ elif page=="Portföyüm":
             if not _d["hist"].empty:
                 _fig = candle_fig(_d["hist"],_sel_tkr)
                 if _fig: st.plotly_chart(_fig, width='stretch')
+
+                # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
+                # yorumla butonu tam istedigim gibi olmus, bunu
+                # Portfoyumdeki varliklar icin de istiyorum"): AYNI
+                # ozellik (v2.0.7.266) Portfoyum'un kendi pozisyon
+                # detay grafigine de eklendi.
+                _grafik_yorum_key_pf = f"_grafik_yorum_ac_pf_{_sel_tkr}"
+                if st.button("Grafiği Yorumla", key=f"grafik_yorum_btn_pf_{_sel_tkr}"):
+                    st.session_state[_grafik_yorum_key_pf] = not st.session_state.get(_grafik_yorum_key_pf, False)
+                if st.session_state.get(_grafik_yorum_key_pf):
+                    with st.spinner("Grafik analiz ediliyor..."):
+                        _yorum_metni_pf = _grafik_yorumu_uret(
+                            _d["hist"], _sel_tkr, str(_sr.get("Kategori", "")))
+                    st.markdown(_yorum_metni_pf)
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
 

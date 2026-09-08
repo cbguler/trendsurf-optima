@@ -5800,5 +5800,20 @@ tamam, canlı doğrulama BEKLİYOR):**
     tesseract-ocr
     tesseract-ocr-tur
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.269 (8 Eylül
+  2026, Bahri'nin talebi — "grafiği yorumla butonu tam istediğim gibi
+  olmuş, bu butonu Portföyümdeki varlıklar için de istiyorum"): AYNI
+  ÖZELLİK (v2.0.7.266) PORTFÖYÜM SAYFASININ POZİSYON DETAY GRAFİĞİNE DE
+  EKLENDİ.**
+  - v2.0.7.266, sadece "elif page in CAT:" bloğuna (BIST/TEFAS/Döviz/
+    Değerli Madenler/Kriptolar'ın ortak sayfası) eklenmişti - Portföyüm
+    sayfasının KENDİ pozisyon detay grafiği (`elif page=="Portföyüm":`
+    bloğu içinde, ayrı bir `candle_fig()` çağrısı) bu kapsamda DEĞİLDİ.
+  - `_grafik_teknik_analiz`/`_grafik_yorumu_uret` fonksiyonlarına
+    HİÇBİR değişiklik yapılmadı (zaten genel amaçlı tasarlanmışlardı) -
+    sadece Portföyüm'ün kendi grafik gösterim noktasına AYNI "Grafiği
+    Yorumla" düğmesi + aç/kapa mantığı eklendi.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
