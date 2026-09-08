@@ -1854,31 +1854,7 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         var mevcutPencereMsTakip = {int(varsayilan_gun)} * 24 * 60 * 60 * 1000;
         if (mevcutPencereMsTakip > TAM_PENCERE_MS) mevcutPencereMsTakip = TAM_PENCERE_MS;
 
-        // v2.0.7.279 (8 Eylul 2026, Bahri'nin bulgusu - "tekerlege
-        // dokundugum an bozuluyor" + KESIN kok neden bulundu): fig.
-        // to_json() BUYUK sayisal dizileri (5 yillik veri artik HER
-        // ZAMAN 1000+ satir oldugu icin) duz JSON listesi olarak DEGIL,
-        // Plotly'nin "typed array" optimizasyonuyla {{dtype:'f8',
-        // bdata:'<base64>'}} seklinde SIKISTIRILMIS olarak kodluyor -
-        // bu, `engine='json'` ile bile degismiyor (ayri bir ozellik).
-        // Grafik yine de DOGRU CIZILIYOR cunku Plotly.js bu formati
-        // KENDI ICINDE cozuyor - ama BENIM kodum HAM `figData.data`'ya
-        // bakip `trace.y[j]` gibi duz dizi erisimi yapmaya calisinca
-        // SESSIZCE basarisiz oluyordu (deger hep undefined donuyordu,
-        // hMax/yMin/yMax hic hesaplanamiyordu). Cozum: artik `figData.
-        // data` YERINE `chartDiv.data`ya (Plotly.newPlot TAMAMLANDIKTAN
-        // SONRA, Plotly'nin KENDI COZULMUS/duz-dizi haline getirdigi
-        // ic kopyasi) bakiyoruz.
         var fiyatTrace = null, hacimTrace = null;
-        Plotly.newPlot(chartDiv, figData.data, figData.layout,
-            {{responsive: true, scrollZoom: false, displaylogo: false}}
-        ).then(function() {{
-            for (var i = 0; i < chartDiv.data.length; i++) {{
-                var tr = chartDiv.data[i];
-                if (tr.type === 'candlestick') fiyatTrace = tr;
-                else if (tr.yaxis === 'y2') hacimTrace = tr;
-            }}
-        }});
 
         function gorunenYAraligiHesapla(baslangicMs, bitisMs) {{
             var sonuc = {{}};
@@ -1916,47 +1892,64 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
             }};
             tarihDiv.textContent = fmt(b) + " – " + fmt(s) + "  (" + gunSayisi + " gün)";
         }}
-        tarihEtiketiGuncelle();
-        chartDiv.on('plotly_relayout', tarihEtiketiGuncelle);
 
-        chartDiv.addEventListener('click', function() {{
-            tekerlekYakinlastirmaAktif = !tekerlekYakinlastirmaAktif;
-            modDiv.textContent = tekerlekYakinlastirmaAktif
-                ? "🔍 Tekerlek: Yakınlaştırma"
-                : "↕️ Tekerlek: Sayfa kaydırma";
+        // v2.0.7.280 (8 Eylul 2026, Bahri'nin bulgusu - "ilk acilista
+        // duzgun, tekerlegi hafif oynatinca bozuluyor"): v2.0.7.279
+        // `fiyatTrace`/`hacimTrace`'i ASENKRON `.then()` icinde
+        // dolduruyordu, AMA tekerlek/tik DINLEYICILERI bunun DISINDA,
+        // ESZAMANLI olarak HEMEN takiliyordu - kullanici sayfa
+        // acilir acilmaz (promise henuz cozulmeden) tekerlegi
+        // oynatirsa, fiyatTrace/hacimTrace HALA null bulunuyor,
+        // gorunenYAraligiHesapla() bos sonuc donuyor, Y ekseni
+        // guncellenmiyordu. Cozum: TUM olay dinleyicileri de artik
+        // `.then()` CALLBACK'inin ICINE tasindi - hicbir tekerlek/tik
+        // olayi, trace'ler hazir olmadan ISLENEMEZ.
+        Plotly.newPlot(chartDiv, figData.data, figData.layout,
+            {{responsive: true, scrollZoom: false, displaylogo: false}}
+        ).then(function() {{
+            for (var i = 0; i < chartDiv.data.length; i++) {{
+                var tr = chartDiv.data[i];
+                if (tr.type === 'candlestick') fiyatTrace = tr;
+                else if (tr.yaxis === 'y2') hacimTrace = tr;
+            }}
+
+            tarihEtiketiGuncelle();
+            chartDiv.on('plotly_relayout', tarihEtiketiGuncelle);
+
+            chartDiv.addEventListener('click', function() {{
+                tekerlekYakinlastirmaAktif = !tekerlekYakinlastirmaAktif;
+                modDiv.textContent = tekerlekYakinlastirmaAktif
+                    ? "🔍 Tekerlek: Yakınlaştırma"
+                    : "↕️ Tekerlek: Sayfa kaydırma";
+            }});
+
+            chartDiv.addEventListener('wheel', function(evt) {{
+                if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
+                evt.preventDefault();
+
+                var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
+                var yeniPencereMs = mevcutPencereMsTakip * carpan;
+                yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
+                mevcutPencereMsTakip = yeniPencereMs;  // ESZAMANLI guncelle
+
+                var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
+                var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
+
+                var _guncelleme = {{
+                    'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
+                                     new Date(SON_TARIH_MS).toISOString()]
+                }};
+                if (yAraliklari.yaxis) {{
+                    _guncelleme['yaxis.range'] = yAraliklari.yaxis;
+                    _guncelleme['yaxis.autorange'] = false;
+                }}
+                if (yAraliklari.yaxis2) {{
+                    _guncelleme['yaxis2.range'] = yAraliklari.yaxis2;
+                    _guncelleme['yaxis2.autorange'] = false;
+                }}
+                Plotly.relayout(chartDiv, _guncelleme);
+            }}, {{passive: false}});
         }});
-
-        chartDiv.addEventListener('wheel', function(evt) {{
-            if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
-            evt.preventDefault();
-
-            // v2.0.7.278: Plotly'nin (asenkron) durumunu OKUMAK yerine
-            // kendi takip degiskenimizi (mevcutPencereMsTakip) kullanip
-            // HEMEN (Plotly'nin cevabini beklemeden) guncelliyoruz - art
-            // arda hizli tekerlek olaylarinda "takilma" riski ortadan
-            // kalkiyor.
-            var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
-            var yeniPencereMs = mevcutPencereMsTakip * carpan;
-            yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
-            mevcutPencereMsTakip = yeniPencereMs;  // ESZAMANLI guncelle
-
-            var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
-            var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
-
-            var _guncelleme = {{
-                'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
-                                 new Date(SON_TARIH_MS).toISOString()]
-            }};
-            if (yAraliklari.yaxis) {{
-                _guncelleme['yaxis.range'] = yAraliklari.yaxis;
-                _guncelleme['yaxis.autorange'] = false;
-            }}
-            if (yAraliklari.yaxis2) {{
-                _guncelleme['yaxis2.range'] = yAraliklari.yaxis2;
-                _guncelleme['yaxis2.autorange'] = false;
-            }}
-            Plotly.relayout(chartDiv, _guncelleme);
-        }}, {{passive: false}});
     }})();
     </script>
     """

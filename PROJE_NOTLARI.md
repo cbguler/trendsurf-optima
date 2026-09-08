@@ -6148,5 +6148,28 @@ tamam, canlı doğrulama BEKLİYOR):**
     değil, gerçek Plotly çıktısında SOMUT olarak GÖRÜLEREK bulundu -
     güven seviyesi daha yüksek.
 
+- **[UYGULANDI, YAPISAL TEST GEÇTİ - CANLI TARAYICI DOĞRULAMASI BEKLİYOR]
+  v2.0.7.280 (8 Eylül 2026, Bahri'nin bulgusu - ekran görüntüleri:
+  "İlk açılışta böyle, tekerleği hafif oynatınca böyle oluyor"):
+  v2.0.7.279 KISMEN İŞE YARADI (İLK AÇILIŞ ARTIK MÜKEMMEL) - AMA
+  KENDİ İÇİNDE BAŞKA BİR YARIŞ DURUMU BIRAKMIŞ.**
+  - **İyi haber:** İlk ekran görüntüsü (90 günlük varsayılan açılış)
+    artık TAM DOĞRU - eksenler, mumlar, MA çizgileri, hacim barları
+    hepsi düzgün görünüyor. v2.0.7.277+279'un ANA düzeltmesi çalışıyor.
+  - **Kalan sorun:** v2.0.7.279, `fiyatTrace`/`hacimTrace`'i ASENKRON
+    `.then()` callback'i İÇİNDE dolduruyordu, AMA tekerlek/tık
+    DİNLEYİCİLERİ bunun DIŞINDA, EŞZAMANLI olarak HEMEN takılıyordu.
+    Kullanıcı sayfa açılır açılmaz (promise henüz çözülmeden) tekerleği
+    "hafif oynatınca", `fiyatTrace`/`hacimTrace` HÂLÂ `null` bulunuyor,
+    `gorunenYAraligiHesapla()` boş sonuç dönüyor, Y ekseni hiç
+    güncellenmiyordu.
+  - **Çözüm:** TÜM olay dinleyicileri (hem `wheel` hem `click`) artık
+    `.then()` callback'inin İÇİNE taşındı - hiçbir tekerlek/tık olayı,
+    trace'ler hazır olmadan İŞLENEMEZ.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Üretilen HTML,
+    `addEventListener` çağrılarının GERÇEKTEN `.then(function(){{`
+    bloğunun BAŞLANGICINDAN SONRA geldiği (yani içeride olduğu)
+    doğrudan string-indeks karşılaştırmasıyla test edildi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
