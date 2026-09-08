@@ -5910,5 +5910,43 @@ tamam, canlı doğrulama BEKLİYOR):**
     gerçekten grafiği yakınlaştırıp uzaklaştırıyor.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, JSON YAPISI GERÇEK PLOTLY ÇIKTISIYLA TEST EDİLDİ - CANLI
+  TARAYICI DOĞRULAMASI BEKLİYOR] v2.0.7.274 (8 Eylül 2026, Bahri'nin
+  talebi — "mouse tekerleğini kullanarak, en son veri sabit kalmak
+  şartıyla, veri zaman aralığının arttırılıp azaltılması" + "onu deneyelim,
+  başarılı olmazsa Periyot butonlarına döneriz"): ÖZEL MOUSE TEKERLEĞİ
+  DAVRANIŞI - RİSKLİ, AMA GERİ DÖNÜŞ PLANIYLA DENENDİ.**
+  - **Netleştirme:** v2.0.7.273'teki standart Plotly `scrollZoom`
+    YANLIŞ davranıştı - imlecin üstüne odaklanarak öğeleri büyütüp
+    küçültüyor, "en son veri sabit kalsın" şartını sağlamıyordu.
+  - **Çözüm:** `st.plotly_chart` yerine `st.components.v1.html` ile TAM
+    KONTROL alan yeni bir `render_candle_interactive()` fonksiyonu
+    eklendi - bu teknik projede ZATEN başka bir yerde (çerez yazma
+    özelliği) başarıyla kullanılıyordu. `candle_fig()` figürü JSON'a
+    çevrilip (`fig.to_json()`) Plotly.js (CDN) ile yeniden çiziliyor,
+    özel bir `wheel` olay dinleyicisi ekleniyor: en son veri noktası
+    HER ZAMAN sabit kalıyor, sadece gösterilen pencerenin BAŞLANGICI
+    (ne kadar geriye gidildiği) tekerlekle büyüyüp küçülüyor.
+  - **Kasıtlı güvenlik ağı:** JS herhangi bir nedenle çalışmazsa
+    (tarayıcı/sürüm sorunu), kullanıcı yine de mevcut "Periyot"
+    düğmeleriyle (1 Ay/3 Ay/...) aralığı değiştirebilir - bu özellik
+    başarısız olsa bile uygulama işlevini kaybetmez.
+  - **Doğrulama:** `python3 -m py_compile` temiz. `fig.to_json()`'ın
+    gerçek Plotly çıktısıyla `{"data":[...], "layout":{...}}` yapısını
+    ürettiği ve tarih değerlerinin ISO 8601 string olarak (JS
+    `Date()` ile doğrudan uyumlu) serileştirildiği gerçek testle
+    doğrulandı. CANLI TARAYICIDA (gerçek mouse tekerleği etkileşimi)
+    HENÜZ test edilemedi - bu, sandbox'ta mümkün değil.
+  - **Ek:** `local import re` eksikliği (modülde SADECE fonksiyon-içi
+    import kullanılıyor, global import yok) fark edilip düzeltildi.
+  - Aynı zamanda "Grafiği Yorumla" düğmesi, Ana Sayfa'nın Bütçe
+    Optimizasyonu tablosundaki varlıkların detay grafiğine de eklendi
+    (BIST/TEFAS/Kripto/vb. ve Portföyüm'de zaten vardı - üç konumun
+    HEPSİ artık kapsanıyor).
+  - **AÇIK:** Bahri'nin dediği gibi - bu çalışmazsa Periyot butonlarına
+    dönülecek (kod zaten buna hazır, sadece `render_candle_interactive`
+    çağrılarını eski `candle_fig`+`st.plotly_chart` ikilisine geri
+    almak yeterli olur).
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -1735,6 +1735,78 @@ def candle_fig(hist, ticker):
     return fig
 
 
+# v2.0.7.274 (8 Eylul 2026, Bahri'nin talebi - "mouse tekerlegini
+# kullanarak, en son veri sabit kalmak sartiyla, veri zaman araliginin
+# arttirilip azaltilmasi"): standart Plotly scrollZoom (v2.0.7.273'te
+# denendi) YANLIS davranisti - o, imlecin ustune ODAKLANARAK ogeleri
+# buyutup kucultuyor, "en son veri sabit kalsin" sartini SAGLAMIYOR.
+# Bunun icin OZEL bir JS davranisi gerekiyor - st.plotly_chart yerine
+# st.components.v1.html ile TAM KONTROL sahibi oluyoruz (bu teknik
+# projede zaten baska bir yerde - cerez yazma ozelliginde - basariyla
+# kullaniliyordu, bkz. modul basi import notu).
+def render_candle_interactive(hist, ticker, key: str):
+    """candle_fig()'i kullanarak figuru olusturur, SONRA onu ham
+    st.plotly_chart YERINE ozel bir HTML+JS sarmalayicisi ile gosterir.
+    Mouse tekerlegi: en son veri noktasi HER ZAMAN sabit kalir, sadece
+    gosterilen zaman araliginin BASLANGICI (ne kadar geriye gidildigi)
+    tekerlekle degisir - standart "imlecin ustune odaklanarak buyutme"
+    DEGIL. JS calismazsa (tarayici/surum sorunu) kullanici yine de
+    "Periyot" dugmeleriyle (1 Ay/3 Ay/...) araligi degistirebilir -
+    bu yuzden bu ozellik BASARISIZ olsa bile uygulama iserlevini
+    kaybetmez."""
+    fig = candle_fig(hist, ticker)
+    if fig is None:
+        return None
+
+    import re
+    _yukseklik = int(fig.layout.height or 480)
+    _son_tarih_ms = int(hist.index[-1].timestamp() * 1000)
+    _tam_baslangic_ms = int(hist.index[0].timestamp() * 1000)
+    _min_pencere_ms = 7 * 24 * 60 * 60 * 1000  # en az 7 gunluk pencere
+
+    _fig_json = fig.to_json()
+    _div_id = f"ts_candle_{re.sub(r'[^a-zA-Z0-9]', '_', key)}"
+
+    _html = f"""
+    <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script>
+    (function() {{
+        var figData = {_fig_json};
+        var chartDiv = document.getElementById("{_div_id}");
+        Plotly.newPlot(chartDiv, figData.data, figData.layout,
+            {{responsive: true, scrollZoom: false, displaylogo: false}});
+
+        var SON_TARIH_MS = {_son_tarih_ms};
+        var TAM_BASLANGIC_MS = {_tam_baslangic_ms};
+        var MIN_PENCERE_MS = {_min_pencere_ms};
+        var TAM_PENCERE_MS = SON_TARIH_MS - TAM_BASLANGIC_MS;
+
+        chartDiv.addEventListener('wheel', function(evt) {{
+            evt.preventDefault();
+            var xaxis = chartDiv.layout.xaxis;
+            var mevcutBaslangicMs = new Date(xaxis.range[0]).getTime();
+            var mevcutPencereMs = SON_TARIH_MS - mevcutBaslangicMs;
+
+            // Asagi kaydirma (deltaY>0) -> pencereyi GENISLET (daha eski
+            // veriye git). Yukari kaydirma -> pencereyi DARALT.
+            var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
+            var yeniPencereMs = mevcutPencereMs * carpan;
+            yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
+
+            var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
+            Plotly.relayout(chartDiv, {{
+                'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
+                                 new Date(SON_TARIH_MS).toISOString()]
+            }});
+        }}, {{passive: false}});
+    }})();
+    </script>
+    """
+    components.html(_html, height=_yukseklik + 10)
+    return fig
+
+
 def render_teknik_gostergeler(d, son_fiyat):
     """v2.0.3.2: Detay panelinde Teknik Gostergeler tablosu (expander icinde).
 
@@ -5045,8 +5117,20 @@ if page=="Ana Sayfa":
                 render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
-                    fig = candle_fig(d["hist"], sel_ana)
-                    if fig: st.plotly_chart(fig, width='stretch', config={"scrollZoom": True})
+                    render_candle_interactive(d["hist"], sel_ana, key=f"ana_{sel_ana}")
+
+                    # v2.0.7.274 (8 Eylul 2026, Bahri'nin talebi):
+                    # "Grafigi Yorumla" Ana Sayfa'nin Butce Optimizasyonu
+                    # tablosundaki varliklarin detay grafigine de eklendi
+                    # (BIST/TEFAS/Kripto/vb. ve Portfoyum'de zaten vardi).
+                    _grafik_yorum_key_ana = f"_grafik_yorum_ac_ana_{sel_ana}"
+                    if st.button("Grafiği Yorumla", key=f"grafik_yorum_btn_ana_{sel_ana}"):
+                        st.session_state[_grafik_yorum_key_ana] = not st.session_state.get(_grafik_yorum_key_ana, False)
+                    if st.session_state.get(_grafik_yorum_key_ana):
+                        with st.spinner("Grafik analiz ediliyor..."):
+                            _yorum_metni_ana = _grafik_yorumu_uret(
+                                d["hist"], sel_ana, str(sel_row_ana.get("Kategori", "")))
+                        st.markdown(_yorum_metni_ana)
                 else:
                     st.warning(f"{sel_ana} icin gecmis fiyat verisi yuklenemedi.")
 
@@ -5939,8 +6023,7 @@ elif page=="Portföyüm":
             render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
 
             if not _d["hist"].empty:
-                _fig = candle_fig(_d["hist"],_sel_tkr)
-                if _fig: st.plotly_chart(_fig, width='stretch', config={"scrollZoom": True})
+                render_candle_interactive(_d["hist"], _sel_tkr, key=f"pf_{_sel_tkr}")
 
                 # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
                 # yorumla butonu tam istedigim gibi olmus, bunu
@@ -6319,8 +6402,7 @@ elif page in CAT:
 
     # Mum grafiği
     if not d["hist"].empty:
-        fig=candle_fig(d["hist"],sel)
-        if fig: st.plotly_chart(fig,width='stretch', config={"scrollZoom": True})
+        render_candle_interactive(d["hist"], sel, key=f"cat_{sel}")
 
         # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
         # BIST/TEFAS/Doviz/Degerli Madenler/Kriptolar'in HEPSINDE (bu
