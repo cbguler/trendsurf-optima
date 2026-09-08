@@ -52,9 +52,9 @@ Konum: C:/Users/bahri/Desktop/TrendSurf_Optima/
 |--------------|---------------|
 | BIST         | 772 hisse     |
 | TEFAS        | ~1.347 fon    |
-| Kripto       | 18            |
-| Maden        | 9             |
-| Döviz        | 12 TRY çapraz |
+| Kripto       | 186 (BtcTurk TRY paritesi olan tüm varlıklar, dinamik) |
+| Maden        | 18 (4 ana + 9 Truncgil sikke/ayar türü + 5 canlı overlay sikke altın) |
+| Döviz        | 63 TRY çapraz (12 ana + 51 Truncgil genişlemesi) |
 
 <table>
 <colgroup>

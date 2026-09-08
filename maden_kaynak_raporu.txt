@@ -1,0 +1,88 @@
+======================================================================
+BOLUM 1: canlidoviz metal ID'leri (borsapy uzerinden) - 9 varlik
+======================================================================
+  [OK]   gram-altin           -> 77 kayit, son deger=6,011.52, kaynak=canlidoviz
+  [OK]   ceyrek-altin         -> 64 kayit, son deger=9,919.83, kaynak=canlidoviz
+  [OK]   yarim-altin          -> 64 kayit, son deger=19,869.80, kaynak=canlidoviz
+  [OK]   tam-altin            -> 64 kayit, son deger=39,558.70, kaynak=canlidoviz
+  [OK]   cumhuriyet-altin     -> 64 kayit, son deger=40,523.55, kaynak=canlidoviz
+  [OK]   ata-altin            -> 64 kayit, son deger=40,704.45, kaynak=canlidoviz
+  [OK]   gram-gumus           -> 77 kayit, son deger=84.16, kaynak=canlidoviz
+  [OK]   ons-altin            -> 29 kayit, son deger=98,448.85, kaynak=canlidoviz
+  [OK]   gram-platin          -> 64 kayit, son deger=2,469.52, kaynak=canlidoviz
+
+======================================================================
+BOLUM 2: Harem kurumsal tarihce (borsapy institution_history) - 4 varlik
+======================================================================
+  [HATA] gram-altin           -> APIError: API Error: Failed to fetch institution history for gram-altin from harem: Client error '401 Unauthorized' for url 'https://api.doviz.com/api/v12/assets/23-gram-altin/archive?start=1776463795&end=1784239795'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+  [HATA] gram-gumus           -> APIError: API Error: Failed to fetch institution history for gram-gumus from harem: Client error '401 Unauthorized' for url 'https://api.doviz.com/api/v12/assets/23-gumus/archive?start=1776463795&end=1784239795'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+  [HATA] ons-altin            -> APIError: API Error: Failed to fetch institution history for ons-altin from harem: Client error '401 Unauthorized' for url 'https://api.doviz.com/api/v12/assets/23-ons/archive?start=1776463795&end=1784239795'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+  [HATA] gram-platin          -> APIError: API Error: Failed to fetch institution history for gram-platin from harem: Client error '401 Unauthorized' for url 'https://api.doviz.com/api/v12/assets/23-gram-platin/archive?start=1776463796&end=1784239796'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+
+======================================================================
+BOLUM 3: Eksik turler icin dogrudan doviz.com arsiv API testi (aday slug'lar)
+======================================================================
+  Taze token deneniyor (birden fazla doviz.com sayfasindan)...
+  [token] https://www.doviz.com/ sayfasinda token deseni bulunamadi.
+  [token] https://altin.doviz.com/gram-altin sayfasinda token deseni bulunamadi.
+  [token] https://kur.doviz.com/ sayfasinda token deseni bulunamadi.
+  [token] Hicbir sayfadan taze token cikarilamadi, FALLBACK_TOKEN kullanilacak.
+  Kullanilacak token onizleme: 7e2a5e914861...
+
+  [red]  GRAM_HAS_ALTIN     -> slug='gram-has-altin' kurum=harem: HTTP 401
+  [red]  GRAM_HAS_ALTIN     -> slug='gram-has-altin' kurum=kapalicarsi: HTTP 401
+  [red]  GRAM_HAS_ALTIN     -> slug='has-altin' kurum=harem: HTTP 401
+  [red]  GRAM_HAS_ALTIN     -> slug='has-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  GRAM_HAS_ALTIN     -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  AYAR14_ALTIN       -> slug='14-ayar-altin' kurum=harem: HTTP 401
+  [red]  AYAR14_ALTIN       -> slug='14-ayar-altin' kurum=kapalicarsi: HTTP 401
+  [red]  AYAR14_ALTIN       -> slug='on-dort-ayar-altin' kurum=harem: HTTP 401
+  [red]  AYAR14_ALTIN       -> slug='on-dort-ayar-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  AYAR14_ALTIN       -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  AYAR18_ALTIN       -> slug='18-ayar-altin' kurum=harem: HTTP 401
+  [red]  AYAR18_ALTIN       -> slug='18-ayar-altin' kurum=kapalicarsi: HTTP 401
+  [red]  AYAR18_ALTIN       -> slug='on-sekiz-ayar-altin' kurum=harem: HTTP 401
+  [red]  AYAR18_ALTIN       -> slug='on-sekiz-ayar-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  AYAR18_ALTIN       -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  BILEZIK22_ALTIN    -> slug='22-ayar-bilezik' kurum=harem: HTTP 401
+  [red]  BILEZIK22_ALTIN    -> slug='22-ayar-bilezik' kurum=kapalicarsi: HTTP 401
+  [red]  BILEZIK22_ALTIN    -> slug='bilezik' kurum=harem: HTTP 401
+  [red]  BILEZIK22_ALTIN    -> slug='bilezik' kurum=kapalicarsi: HTTP 401
+  [YOK]  BILEZIK22_ALTIN    -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  IKIBUCUK_ALTIN     -> slug='ikibucuk-altin' kurum=harem: HTTP 401
+  [red]  IKIBUCUK_ALTIN     -> slug='ikibucuk-altin' kurum=kapalicarsi: HTTP 401
+  [red]  IKIBUCUK_ALTIN     -> slug='iki-bucuk-altin' kurum=harem: HTTP 401
+  [red]  IKIBUCUK_ALTIN     -> slug='iki-bucuk-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  IKIBUCUK_ALTIN     -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  BESLI_ALTIN        -> slug='besli-altin' kurum=harem: HTTP 401
+  [red]  BESLI_ALTIN        -> slug='besli-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  BESLI_ALTIN        -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  GREMSE_ALTIN       -> slug='gremse-altin' kurum=harem: HTTP 401
+  [red]  GREMSE_ALTIN       -> slug='gremse-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  GREMSE_ALTIN       -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  RESAT_ALTIN        -> slug='resat-altin' kurum=harem: HTTP 401
+  [red]  RESAT_ALTIN        -> slug='resat-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  RESAT_ALTIN        -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  HAMIT_ALTIN        -> slug='hamit-altin' kurum=harem: HTTP 401
+  [red]  HAMIT_ALTIN        -> slug='hamit-altin' kurum=kapalicarsi: HTTP 401
+  [YOK]  HAMIT_ALTIN        -> denenen hicbir aday/kurum kombinasyonu calismadi
+  [red]  PALADYUM_TRY       -> slug='gram-paladyum' kurum=harem: HTTP 401
+  [red]  PALADYUM_TRY       -> slug='gram-paladyum' kurum=kapalicarsi: HTTP 401
+  [red]  PALADYUM_TRY       -> slug='paladyum' kurum=harem: HTTP 401
+  [red]  PALADYUM_TRY       -> slug='paladyum' kurum=kapalicarsi: HTTP 401
+  [YOK]  PALADYUM_TRY       -> denenen hicbir aday/kurum kombinasyonu calismadi
+
+======================================================================
+OZET
+======================================================================
+canlidoviz (9 varlik) calisan sayisi : 9/9
+Harem kurumsal (4 varlik) calisan sayisi: 0/4
+Eksik 10 tur icin bulunan kaynak sayisi : 0/10
+
+Not: Bu betik hicbir dosyayi degistirmedi. Ciktiyi (bu ekran + ayni
+klasordeki maden_kaynak_raporu.txt) Claude'a iletirsen, hangi turun
+hangi kaynaga baglanacagini netlestirip kodu (v2.0.7.76) yazariz.

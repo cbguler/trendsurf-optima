@@ -5772,5 +5772,33 @@ tamam, canlı doğrulama BEKLİYOR):**
     yorum satırlarının en altındaki iki satırı (`tesseract-ocr`,
     `tesseract-ocr-tur`) yorumdan çıkarıp tekrar push et.
 
+- **[ACİL DURUM DÜZELTMESİ - DEVAM, PUSH BEKLİYOR] v2.0.7.268 (8 Eylül
+  2026, Bahri'nin bulgusu — push+reboot sonrası log paylaştı, hâlâ
+  AYNI hata): v2.0.7.267'NİN VARSAYIMI YANLIŞ ÇIKTI - PACKAGES.TXT'İ
+  BOŞALTMAK YETMİYOR, DOSYA TAMAMEN SİLİNMELİ.**
+  - **Kanıt:** Bahri'nin paylaştığı log, packages.txt YORUM SATIRLARINDAN
+    İBARET (boş) olmasına RAĞMEN hâlâ "Apt dependencies were installed
+    from .../packages.txt using apt-get" diyip AYNI "bullseye-security"
+    hatasını veriyordu. Demek ki Streamlit Cloud'un derleme betiği
+    "packages.txt VAR MI?" diye kontrol ediyor (içeriği BOŞ olsa bile),
+    ve dosya MEVCUTSA `apt-get update` adımını YİNE DE çalıştırıyor -
+    kurulacak GERÇEK bir paket olmasa bile `apt-get update` TÜM
+    yapılandırılmış depoları (bullseye-security dahil) tazelemeye
+    çalışıyor ve kırık depoya aynen takılıyor.
+  - **Düzeltme:** `packages.txt` içeriğini boşaltmak YERİNE dosyanın
+    KENDİSİ tamamen silindi (`rm packages.txt` / `git rm`). Dosya hiç
+    yoksa Streamlit'in derleme süreci "apt dependencies" adımını
+    muhtemelen TAMAMEN ATLAYACAK.
+  - **AÇIK:** Bu varsayım da yanlış çıkarsa (dosya tamamen silinmesine
+    rağmen SORUN DEVAM EDERSE), bu durumda kırık depo Streamlit'in
+    KENDİ TEMEL imajına (packages.txt'ten TAMAMEN bağımsız, HER
+    Streamlit Cloud uygulamasını etkileyen bir sorun) ait olmalı - bu
+    durumda gerçekten Streamlit'in düzeltmesini beklemekten başka
+    seçenek kalmaz (kod tarafında yapılacak başka bir şey yok).
+  - **Geri alma notu korundu:** Streamlit sorunu düzeltince, `packages.
+    txt` dosyası şu 2 satırla YENİDEN OLUŞTURULMALI:
+    tesseract-ocr
+    tesseract-ocr-tur
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
