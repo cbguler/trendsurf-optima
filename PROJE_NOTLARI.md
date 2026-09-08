@@ -6014,5 +6014,29 @@ tamam, canlı doğrulama BEKLİYOR):**
      (aynı token'a bağımlılar).
   - **DURUM: KAPANDI.**
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.276 (8 Eylül
+  2026, Bahri'nin bulgusu - ekran görüntüsü): EKSEN ETİKETLERİ HÂLÂ
+  KAYIPTI - KESİN KÖK NEDEN BULUNDU.**
+  - v2.0.7.275'te `showticklabels=True` eklenmesine rağmen etiketler
+    hâlâ görünmüyordu - gerçek neden FARKLIYMIŞ: `candle_fig()`'in
+    layout'unda `margin=dict(l=0, r=0, t=30, b=0)` - SOL kenar boşluğu
+    SIFIRDI. Bu, Streamlit'in KENDİ `st.plotly_chart` sarmalayıcısında
+    muhtemelen gizli bir dolgu ile telafi ediliyordu, ama
+    `render_candle_interactive`'in ham HTML/iframe'inde HİÇ yer
+    kalmıyordu - etiketler VARDI ama gösterecek yer YOKTU.
+  - **Çözüm:** Margin `l=55, r=15, t=30, b=30` yapıldı (hem subplot
+    hem tek panel düzeninde).
+  - **İkinci madde (yakınlaştırma sınırı Periyot'tan bağımsız olsun):**
+    Kod incelendi - v2.0.7.275'te ZATEN doğru uygulanmış görünüyor
+    (grafik için ayrıca her zaman "5y" çekiliyor). Bahri'ye gerçekten
+    30 günden çok öteye (aylarca geriye) kaydırıp kaydıramadığını
+    TEST etmesi istendi - ekran görüntüsündeki "30 gün" göstergesi
+    sadece İLK AÇILIŞ penceresi, zoom SINIRI değil.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+  - **AÇIK:** Bahri'nin gerçek kaydırma testi sonucu bekleniyor - eğer
+    zoom sınırı GERÇEKTEN 30 günde takılıyorsa, `get_hist(...,"5y")`
+    çağrısının KRIPTO icin neden beklenen veriyi dönmediği daha derin
+    araştırılmalı.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -1727,7 +1727,7 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
         fig.update_layout(
             height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
-            margin=dict(l=0, r=0, t=30, b=0))
+            margin=dict(l=55, r=15, t=30, b=30))
         fig.update_xaxes(**_eksen_ortak, rangeslider=dict(visible=False), row=1, col=1)
         fig.update_xaxes(**_eksen_ortak, row=2, col=1)
         fig.update_yaxes(**_eksen_ortak, autorange=True, row=1, col=1)
@@ -1740,7 +1740,7 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
             xaxis=dict(**_eksen_ortak, rangeslider=dict(visible=False)),
             yaxis=dict(**_eksen_ortak, autorange=True),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
-            margin=dict(l=0, r=0, t=30, b=0))
+            margin=dict(l=55, r=15, t=30, b=30))
 
     fig.update_xaxes(range=[_uc_baslangic, _uc_son_tarih])
     return fig
