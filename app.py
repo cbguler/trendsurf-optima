@@ -1707,22 +1707,40 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
             fill="tozeroy", fillcolor="rgba(27,42,74,.07)")
         fig.add_trace(line_trace)
 
-    # Y ekseni — fiyat aralığını otomatik ayarla (normalize 0-100 görünümünü engelle)
+    # Y ekseni — fiyat aralığını GORUNEN pencereye gore ayarla
     # v2.0.7.270: X ekseni varsayilan gorunumu belli bir pencereye (artik
     # PARAMETRE - varsayilan_gun) sabitlendi. Grafigin kendisi (mum/MA
-    # cizgileri) HALA TUM gecmisi iceriyor.
+    # cizgileri) HALA TUM gecmisi iceriyor (artik her zaman 5 yil).
     _uc_son_tarih = hist.index[-1]
     _uc_baslangic = max(hist.index[0], _uc_son_tarih - pd.Timedelta(days=varsayilan_gun))
 
-    # v2.0.7.275: Y ekseni artik SABIT DEGIL - autorange=True ile
-    # Plotly, GORUNEN X araligina gore Y'yi KENDILIGINDEN olcekliyor
-    # (mouse tekerlegiyle zoom yapildiginda MA cizgileri/hacim artik
-    # cerceve disina TASMAYACAK).
+    # v2.0.7.277 (8 Eylul 2026, Bahri'nin bulgusu - "mumlar/hacim
+    # basilmis gibi yassilasti"): v2.0.7.275'teki autorange=True KOK
+    # NEDENDI - Plotly'nin autorange'i GORUNEN X penceresine DEGIL,
+    # figurdeki TUM veriye (artik her zaman 5 yil!) gore olcekliyordu -
+    # dar bir pencerede (orn. 90 gun) fiyat hep dar bir aralikta
+    # kalirken, 5 yillik TUM verinin genis araligina gore cizilince
+    # mumlar "yassi" gorunuyordu. Cozum: Y ekseni yeniden SABIT
+    # (autorange=False) yapildi, ama ARTIK SADECE GORUNEN pencerenin
+    # (varsayilan_gun) verisine gore hesaplaniyor - render_candle_
+    # interactive'deki JS de HER tekerlek hareketinde bu HESAPLAMAYI
+    # (Plotly'nin autorange'ine GUVENMEDEN) kendisi TEKRARLIYOR (bkz.
+    # asagidaki fonksiyonun JS kismi).
+    _gorunen = hist[(hist.index >= _uc_baslangic) & (hist.index <= _uc_son_tarih)]
+    if _gorunen.empty:
+        _gorunen = hist
+    _y_low_col = _gorunen["Low"] if "Low" in _gorunen.columns else _gorunen["Close"]
+    _y_high_col = _gorunen["High"] if "High" in _gorunen.columns else _gorunen["Close"]
+    _y_min = float(_y_low_col.min()) * 0.99
+    _y_max = float(_y_high_col.max()) * 1.01
+
     _eksen_ortak = dict(showgrid=True, gridcolor="#eef0f7",
                         showticklabels=True,
                         tickfont=dict(size=11, color="#3d4a63"))
 
     if has_volume:
+        _gorunen_hacim = _gorunen["Volume"] if "Volume" in _gorunen.columns else None
+        _hacim_max = float(_gorunen_hacim.max()) * 1.05 if _gorunen_hacim is not None and len(_gorunen_hacim) else None
         # 2 satirli subplot duzeni
         fig.update_layout(
             height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
@@ -1730,15 +1748,17 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
             margin=dict(l=55, r=15, t=30, b=30))
         fig.update_xaxes(**_eksen_ortak, rangeslider=dict(visible=False), row=1, col=1)
         fig.update_xaxes(**_eksen_ortak, row=2, col=1)
-        fig.update_yaxes(**_eksen_ortak, autorange=True, row=1, col=1)
-        fig.update_yaxes(**_eksen_ortak, autorange=True,
+        fig.update_yaxes(**_eksen_ortak, range=[_y_min, _y_max], autorange=False, row=1, col=1)
+        fig.update_yaxes(**_eksen_ortak,
+                         range=([0, _hacim_max] if _hacim_max else None),
+                         autorange=(_hacim_max is None),
                          title_text="Hacim", title_font=dict(size=10, color="#6c7a9c"),
                          row=2, col=1)
     else:
         # Tek panel duzeni (DOVIZ/MADEN/TEFAS)
         fig.update_layout(height=380, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
             xaxis=dict(**_eksen_ortak, rangeslider=dict(visible=False)),
-            yaxis=dict(**_eksen_ortak, autorange=True),
+            yaxis=dict(**_eksen_ortak, range=[_y_min, _y_max], autorange=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=55, r=15, t=30, b=30))
 
@@ -1759,27 +1779,24 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     """candle_fig()'i kullanarak figuru olusturur, SONRA onu ham
     st.plotly_chart YERINE ozel bir HTML+JS sarmalayicisi ile gosterir.
 
-    v2.0.7.275 (8 Eylul 2026, Bahri'nin bulgusu - "hoşuma gitti ama
-    coook duzeltme gerekiyor" + 6 maddelik liste): KAPSAMLI REVIZYON.
-    - (1) Eksen etiketleri: candle_fig() artik acikca showticklabels/
-      tickfont ayarliyor (render_candle_interactive'in kendisi
-      Streamlit'in varsayilan temasini SAGLAMADIGI icin bu ARTIK
-      figürün kendi JSON'unda).
-    - (2)+(3) MA cizgileri/hacim tasması: candle_fig() Y eksenini artik
-      SABIT DEGIL (autorange=True) yapiyor - HER relayout cagrisinda
-      (asagida) yaxis(+yaxis2).autorange=true da GONDERILEREK Plotly'nin
-      GORUNEN X araligina gore Y'yi YENIDEN HESAPLAMASI saglaniyor.
-    - (4) Yakinlastirma siniri artik "Periyot" secimine BAGLI DEGIL -
-      cagiran taraf ARTIK HER ZAMAN 5 yillik (ya da mevcut olan TUM)
-      veriyi geciyor (bkz. asagidaki cagri noktalarindaki degisiklik),
-      TAM_BASLANGIC_MS bu tam veriden hesaplaniyor. Min pencere: 7 gun.
-    - (5) Tarih araligi gostergesi: grafigin ALTINA bir <div> eklendi,
-      Plotly'nin kendi 'plotly_relayout' olayi dinlenerek (SADECE
-      tekerlek degil, TÜM surukleme/zoom etkilesimlerinde de dogru
-      calisir) guncel baslangic-bitis tarihi ve gun sayisi gosteriliyor.
+    v2.0.7.277 (8 Eylul 2026, Bahri'nin bulgusu - "mumlar/hacim
+    basilmis gibi yassilasti"): v2.0.7.275'teki `yaxis.autorange=true`
+    yaklasimi YANLIS cikti - Plotly'nin autorange'i GORUNEN X
+    penceresine DEGIL, figurdeki TUM veriye (artik her zaman 5 yil)
+    gore olcekliyordu. Cozum: Y ekseni artik HER tekerlek hareketinde
+    JS'in KENDISI tarafindan, SADECE o an GORUNEN X araligindaki
+    High/Low (ve Hacim) degerlerinden HESAPLANIYOR - Plotly'nin kendi
+    autorange'ine hic guvenilmiyor.
+    - (1) Eksen etiketleri: candle_fig()'te acikca showticklabels/
+      tickfont + yeterli sol kenar bosluğu (margin) ayarlandi.
+    - (4) Yakinlastirma siniri "Periyot" secimine BAGLI DEGIL - cagiran
+      taraf HER ZAMAN 5 yillik (ya da mevcut olan TUM) veriyi geciyor.
+      Min pencere: 7 gun.
+    - (5) Tarih araligi gostergesi: grafigin ALTINDA, guncel baslangic-
+      bitis tarihi ve gun sayisi gosteriliyor.
     - (6) Tik ile ac/kapa: grafige TIKLANINCA tekerlegin "grafigi
       yakinlastirma" MI yoksa "sayfayi kaydirma" MI yapacagi TERSINE
-      cevriliyor - kucuk bir gosterge metni mevcut modu gosteriyor.
+      cevriliyor.
     JS herhangi bir nedenle calismazsa kullanici yine de "Periyot"
     dugmeleriyle araligi degistirebilir - bu ozellik basarisiz olsa
     bile uygulama islevini kaybetmez."""
@@ -1796,11 +1813,6 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
 
     _fig_json = fig.to_json()
     _div_id = f"ts_candle_{re.sub(r'[^a-zA-Z0-9]', '_', key)}"
-
-    _yaxis_autorange_js = (
-        "{'yaxis.autorange': true, 'yaxis2.autorange': true}"
-        if _has_volume else "{'yaxis.autorange': true}"
-    )
 
     _html = f"""
     <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
@@ -1824,6 +1836,43 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         var MIN_PENCERE_MS = {_min_pencere_ms};
         var TAM_PENCERE_MS = SON_TARIH_MS - TAM_BASLANGIC_MS;
         var tekerlekYakinlastirmaAktif = true;
+        var HACIM_VAR = {str(_has_volume).lower()};
+
+        // v2.0.7.277: Fiyat (High/Low) ve Hacim trace'lerini bul -
+        // Plotly'nin autorange'ine GUVENMEDEN, GORUNEN pencereye gore
+        // Y araligini KENDIMIZ hesaplayacagiz.
+        var fiyatTrace = null, hacimTrace = null;
+        for (var i = 0; i < figData.data.length; i++) {{
+            var tr = figData.data[i];
+            if (tr.type === 'candlestick') fiyatTrace = tr;
+            else if (tr.yaxis === 'y2') hacimTrace = tr;
+        }}
+
+        function gorunenYAraligiHesapla(baslangicMs, bitisMs) {{
+            var sonuc = {{}};
+            if (fiyatTrace) {{
+                var yMin = null, yMax = null;
+                for (var i = 0; i < fiyatTrace.x.length; i++) {{
+                    var t = new Date(fiyatTrace.x[i]).getTime();
+                    if (t < baslangicMs || t > bitisMs) continue;
+                    var lo = fiyatTrace.low[i], hi = fiyatTrace.high[i];
+                    if (yMin === null || lo < yMin) yMin = lo;
+                    if (yMax === null || hi > yMax) yMax = hi;
+                }}
+                if (yMin !== null) sonuc.yaxis = [yMin * 0.99, yMax * 1.01];
+            }}
+            if (hacimTrace) {{
+                var hMax = null;
+                for (var j = 0; j < hacimTrace.x.length; j++) {{
+                    var t2 = new Date(hacimTrace.x[j]).getTime();
+                    if (t2 < baslangicMs || t2 > bitisMs) continue;
+                    var v = hacimTrace.y[j];
+                    if (hMax === null || v > hMax) hMax = v;
+                }}
+                if (hMax !== null) sonuc.yaxis2 = [0, hMax * 1.05];
+            }}
+            return sonuc;
+        }}
 
         function tarihEtiketiGuncelle() {{
             var xr = chartDiv.layout.xaxis.range;
@@ -1859,11 +1908,20 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
             yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
 
             var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
+            var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
+
             var _guncelleme = {{
                 'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
                                  new Date(SON_TARIH_MS).toISOString()]
             }};
-            Object.assign(_guncelleme, {_yaxis_autorange_js});
+            if (yAraliklari.yaxis) {{
+                _guncelleme['yaxis.range'] = yAraliklari.yaxis;
+                _guncelleme['yaxis.autorange'] = false;
+            }}
+            if (yAraliklari.yaxis2) {{
+                _guncelleme['yaxis2.range'] = yAraliklari.yaxis2;
+                _guncelleme['yaxis2.autorange'] = false;
+            }}
             Plotly.relayout(chartDiv, _guncelleme);
         }}, {{passive: false}});
     }})();

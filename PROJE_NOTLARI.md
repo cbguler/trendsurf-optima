@@ -6038,5 +6038,37 @@ tamam, canlı doğrulama BEKLİYOR):**
     çağrısının KRIPTO icin neden beklenen veriyi dönmediği daha derin
     araştırılmalı.
 
+- **[UYGULANDI, GERÇEKÇİ SENTETİK VERİYLE DOĞRULANDI - CANLI TARAYICI
+  DOĞRULAMASI BEKLİYOR] v2.0.7.277 (8 Eylül 2026, Bahri'nin bulgusu -
+  ekran görüntüleri, "mumlar/hacim barları basılmış gibi yassılaştı,
+  bu grafikten bir şey anlaşılmıyor"): v2.0.7.275'İN Y EKSENİ
+  DÜZELTMESİ YANLIŞ ÇIKTI - KESİN KÖK NEDEN BULUNDU VE DÜZELTİLDİ.**
+  - **Kök neden:** v2.0.7.275'te "MA çizgileri/hacim taşıyor" sorununu
+    çözmek için Y eksenine `autorange=True` verilmişti - AMA Plotly'nin
+    `autorange`'i, GÖRÜNEN X penceresine DEĞİL, figürdeki TÜM veriye
+    göre ölçekleniyormuş. v2.0.7.275 AYNI ZAMANDA grafiğin artık HER
+    ZAMAN 5 yıllık veri içermesini sağladığı için (yakınlaştırma sınırı
+    Periyot'tan bağımsız olsun diye), Y ekseni TÜM 5 YILIN geniş fiyat
+    aralığına göre çiziliyordu - dar bir pencerede (30-90 gün) fiyat
+    hep küçük bir bantta kaldığından mumlar "yassı" görünüyordu.
+  - **Çözüm:** Y ekseni yeniden SABİT (`autorange=False`) yapıldı, ama
+    artık SADECE GÖRÜNEN pencerenin (varsayılan_gün) verisine göre
+    hesaplanıyor. `render_candle_interactive`'in JS'i de artık HER
+    tekerlek hareketinde Plotly'nin autorange'ine GÜVENMİYOR - kendi
+    içinde candlestick/hacim trace'lerini TARAYIP, sadece o an görünen
+    X aralığındaki High/Low (ve Hacim) değerlerinden Y aralığını
+    HESAPLIYOR ve `Plotly.relayout()`'a `autorange:false` ile birlikte
+    açıkça gönderiyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Gerçekçi (pürüzsüz,
+    yapay sıçrama içermeyen) 5 yıllık sentetik veriyle `candle_fig()`
+    uçtan uca test edildi: son-90-gün penceresi için Y ekseni doğru
+    şekilde dar bir aralık (60-69) üretti, TAM 5 yılın geniş aralığını
+    (54-101) YANSITMADI. (İlk denemede yapay/keskin bir sıçrama içeren
+    test verisiyle YANLIŞ bir pozitif/negatif sonuç alınmıştı - bu,
+    gerçek mantığın değil, test verisinin bir kusuruydu, düzeltilip
+    doğru sonuç elde edildi.)
+  - **AÇIK:** Gerçek tarayıcıda (asıl mouse tekerleği etkileşimi)
+    henüz test edilemedi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
