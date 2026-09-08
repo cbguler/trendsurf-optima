@@ -1689,7 +1689,19 @@ def candle_fig(hist, ticker):
         fig.add_trace(line_trace)
 
     # Y ekseni — fiyat aralığını otomatik ayarla (normalize 0-100 görünümünü engelle)
-    close_col = hist["Close"] if "Close" in hist.columns else hist.iloc[:, 0]
+    # v2.0.7.270 (8 Eylul 2026, Bahri'nin talebi - "tum grafikler ilk
+    # acilista 3 aylik olarak gelsin"): Y ekseni araligi, ARTIK TUM
+    # gecmis (orn. 1 yil) yerine sadece SON 3 AYLIK dilime gore
+    # hesaplaniyor - boylece varsayilan (yakinlastirilmis) gorunum
+    # duzgun olceklenir. Grafigin kendisi (mum/MA cizgileri) HALA TUM
+    # gecmisi iceriyor - kullanici geri yakinlastirip/uzaklastirabilir,
+    # SADECE ilk acilis penceresi degisti.
+    close_col_tam = hist["Close"] if "Close" in hist.columns else hist.iloc[:, 0]
+    _uc_son_tarih = hist.index[-1]
+    _uc_baslangic = _uc_son_tarih - pd.Timedelta(days=90)
+    _uc_son3ay = hist[hist.index >= _uc_baslangic]
+    close_col = (_uc_son3ay["Close"] if "Close" in _uc_son3ay.columns
+                 else _uc_son3ay.iloc[:, 0]) if not _uc_son3ay.empty else close_col_tam
     y_min = float(close_col.min()) * 0.995
     y_max = float(close_col.max()) * 1.005
 
@@ -1715,6 +1727,11 @@ def candle_fig(hist, ticker):
                        range=[y_min, y_max], autorange=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=0, r=0, t=30, b=0))
+
+    # v2.0.7.270: X ekseni varsayilan gorunumu son 3 aya sabitlendi -
+    # TUM veri (fig icindeki traces) hala tam donemi (orn. 1 yil)
+    # iceriyor, kullanici zoom/pan ile geri genisletebilir.
+    fig.update_xaxes(range=[_uc_baslangic, _uc_son_tarih])
     return fig
 
 
@@ -2223,19 +2240,32 @@ with st.sidebar:
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
 
-    # v2.0.7.264 (5 Eylul 2026, Bahri'nin talebi - "Neden ilk haline
-    # donmuyoruz? Ilk hali sorunsuz calisiyordu, cok sinir bozucu..."):
-    # v2.0.7.256-263 arasinda denenen TUM sidebar "otomatik gizlenme/
-    # hover ile genisleme" ozelligi TAMAMEN KALDIRILDI - bes ayri canli
-    # denemede (256, 257, 258, 259/260, 261, 262, 263) hep YENI bir
-    # gorsel sorun cikti (ikon izgarasi, metin dagilmasi, slider
-    # etiketlerinin dikey siralanmasi - bu SONUNCUSU tek basina 5 farkli
-    # CSS yaklasimiyla denendi, hicbiri tutmadi). Sidebar artik
-    # Streamlit'in TAMAMEN VARSAYILAN, HICBIR OZEL CSS ICERMEYEN
-    # davranisina donuyor - sabit genislikte, her zaman tam gorunur,
-    # hic collapse/hover efekti YOK. Bu, "otomatik gizlenme" ozelligi
-    # olmadan once (bugunku oturumdan ONCE) hep boyle calisiyordu ve
-    # sorunsuzdu.
+    # v2.0.7.271 (8 Eylul 2026, Bahri'nin talebi - "menu barinin
+    # icindekilere DOKUNMAKSIZIN kaybolmasini ve imlecin uzerine
+    # gelmesiyle yeniden gorunur olmasini saglasak yeterli olur"):
+    # v2.0.7.256-263'teki BASARISIZ denemelerin HEPSI, sidebar'in SADECE
+    # genisligini degil, AYRICA icindeki METNI de (nowrap/overflow/
+    # slider istisnalari ile) kontrol etmeye calistigi icin surekli
+    # yeni sorunlar cikarmisti. Bu sefer KESINLIKLE SADECE dis kutunun
+    # (stSidebar) genisligi degisiyor - ICERIDEKI HICBIR SEYE (metin,
+    # slider, buton) OZEL BIR CSS KURALI UYGULANMIYOR. Icerik, tarayicinin
+    # kendi varsayilan davranisiyla (muhtemelen dar haldeyken normal
+    # sekilde satir kaydirir) tepki verecek - bu BILINCLI bir tercih,
+    # "kusursuz gizleme" yerine "basit ve guvenilir" tercih edildi.
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {
+        min-width: 74px !important;
+        max-width: 74px !important;
+        transition: min-width 0.22s ease, max-width 0.22s ease;
+    }
+    [data-testid="stSidebar"]:hover {
+        min-width: 300px !important;
+        max-width: 300px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim
     st.divider()

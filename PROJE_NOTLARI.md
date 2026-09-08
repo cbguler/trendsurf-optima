@@ -5815,5 +5815,45 @@ tamam, canlı doğrulama BEKLİYOR):**
     Yorumla" düğmesi + aç/kapa mantığı eklendi.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.270 (8 Eylül
+  2026, Bahri'nin talebi — "Tüm grafikler ilk açılışta 3 aylık olarak
+  gelsin"): GRAFİKLERİN VARSAYILAN GÖRÜNÜM PENCERESİ 3 AYA AYARLANDI.**
+  - `candle_fig()` fonksiyonu değiştirildi - grafiğin İÇİNDEKİ VERİ hâlâ
+    tam dönemi (varsayılan 1 yıl - `enrich()`/`get_hist()`'in `period`
+    parametresi DEĞİŞTİRİLMEDİ, MA50/destek-direnç hesaplamaları için
+    hâlâ 1 yıllık veri kullanılıyor) içeriyor - SADECE Plotly'nin
+    varsayılan X ekseni görünümü (`fig.update_xaxes(range=...)`) son
+    90 güne sabitlendi. Kullanıcı geri yakınlaştırıp/uzaklaştırarak
+    tam yılı görebilir.
+  - Y ekseni aralığı da (önceden TÜM dönemin min/max'ına göre sabitti)
+    artık SADECE son 3 aylık dilimin min/max'ına göre hesaplanıyor -
+    aksi halde 3 aylık varsayılan görünüm, tüm yılın fiyat aralığına
+    göre "sıkışmış" görünürdü.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.271 (8 Eylül
+  2026, Bahri'nin talebi — "Sol menü barının kaybolmasını denedik ama
+  başarısız olmuştuk, bu sefer sadece menü barın içindekilere
+  dokunmaksızın kaybolmasını... bir daha denesek mi?"): SIDEBAR HOVER-
+  COLLAPSE ALTINCI KEZ, AMA ÇOK DAHA DAR KAPSAMLA DENENDİ.**
+  - v2.0.7.256-263'teki TÜM başarısız denemelerin ortak noktası:
+    sidebar'ın SADECE genişliğini değil, AYRICA İÇİNDEKİ METNİ de
+    (nowrap/overflow/slider istisnaları ile) kontrol etmeye
+    çalışmalarıydı - her ek kural yeni bir görsel sorun çıkarmıştı.
+  - **Bu sefer:** SADECE 2 CSS kuralı - `[data-testid="stSidebar"]`
+    varsayılan 74px, `:hover` ile 300px. İÇERİĞE (metin, slider, buton)
+    YÖNELİK HİÇBİR ÖZEL KURAL YOK. İçerik, tarayıcının kendi varsayılan
+    davranışıyla tepki verecek - Bahri'nin kendi ifadesiyle "içindekilere
+    dokunmaksızın" tam olarak bunu karşılıyor.
+  - **Bilinen risk (açıkça kabul edildi):** Bu, "kusursuz gizleme"
+    sağlamaz - dar haldeyken metin muhtemelen normal şekilde satır
+    kaydıracak (belki biraz sıkışık görünecek) ama ÖZEL bir CSS
+    kuralı bunu BOZMAYACAK, çünkü hiçbiri yok. Basitlik güvenilirlik
+    için tercih edildi.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Bu, art arda 6.
+    denemedir - eğer bu da tatmin edici olmazsa, muhtemelen bu özellik
+    Streamlit'in mimarisiyle bu projede güvenilir şekilde
+    uygulanamıyor demektir.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
