@@ -1882,6 +1882,24 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         // atob() fonksiyonuyla COZUP duz bir JS dizisine ceviren
         // VARSAYIMSIZ yardimci fonksiyon - Plotly'nin surumune/ic
         // davranisina HIC bagimli degil.
+        // v2.0.7.284 (8 Eylul 2026, Bahri'nin bulgusu - "hacim barlari
+        // yine bozuluyor", KESIN kok neden bulundu): fig.to_json(),
+        // TAM SAYI degerli dizileri (Hacim - hisse adedi hep tam sayi
+        // olur) `dtype:'f8'` (8 baytlik float) YERINE `dtype:'i4'`
+        // (4 baytlik tam sayi) ile kodluyormus - bu, Fiyat (High/Low,
+        // hep ondalikli) icin 'f8' kullanilirken Hacim icin FARKLI bir
+        // format secildigi anlamina geliyor. `alanCoz()` HER ZAMAN
+        // Float64Array (8 bayt/eleman) varsayiyordu - Hacim'in 4
+        // baytlik verisiyle karsilasinca "byte length ... multiple of
+        // 8 olmali" JS HATASI firlatiyordu (gercek Chromium'da SOMUT
+        // olarak yakalandi). Cozum: dtype alanina BAKARAK doğru
+        // TypedArray'i (Int32Array, Float32Array, vb.) secen TAM
+        // kapsamli bir cozucu yazildi.
+        var DTYPE_HARITASI = {{
+            'f8': Float64Array, 'f4': Float32Array,
+            'i1': Int8Array, 'i2': Int16Array, 'i4': Int32Array,
+            'u1': Uint8Array, 'u2': Uint16Array, 'u4': Uint32Array,
+        }};
         function alanCoz(alan) {{
             if (Array.isArray(alan)) return alan;
             if (alan && typeof alan === 'object' && typeof alan.bdata === 'string') {{
@@ -1891,7 +1909,8 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
                 for (var i = 0; i < ikiliMetin.length; i++) {{
                     gorunum[i] = ikiliMetin.charCodeAt(i);
                 }}
-                return Array.from(new Float64Array(arabellek));
+                var TipDizisi = DTYPE_HARITASI[alan.dtype] || Float64Array;
+                return Array.from(new TipDizisi(arabellek));
             }}
             return [];
         }}

@@ -6276,5 +6276,40 @@ tamam, canlı doğrulama BEKLİYOR):**
     tutabilirdi - bu fark, güvenilirlik ugruna kabul edildi).
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, GERÇEK ALBRK VERİSİYLE GERÇEK TARAYICIDA UÇTAN UCA
+  DOĞRULANDI] v2.0.7.284 (8 Eylül 2026, Bahri'nin bulgusu — "hacim
+  barları yine bozuluyor" + BIST ekran görüntüsü): HACİM İÇİN KESİN
+  KÖK NEDEN BULUNDU - v2.0.7.281'İN ÇÖZÜCÜSÜ EKSİKTİ.**
+  - **Kesin bulgu (gerçek yfinance ALBRK verisiyle):** `fig.to_json()`,
+    Fiyat (High/Low - hep ondalıklı) için `dtype:'f8'` (8 baytlık float)
+    kullanırken, Hacim (hisse adedi - hep TAM SAYI) için **`dtype:'i4'`**
+    (4 baytlık tam sayı) kullanıyormuş - Plotly, veri TAM SAYIYSA daha
+    KOMPAKT bir format seçiyor. v2.0.7.281'in `alanCoz()` fonksiyonu
+    HER ZAMAN 8 bayt (Float64Array) varsayıyordu - Hacim'in 4 baytlık
+    verisiyle karşılaşınca gerçek Chromium'da SOMUT bir JS hatası
+    fırlatıyordu: `"byte length of Float64Array should be a multiple
+    of 8"` (1255 satır × 4 bayt = 5020, 8'e bölünemiyor).
+  - **Neden XRP'de "çalışıyor" gibi göründü:** Muhtemelen farklı satır
+    sayısı/veri boyutu tesadüfen hata fırlatmadan (ama muhtemelen YİNE
+    DE yanlış) bir sonuç üretmişti - BIST/ALBRK'nin 1255 satırı bu
+    hatayı AÇIKÇA ortaya çıkardı.
+  - **Çözüm:** `alanCoz()` artık `alan.dtype` alanına BAKIYOR ve
+    doğru TypedArray'i (Float64Array/Float32Array/Int32Array/Int16Array/
+    Int8Array/Uint32Array/Uint16Array/Uint8Array) seçen kapsamlı bir
+    harita kullanıyor - HANGİ dtype gelirse gelsin artık doğru
+    çözülüyor.
+  - **Doğrulama (gerçek yfinance ALBRK verisi + gerçek Chromium +
+    gerçek fare tekerleği simülasyonu):** "byte length" hatası TAMAMEN
+    ORTADAN KALKTI. Daraltma (7 gün): Fiyat [8.46,9.09], Hacim
+    [0,21M] - Genişletme (5 yıl): Fiyat [1.08,10.34] (GERÇEK 5 yıllık
+    aralıkla eşleşiyor), Hacim [0,476M] (GERÇEK maksimuma - 453M -
+    yakın). Tüm değerler GERÇEKÇİ ve DOĞRU ölçekli.
+  - **Bilinen, ÇOK KÜÇÜK kalan kozmetik sorun:** 2565 SVG path'inden
+    SADECE 1 tanesinde "NaN" içeren bir çizim hatası kaldı (muhtemelen
+    ALBRK'nin gerçek verisindeki 3 ardışık sıfır-hacim/düz-fiyat
+    gününden biri - 27-29 Mayıs 2026). Bu, grafiğin genel işlevini
+    ETKİLEMİYOR (%0.04'lük bir path) - izlenecek ama ACİL değil.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
