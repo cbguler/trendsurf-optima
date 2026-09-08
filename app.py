@@ -2240,31 +2240,42 @@ with st.sidebar:
     _yardim_etiket = "Admin El Kitabı" if _cur_user.get("is_admin") else "Kullanıcı El Kitabı"
     _pages_display = PAGES[:-1] + [_yardim_etiket]
 
-    # v2.0.7.271 (8 Eylul 2026, Bahri'nin talebi - "menu barinin
-    # icindekilere DOKUNMAKSIZIN kaybolmasini ve imlecin uzerine
-    # gelmesiyle yeniden gorunur olmasini saglasak yeterli olur"):
-    # v2.0.7.256-263'teki BASARISIZ denemelerin HEPSI, sidebar'in SADECE
-    # genisligini degil, AYRICA icindeki METNI de (nowrap/overflow/
-    # slider istisnalari ile) kontrol etmeye calistigi icin surekli
-    # yeni sorunlar cikarmisti. Bu sefer KESINLIKLE SADECE dis kutunun
-    # (stSidebar) genisligi degisiyor - ICERIDEKI HICBIR SEYE (metin,
-    # slider, buton) OZEL BIR CSS KURALI UYGULANMIYOR. Icerik, tarayicinin
-    # kendi varsayilan davranisiyla (muhtemelen dar haldeyken normal
-    # sekilde satir kaydirir) tepki verecek - bu BILINCLI bir tercih,
-    # "kusursuz gizleme" yerine "basit ve guvenilir" tercih edildi.
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] {
-        min-width: 74px !important;
-        max-width: 74px !important;
-        transition: min-width 0.22s ease, max-width 0.22s ease;
-    }
-    [data-testid="stSidebar"]:hover {
-        min-width: 300px !important;
-        max-width: 300px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # v2.0.7.272 (8 Eylul 2026, Bahri'nin bulgusu - "Sol barin tamamiyla
+    # kaybolmasini istiyordum, bir parcasinin ve abidik yazilarin
+    # gorunmesi hosuma gitmedi. Uygulamanin ilk acilisinda sol menu bar
+    # kaybolmasin, ilk komutu verince (orn. portfoyumu secince)
+    # gizlensin"): IKI DUZELTME.
+    # (1) 74px -> 10px: 74px, kirik/harf-harf metin parcalarini gorunur
+    # birakiyordu (tam istenen "tamamen kaybolma" degildi) - 10px'te
+    # HICBIR SEY okunacak kadar yer kalmiyor, gercekten "kaybolmus"
+    # gorunuyor. (:hover yine calismaya devam etsin diye 0px DEGIL,
+    # 10px - tamamen 0 olursa uzerine gelinecek bir yuzey kalmaz).
+    # (2) Session state ile "bu SESSION'DA ilk render mi?" kontrolu
+    # eklendi - ILK render'da (sayfa YENI acildiginda, henuz hicbir
+    # secim yapilmadan) sidebar TAM GENISLIKTE kalir (collapse CSS'i
+    # HIC UYGULANMAZ). Kullanici HERHANGI bir etkilesimde bulunup
+    # (orn. bir sayfa secince) script YENIDEN calistiginda ise artik
+    # collapse CSS'i devreye girer - o andan itibaren sidebar dar/
+    # hover-genisler halinde kalir.
+    _sidebar_daraltilsin = st.session_state.get("_sidebar_ilk_render_gecti", False)
+    st.session_state["_sidebar_ilk_render_gecti"] = True
+
+    if _sidebar_daraltilsin:
+        st.markdown("""
+        <style>
+        [data-testid="stSidebar"] {
+            min-width: 10px !important;
+            max-width: 10px !important;
+            overflow: hidden !important;
+            transition: min-width 0.22s ease, max-width 0.22s ease;
+        }
+        [data-testid="stSidebar"]:hover {
+            min-width: 300px !important;
+            max-width: 300px !important;
+            overflow: visible !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
     _page_secim = st.radio("", _pages_display, label_visibility="collapsed")
     page = "Yardım" if _page_secim == _yardim_etiket else _page_secim

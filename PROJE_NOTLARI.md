@@ -5855,5 +5855,29 @@ tamam, canlı doğrulama BEKLİYOR):**
     Streamlit'in mimarisiyle bu projede güvenilir şekilde
     uygulanamıyor demektir.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.272 (8 Eylül
+  2026, Bahri'nin bulgusu — "Sol barın tamamıyla kaybolmasını
+  istiyordum, bir parçasının ve abidik yazıların görünmesi hoşuma
+  gitmedi. Uygulamanın ilk açılışında sol menü bar kaybolmasın, ilk
+  komutu verince gizlensin"): SIDEBAR COLLAPSE - YEDİNCİ DENEME, İKİ
+  DÜZELTMEYLE.**
+  - **(1) 74px → 10px:** v2.0.7.271'in 74px'i, harf harf kırık metin
+    parçalarını GÖRÜNÜR bırakıyordu ("Adm/in", "Pre/miu/m" gibi) - bu
+    "tamamen kaybolma" değildi. 10px'te hiçbir şeyin okunacak yeri
+    kalmıyor - gerçekten "kaybolmuş" görünüyor. Tam 0px YAPILMADI -
+    o zaman `:hover` için üzerine gelinecek bir yüzey kalmaz, imleç
+    hiçbir zaman geri getiremezdi.
+  - **(2) Session state ile "ilk render mi?" kontrolü:** Yeni bir
+    `st.session_state["_sidebar_ilk_render_gecti"]` bayrağı eklendi.
+    Sayfa YENİ açıldığında (bayrak henüz yok/False) collapse CSS'i
+    HİÇ UYGULANMIYOR - sidebar tam genişlikte kalıyor. Kullanıcı
+    HERHANGİ bir etkileşimde bulunup (bir sayfa seçmek dahil) script
+    yeniden çalıştığında bayrak artık True - O ANDAN İTİBAREN collapse
+    CSS'i devreye giriyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Session state
+    mantığı basit ve Streamlit'in standart "ilk çalışma mı" desenine
+    uygun - CSS riski önceki denemelere göre DAHA DA azaltıldı (hâlâ
+    sadece 2 kural, içeriğe dokunmuyor).
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
