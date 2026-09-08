@@ -1013,7 +1013,21 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
     # v1.6: KRIPTO - borsapy direkt TRY cifti (BtcTurk gercek zamanli)
     if category == "KRIPTO":
         hist = _ld_kripto_history(ticker, period)
-        if hist is not None and not hist.empty and len(hist) >= 5:
+        # v2.0.7.285 (8 Eylul 2026, Bahri'nin bulgusu - "kriptolarin
+        # maksimum geriye gidisi 30 gun oluyor"): BtcTurk'un (borsapy)
+        # gecmis veri API'si "5y" istense bile GERCEKTE cok daha KISA
+        # bir sure (orn. ~30 gun) donduruyor olabilir - onceki kod
+        # sadece ">=5 satir var mi" diye bakiyordu, bu kisa veriyi
+        # "yeterli" sayip yfinance yedegini HIC DENEMIYORDU. Artik "5y"
+        # istegi ozelinde, BtcTurk'un donduğu verinin GERCEK tarih
+        # araligi cok kisaysa (6 aydan az), yfinance'i DE deneyip HANGISI
+        # DAHA UZUN bir gecmis sunuyorsa ONU kullaniyoruz.
+        _btcturk_yeterli = hist is not None and not hist.empty and len(hist) >= 5
+        _btcturk_5y_kisa = (
+            period == "5y" and _btcturk_yeterli
+            and (hist.index[-1] - hist.index[0]).days < 180
+        )
+        if _btcturk_yeterli and not _btcturk_5y_kisa:
             return hist
         # Yedek: yfinance BTC-USD turetilmis
         try:
@@ -1026,9 +1040,20 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 _cols = ["Open","High","Low","Close"]
                 if "Volume" in _h.columns:
                     _cols.append("Volume")
-                return _h[_cols].dropna(subset=["Open","High","Low","Close"])
+                _h = _h[_cols].dropna(subset=["Open","High","Low","Close"])
+                # "5y" ozelinde: yfinance'in gercek araligi BtcTurk'ten
+                # DAHA UZUNSA yfinance'i kullan, degilse (ikisi de
+                # kisaysa ya da BtcTurk zaten daha uzunsa) elimizdeki
+                # BtcTurk verisine geri don.
+                if _btcturk_5y_kisa:
+                    _yf_gun = (_h.index[-1] - _h.index[0]).days if not _h.empty else 0
+                    _bt_gun = (hist.index[-1] - hist.index[0]).days
+                    return _h if _yf_gun > _bt_gun else hist
+                return _h
         except Exception:
             pass
+        if _btcturk_yeterli:
+            return hist  # yfinance denemesi basarisiz oldu, BtcTurk'un kisa da olsa verisi olsun
         raise _HistEmptyError()
 
     # BIST - simdilik yfinance (v1.7'de borsapy.Ticker'a gecilecek)
@@ -5222,7 +5247,26 @@ if page=="Ana Sayfa":
         # ── Tıklanan varlığın analizi ──────────────────────────
         sel_ana = st.session_state.get("sel_Ana Sayfa")
         if sel_ana:
-            sel_row_ana = df_uni[df_uni["Ticker"] == sel_ana]
+            # v2.0.7.285 (8 Eylul 2026, Bahri'nin bulgusu - "JUP fonu
+            # kripto gibi davraniyor, AURA PORTFOY JUPITER SERBEST FON
+            # kriptolardan buraya karismis olmali"): AYNI ticker kodu
+            # (orn. "JUP") HEM bir TEFAS fonuna HEM bir kripto varliga
+            # ait olabiliyor - `df_uni[df_uni["Ticker"]==sel_ana]` bu
+            # durumda YANLIS satiri (ilk eslesen - hangi kategori once
+            # geliyorsa) secebiliyordu. Once TIKLANAN tablonun kendisinde
+            # (df_opt - Butce Optimizasyonu) bu ticker'in Kategorisini
+            # bulup, sel_row_ana'yi BUNA GORE filtreliyoruz.
+            _cat_ana_ipucu = None
+            try:
+                _df_opt_eslesme = df_opt[df_opt["Ticker"] == sel_ana]
+                if not _df_opt_eslesme.empty:
+                    _cat_ana_ipucu = str(_df_opt_eslesme.iloc[0]["Kategori"])
+            except Exception:
+                pass
+            if _cat_ana_ipucu:
+                sel_row_ana = df_uni[(df_uni["Ticker"] == sel_ana) & (df_uni["Kategori"] == _cat_ana_ipucu)]
+            else:
+                sel_row_ana = df_uni[df_uni["Ticker"] == sel_ana]
             if not sel_row_ana.empty:
                 sel_row_ana = sel_row_ana.iloc[0]
                 cat_ana = str(sel_row_ana["Kategori"])
@@ -6532,7 +6576,7 @@ elif page in CAT:
         st.session_state[f"sel_{page}"]=all_tickers[0] if all_tickers else None
         st.rerun()
 
-    sel_row=df_uni[df_uni["Ticker"]==sel].iloc[0]
+    sel_row=df_uni[(df_uni["Ticker"]==sel) & (df_uni["Kategori"]==cat_code)].iloc[0]
     st.divider()
     st.subheader(f"Detay: {sel}  —  {str(sel_row['Ad'])[:60]}")
 
@@ -6747,7 +6791,15 @@ elif page in CAT:
     # TEFAS Getiri ve Risk Analizi (API verisinden)
     if cat_code=="TEFAS":
         st.divider(); st.subheader("TEFAS Getiri ve Risk Analizi")
-        risk_val = int(sel_row.get("Risk_Deger",4))
+        # v2.0.7.285: .get(key, varsayilan) SADECE anahtar YOKSA
+        # varsayilani kullanir - deger None/NaN ISE (orn. bir onceki
+        # "JUP" karismasi gibi bir nedenle) int() burada patlar. Artik
+        # bu durumu da savunmaci sekilde ele aliyoruz.
+        _risk_ham = sel_row.get("Risk_Deger", 4)
+        try:
+            risk_val = int(_risk_ham) if _risk_ham is not None and str(_risk_ham) != "nan" else 4
+        except (ValueError, TypeError):
+            risk_val = 4
         risk_labels={1:"Çok Düşük",2:"Düşük",3:"Orta Altı",4:"Orta",
                      5:"Orta Üstü",6:"Yüksek",7:"Çok Yüksek"}
 

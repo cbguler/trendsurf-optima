@@ -6311,5 +6311,39 @@ tamam, canlı doğrulama BEKLİYOR):**
     ETKİLEMİYOR (%0.04'lük bir path) - izlenecek ama ACİL değil.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.285 (8
+  Eylül 2026, Bahri'nin bulgusu - "ALBRK düzeldi! ama JUP fonu kripto
+  gibi davranıyor, kriptolar max 30 güne gidiyor"): ÜÇ AYRI SORUN.**
+  - **(1) JUP ticker çakışması - GRT ile AYNI SINIF bir hata:**
+    "JUP" hem bir TEFAS fonunun (AURA PORTFÖY JÜPİTER SERBEST DÖVİZ
+    FON) HEM bir kripto varlığın (Jupiter) ticker kodu. Kategori
+    sayfasında `sel_row=df_uni[df_uni["Ticker"]==sel].iloc[0]` SADECE
+    Ticker'a bakıyordu (aynı satırda HEMEN ÜSTÜNDEKİ `all_tickers`
+    DOĞRU şekilde Kategori'ye göre filtrelenmişti, ama `sel_row` bunu
+    KULLANMIYORDU) - Kategori filtresi eklendi. Ana Sayfa'nın Bütçe
+    Optimizasyonu tablosu için de AYNI sınıf savunma eklendi (önce
+    tıklanan `df_opt` tablosundan Kategori ipucu alınıyor).
+  - **(2) TEFAS Risk_Deger ValueError:** `.get(key, varsayilan)`
+    SADECE anahtar YOKSA varsayılanı kullanır - JUP karışması yüzünden
+    değer None/NaN geldiğinde `int()` patlıyordu. Artık bu durum da
+    savunmacı şekilde ele alınıyor (muhtemelen kök neden zaten (1) ile
+    çözüldü, ama ek güvenlik olarak kalıcı yapıldı).
+  - **(3) Kriptolarda maksimum yakınlaştırma 30 günde takılıyor:**
+    Kök neden - BtcTurk'un (borsapy) geçmiş veri API'si "5y" istense
+    bile GERÇEKTE çok daha kısa bir süre (muhtemelen ~30 gün)
+    döndürüyor; önceki kod sadece ">=5 satır var mı" diye bakıp bu
+    KISA veriyi "yeterli" sayıyor, yfinance yedeğini hiç denemiyordu.
+    Artık "5y" isteği özelinde, BtcTurk'ün döndüğü verinin GERÇEK
+    tarih aralığı 6 aydan kısaysa, yfinance de deneniyor ve HANGİSİ
+    DAHA UZUN bir geçmiş sunuyorsa O kullanılıyor.
+  - **(4) TEFAS fonlarının "cetvelle çizilmiş gibi" görünmesi:**
+    İncelendi - bu muhtemelen NORMAL bir davranış (fonlar çeşitlendirilmiş
+    portföyler olduğu için günlük NAV değişimi hisse/kripto kadar oynak
+    değil) - bir hata olarak DEĞİL, TEFAS fonlarının doğal karakteri
+    olarak değerlendirildi. Bahri'ye AYNI fiyatın art arda çok fazla
+    tekrarlanıp tekrarlanmadığını (gerçek bir durgunluk belirtisi
+    olur) kontrol etmesi önerildi.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
