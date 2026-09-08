@@ -5129,9 +5129,37 @@ tamam, canlı doğrulama BEKLİYOR):**
     çağrısı ile). Genel amaçlı olmalı - sadece kripto değil, BIST/
     TEFAS/Döviz/Değerli Maden sayfalarındaki grafikler için de
     çalışmalı.
-  - **DURUM: Sadece kaydedildi, henüz kapsam/tasarım netleşmedi ve
-    kod yazılmadı - bir sonraki oturumda (veya bu oturumda devam
-    edilirse) baştan ele alınmalı.**
+  - **✅ UYGULANDI (5 Eylül 2026, v2.0.7.266) - DURUM: KAPANDI.**
+    Bahri'nin tercihi: "İkisinin karışımı (algoritma sayıları
+    hesaplar, AI cümleleri yazar)" + "Tüm varlık sayfaları (BIST,
+    TEFAS, Döviz, Maden, Kripto)".
+    - **`_grafik_teknik_analiz(hist)`**: SAYISAL hesaplama - MA20/MA50
+      + kesişim tespiti (Golden/Death Cross, son 20 gün penceresi),
+      destek/direnç (±10 günlük yerel tepe/dip taraması), ikili dip/
+      tepe tespiti (%3 tolerans), hacim onayı (güncel/20-gün ortalama
+      oranı), dönem en düşük/yüksek. HİÇ METİN ÜRETMEZ.
+    - **`_grafik_yorumu_uret(hist, ticker, kategori, birim)`**: Ana
+      giriş noktası - önce algoritma çalışır, `st.secrets`'ta
+      GEMINI_API_KEY VARSA Gemini (`gemini-2.5-flash`, `haber_izleme.
+      py`'deki AYNI REST API deseni) ile doğal cümleler üretilir,
+      YOKSA/hata olursa `_grafik_yorumu_sablon()` (sabit ama eksiksiz,
+      Bahri'nin formatına sadık) devreye girer - özellik HER DURUMDA
+      çalışır, anahtar yoksa sadece metin kalitesi daha mekanik olur.
+    - **Tek ortak entegrasyon noktası:** `elif page in CAT:` bloğu
+      (BIST/TEFAS/Döviz/Değerli Madenler/Kriptolar'ın HEPSİ bu TEK
+      paylaşılan kod yolundan geçiyor) - "Grafiği Yorumla" aç/kapa
+      düğmesi, mum grafiğinin hemen altına eklendi. Beş kategorinin
+      hepsini AYRI AYRI değiştirmeye gerek kalmadı.
+    - **Doğrulama:** `python3 -m py_compile` temiz. Algoritma sentetik
+      OHLCV veriyle (V-dönüşü + hacim) test edildi - MA ilişkisi,
+      destek/direnç, hacim oranı doğru hesaplandı. Şablon-metin yolu
+      (AI anahtarı YOKKEN) uçtan uca test edildi, Bahri'nin formatına
+      uygun, okunabilir bir çıktı üretti.
+    - **AÇIK:** Gerçek Streamlit ortamında canlı görsel doğrulama
+      gerekiyor. AI yolu (Gemini ile) test EDİLEMEDİ - gerçek bir
+      GEMINI_API_KEY sandbox'ta yok; `st.secrets`'ta bu anahtar
+      tanımlıysa canlıda otomatik denenecek, tanımlı değilse
+      sorunsuzca şablona düşecek.
 
 - **[UYGULANDI, MANTIK DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.246 (2 Eylül
   2026, Bahri'nin bulgusu — "Son dakika haber pop-upları... tercih
@@ -5681,6 +5709,40 @@ tamam, canlı doğrulama BEKLİYOR):**
     `streamlit-option-menu` gibi seçeneklerin hover-collapse için
     dıştan erişilemez olma sorununu taşıyabilir, dikkatli
     değerlendirilmeli.
+
+- **[UYGULANDI, SENTETİK VERİYLE DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.265
+  (5 Eylül 2026, Bahri'nin bulgusu — "GRT nedir? 4 yerde karşıma
+  çıkıyor, hem TEFAS hem de Kripto olarak gösteriliyor?"): İKİ AYRI
+  KÖK NEDEN BULUNDU VE DÜZELTİLDİ - BÜTÇE OPTİMİZASYONU'NDA GRT 4 KEZ
+  GÖRÜNÜYORDU.**
+  - **Doğrulama:** GRT gerçekten İKİ FARKLI, MEŞRU varlık - KRIPTO:
+    "The Graph" token'ı, TEFAS: "Garanti Portföy Teknoloji Şirketleri
+    Fonu" - veri BOZUK değil, sadece kısa kod tesadüfen çakışıyor.
+  - **Kök neden 1 (worker.py, kaynak seviyesinde):** Kripto evreni
+    oluşturulurken BIST ile çakışan ticker'lar "C" öneki ile yeniden
+    adlandırılıyordu (LINK->CLINK gibi, önceden bilinen bir mekanizma)
+    - AMA bu kontrol SADECE `BIST_TICKERS`'a bakıyordu, TEFAS fon
+    kodlarına HİÇ bakmıyordu. Çözüm: TEFAS ticker'ları da (bu adım
+    sırasında TEFAS henüz canlı yüklenmediği için, önceki çalışmadan
+    kalan `optimized_universe.csv`'den okunarak) çakışma kontrolüne
+    dahil edildi - artık kripto GRT bir sonraki "Veri Güncelle"de
+    "CGRT" olarak yeniden adlandırılacak.
+  - **Kök neden 2 (app.py, DAHA KRİTİK - asıl 4 satır sorununun
+    kaynağı):** "Bütçe Optimizasyonu" sayfasında gelir projeksiyonu
+    verisi `df_opt.merge(gelir_merge, on="Ticker", how="left")` ile
+    SADECE Ticker'a göre birleştiriliyordu, Kategori'ye göre DEĞİL.
+    GRT çakışması yüzünden bu CAPRAZ ÇARPIM yaratıyordu: her TEFAS-GRT
+    satırı hem kendi gelir verisiyle hem YANLIŞLIKLA KRIPTO-GRT'nin
+    gelir verisiyle eşleşip 2 satıra bölünüyordu (ve KRIPTO-GRT için
+    de tam tersi) - toplam 4 satır. Çözüm: birleştirme artık
+    `on=["Ticker","Kategori"]` ile yapılıyor.
+  - **Doğrulama:** Her iki dosya da `python3 -m py_compile` ile temiz.
+    Gerçek `optimized_universe.csv`'de "GRT"nin TEFAS setinde
+    olduğu doğrulandı. app.py'deki merge düzeltmesi, hatayı BİREBİR
+    yeniden üreten sentetik bir örnekle test edildi - eski kod 4 satır
+    (yanlış gelir değerleriyle), yeni kod doğru 2 satır üretti.
+  - **AÇIK:** Push + bir sonraki "Veri Güncelle" + canlı Bütçe
+    Optimizasyonu sayfası kontrolü gerekiyor.
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

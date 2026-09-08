@@ -1404,6 +1404,218 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
     return sel_ticker
 
 
+# ── v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): GRAFIK YORUMLAMA ──────────
+# Instagram tarzi sidebar denemesinden sonra planlanan, Bahri'nin kendi
+# sablonuyla verdigi ozellik. Karma yaklasim: asagidaki fonksiyon TUM
+# SAYISAL degerleri (MA20/MA50 kesisimi, destek/direnc, hacim onayi)
+# ALGORITMIK olarak hesaplar - HICBIR METIN URETMEZ. Metin uretimi
+# (dogal cumleler) AYRI bir fonksiyonda (_grafik_yorumu_uret), AI
+# anahtari VARSA Gemini ile, YOKSA sabit bir sablonla yapilir - boylece
+# ozellik st.secrets'ta GEMINI_API_KEY/GROQ_API_KEY tanimli olmasa BILE
+# calisir (daha sade ama eksiksiz bir metinle).
+def _grafik_teknik_analiz(hist: pd.DataFrame) -> dict:
+    """Bir varligin OHLCV gecmisinden teknik analiz icin gereken TUM
+    sayisal degerleri hesaplar. Yetersiz veri (20 gunden az) varsa
+    bos sozluk doner."""
+    if hist is None or hist.empty or "Close" not in hist.columns:
+        return {}
+    pr = hist["Close"].dropna()
+    if len(pr) < 20:
+        return {}
+
+    son_fiyat = float(pr.iloc[-1])
+    ma20 = pr.rolling(20).mean()
+    ma50 = pr.rolling(50).mean() if len(pr) >= 50 else None
+
+    sonuc = {
+        "son_fiyat": son_fiyat,
+        "ma20": float(ma20.iloc[-1]),
+        "ma50": float(ma50.iloc[-1]) if ma50 is not None and ma50.notna().iloc[-1] else None,
+    }
+
+    if ma50 is not None and ma50.notna().iloc[-1]:
+        fark_simdi = ma20.iloc[-1] - ma50.iloc[-1]
+        pencere = min(20, len(pr) - 50)
+        kesisim_turu = None
+        if pencere > 1:
+            fark_serisi = (ma20 - ma50).tail(pencere)
+            for i in range(1, len(fark_serisi)):
+                onceki, simdiki = fark_serisi.iloc[i-1], fark_serisi.iloc[i]
+                if onceki < 0 and simdiki >= 0:
+                    kesisim_turu = "golden_cross"
+                elif onceki > 0 and simdiki <= 0:
+                    kesisim_turu = "death_cross"
+        sonuc["ma20_ma50_iliski"] = "MA20_USTUNDE_MA50" if fark_simdi > 0 else "MA20_ALTINDA_MA50"
+        sonuc["son_kesisim"] = kesisim_turu
+    else:
+        sonuc["ma20_ma50_iliski"] = None
+        sonuc["son_kesisim"] = None
+
+    sonuc["fiyat_ma_ustunde"] = bool(son_fiyat > ma20.iloc[-1])
+
+    # Destek/Direnc: yerel tepe/dip tespiti (basit +/-10 gunluk pencere)
+    pencere_boyu = 10
+    highs = hist["High"] if "High" in hist.columns else pr
+    lows = hist["Low"] if "Low" in hist.columns else pr
+    tepeler, dipler = [], []
+    for i in range(pencere_boyu, len(hist) - pencere_boyu):
+        pencere_h = highs.iloc[i-pencere_boyu:i+pencere_boyu+1]
+        pencere_l = lows.iloc[i-pencere_boyu:i+pencere_boyu+1]
+        if highs.iloc[i] == pencere_h.max():
+            tepeler.append((hist.index[i], float(highs.iloc[i])))
+        if lows.iloc[i] == pencere_l.min():
+            dipler.append((hist.index[i], float(lows.iloc[i])))
+
+    ustteki_tepeler = [t for t in tepeler if t[1] > son_fiyat]
+    ana_direnc = min(ustteki_tepeler, key=lambda t: t[1]) if ustteki_tepeler else (
+        (hist.index[-1], float(highs.max())))
+    tum_tepeler_sirali = sorted(tepeler, key=lambda t: -t[1])
+    ikinci_direnc = next((t for t in tum_tepeler_sirali if t[1] > ana_direnc[1]), None)
+
+    altteki_dipler = [d for d in dipler if d[1] < son_fiyat]
+    ana_destek = max(altteki_dipler, key=lambda d: d[1]) if altteki_dipler else (
+        (hist.index[-1], float(lows.min())))
+
+    sonuc["ana_direnc"] = {"tarih": str(ana_direnc[0].date()), "fiyat": ana_direnc[1]}
+    sonuc["ikinci_direnc"] = ({"tarih": str(ikinci_direnc[0].date()), "fiyat": ikinci_direnc[1]}
+                               if ikinci_direnc else None)
+    sonuc["ana_destek"] = {"tarih": str(ana_destek[0].date()), "fiyat": ana_destek[1]}
+
+    def _ikili_var_mi(noktalar, tolerans=0.03):
+        if len(noktalar) < 2:
+            return None
+        for i in range(len(noktalar) - 1, 0, -1):
+            for j in range(i - 1, -1, -1):
+                p1, p2 = noktalar[i][1], noktalar[j][1]
+                if abs(p1 - p2) / max(p1, p2) < tolerans:
+                    return (noktalar[j], noktalar[i])
+        return None
+    sonuc["ikili_dip"] = _ikili_var_mi(dipler)
+    sonuc["ikili_tepe"] = _ikili_var_mi(tepeler)
+
+    if "Volume" in hist.columns and hist["Volume"].fillna(0).sum() > 0:
+        vol = hist["Volume"].fillna(0)
+        vol_ort20 = vol.rolling(20).mean()
+        sonuc["hacim_guncel_ort20_orani"] = (
+            float(vol.iloc[-1] / vol_ort20.iloc[-1]) if vol_ort20.iloc[-1] > 0 else None)
+        sonuc["hacim_var"] = True
+    else:
+        sonuc["hacim_var"] = False
+        sonuc["hacim_guncel_ort20_orani"] = None
+
+    sonuc["donem_en_dusuk"] = {"tarih": str(pr.idxmin().date()), "fiyat": float(pr.min())}
+    sonuc["donem_en_yuksek"] = {"tarih": str(pr.idxmax().date()), "fiyat": float(pr.max())}
+    return sonuc
+
+
+def _grafik_yorumu_sablon(t: dict, ticker: str, birim: str = "TL") -> str:
+    """AI KULLANILAMADIGINDA (anahtar yok veya AI hatasi) devreye giren,
+    SABIT ama EKSIKSIZ sablon - Bahri'nin verdigi formata sadik kalir,
+    sadece cumleler daha mekanik/dogrudandir."""
+    def _f(x):
+        return fmt_tr(x, 2 if x < 1000 else 0)
+    ma_metni = ""
+    if t.get("ma50") is not None:
+        iliski = "üzerinde" if t["ma20_ma50_iliski"] == "MA20_USTUNDE_MA50" else "altında"
+        kesisim_metni = ""
+        if t.get("son_kesisim") == "golden_cross":
+            kesisim_metni = " Kısa süre önce MA20, MA50'yi yukarı kesti (Golden Cross)."
+        elif t.get("son_kesisim") == "death_cross":
+            kesisim_metni = " Kısa süre önce MA20, MA50'yi aşağı kesti (Death Cross)."
+        konum = "üzerinde seyrediyor, kısa-orta vadeli ivme pozitif" if t["fiyat_ma_ustunde"] else "altında seyrediyor, kısa-orta vadeli ivme zayıf"
+        ma_metni = (f"MA20 çizgisi MA50'nin {iliski}.{kesisim_metni} "
+                    f"Fiyat, ortalamaların {konum}.")
+    formasyon = ""
+    if t.get("ikili_dip"):
+        (t1, p1), (t2, p2) = t["ikili_dip"]
+        formasyon = f"Grafikte {t1}-{t2} aralığında ~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Dip (Double Bottom) görülüyor."
+    elif t.get("ikili_tepe"):
+        (t1, p1), (t2, p2) = t["ikili_tepe"]
+        formasyon = f"Grafikte {t1}-{t2} aralığında ~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Tepe (Double Top) görülüyor."
+
+    hacim_notu = ""
+    if t.get("hacim_var") and t.get("hacim_guncel_ort20_orani"):
+        oran = t["hacim_guncel_ort20_orani"]
+        hacim_notu = (f" Güncel hacim, 20 günlük ortalamanın {oran:.1f} katı"
+                       + (" - kırılım varsa güçlü destekleniyor." if oran > 1.2 else " - ortalama seviyede."))
+
+    ikinci_direnc_str = ""
+    if t.get("ikinci_direnc"):
+        ikinci_direnc_str = f" Bu da aşılırsa bir sonraki hedef ~{_f(t['ikinci_direnc']['fiyat'])} {birim} ({t['ikinci_direnc']['tarih']}) olur."
+
+    return (
+        f"**Mevcut Trend:** {ticker}, {t['donem_en_dusuk']['tarih']} tarihli "
+        f"~{_f(t['donem_en_dusuk']['fiyat'])} {birim} dip seviyesinden "
+        f"{t['donem_en_yuksek']['tarih']} tarihli ~{_f(t['donem_en_yuksek']['fiyat'])} {birim} "
+        f"zirvesi arasında hareket ediyor; güncel fiyat ~{_f(t['son_fiyat'])} {birim}.\n\n"
+        f"**Ortalamaların Durumu:** {ma_metni or 'Yeterli veri yok.'}\n\n"
+        + (f"**Formasyon:** {formasyon}\n\n" if formasyon else "")
+        + f"**Kritik Seviyeler:**\n"
+        f"- Direnç: ~{_f(t['ana_direnc']['fiyat'])} {birim} ({t['ana_direnc']['tarih']}).{ikinci_direnc_str}\n"
+        f"- Destek: ~{_f(t['ana_destek']['fiyat'])} {birim} ({t['ana_destek']['tarih']})."
+        f"{hacim_notu}\n\n"
+        f"*Bu otomatik bir teknik özet olup yatırım tavsiyesi değildir. "
+        f"Doğrudan alım yerine direncin hacimli kırılımı veya destek "
+        f"seviyesine geri çekilme beklemek riski azaltan bir yaklaşımdır.*"
+    )
+
+
+def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: str = "TL") -> str:
+    """Ana giris noktasi: once sayisal analiz hesaplanir (algoritma),
+    sonra elde varsa Gemini ile dogal cumleler uretilir, YOKSA/hata
+    olursa sabit sablona (_grafik_yorumu_sablon) dusulur - ozellik
+    HER DURUMDA calisir, sadece metin kalitesi degisir."""
+    t = _grafik_teknik_analiz(hist)
+    if not t:
+        return "Bu varlık için yeterli geçmiş veri bulunmuyor (en az 20 günlük veri gerekir)."
+
+    api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
+    if not api_key:
+        return _grafik_yorumu_sablon(t, ticker, birim)
+
+    try:
+        import requests, json as _json
+        prompt = f"""Sen bir teknik analiz asistanisin. Asagidaki HESAPLANMIS sayisal
+verileri kullanarak, ASAGIDAKI FORMATI BIREBIR izleyen, Turkce, kisa ve net
+bir teknik analiz metni yaz. SAYILARI UYDURMA - sadece verilenleri kullan.
+
+Varlik: {ticker} ({kategori})
+Guncel fiyat: {t['son_fiyat']:.2f} {birim}
+Donem en dusugu: {t['donem_en_dusuk']['fiyat']:.2f} {birim} ({t['donem_en_dusuk']['tarih']})
+Donem en yuksegi: {t['donem_en_yuksek']['fiyat']:.2f} {birim} ({t['donem_en_yuksek']['tarih']})
+MA20: {t.get('ma20')}, MA50: {t.get('ma50')}
+MA20/MA50 iliskisi: {t.get('ma20_ma50_iliski')}, son kesisim: {t.get('son_kesisim')}
+Fiyat MA20 ustunde mi: {t.get('fiyat_ma_ustunde')}
+Ana direnc: {t['ana_direnc']}
+Ikinci direnc: {t.get('ikinci_direnc')}
+Ana destek: {t['ana_destek']}
+Ikili dip var mi: {t.get('ikili_dip') is not None}
+Ikili tepe var mi: {t.get('ikili_tepe') is not None}
+Hacim guncel/ort20 orani: {t.get('hacim_guncel_ort20_orani')}
+
+Format (Markdown basliklarla):
+**Mevcut Trend:** ...
+**Ortalamaların Durumu:** ...
+**Kritik Seviyeler:**
+- Direnç: ...
+- Destek: ...
+
+Sonda tek cumlelik bir not: dogrudan alim yerine kirilim/geri cekilme
+beklemenin riski nasil azalttigina dair. "Yatirim tavsiyesi degildir" ifadesini
+mutlaka ekle. En fazla 180 kelime."""
+        url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+               "gemini-2.5-flash:generateContent")
+        resp = requests.post(
+            url, headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=20)
+        resp.raise_for_status()
+        metin = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return metin
+    except Exception as e:
+        print(f"[app] Grafik yorumu AI hatasi (sablona dusuluyor): {type(e).__name__}: {e}")
+        return _grafik_yorumu_sablon(t, ticker, birim)
+
+
 def candle_fig(hist, ticker):
     """v2.0.3: Mum grafigi + opsiyonel hacim subplot.
 
@@ -4548,12 +4760,31 @@ if page=="Ana Sayfa":
                 df_opt_gelir = calc_optimization_income(df_opt, df_uni, budget)
             if not df_opt_gelir.empty and "Yıllık Gelir (₺)" in df_opt_gelir.columns:
                 toplam_gelir = df_opt_gelir["Yıllık Gelir (₺)"].sum()
-                # Gelir sütunlarını Ticker üzerinden birleştir
+                # Gelir sütunlarını Ticker + Kategori üzerinden birleştir
+                # v2.0.7.265 (5 Eylul 2026, Bahri'nin bulgusu - GRT'nin
+                # hem TEFAS hem KRIPTO olarak 4 kez gorunmesi): KOK NEDEN
+                # BULUNDU - bu birlestirme SADECE "Ticker"a gore yapiliyordu,
+                # "Kategori"ye gore DEGIL. TEFAS'in "GRT" (Garanti Portfoy
+                # Teknoloji fonu) ile KRIPTO'nun "GRT" (The Graph) ayni kisa
+                # koda sahip OLUNCA, bu birlestirme CAPRAZ CARPIM yaratiyordu:
+                # her TEFAS-GRT satiri hem kendi gelir verisiyle hem
+                # YANLISLIKLA KRIPTO-GRT'nin gelir verisiyle eslesip IKI
+                # satira bolunuyordu (ve KRIPTO-GRT icin de tam tersi) -
+                # toplam 4 satir ortaya cikiyordu. Cozum: birlestirme artik
+                # "Ticker" + "Kategori" ikilisine gore yapiliyor - ayni
+                # kisa kodu paylasan ama FARKLI kategorideki varliklar
+                # artik birbirine karismiyor. (Kripto tarafinda ayni
+                # cakismayi KAYNAGINDAN onlemek icin worker.py'de de
+                # TEFAS-farkindalikli yeniden adlandirma eklendi - bkz.
+                # o dosyadaki v2.0.7.265 notu.)
                 gelir_merge = df_opt_gelir[
-                    [c for c in ["Ticker","Gelir Türü","Gelir Oranı (%)","Yıllık Gelir (₺)"]
+                    [c for c in ["Ticker","Kategori","Gelir Türü","Gelir Oranı (%)","Yıllık Gelir (₺)"]
                      if c in df_opt_gelir.columns]
                 ]
-                df_opt = df_opt.merge(gelir_merge, on="Ticker", how="left")
+                _gelir_merge_anahtar = (["Ticker", "Kategori"]
+                                        if "Kategori" in gelir_merge.columns
+                                        else ["Ticker"])
+                df_opt = df_opt.merge(gelir_merge, on=_gelir_merge_anahtar, how="left")
                 # Özet metrikler
                 if toplam_gelir > 0:
                     pg1, pg2, pg3 = st.columns(3)
@@ -6035,6 +6266,18 @@ elif page in CAT:
     if not d["hist"].empty:
         fig=candle_fig(d["hist"],sel)
         if fig: st.plotly_chart(fig,width='stretch')
+
+        # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
+        # BIST/TEFAS/Doviz/Degerli Madenler/Kriptolar'in HEPSINDE (bu
+        # blok "elif page in CAT:" ile ortak) calisan grafik yorumlama
+        # dugmesi. Aç/kapa (toggle) - tekrar basinca gizlenir.
+        _grafik_yorum_key = f"_grafik_yorum_ac_{sel}"
+        if st.button("Grafiği Yorumla", key=f"grafik_yorum_btn_{sel}"):
+            st.session_state[_grafik_yorum_key] = not st.session_state.get(_grafik_yorum_key, False)
+        if st.session_state.get(_grafik_yorum_key):
+            with st.spinner("Grafik analiz ediliyor..."):
+                _yorum_metni = _grafik_yorumu_uret(d["hist"], sel, cat_code)
+            st.markdown(_yorum_metni)
     else:
         st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
 
