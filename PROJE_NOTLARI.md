@@ -5990,5 +5990,29 @@ tamam, canlı doğrulama BEKLİYOR):**
     HEPSİNİN mevcut olduğu doğrulandı. GERÇEK TARAYICIDA (fiili mouse
     etkileşimi, görsel doğruluk) HENÜZ test edilemedi.
 
+- **[ÇÖZÜLDÜ] GH_TOKEN Secret Zinciri (8 Eylül 2026) - TAM KRONOLOJİ:**
+  1. API.txt dosyasında sızmış bir GitHub PAT + Groq anahtarı bulundu
+     (GitHub push protection tarafından yakalandı) → `git filter-branch`
+     ile tüm geçmişten temizlendi, force-push edildi.
+  2. Sızan GitHub PAT (classic) iptal edildi - AMA bu token, ÜÇ
+     workflow'un (`health_check.yml`, `update_data.yml`,
+     `update_tefas_evening.yml`) `secrets.GH_TOKEN`'ı OLARAK
+     kullanılıyormuş - iptal sonrası "Veri Akışı Sağlık Kontrolü"
+     iş akışı checkout adımında başarısız olmaya başladı (38 saniyede,
+     kimlik doğrulama hatası).
+  3. Yerine yeni bir token oluşturulurken yanlışlıkla "Fine-grained"
+     sekmesinde (Classic yerine) oluşturuldu - bu SORUN DEĞİLDİ (repo
+     zaten başka fine-grained token'lar - cron-job.org tetikleyicileri -
+     kullanıyordu), ama İLK oluşturmada "Contents: Read and write"
+     izni VERİLMEMİŞTİ (varsayılan "No access").
+  4. Token silinip doğru ayarlarla (bu repoya özel erişim + Contents:
+     Read/write) yeniden oluşturuldu, `GH_TOKEN` secret'ı güncellendi.
+  5. **✅ DOĞRULANDI:** "Veri Akışı Sağlık Kontrolü" manuel tetiklendi,
+     başarılı oldu - `health_state.json`'ın gerçekten push edildiği
+     git geçmişinde görüldü. Aynı secret'ı kullanan `update_data.yml`
+     ve `update_tefas_evening.yml`'in de düzelmiş olması bekleniyor
+     (aynı token'a bağımlılar).
+  - **DURUM: KAPANDI.**
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
