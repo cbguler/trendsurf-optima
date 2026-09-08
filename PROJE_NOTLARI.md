@@ -6103,5 +6103,50 @@ tamam, canlı doğrulama BEKLİYOR):**
     %100 garanti edemiyorum. Bahri'nin "bir kez daha deneyelim, riskli
     olsa da" onayıyla ilerlendi.
 
+- **[UYGULANDI, KESİN KÖK NEDEN GERÇEK PLOTLY ÇIKTISIYLA SOMUT OLARAK
+  DOĞRULANDI - CANLI TARAYICI DOĞRULAMASI BEKLİYOR] v2.0.7.279 (8 Eylül
+  2026, Bahri'nin bulgusu — "olmadı yine, tekerleğe dokunduğum anda
+  bozuluyor"): BU SEFER TAHMİN DEĞİL, SOMUT KANIT - KESİN KÖK NEDEN
+  BULUNDU.**
+  - **Bulgu yöntemi:** v2.0.7.278'in "asenkron yarış durumu" hipotezi
+    yanlış çıktı (kullanıcı "tekerleğe dokunduğum an" bozulduğunu
+    söyledi - bu, HIZLI ART ARDA olaylardan çok TEK bir dokunuşta bile
+    olan bir şeye işaret ediyordu). Gerçek `candle_fig()` çıktısı
+    `fig.to_json()` ile üretilip Python'da DOĞRUDAN incelendi.
+  - **KESİN KÖK NEDEN:** `fig.to_json()`, BÜYÜK sayısal dizileri (5
+    yıllık veri artık HER ZAMAN 1000+ satır olduğu için) düz bir JSON
+    listesi olarak DEĞİL, Plotly'nin "typed array" optimizasyonuyla
+    `{"dtype":"f8","bdata":"<base64>"}` şeklinde SIKIŞTIRILMIŞ olarak
+    kodluyormuş - bu SOMUT olarak `json.loads(fig.to_json())` çıktısı
+    incelenerek doğrulandı. `engine="json"` (Python'un yerleşik json
+    modülü) ile DENENDİ, AYNI sonuç çıktı - bu, JSON motorundan
+    BAĞIMSIZ, ayrı bir Plotly özelliği. Grafik yine de DOĞRU
+    çiziliyordu çünkü Plotly.js bu formatı KENDİ İÇİNDE çözüyor - ama
+    BENİM JS kodum HAM `figData.data`'ya bakıp `trace.y[j]` gibi düz
+    dizi erişimi yapmaya çalışınca SESSİZCE başarısız oluyordu (değer
+    hep `undefined` dönüyordu, Y aralığı hiç hesaplanamıyordu - "-1 ile
+    1 arası" ve "sol üstte sıkışma" gibi TÜM önceki semptomlar bununla
+    tam tutarlı).
+  - **Çözüm:** JS artık `figData.data` (ham, çözülmemiş Python-JSON
+    çıktısı) YERİNE `chartDiv.data`ya (Plotly.newPlot() TAMAMLANDIKTAN
+    SONRA, `.then()` callback'i içinde, Plotly'nin KENDİ çözülmüş/
+    düz-dizi haline getirdiği iç kopyası) bakıyor. `Plotly.newPlot()`
+    artık TEK SEFER çağrılıyor (önceki taslakta yanlışlıkla iki kez
+    çağrılma riski oluşmuştu, fark edilip düzeltildi). Ayrıca ilk
+    görünen pencere artık Plotly'den GERİ OKUNMUYOR - zaten Python'dan
+    bilinen `varsayilan_gun` değerinden DOĞRUDAN hesaplanıyor (bir
+    zamanlama hatasını daha önledi).
+  - **Küçük bir f-string hatası da fark edilip düzeltildi:** JS
+    yorumunda örnek olarak yazılan `{{dtype:'f8',...}}` metni,
+    kaçırılmamış süslü parantezler yüzünden Python tarafından
+    ifade olarak yorumlanmaya çalışılıp `NameError` veriyordu.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Gerçek 5 yıllık
+    ALBRK-benzeri veriyle (1255 satır) uçtan uca test edildi - tek bir
+    `Plotly.newPlot()` çağrısı, `chartDiv.data` + `.then()` yapısının
+    doğru üretildiği mock `components.html` ile doğrulandı.
+  - **Güven notu:** v2.0.7.278'in aksine, bu sefer kök neden TAHMİN
+    değil, gerçek Plotly çıktısında SOMUT olarak GÖRÜLEREK bulundu -
+    güven seviyesi daha yüksek.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

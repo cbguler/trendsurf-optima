@@ -1831,8 +1831,6 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         var chartDiv = document.getElementById("{_div_id}");
         var tarihDiv = document.getElementById("{_div_id}_tarih");
         var modDiv   = document.getElementById("{_div_id}_mod");
-        Plotly.newPlot(chartDiv, figData.data, figData.layout,
-            {{responsive: true, scrollZoom: false, displaylogo: false}});
 
         var SON_TARIH_MS = {_son_tarih_ms};
         var TAM_BASLANGIC_MS = {_tam_baslangic_ms};
@@ -1853,22 +1851,34 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         // pencere ARTIK Plotly'den OKUNMUYOR - JS'in KENDI hafizasinda
         // (asagidaki degisken) TUTULUYOR, her tekerlek olayinda ESZAMANLI
         // (Plotly'nin cevabini beklemeden) guncelleniyor.
-        var mevcutPencereMsTakip = SON_TARIH_MS - TAM_BASLANGIC_MS;
-        // Baslangicta gorunen (varsayilan) pencere neyse ONU baz al:
-        if (chartDiv.layout && chartDiv.layout.xaxis && chartDiv.layout.xaxis.range) {{
-            var _ilkBaslangic = new Date(chartDiv.layout.xaxis.range[0]).getTime();
-            mevcutPencereMsTakip = SON_TARIH_MS - _ilkBaslangic;
-        }}
+        var mevcutPencereMsTakip = {int(varsayilan_gun)} * 24 * 60 * 60 * 1000;
+        if (mevcutPencereMsTakip > TAM_PENCERE_MS) mevcutPencereMsTakip = TAM_PENCERE_MS;
 
-        // v2.0.7.277: Fiyat (High/Low) ve Hacim trace'lerini bul -
-        // Plotly'nin autorange'ine GUVENMEDEN, GORUNEN pencereye gore
-        // Y araligini KENDIMIZ hesaplayacagiz.
+        // v2.0.7.279 (8 Eylul 2026, Bahri'nin bulgusu - "tekerlege
+        // dokundugum an bozuluyor" + KESIN kok neden bulundu): fig.
+        // to_json() BUYUK sayisal dizileri (5 yillik veri artik HER
+        // ZAMAN 1000+ satir oldugu icin) duz JSON listesi olarak DEGIL,
+        // Plotly'nin "typed array" optimizasyonuyla {{dtype:'f8',
+        // bdata:'<base64>'}} seklinde SIKISTIRILMIS olarak kodluyor -
+        // bu, `engine='json'` ile bile degismiyor (ayri bir ozellik).
+        // Grafik yine de DOGRU CIZILIYOR cunku Plotly.js bu formati
+        // KENDI ICINDE cozuyor - ama BENIM kodum HAM `figData.data`'ya
+        // bakip `trace.y[j]` gibi duz dizi erisimi yapmaya calisinca
+        // SESSIZCE basarisiz oluyordu (deger hep undefined donuyordu,
+        // hMax/yMin/yMax hic hesaplanamiyordu). Cozum: artik `figData.
+        // data` YERINE `chartDiv.data`ya (Plotly.newPlot TAMAMLANDIKTAN
+        // SONRA, Plotly'nin KENDI COZULMUS/duz-dizi haline getirdigi
+        // ic kopyasi) bakiyoruz.
         var fiyatTrace = null, hacimTrace = null;
-        for (var i = 0; i < figData.data.length; i++) {{
-            var tr = figData.data[i];
-            if (tr.type === 'candlestick') fiyatTrace = tr;
-            else if (tr.yaxis === 'y2') hacimTrace = tr;
-        }}
+        Plotly.newPlot(chartDiv, figData.data, figData.layout,
+            {{responsive: true, scrollZoom: false, displaylogo: false}}
+        ).then(function() {{
+            for (var i = 0; i < chartDiv.data.length; i++) {{
+                var tr = chartDiv.data[i];
+                if (tr.type === 'candlestick') fiyatTrace = tr;
+                else if (tr.yaxis === 'y2') hacimTrace = tr;
+            }}
+        }});
 
         function gorunenYAraligiHesapla(baslangicMs, bitisMs) {{
             var sonuc = {{}};
