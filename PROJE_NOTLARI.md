@@ -6070,5 +6070,38 @@ tamam, canlı doğrulama BEKLİYOR):**
   - **AÇIK:** Gerçek tarayıcıda (asıl mouse tekerleği etkileşimi)
     henüz test edilemedi.
 
+- **[UYGULANDI, YAPISAL TEST GEÇTİ - CANLI TARAYICI DOĞRULAMASI BEKLİYOR,
+  KESİN KÖK NEDEN %100 DOĞRULANAMADI] v2.0.7.278 (8 Eylül 2026, Bahri'nin
+  bulgusu - "olmadı, hatalı", geniş pencerede mumlar sol üstte sıkışıp
+  ~1073 günde takılıyordu): EN GÜÇLÜ HİPOTEZ - ASENKRON YARIŞ DURUMU -
+  ÜZERİNE ÇALIŞILDI. ÖNCE VERİ DOĞRULANDI.**
+  - **Önce veri temizliği doğrulandı:** Gerçek ALBRK 5 yıllık verisi
+    doğrudan yfinance ile çekilip incelendi - 2021'den 2026'ya 1255
+    satır, HİÇBİR boşluk/anomali yok, fiyat aralığı normal (1,09-10,24
+    TL). Bu, sorunun VERİDE olmadığını, JS/Python kodunda olduğunu
+    kesin olarak gösterdi.
+  - **En güçlü hipotez:** `Plotly.relayout()` ASENKRON çalışıyor. Fare
+    tekerleği/trackpad TEK bir kaydırma hareketinde ONLARCA `wheel`
+    olayı ateşleyebilir - önceki `relayout()` çağrısı HENÜZ
+    TAMAMLANMADIYSA, ardışık olaylar `chartDiv.layout.xaxis.range`'i
+    okuyunca hâlâ ESKİ değeri görür - bu da büyüme/küçülmenin
+    beklenmedik bir noktada "takılmış" gibi durmasına yol açabilir
+    ("1073 gün" gibi keyfi bir sayıda durmak buna işaret ediyor).
+  - **Çözüm:** Mevcut pencere artık Plotly'nin (potansiyel olarak
+    güncel olmayan) durumundan OKUNMUYOR - JS'in KENDİ hafızasında
+    (`mevcutPencereMsTakip`) tutuluyor, her tekerlek olayında Plotly'nin
+    cevabını BEKLEMEDEN eşzamanlı güncelleniyor.
+  - **Ek:** Tarih aralığı göstergesi Bahri'nin isteğiyle daha belirgin
+    yapıldı (büyük, kalın, açık mavi arka planlı rozet görünümü).
+  - **Doğrulama:** `python3 -m py_compile` + `ast.parse` temiz. Tam
+    fonksiyon, gerçekçi 5 yıllık ALBRK-benzeri veriyle uçtan uca
+    çalıştırıldı (mock `components.html` ile), yeni takip mantığının
+    JS çıktısında mevcut olduğu doğrulandı.
+  - **DÜRÜST NOT:** Bu, benim EN GÜÇLÜ hipotezim - gerçek tarayıcıdaki
+    asenkron zamanlama davranışını sandbox'ta TAM OLARAK simüle
+    edemedim, yani bu düzeltmenin kesin olarak işe yarayacağını
+    %100 garanti edemiyorum. Bahri'nin "bir kez daha deneyelim, riskli
+    olsa da" onayıyla ilerlendi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

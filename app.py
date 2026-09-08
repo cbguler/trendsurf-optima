@@ -1817,9 +1817,12 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     _html = f"""
     <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;
-                font-size:12px;color:#6c7a9c;padding:4px 4px 0 4px;">
-        <span id="{_div_id}_tarih">—</span>
-        <span id="{_div_id}_mod" style="font-weight:600;">🔍 Tekerlek: Yakınlaştırma</span>
+                padding:8px 6px 2px 6px;">
+        <span id="{_div_id}_tarih"
+              style="font-size:15px;font-weight:700;color:#1b2a4a;
+                     background:#eef1fb;padding:4px 10px;border-radius:6px;">—</span>
+        <span id="{_div_id}_mod"
+              style="font-size:12px;font-weight:600;color:#6c7a9c;">🔍 Tekerlek: Yakınlaştırma</span>
     </div>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script>
@@ -1837,6 +1840,25 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         var TAM_PENCERE_MS = SON_TARIH_MS - TAM_BASLANGIC_MS;
         var tekerlekYakinlastirmaAktif = true;
         var HACIM_VAR = {str(_has_volume).lower()};
+        // v2.0.7.278 (8 Eylul 2026, Bahri'nin bulgusu - "olmadi, hatali",
+        // genis pencerede mumlar sol ustte sikisip kaliyordu, ~1073
+        // gunde takiliyordu - GERCEK 5 yillik veri dogrulanmisti, sorun
+        // veride DEGILDI): SUPHELI KOK NEDEN - `Plotly.relayout()`
+        // ASENKRON calisiyor. Fare tekerlegi TEK bir kaydirma hareketinde
+        // ONLARCA 'wheel' olayi ATESLEYEBILIR - eger onceki relayout
+        // cagrisi HENUZ TAMAMLANMADIYSA, ardisik olaylar
+        // `chartDiv.layout.xaxis.range`'i OKUYUNCA hala ESKI degeri
+        // gorur, bu da buyume/kucultmenin BEKLENMEDIK bir noktada
+        // "takilmis" gibi durmasina yol acabilir. Cozum: mevcut
+        // pencere ARTIK Plotly'den OKUNMUYOR - JS'in KENDI hafizasinda
+        // (asagidaki degisken) TUTULUYOR, her tekerlek olayinda ESZAMANLI
+        // (Plotly'nin cevabini beklemeden) guncelleniyor.
+        var mevcutPencereMsTakip = SON_TARIH_MS - TAM_BASLANGIC_MS;
+        // Baslangicta gorunen (varsayilan) pencere neyse ONU baz al:
+        if (chartDiv.layout && chartDiv.layout.xaxis && chartDiv.layout.xaxis.range) {{
+            var _ilkBaslangic = new Date(chartDiv.layout.xaxis.range[0]).getTime();
+            mevcutPencereMsTakip = SON_TARIH_MS - _ilkBaslangic;
+        }}
 
         // v2.0.7.277: Fiyat (High/Low) ve Hacim trace'lerini bul -
         // Plotly'nin autorange'ine GUVENMEDEN, GORUNEN pencereye gore
@@ -1897,15 +1919,16 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
         chartDiv.addEventListener('wheel', function(evt) {{
             if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
             evt.preventDefault();
-            var xaxis = chartDiv.layout.xaxis;
-            var mevcutBaslangicMs = new Date(xaxis.range[0]).getTime();
-            var mevcutPencereMs = SON_TARIH_MS - mevcutBaslangicMs;
 
-            // Asagi kaydirma (deltaY>0) -> pencereyi GENISLET (daha eski
-            // veriye git). Yukari kaydirma -> pencereyi DARALT.
+            // v2.0.7.278: Plotly'nin (asenkron) durumunu OKUMAK yerine
+            // kendi takip degiskenimizi (mevcutPencereMsTakip) kullanip
+            // HEMEN (Plotly'nin cevabini beklemeden) guncelliyoruz - art
+            // arda hizli tekerlek olaylarinda "takilma" riski ortadan
+            // kalkiyor.
             var carpan = evt.deltaY > 0 ? 1.15 : 0.87;
-            var yeniPencereMs = mevcutPencereMs * carpan;
+            var yeniPencereMs = mevcutPencereMsTakip * carpan;
             yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
+            mevcutPencereMsTakip = yeniPencereMs;  // ESZAMANLI guncelle
 
             var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
             var yAraliklari = gorunenYAraligiHesapla(yeniBaslangicMs, SON_TARIH_MS);
