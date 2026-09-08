@@ -5948,5 +5948,47 @@ tamam, canlı doğrulama BEKLİYOR):**
     çağrılarını eski `candle_fig`+`st.plotly_chart` ikilisine geri
     almak yeterli olur).
 
+- **[UYGULANDI, HTML/JS ÜRETİMİ SENTETİK VERİYLE UÇTAN UCA TEST EDİLDİ -
+  CANLI TARAYICI DOĞRULAMASI BEKLİYOR] v2.0.7.275 (8 Eylül 2026,
+  Bahri'nin bulgusu - 6 maddelik detaylı liste, "hoşuma gitti ama bir
+  çok düzeltme yapılması gerekiyor"): ÖZEL MOUSE TEKERLEĞİ GRAFİĞİNİN
+  KAPSAMLI REVİZYONU.**
+  - **(1) Eksen etiketleri kayboldu:** `candle_fig()`'e artık açıkça
+    `showticklabels=True` + `tickfont` ekleniyor - `render_candle_
+    interactive`'in kendi HTML'i Streamlit'in varsayılan temasını
+    SAĞLAMADIĞI için bu bilgiler artık figürün kendi JSON'unda.
+  - **(2)+(3) MA çizgileri/hacim dışarı taşıyordu:** Y ekseni artık
+    SABİT DEĞİL - `autorange=True`. JS'teki HER `Plotly.relayout()`
+    çağrısına `yaxis.autorange` (+ hacim varsa `yaxis2.autorange`)
+    da ekleniyor - X aralığı değiştiğinde Y, GÖRÜNEN veriye göre
+    kendiliğinden yeniden ölçekleniyor.
+  - **(4) Yakınlaştırma sınırı Periyot'a bağımlıydı:** Artık HER ÜÇ
+    çağrı noktası da (Ana Sayfa/Portföyüm/BIST-TEFAS-vb.) grafik İÇİN
+    AYRICA (metrikler için kullanılan Periyot-bağımlı veriden BAĞIMSIZ)
+    her zaman `get_hist(..., "5y")` ile 5 yıllık veri çekiyor - min
+    pencere 7 gün, max pencere mevcut TÜM veri (5 yıldan kısaysa
+    doğal olarak kısıtlanıyor). "Periyot" seçimi artık SADECE ilk
+    açılış penceresinin BOYUTUNU belirliyor (`_PERIYOT_GUN_MAP`).
+  - **(5) Tarih aralığı göstergesi:** Grafiğin altına bir `<div>`
+    eklendi - Plotly'nin kendi `plotly_relayout` olayı dinlenerek
+    (SADECE tekerlek değil, TÜM etkileşimlerde doğru çalışır) güncel
+    başlangıç-bitiş tarihi ve gün sayısı gösteriliyor.
+  - **(6) Tık ile aç/kapa:** Grafiğe TIKLANINCA tekerleğin işlevi
+    (yakınlaştırma ↔ sayfa kaydırma) TERSİNE çevriliyor, küçük bir
+    gösterge metni mevcut modu gösteriyor.
+  - **Maliyet notu:** Her detay sayfası artık grafik için EK bir
+    "5y" veri çekimi yapıyor (metrikler için olandan ayrı) - bu,
+    `_get_hist_cached`'in mevcut 300s önbelleği sayesinde makul
+    kalıyor (aynı varlık 5 dakika içinde tekrar açılırsa önbellekten
+    gelir).
+  - **Doğrulama:** `python3 -m py_compile` temiz. `_has_volume`
+    tespiti (Plotly trace'lerinin `yaxis` özniteliğine bakarak)
+    gerçek bir subplot figürüyle test edildi - doğru çalıştı. Tüm
+    `render_candle_interactive` akışı sentetik OHLCV veriyle uçtan
+    uca çalıştırıldı (mock `components.html` ile) - üretilen HTML'de
+    `Plotly.newPlot`, wheel/click/`plotly_relayout` dinleyicilerinin
+    HEPSİNİN mevcut olduğu doğrulandı. GERÇEK TARAYICIDA (fiili mouse
+    etkileşimi, görsel doğruluk) HENÜZ test edilemedi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

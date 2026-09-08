@@ -154,6 +154,13 @@ EMAIL_CFG_FILE = "email_config.json"
 # onu PAGES[:-1] + [el_kitabi_etiketi] seklinde kuruyor (yani PAGES'in
 # SON elemani HER ZAMAN "Yardim" olmak zorunda, yoksa navigasyon bozulur).
 PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","Kriptolar","Halka Arz","Temettü","Makro Göstergeler","SonDakika Haberleri","Abonelik","Yardım"]
+# v2.0.7.275 (8 Eylul 2026): "Periyot" secim etiketinin (yfinance period
+# string'i) yaklasik gun sayisina cevrimi - render_candle_interactive'in
+# varsayilan (ilk acilis) gorunum penceresini, secilen Periyot'a gore
+# ayarlamak icin kullanilir. Grafigin KENDI ZOOM SINIRI (1 hafta - 5 yil/
+# mevcut veri) bundan BAGIMSIZDIR - HER ZAMAN ayrica cekilen 5 yillik
+# veriye gore hesaplanir (bkz. render_candle_interactive cagri noktalari).
+_PERIYOT_GUN_MAP = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "5y": 1825}
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
 
@@ -1616,11 +1623,23 @@ mutlaka ekle. En fazla 180 kelime."""
         return _grafik_yorumu_sablon(t, ticker, birim)
 
 
-def candle_fig(hist, ticker):
+def candle_fig(hist, ticker, varsayilan_gun=90):
     """v2.0.3: Mum grafigi + opsiyonel hacim subplot.
 
     Volume kolonu varsa (BIST/KRIPTO) altta tek-renk hacim cubuklari gosterilir.
     DOVIZ/MADEN/TEFAS'ta Volume yok -> eski tek-panel davranis korunur.
+
+    v2.0.7.275 (8 Eylul 2026, Bahri'nin bulgusu - "eksenlerin degerleri
+    yok olmus, cizgiler/hacim disari tasiyor"): `varsayilan_gun` artik
+    parametre (cagiran taraf, secili "Periyot"a gore farkli bir baslangic
+    penceresi isteyebilir). Y ekseni SABIT (autorange=False) OLMAKTAN
+    CIKARILDI - artik autorange=True, boylece kullanici mouse tekerlegiyle
+    X araligini degistirdiginde Y ekseni GORUNEN veriye gore KENDILIGINDEN
+    yeniden olceklenir (MA cizgileri/hacim cubuklari artik disari
+    TASMAZ). Eksen etiketleri (sayilar/tarihler) de ACIKCA gorunur
+    yapildi - render_candle_interactive() Streamlit'in kendi varsayilan
+    temasini SAGLAMADIGI icin, bu bilgiler ARTIK candle_fig'in kendi
+    JSON'unda acikca bulunuyor.
     """
     if not HAS_PLOTLY or hist.empty: return None
     has_ohlc = all(c in hist.columns for c in ["Open","High","Low","Close"])
@@ -1689,21 +1708,19 @@ def candle_fig(hist, ticker):
         fig.add_trace(line_trace)
 
     # Y ekseni — fiyat aralığını otomatik ayarla (normalize 0-100 görünümünü engelle)
-    # v2.0.7.270 (8 Eylul 2026, Bahri'nin talebi - "tum grafikler ilk
-    # acilista 3 aylik olarak gelsin"): Y ekseni araligi, ARTIK TUM
-    # gecmis (orn. 1 yil) yerine sadece SON 3 AYLIK dilime gore
-    # hesaplaniyor - boylece varsayilan (yakinlastirilmis) gorunum
-    # duzgun olceklenir. Grafigin kendisi (mum/MA cizgileri) HALA TUM
-    # gecmisi iceriyor - kullanici geri yakinlastirip/uzaklastirabilir,
-    # SADECE ilk acilis penceresi degisti.
-    close_col_tam = hist["Close"] if "Close" in hist.columns else hist.iloc[:, 0]
+    # v2.0.7.270: X ekseni varsayilan gorunumu belli bir pencereye (artik
+    # PARAMETRE - varsayilan_gun) sabitlendi. Grafigin kendisi (mum/MA
+    # cizgileri) HALA TUM gecmisi iceriyor.
     _uc_son_tarih = hist.index[-1]
-    _uc_baslangic = max(hist.index[0], _uc_son_tarih - pd.Timedelta(days=90))
-    _uc_son3ay = hist[hist.index >= _uc_baslangic]
-    close_col = (_uc_son3ay["Close"] if "Close" in _uc_son3ay.columns
-                 else _uc_son3ay.iloc[:, 0]) if not _uc_son3ay.empty else close_col_tam
-    y_min = float(close_col.min()) * 0.995
-    y_max = float(close_col.max()) * 1.005
+    _uc_baslangic = max(hist.index[0], _uc_son_tarih - pd.Timedelta(days=varsayilan_gun))
+
+    # v2.0.7.275: Y ekseni artik SABIT DEGIL - autorange=True ile
+    # Plotly, GORUNEN X araligina gore Y'yi KENDILIGINDEN olcekliyor
+    # (mouse tekerlegiyle zoom yapildiginda MA cizgileri/hacim artik
+    # cerceve disina TASMAYACAK).
+    _eksen_ortak = dict(showgrid=True, gridcolor="#eef0f7",
+                        showticklabels=True,
+                        tickfont=dict(size=11, color="#3d4a63"))
 
     if has_volume:
         # 2 satirli subplot duzeni
@@ -1711,26 +1728,20 @@ def candle_fig(hist, ticker):
             height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=0, r=0, t=30, b=0))
-        fig.update_xaxes(showgrid=True, gridcolor="#eef0f7",
-                         rangeslider=dict(visible=False), row=1, col=1)
-        fig.update_xaxes(showgrid=True, gridcolor="#eef0f7", row=2, col=1)
-        fig.update_yaxes(showgrid=True, gridcolor="#eef0f7",
-                         range=[y_min, y_max], autorange=False, row=1, col=1)
-        fig.update_yaxes(showgrid=True, gridcolor="#eef0f7",
+        fig.update_xaxes(**_eksen_ortak, rangeslider=dict(visible=False), row=1, col=1)
+        fig.update_xaxes(**_eksen_ortak, row=2, col=1)
+        fig.update_yaxes(**_eksen_ortak, autorange=True, row=1, col=1)
+        fig.update_yaxes(**_eksen_ortak, autorange=True,
                          title_text="Hacim", title_font=dict(size=10, color="#6c7a9c"),
                          row=2, col=1)
     else:
         # Tek panel duzeni (DOVIZ/MADEN/TEFAS)
         fig.update_layout(height=380, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
-            xaxis=dict(showgrid=True, gridcolor="#eef0f7", rangeslider=dict(visible=False)),
-            yaxis=dict(showgrid=True, gridcolor="#eef0f7",
-                       range=[y_min, y_max], autorange=False),
+            xaxis=dict(**_eksen_ortak, rangeslider=dict(visible=False)),
+            yaxis=dict(**_eksen_ortak, autorange=True),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=0, r=0, t=30, b=0))
 
-    # v2.0.7.270: X ekseni varsayilan gorunumu son 3 aya sabitlendi -
-    # TUM veri (fig icindeki traces) hala tam donemi (orn. 1 yil)
-    # iceriyor, kullanici zoom/pan ile geri genisletebilir.
     fig.update_xaxes(range=[_uc_baslangic, _uc_son_tarih])
     return fig
 
@@ -1744,21 +1755,40 @@ def candle_fig(hist, ticker):
 # st.components.v1.html ile TAM KONTROL sahibi oluyoruz (bu teknik
 # projede zaten baska bir yerde - cerez yazma ozelliginde - basariyla
 # kullaniliyordu, bkz. modul basi import notu).
-def render_candle_interactive(hist, ticker, key: str):
+def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     """candle_fig()'i kullanarak figuru olusturur, SONRA onu ham
     st.plotly_chart YERINE ozel bir HTML+JS sarmalayicisi ile gosterir.
-    Mouse tekerlegi: en son veri noktasi HER ZAMAN sabit kalir, sadece
-    gosterilen zaman araliginin BASLANGICI (ne kadar geriye gidildigi)
-    tekerlekle degisir - standart "imlecin ustune odaklanarak buyutme"
-    DEGIL. JS calismazsa (tarayici/surum sorunu) kullanici yine de
-    "Periyot" dugmeleriyle (1 Ay/3 Ay/...) araligi degistirebilir -
-    bu yuzden bu ozellik BASARISIZ olsa bile uygulama iserlevini
-    kaybetmez."""
-    fig = candle_fig(hist, ticker)
+
+    v2.0.7.275 (8 Eylul 2026, Bahri'nin bulgusu - "hoşuma gitti ama
+    coook duzeltme gerekiyor" + 6 maddelik liste): KAPSAMLI REVIZYON.
+    - (1) Eksen etiketleri: candle_fig() artik acikca showticklabels/
+      tickfont ayarliyor (render_candle_interactive'in kendisi
+      Streamlit'in varsayilan temasini SAGLAMADIGI icin bu ARTIK
+      figürün kendi JSON'unda).
+    - (2)+(3) MA cizgileri/hacim tasması: candle_fig() Y eksenini artik
+      SABIT DEGIL (autorange=True) yapiyor - HER relayout cagrisinda
+      (asagida) yaxis(+yaxis2).autorange=true da GONDERILEREK Plotly'nin
+      GORUNEN X araligina gore Y'yi YENIDEN HESAPLAMASI saglaniyor.
+    - (4) Yakinlastirma siniri artik "Periyot" secimine BAGLI DEGIL -
+      cagiran taraf ARTIK HER ZAMAN 5 yillik (ya da mevcut olan TUM)
+      veriyi geciyor (bkz. asagidaki cagri noktalarindaki degisiklik),
+      TAM_BASLANGIC_MS bu tam veriden hesaplaniyor. Min pencere: 7 gun.
+    - (5) Tarih araligi gostergesi: grafigin ALTINA bir <div> eklendi,
+      Plotly'nin kendi 'plotly_relayout' olayi dinlenerek (SADECE
+      tekerlek degil, TÜM surukleme/zoom etkilesimlerinde de dogru
+      calisir) guncel baslangic-bitis tarihi ve gun sayisi gosteriliyor.
+    - (6) Tik ile ac/kapa: grafige TIKLANINCA tekerlegin "grafigi
+      yakinlastirma" MI yoksa "sayfayi kaydirma" MI yapacagi TERSINE
+      cevriliyor - kucuk bir gosterge metni mevcut modu gosteriyor.
+    JS herhangi bir nedenle calismazsa kullanici yine de "Periyot"
+    dugmeleriyle araligi degistirebilir - bu ozellik basarisiz olsa
+    bile uygulama islevini kaybetmez."""
+    fig = candle_fig(hist, ticker, varsayilan_gun=varsayilan_gun)
     if fig is None:
         return None
 
     import re
+    _has_volume = any(getattr(t, "yaxis", None) == "y2" for t in fig.data)
     _yukseklik = int(fig.layout.height or 480)
     _son_tarih_ms = int(hist.index[-1].timestamp() * 1000)
     _tam_baslangic_ms = int(hist.index[0].timestamp() * 1000)
@@ -1767,13 +1797,25 @@ def render_candle_interactive(hist, ticker, key: str):
     _fig_json = fig.to_json()
     _div_id = f"ts_candle_{re.sub(r'[^a-zA-Z0-9]', '_', key)}"
 
+    _yaxis_autorange_js = (
+        "{'yaxis.autorange': true, 'yaxis2.autorange': true}"
+        if _has_volume else "{'yaxis.autorange': true}"
+    )
+
     _html = f"""
     <div id="{_div_id}" style="width:100%;height:{_yukseklik}px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                font-size:12px;color:#6c7a9c;padding:4px 4px 0 4px;">
+        <span id="{_div_id}_tarih">—</span>
+        <span id="{_div_id}_mod" style="font-weight:600;">🔍 Tekerlek: Yakınlaştırma</span>
+    </div>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script>
     (function() {{
         var figData = {_fig_json};
         var chartDiv = document.getElementById("{_div_id}");
+        var tarihDiv = document.getElementById("{_div_id}_tarih");
+        var modDiv   = document.getElementById("{_div_id}_mod");
         Plotly.newPlot(chartDiv, figData.data, figData.layout,
             {{responsive: true, scrollZoom: false, displaylogo: false}});
 
@@ -1781,8 +1823,30 @@ def render_candle_interactive(hist, ticker, key: str):
         var TAM_BASLANGIC_MS = {_tam_baslangic_ms};
         var MIN_PENCERE_MS = {_min_pencere_ms};
         var TAM_PENCERE_MS = SON_TARIH_MS - TAM_BASLANGIC_MS;
+        var tekerlekYakinlastirmaAktif = true;
+
+        function tarihEtiketiGuncelle() {{
+            var xr = chartDiv.layout.xaxis.range;
+            if (!xr) return;
+            var b = new Date(xr[0]), s = new Date(xr[1]);
+            var gunSayisi = Math.round((s - b) / (24*60*60*1000));
+            var fmt = function(d) {{
+                return d.toLocaleDateString('tr-TR', {{day:'2-digit', month:'short', year:'numeric'}});
+            }};
+            tarihDiv.textContent = fmt(b) + " – " + fmt(s) + "  (" + gunSayisi + " gün)";
+        }}
+        tarihEtiketiGuncelle();
+        chartDiv.on('plotly_relayout', tarihEtiketiGuncelle);
+
+        chartDiv.addEventListener('click', function() {{
+            tekerlekYakinlastirmaAktif = !tekerlekYakinlastirmaAktif;
+            modDiv.textContent = tekerlekYakinlastirmaAktif
+                ? "🔍 Tekerlek: Yakınlaştırma"
+                : "↕️ Tekerlek: Sayfa kaydırma";
+        }});
 
         chartDiv.addEventListener('wheel', function(evt) {{
+            if (!tekerlekYakinlastirmaAktif) return;  // sayfa normal kaysin
             evt.preventDefault();
             var xaxis = chartDiv.layout.xaxis;
             var mevcutBaslangicMs = new Date(xaxis.range[0]).getTime();
@@ -1795,15 +1859,17 @@ def render_candle_interactive(hist, ticker, key: str):
             yeniPencereMs = Math.max(MIN_PENCERE_MS, Math.min(TAM_PENCERE_MS, yeniPencereMs));
 
             var yeniBaslangicMs = SON_TARIH_MS - yeniPencereMs;
-            Plotly.relayout(chartDiv, {{
+            var _guncelleme = {{
                 'xaxis.range': [new Date(yeniBaslangicMs).toISOString(),
                                  new Date(SON_TARIH_MS).toISOString()]
-            }});
+            }};
+            Object.assign(_guncelleme, {_yaxis_autorange_js});
+            Plotly.relayout(chartDiv, _guncelleme);
         }}, {{passive: false}});
     }})();
     </script>
     """
-    components.html(_html, height=_yukseklik + 10)
+    components.html(_html, height=_yukseklik + 35)
     return fig
 
 
@@ -5117,7 +5183,20 @@ if page=="Ana Sayfa":
                 render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
-                    render_candle_interactive(d["hist"], sel_ana, key=f"ana_{sel_ana}")
+                    # v2.0.7.275 (8 Eylul 2026, Bahri'nin talebi):
+                    # grafigin YAKINLASTIRMA SINIRI Periyot secimine
+                    # BAGLI OLMASIN diye, grafik icin AYRICA (metrikler
+                    # icin kullanilan 'd["hist"]'ten BAGIMSIZ) her zaman
+                    # 5 yillik veri cekiliyor - mevcut veri 5 yildan
+                    # kisaysa (yeni varlik) dogal olarak elde ne varsa o
+                    # kadar geriye gidilebiliyor.
+                    _hist_5y_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
+                                             cat_ana, "5y")
+                    if _hist_5y_ana is None or _hist_5y_ana.empty:
+                        _hist_5y_ana = d["hist"]
+                    render_candle_interactive(
+                        _hist_5y_ana, sel_ana, key=f"ana_{sel_ana}",
+                        varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
                     # v2.0.7.274 (8 Eylul 2026, Bahri'nin talebi):
                     # "Grafigi Yorumla" Ana Sayfa'nin Butce Optimizasyonu
@@ -6023,7 +6102,12 @@ elif page=="Portföyüm":
             render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
 
             if not _d["hist"].empty:
-                render_candle_interactive(_d["hist"], _sel_tkr, key=f"pf_{_sel_tkr}")
+                _hist_5y_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
+                                        str(_sr.get("Kategori","")), "5y")
+                if _hist_5y_pf is None or _hist_5y_pf.empty:
+                    _hist_5y_pf = _d["hist"]
+                render_candle_interactive(_hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
+                                           varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
 
                 # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
                 # yorumla butonu tam istedigim gibi olmus, bunu
@@ -6402,7 +6486,12 @@ elif page in CAT:
 
     # Mum grafiği
     if not d["hist"].empty:
-        render_candle_interactive(d["hist"], sel, key=f"cat_{sel}")
+        _hist_5y_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
+                                 str(sel_row.get("Kategori","")), "5y")
+        if _hist_5y_cat is None or _hist_5y_cat.empty:
+            _hist_5y_cat = d["hist"]
+        render_candle_interactive(_hist_5y_cat, sel, key=f"cat_{sel}",
+                                   varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
         # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
         # BIST/TEFAS/Doviz/Degerli Madenler/Kriptolar'in HEPSINDE (bu
