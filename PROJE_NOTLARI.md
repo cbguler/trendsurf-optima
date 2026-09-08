@@ -5879,5 +5879,36 @@ tamam, canlı doğrulama BEKLİYOR):**
     uygun - CSS riski önceki denemelere göre DAHA DA azaltıldı (hâlâ
     sadece 2 kural, içeriğe dokunmuyor).
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.273 (8 Eylül
+  2026, Bahri'nin bulgusu - ekran görüntüsü, "beni şok etti"): v2.0.7.270
+  YETERSİZDİ - ÜÇ AYRI SORUN BULUNDU VE DÜZELTİLDİ.**
+  - **Sorun 1 - "eksenleri 3 aylık ama verileri 1 aylık":** Bu, benim
+    dokunduğum `candle_fig()`'in x-ekseni AYARINDAN DEĞİL, TAMAMEN AYRI
+    bir mekanizmadan kaynaklanıyordu: Ana Sayfa/Portföyüm/BIST-TEFAS-
+    Kripto sayfalarının HER BİRİNDE ayrı bir "Periyot" radio seçicisi
+    (1 Ay/3 Ay/6 Ay/1 Yıl/5 Yıl) var - bu seçici, `hist` verisinin NE
+    KADARININ YFinance'DEN ÇEKİLECEĞİNİ belirliyor (candle_fig'in x-ekseni
+    ayarından TAMAMEN BAĞIMSIZ). Bu üç seçicinin HİÇBİRİNDE `index=`
+    belirtilmediği için varsayılan olarak listenin İLK elemanı ("1 Ay")
+    seçiliyordu - `candle_fig` sonradan "son 90 güne odaklan" diye
+    ayarlıyordu ama ELİNDE SADECE 1 AYLIK VERİ vardı, bu da eksende
+    3 aylık bir aralık gösterip solunu BOŞ bırakıyordu.
+  - **Çözüm 1:** Üç "Periyot" `st.radio`'sunun ÜÇÜNE DE `index=1`
+    eklendi ("3 Ay" artık varsayılan seçili).
+  - **Sorun/Çözüm 2 (ek güvenlik):** `candle_fig`'in x-ekseni
+    başlangıcı artık `max(hist.index[0], son_tarih - 90 gün)` ile
+    hesaplanıyor - veri, 90 günden KISA olsa bile (örn. "3 Ay"
+    periyodu tam 90 gün getirmeyebilir) eksende asla BOŞ bir aralık
+    oluşmuyor.
+  - **Sorun 3 - "mouse tekerleği ile yakınlaştırma... böyle olmamış":**
+    Önceki özette "geri yakınlaştırabilirsiniz" derken YANLIŞ bir
+    varsayımda bulunmuşum - Streamlit'in `st.plotly_chart`'ı
+    VARSAYILAN olarak `scrollZoom`'u KAPALI bırakıyor, yani mouse
+    tekerleği çalışmıyor, sayfayı kaydırıyordu.
+  - **Çözüm 3:** Üç `st.plotly_chart(...)` çağrısına da
+    `config={"scrollZoom": True}` eklendi - artık mouse tekerleği
+    gerçekten grafiği yakınlaştırıp uzaklaştırıyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

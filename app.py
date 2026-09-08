@@ -1698,7 +1698,7 @@ def candle_fig(hist, ticker):
     # SADECE ilk acilis penceresi degisti.
     close_col_tam = hist["Close"] if "Close" in hist.columns else hist.iloc[:, 0]
     _uc_son_tarih = hist.index[-1]
-    _uc_baslangic = _uc_son_tarih - pd.Timedelta(days=90)
+    _uc_baslangic = max(hist.index[0], _uc_son_tarih - pd.Timedelta(days=90))
     _uc_son3ay = hist[hist.index >= _uc_baslangic]
     close_col = (_uc_son3ay["Close"] if "Close" in _uc_son3ay.columns
                  else _uc_son3ay.iloc[:, 0]) if not _uc_son3ay.empty else close_col_tam
@@ -4951,7 +4951,7 @@ if page=="Ana Sayfa":
 
                 period_map = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yil":"1y","5 Yil":"5y"}
                 p_lbl = st.radio("Periyot", list(period_map.keys()),
-                                 horizontal=True, key="per_ana")
+                                 index=1, horizontal=True, key="per_ana")
                 period_val = period_map[p_lbl]
 
                 with st.spinner("Analiz yukleniyor..."):
@@ -5046,7 +5046,7 @@ if page=="Ana Sayfa":
 
                 if not d["hist"].empty:
                     fig = candle_fig(d["hist"], sel_ana)
-                    if fig: st.plotly_chart(fig, width='stretch')
+                    if fig: st.plotly_chart(fig, width='stretch', config={"scrollZoom": True})
                 else:
                     st.warning(f"{sel_ana} icin gecmis fiyat verisi yuklenemedi.")
 
@@ -5872,7 +5872,7 @@ elif page=="Portföyüm":
             st.divider()
             st.subheader(f"Detay: {_sel_tkr} — {str(_sr['Ad'])[:60]}")
             _pm2 = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
-            _pl  = st.radio("Periyot", list(_pm2.keys()), horizontal=True, key="pf_per")
+            _pl  = st.radio("Periyot", list(_pm2.keys()), index=1, horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
                 _d = enrich(_sr, _pm2[_pl])
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
@@ -5940,7 +5940,7 @@ elif page=="Portföyüm":
 
             if not _d["hist"].empty:
                 _fig = candle_fig(_d["hist"],_sel_tkr)
-                if _fig: st.plotly_chart(_fig, width='stretch')
+                if _fig: st.plotly_chart(_fig, width='stretch', config={"scrollZoom": True})
 
                 # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
                 # yorumla butonu tam istedigim gibi olmus, bunu
@@ -6228,7 +6228,7 @@ elif page in CAT:
     st.subheader(f"Detay: {sel}  —  {str(sel_row['Ad'])[:60]}")
 
     period_map={"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
-    p_lbl=st.radio("Periyot",list(period_map.keys()),horizontal=True,key=f"per_{page}")
+    p_lbl=st.radio("Periyot",list(period_map.keys()),index=1,horizontal=True,key=f"per_{page}")
     period_val=period_map[p_lbl]
 
     with st.spinner("Analiz yükleniyor..."):
@@ -6320,7 +6320,7 @@ elif page in CAT:
     # Mum grafiği
     if not d["hist"].empty:
         fig=candle_fig(d["hist"],sel)
-        if fig: st.plotly_chart(fig,width='stretch')
+        if fig: st.plotly_chart(fig,width='stretch', config={"scrollZoom": True})
 
         # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
         # BIST/TEFAS/Doviz/Degerli Madenler/Kriptolar'in HEPSINDE (bu
