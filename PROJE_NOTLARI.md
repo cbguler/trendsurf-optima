@@ -6647,5 +6647,51 @@ tamam, canlı doğrulama BEKLİYOR):**
     fonksiyon ÇEVRİLMEMİŞ (ama en azından HATASIZ çalışan) veriyi
     döndürür - sessizce YANLIŞ bir TL değeri UYDURMAK yerine.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.295 (12
+  Eylül 2026, Bahri'nin KESİN uyarısı — "çapraz kur ile değerleme çok
+  önceden sistemden kaldırıldı, bunu neden hatırlamıyorsun?"): ÖNEMLİ
+  ÖZ-ELEŞTİRİ - v2.0.7.285 VE v2.0.7.294 TAMAMEN GERİ ALINDI, TEMEL
+  İLKE (§0) İHLALİ DÜZELTİLDİ.**
+  - **Hata:** v2.0.7.294'te "HNT'nin 12 Eylül fiyatı diğer günlerle
+    uyumsuz" sorununu "düzeltirken", yfinance'in USD fiyatını USDTRY
+    ile çarpıp KRIPTO/MADEN için sentetik bir TL fiyatı ÜRETTİM - bu,
+    bu dosyanın EN BAŞINDAKİ "0. TEMEL İLKE" bölümünün ("asla ihlal
+    etme" diye işaretli) DOĞRUDAN İHLALİYDİ. Daha da kötüsü,
+    v2.0.7.285 ("kripto max 30 gün" düzeltmesi, 8 Eylül) de AYNI
+    ilkeyi ZATEN ihlal ediyordu - BtcTurk'ün GERÇEK ama kısa verisini,
+    YASAK olan çapraz-kur türetilmiş yfinance verisiyle
+    "zenginleştiriyordu". İKİSİ DE TAMAMEN GERİ ALINDI.
+  - **Doğru davranış (geri yüklendi):** KRIPTO ve MADEN için birincil
+    kaynak (BtcTurk/canlidoviz) başarısız olursa veya beklenenden kısa
+    bir geçmiş dönerse, ARTIK HİÇBİR yfinance/çapraz-kur denemesi
+    YAPILMIYOR - `_HistEmptyError()` ile dürüstçe "veri yok"
+    bırakılıyor, ya da BtcTurk'ün elindeki (kısa da olsa) GERÇEK veri
+    AYNEN kullanılıyor. Bir varlığın BtcTurk'te sadece 30 gündür işlem
+    görmesi ARTIK BİR HATA DEĞİL - bu, o varlığın gerçek durumunun
+    DÜRÜST yansımasıdır.
+  - **Muhtemel yan fayda - HNT'nin 11 Eylül boşluğu:** Eğer HNT'nin
+    BtcTurk'teki TOPLAM geçmişi kısaysa (v2.0.7.285'in tetiklendiği
+    durum), eski kod yfinance'e GEÇİP onun KENDİ (BtcTurk'ten bağımsız)
+    veri boşluklarını miras alıyor olabilirdi - bu düzeltmeyle böyle
+    bir geçiş artık HİÇ YAŞANMIYOR, sadece BtcTurk'ün gerçek verisi
+    kullanılıyor (ki bu, doğrudan kontrol edildiğinde 11 Eylül'ü
+    İÇERİYORDU).
+  - **Yan hata da düzeltildi:** v2.0.7.294'ü eklerken `@st.cache_data`
+    dekoratörü yanlışlıkla `_get_hist_cached()`'den "çalınıp" yeni
+    (şimdi kaldırılan) fonksiyona uygulanmıştı - `_get_hist_cached()`
+    bir süre ÖNBELLEKSİZ çalışmış olabilir (fonksiyonel olarak doğru
+    ama performans kaybı ile). Dekoratör doğru yere geri kondu.
+  - **El kitapları da düzeltildi:** Hem admin hem kullanıcı el
+    kitabındaki "yfinance (USD çapraz × USDTRY türetilmiş)" ibaresi
+    kaldırıldı, yerine "bilinçli tek kaynak" + TEMEL İLKE'yi açıklayan
+    belirgin bir uyarı kutusu eklendi (elmas-su/değer paradoksu
+    örneğiyle).
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+  - **DERS:** PROJE_NOTLARI.md'nin EN BAŞINDAKİ "0. TEMEL İLKE"
+    bölümü, YENİ bir veri-kaynağı değişikliği yapmadan ÖNCE her zaman
+    okunmalı - bu ilke birden fazla kez unutulup tekrar hatırlatılmak
+    zorunda kalındı (Döviz için 18 Temmuz 2026, şimdi KRIPTO/MADEN için
+    12 Eylül 2026).
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

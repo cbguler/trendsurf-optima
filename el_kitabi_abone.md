@@ -48,12 +48,32 @@ etkilemez.
 |---------------------------|------------------------------------------|----------------------------------------|
 | BIST Hisseleri             | Gerçek zamanlı borsa verisi (borsapy)     | Yahoo Finance                          |
 | TEFAS Fonları               | Günlük TEFAS verisi (önbelleklenmiş)      | Canlı TEFAS sorgusu                    |
-| Döviz                      | canlidoviz.com (TL-doğrudan)              | Yahoo Finance                          |
-| Kıymetli Madenler          | canlidoviz.com (gram bazlı, TL-doğrudan)  | Yahoo Finance                          |
-| Kriptoparalar               | BtcTurk (TL-doğrudan)                     | Yahoo Finance                          |
+| Döviz                      | canlidoviz.com (TL-doğrudan)              | Yahoo Finance (TL-doğrudan sorgu)      |
+| Kıymetli Madenler          | canlidoviz.com (gram bazlı, TL-doğrudan)  | *(bilinçli olarak tek kaynak — aşağıya bakınız)* |
+| Kriptoparalar               | BtcTurk (TL-doğrudan)                     | *(bilinçli olarak tek kaynak — aşağıya bakınız)* |
 | BIST Temel Analiz (F/K, PD/DD, Temettü Verimi) | KAP (Kamuyu Aydınlatma Platformu) | Yahoo Finance |
 | Temettü Duyuruları          | KAP — şirketlerin resmi duyuruları        | *(bilinçli olarak tek kaynak — resmi duyuru olduğu için)* |
 | Halka Arz Bilgileri         | KAP — resmi halka arz belgeleri           | Statik yedek liste                     |
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#fef2f2;border-left:5px solid #dc2626;padding:14px 16px;border-radius:4px;"><p><strong>⚠ Kıymetli Madenler ve Kriptoda "dolar üzerinden çevrilmiş" fiyat KULLANILMAZ</strong></p>
+<p>Bir varlığın Türkiye'de kendi gerçek piyasası varsa, o piyasanın
+fiyatı dolardan çevrilmiş bir tahminden HER ZAMAN daha doğrudur —
+çünkü arz-talep koşulları farklı gelişebilir (örneğin ons altının
+dünya piyasasındaki fiyatı ile Türkiye'deki gram altın fiyatı, farklı
+nedenlerle birbirinden ayrışabilir). Bu yüzden Kıymetli Madenler ve
+Kriptoparalar için gerçek Türkiye fiyatı (canlidoviz.com/BtcTurk)
+geçici olarak ulaşılamaz olursa, sistem dolar fiyatını bir kurla
+çarparak SENTETİK bir TL fiyatı ÜRETMEZ — bunun yerine dürüstçe "veri
+yok" gösterir. Bu, YANLIŞ bir fiyat göstermekten çok daha güvenlidir.</p></td>
+</tr>
+</tbody>
+</table>
 
 <table>
 <colgroup>

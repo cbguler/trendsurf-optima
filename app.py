@@ -943,35 +943,15 @@ class _HistEmptyError(Exception):
                                               # v2.0.4.x+1: basarisiz sonuclar _HistEmptyError
                                               # firlatir - Streamlit exception'i cache'lemez,
                                               # yani gecici aksaklik her cagrida yeniden denenir.
-def _usd_hist_try_cevir(usd_hist: pd.DataFrame) -> pd.DataFrame:
-    """v2.0.7.294 (12 Eylul 2026, Bahri'nin bulgusu - HNT kripto
-    grafiginde son gunun fiyati (~0.50) digerleriyle (~23-24) TAMAMEN
-    UYUMSUZDU): USD-denominasyonlu bir OHLC gecmisini (yfinance'ten,
-    KRIPTO/MADEN yedek yolu) GERCEKTEN USDTRY ile carpip TL'ye cevirir.
-    ONCEKI KOD bu adimi HIC YAPMIYORDU - yorumda "USD x USDTRY
-    turetilmis" yaziyordu ama gercekte HAM USD degeri DOGRUDAN TL gibi
-    donduruluyordu. Her tarih icin USDTRY'nin O GUNKU degerini kullanir
-    (tek bir sabit kur DEGIL) - boylece cok yillik bir gecmiste kur
-    degisimi de dogru yansitilir. USDTRY verisi alinamazsa (cok nadir),
-    ham USD veriyi (cevrilmemis, ama en azindan HATASIZ CALISAN bir
-    sonuc) dondurur - sessizce yanlis TL degeri UYDURMAKTANSA."""
-    try:
-        _usdtry_hist = _ld_fx_history("USDTRY", "5y")
-        if _usdtry_hist is None or _usdtry_hist.empty:
-            return usd_hist
-        _kur_serisi = _usdtry_hist["Close"].reindex(
-            usd_hist.index, method="ffill").bfill()
-        if _kur_serisi.isna().any():
-            return usd_hist
-        _sonuc = usd_hist.copy()
-        for _kol in ["Open", "High", "Low", "Close"]:
-            if _kol in _sonuc.columns:
-                _sonuc[_kol] = _sonuc[_kol] * _kur_serisi.values
-        return _sonuc
-    except Exception:
-        return usd_hist
-
-
+                                              #
+                                              # v2.0.7.295 (12 Eylul 2026): `_usd_hist_try_cevir()`
+                                              # BURAYA (v2.0.7.294'te) yanlislikla EKLENMISTI - bu
+                                              # dekoratoru _get_hist_cached'den "calip" o fonksiyonun
+                                              # ONBELLEKSIZ kalmasina yol acmisti (fonksiyonel olarak
+                                              # calismaya devam etsede performans kaybi olusuyordu).
+                                              # _usd_hist_try_cevir TAMAMEN KALDIRILDI (capraz-kur
+                                              # yasagi ihlali oldugu icin) - dekorator artik DOGRU
+                                              # sekilde _get_hist_cached'e uygulaniyor.
 def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
     # TEFAS — önce yerel JSON cache, sonra pytefas, son çare sentetik
     if category == "TEFAS":
@@ -1025,76 +1005,36 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         hist = _ld_maden_history(ticker, period)
         if hist is not None and not hist.empty and len(hist) >= 5:
             return hist
-        # v2.0.7.294 (12 Eylul 2026, Bahri'nin bulgusu - "HNT grafiginde
-        # 12 Eylul fiyati (~0.50) diger gunlerle (~23-24) UYUMSUZ"):
-        # KESIN KOK NEDEN - bu yedek yolun yorumu "USD x USDTRY
-        # turetilmis" diyordu AMA KODUN KENDISI HICBIR CARPMA
-        # YAPMIYORDU - yfinance'in HAM USD fiyati DOGRUDAN TL gibi
-        # donduruluyordu. borsapy gecici olarak basarisiz oldugunda
-        # (Streamlit Cloud'a ozgu bir ag/API sorunu olabilir, sandbox'ta
-        # HER ZAMAN tekrarlanmayabilir) bu yedek yol devreye giriyor ve
-        # YANLIŞ (cevrilmemis) fiyat gosteriyordu. Artik GERCEKTEN
-        # USDTRY ile carpip TL'ye ceviriyor.
-        try:
-            import yfinance as yf
-            from data_pipeline import _format_yf_symbol
-            _sym = _format_yf_symbol(ticker, category)
-            if yf_symbol and yf_symbol.strip() and "=F" in str(yf_symbol):
-                _sym = yf_symbol.strip()
-            _h = yf.Ticker(_sym).history(period=period, auto_adjust=True)
-            if not _h.empty and len(_h) >= 5:
-                _h = _h[["Open","High","Low","Close"]].dropna()
-                return _usd_hist_try_cevir(_h)
-        except Exception:
-            pass
+        # v2.0.7.295 (12 Eylul 2026, Bahri'nin KESIN uyarisi - "bir
+        # varligin TL fiyati yoksa USD fiyatini TL'ye cevirerek
+        # kullanmak (capraz kur ile degerleme) cok onceden sistemden
+        # KALDIRILDI - ons altin-su celiskisi tam da bunun neden
+        # ekonomik olarak GECERSIZ oldugunu gosterir"): v2.0.7.294'TE
+        # EKLENEN USDTRY CEVRIM MANTIGI TAMAMEN GERI ALINDI - bu, PROJE_
+        # NOTLARI.md'nin "0. TEMEL ILKE" bolumunun DOGRUDAN IHLALIYDI
+        # (Degerli Madenler icin zaten worker.py'de
+        # `_MADEN_SENTETIK_CEVRIM_YASAK` seti olarak kod haline
+        # getirilmis bir kuraldi - app.py'nin bu SEPARATE grafik-veri
+        # yolunda ayni koruma EKSIKTI, simdi eklendi). yfinance yedegi
+        # ARTIK HIC DENENMIYOR - gercek kaynak (canlidoviz) basarisiz
+        # olursa durum durustce "veri yok" olarak birakiliyor.
         raise _HistEmptyError()
 
     # v1.6: KRIPTO - borsapy direkt TRY cifti (BtcTurk gercek zamanli)
     if category == "KRIPTO":
         hist = _ld_kripto_history(ticker, period)
-        # v2.0.7.285 (8 Eylul 2026, Bahri'nin bulgusu - "kriptolarin
-        # maksimum geriye gidisi 30 gun oluyor"): BtcTurk'un (borsapy)
-        # gecmis veri API'si "5y" istense bile GERCEKTE cok daha KISA
-        # bir sure (orn. ~30 gun) donduruyor olabilir - onceki kod
-        # sadece ">=5 satir var mi" diye bakiyordu, bu kisa veriyi
-        # "yeterli" sayip yfinance yedegini HIC DENEMIYORDU. Artik "5y"
-        # istegi ozelinde, BtcTurk'un donduğu verinin GERCEK tarih
-        # araligi cok kisaysa (6 aydan az), yfinance'i DE deneyip HANGISI
-        # DAHA UZUN bir gecmis sunuyorsa ONU kullaniyoruz.
-        _btcturk_yeterli = hist is not None and not hist.empty and len(hist) >= 5
-        _btcturk_5y_kisa = (
-            period == "5y" and _btcturk_yeterli
-            and (hist.index[-1] - hist.index[0]).days < 180
-        )
-        if _btcturk_yeterli and not _btcturk_5y_kisa:
+        # v2.0.7.295 (12 Eylul 2026): v2.0.7.285'TE EKLENEN "yfinance'in
+        # gercek araligi BtcTurk'ten daha uzunsa yfinance'i kullan"
+        # mantigi TAMAMEN GERI ALINDI - bu da AYNI capraz-kur yasagini
+        # ihlal ediyordu (yfinance'in USD verisini USDTRY ile
+        # "zenginlestirerek" BtcTurk'un GERCEK ama daha KISA verisinin
+        # yerine koyuyordu). Eger BtcTurk'un GERCEK verisi 30 gun gibi
+        # kisa bir sureyse, bu ARTIK BIR HATA DEGIL - bu, o varligin
+        # BtcTurk'te GERCEKTEN ne kadar surdur islem gordugunun DURUST
+        # yansimasidir. yfinance/capraz-kur yedegi ARTIK HIC
+        # DENENMIYOR.
+        if hist is not None and not hist.empty and len(hist) >= 5:
             return hist
-        # Yedek: yfinance BTC-USD turetilmis, USDTRY ile TL'ye cevrilir
-        # (v2.0.7.294 - bkz. MADEN blogundaki AYNI hata icin yukaridaki not)
-        try:
-            import yfinance as yf
-            from data_pipeline import _format_yf_symbol
-            _sym = _format_yf_symbol(ticker, category)
-            _h = yf.Ticker(_sym).history(period=period, auto_adjust=True)
-            if not _h.empty and len(_h) >= 5:
-                # v2.0.3: Volume varsa ekle
-                _cols = ["Open","High","Low","Close"]
-                if "Volume" in _h.columns:
-                    _cols.append("Volume")
-                _h = _h[_cols].dropna(subset=["Open","High","Low","Close"])
-                _h = _usd_hist_try_cevir(_h)
-                # "5y" ozelinde: yfinance'in gercek araligi BtcTurk'ten
-                # DAHA UZUNSA yfinance'i kullan, degilse (ikisi de
-                # kisaysa ya da BtcTurk zaten daha uzunsa) elimizdeki
-                # BtcTurk verisine geri don.
-                if _btcturk_5y_kisa:
-                    _yf_gun = (_h.index[-1] - _h.index[0]).days if not _h.empty else 0
-                    _bt_gun = (hist.index[-1] - hist.index[0]).days
-                    return _h if _yf_gun > _bt_gun else hist
-                return _h
-        except Exception:
-            pass
-        if _btcturk_yeterli:
-            return hist  # yfinance denemesi basarisiz oldu, BtcTurk'un kisa da olsa verisi olsun
         raise _HistEmptyError()
 
     # v2.0.7.290 (12 Eylul 2026, Bahri'nin bulgusu - "daha once kaynak

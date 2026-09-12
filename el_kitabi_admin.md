@@ -125,21 +125,24 @@ sarmalayıcısı kullanır (`render_candle_interactive()`, app.py):
 
 # 2. Veri Kaynakları ve Yedek Mekanizmaları
 
-**Not (12 Eylül 2026 güncellemesi):** Bu tablo, koddaki gerçek kaynak
-zincirleriyle satır satır karşılaştırılıp düzeltildi — önceki sürüm
-BIST/Döviz/Maden için PLANLANMIŞ ama HENÜZ UYGULANMAMIŞ bir mimariyi
-tarif ediyordu (özellikle BIST satırı, v1.7'den beri kodda bekleyen
-ama hiç uygulanmamış bir TODO'yu erken yazılmış gibi gösteriyordu).
-Aşağıdaki tablo artık gerçek `_get_hist_cached()` (app.py) zincirini
-birebir yansıtıyor.
+**Not (12 Eylül 2026 güncellemesi - v2.0.7.295):** Bu tablo, koddaki
+gerçek kaynak zincirleriyle satır satır karşılaştırılıp düzeltildi.
+BIST satırı, v1.7'den beri kodda bekleyen ama hiç uygulanmamış bir
+TODO'yu erken yazılmış gibi gösteriyordu - düzeltildi. **AYRICA:**
+Değerli Madenler ve Kripto satırlarının "yfinance (USD çapraz ×
+USDTRY türetilmiş)" yedeği YANLIŞLIKLA yazılmıştı ve kısa süreliğine
+KODA DA eklenmişti (v2.0.7.294) - bu, Bahri'nin BÖLÜM 0'daki temel
+ilkesini (aşağıdaki bilgi kutusuna bakınız) doğrudan ihlal ediyordu ve
+v2.0.7.295'te TAMAMEN GERİ ALINDI. Aşağıdaki tablo artık gerçek
+`_get_hist_cached()` (app.py) zincirini birebir yansıtıyor.
 
 | **Varlık Sınıfı**        | **1. Kaynak (öncelikli)**                                    | **2. Kaynak (yedek)**                                     | **3. Kaynak**                          |
 |--------------------------|---------------------------------------------------------------|-------------------------------------------------------------|------------------------------------------|
 | BIST (fiyat/mum grafiği) | `borsapy.Ticker(...)` (v2.0.7.290, 12 Eylül 2026'da eklendi — önceden SADECE yfinance kullanılıyordu) | yfinance (`.IS` suffix)                                       | —                                        |
 | TEFAS                    | Yerel JSON önbellek (worker.py gece üretir)                   | `pytefas` kütüphanesi (canlı, yavaş ama doğru)              | Excel'den sentetik türetim (son çare)   |
-| Döviz                    | `borsapy.FX(...)` (canlidoviz.com üzerinden TRY-direkt)        | yfinance (`=X` suffix)                                       | —                                        |
-| Değerli Madenler         | `borsapy.FX(...)` (canlidoviz.com, gram bazlı TRY-direkt)      | yfinance (USD çapraz × USDTRY türetilmiş)                    | —                                        |
-| Kripto                   | `borsapy.Crypto(...)` (BtcTurk, TRY doğrudan)                  | yfinance (USD çapraz × USDTRY türetilmiş)                    | —                                        |
+| Döviz                    | `borsapy.FX(...)` (canlidoviz.com üzerinden TRY-direkt)        | yfinance (`=X` suffix, DOĞRUDAN TRY paritesi sorgusu - çapraz kur DEĞİL) | —                        |
+| Değerli Madenler         | `borsapy.FX(...)` (canlidoviz.com, gram bazlı TRY-direkt)      | **Yok — bilinçli tek kaynak** (v2.0.7.295: çapraz kur yasağı, bkz. Bölüm 0) | —                        |
+| Kripto                   | `borsapy.Crypto(...)` (BtcTurk, TRY doğrudan)                  | **Yok — bilinçli tek kaynak** (v2.0.7.295: çapraz kur yasağı, bkz. Bölüm 0) | —                        |
 | Temel Analiz (BIST — F/K, PD/DD, Temettü Verimi) | `kap_client.py` → kap.org.tr                | yfinance `.info` (P/E, beta, temettü verimi)                 | —                                        |
 | Temettü Duyuruları (BIST)| `temettu_client.py` → KAP "Kar Payı Dağıtımı" bildirimleri     | **Yok — bilinçli tek kaynak** (v2.0.7.229: yfinance'ten TAMAMEN vazgeçildi, doğruluk için — bkz. PROJE_NOTLARI) | —      |
 | Halka Arz / Fiyat Tespit | KAP RSC endpoint (Next.js, resmi/otoriter)                     | Endeksler.xlsx (statik yedek liste)                          | —                                        |
@@ -151,15 +154,39 @@ birebir yansıtıyor.
 </colgroup>
 <tbody>
 <tr class="odd">
+<td style="background-color:#fef2f2;border-left:5px solid #dc2626;padding:14px 16px;border-radius:4px;"><p><strong>⚠ TEMEL İLKE - ASLA İHLAL ETME: Çapraz Kur ile Sentetik Fiyat Türetme YASAK</strong></p>
+<p>Bir varlığın <strong>Türkiye'de kendi gerçek piyasası</strong> varsa
+(arz-talep koşulları uluslararası piyasadan FARKLI gelişebilir - Ons
+Altın'ın USD fiyatı ile Türkiye'deki gram altın fiyatının farklı
+saiklerle oluşabilmesi, iktisattaki "değer paradoksu" (elmas-su
+çelişkisi) örneğine benzer), o gerçek Türkiye fiyatı HER ZAMAN
+tercih edilir. <strong>USD (veya başka bir yabancı para) fiyatını
+alıp bir kurla çarparak/bölerek türetilmiş (sentetik) bir fiyat ASLA
+kullanılmaz</strong> - gerçek kaynak (canlidoviz/BtcTurk) başarısız
+olursa, veri "yok" olarak dürüstçe bırakılır, yfinance'in USD verisi
+KESİNLİKLE yedek olarak kullanılmaz. Bu ilke Değerli Madenler ve
+Kripto için (v2.0.7.295) app.py'nin `_get_hist_cached()` fonksiyonunda
+UYGULANMIŞTIR; worker.py'de ayrıca `_MADEN_SENTETIK_CEVRIM_YASAK`
+seti olarak da kod haline getirilmiştir. Detaylı tarihçe için
+PROJE_NOTLARI.md'nin "0. TEMEL İLKE" bölümüne bakınız.</p></td>
+</tr>
+</tbody>
+</table>
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
 <td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ "En az iki kaynak" ilkesi ve istisnaları</strong></p>
-<p>Fiyat/mum grafiği verisi (BIST/Döviz/Maden/Kripto/TEFAS) İÇİN her
-zaman en az iki bağımsız kaynak zincirlenir — birincisi başarısız
-olursa (API kesintisi, eksik/NaN veri) otomatik olarak ikincisine
-düşülür. Temettü Duyuruları ve Halka Arz/Fiyat Tespit gibi RESMİ
-AÇIKLAMA verilerinde ise KAP (Kamuyu Aydınlatma Platformu) BİLİNÇLİ
-OLARAK tek/öncelikli kaynak olarak tutuluyor — çünkü bunlar şirketin
-kendi resmi beyanları, ikinci bir "tahmin" kaynağı eklemek doğruluğu
-ARTIRMAZ, aksine yanlış-pozitif riski yaratabilir.</p></td>
+<p>Fiyat/mum grafiği verisi İÇİN mümkün olan durumlarda en az iki
+bağımsız kaynak zincirlenir (BIST/Döviz/TEFAS) — birincisi başarısız
+olursa otomatik olarak ikincisine düşülür. Değerli Madenler, Kripto,
+Temettü Duyuruları ve Halka Arz/Fiyat Tespit gibi durumlarda ise
+YUKARIDAKİ çapraz-kur yasağı VEYA resmi-kaynak-önceliği nedeniyle
+BİLİNÇLİ OLARAK tek/öncelikli kaynak kullanılır — bu bir eksiklik
+DEĞİL, doğruluk için bilinçli bir tasarım kararıdır.</p></td>
 </tr>
 </tbody>
 </table>
