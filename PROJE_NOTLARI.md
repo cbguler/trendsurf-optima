@@ -6418,5 +6418,77 @@ tamam, canlı doğrulama BEKLİYOR):**
     veritabanı sandbox'ta mevcut olmadığı için CANLI test edilemedi,
     Bahri'nin canlı ortamda doğrulaması gerekiyor.
 
+- **[BULGU - KOD DEĞİŞİKLİĞİ GEREKMEDİ] 12 Eylül 2026, Bahri'nin sorusu
+  - "Bugün 12 Eylül ama BIST grafiğinde son tarih 10 Eylül, 11 Eylül
+  neden yok?": CANLI yfinance sorgusuyla DOĞRULANDI - bu bir KOD HATASI
+  DEĞİL, veri KAYNAĞININ (Yahoo Finance) kendisinde bir gecikme.
+  CATES.IS için 11 Eylül satırı yfinance'te MEVCUT ama Open/High/Low/
+  Close hepsi NaN (sadece Volume=3.053.244 dolu) - kod zaten doğru
+  şekilde `dropna(subset=["Open","High","Low","Close"])` ile bu
+  GEÇERSİZ satırı atıyor, bu yüzden son GEÇERLİ gün 10 Eylül olarak
+  görünüyor. Bu, BIST verisi için yfinance'in bilinen bir gecikmesi -
+  muhtemelen Yahoo'nun kendi verisi güncellenince kendiliğinden
+  düzelecek.
+
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.288 (12
+  Eylül 2026, Bahri'nin talebi - "Optima skor grafiğinin hangi
+  elemanlardan oluştuğu (grafikte olsun veya olmasın, tümü) konusunda
+  bir bilgilendirme notu istiyorum"): "Bütçe Sepetinin Optima Skor
+  Bileşimi" pasta grafiğinin ALTINA (her iki grafiğin de altında, tam
+  genişlikte) TAM FORMÜLÜ açıklayan bir not eklendi.**
+  - Not, RSI Bölgesi (%25) + Momentum/Getiri (%35) + Volatilite (%15)
+    + Temel Analiz (%25) formülünü VE Temel Analiz'in kendi içinde
+    F/K + PD/DD + Temettü Verimi'ne ayrıldığını açıklıyor - pasta
+    grafiğin SADECE sıfıra yuvarlanmayan (sepette gerçekten payı olan)
+    bileşenleri gösterdiğini, bir bileşenin görünmemesinin formülden
+    çıkarıldığı anlamına GELMEDİĞİNİ netleştiriyor.
+  - **Doğrulama:** `python3 -m py_compile` temiz, girinti kontrolü
+    yapıldı (not, iki sütunun DIŞINDA/ALTINDA, tam genişlikte
+    render ediliyor).
+
+- **[UYGULANDI, GERÇEK CATES/BIST VERİSİYLE İKİ SENARYO DA TEST EDİLDİ -
+  PUSH BEKLİYOR] v2.0.7.289 (12 Eylül 2026, Bahri'nin bulgusu - "BIST
+  grafiğinde 11 Eylül'ü göremiyorum, seans sırasında da günün son
+  verisi grafikte olmalı, diğer varlıklara da uygulanabilirse iyi
+  olur"): CANLI FİYATLA GRAFİK TAMAMLAMA - TÜM KATEGORİLERE UYGULANDI.**
+  - **Kesin kök neden (gerçek yfinance verisiyle doğrulandı):** Sorun
+    önbellekleme DEĞİLDİ - `yf.Ticker('CATES.IS').history(period='5d')`
+    doğrudan çekildiğinde, 11 Eylül satırının GERÇEKTEN VAR olduğu ama
+    Open/High/Low/Close alanlarının NaN olduğu (sadece Hacim dolu)
+    görüldü - yfinance'in BIST için en son günün resmi kapanışını
+    henüz tam işlememesi. Kod bu NaN satırları otomatik elediği için
+    grafik o günü hiç göstermiyordu.
+  - **Çözüm:** Yeni `_hist_canli_ile_tamamla(hist, canli_fiyat)`
+    fonksiyonu eklendi - zaten TÜM kategorilerde canlı tutulan
+    "Son_Fiyat" sütununu kullanarak: (a) son satır NaN ise canlı
+    fiyatla DOLDURUYOR, (b) bugünkü bar hiç yoksa (seans devam
+    ediyor/henüz veri yayınlanmadı) canlı fiyatla YENİ bir "bugün"
+    barı EKLİYOR. Fonksiyon KATEGORİDEN BAĞIMSIZ olduğu için Ana
+    Sayfa/Portföyüm/BIST-TEFAS-Döviz-Maden-Kripto ortak sayfasının
+    ÜÇÜNDE de uygulandı - Bahri'nin "diğer varlıklara da uygulanabilirse
+    iyi olur" isteği karşılandı.
+  - **Doğrulama:** Gerçek CATES verisiyle iki senaryo da test edildi:
+    (1) NaN son satır → doğru şekilde önceki kapanış+canlı fiyatla
+    dolduruldu, hacim korundu. (2) Bugünkü satır hiç yok → doğru
+    tarihte (bugünün tarihi) yeni bir satır eklendi. `python3
+    -m py_compile` temiz.
+  - **Güvenlik notu:** Fonksiyon HERHANGİ bir adımda hata alırsa
+    (try/except ile sarılı) hist'i DEĞİŞTİRMEDEN döndürüyor - bu
+    özellik başarısız olsa bile grafik normal çalışmaya devam eder.
+
+- **[BULUNDU - DAHA ÖNCE YAZILMIŞ AMA HİÇ COMMIT EDİLMEMİŞ, ŞİMDİ
+  DAHİL EDİLDİ] Optima Skoru Bileşenleri Açıklama Notu (v2.0.7.288
+  olarak etiketlenmiş, tarih/yazar belirsiz - muhtemelen bu oturumun
+  özetlenen/sıkıştırılmış kısmında yazılıp stash'te unutulmuş):**
+  Ana Sayfa'daki "Bütçe Sepetinin Optima Skor Bileşimi" pasta grafiğinin
+  ALTINA, Optima Skoru formülünün TAMAMINI (grafikte görünsün ya da
+  görünmesin - RSI Bölgesi %25, Momentum/Getiri %35, Volatilite %15,
+  Temel Analiz %25 = F/K+PD/DD+Temettü Verimi) açıklayan bir
+  `st.caption` notu ekleniyor. Bu, Bahri'nin bu mesajdaki İKİNCİ
+  isteğiyle (Image 2 referansıyla) TAM olarak örtüşüyor - git
+  geçmişinde bu metne dair hiçbir commit bulunmadı, `git status`
+  dosyayı "modified/uncommitted" gösteriyordu - içerik doğru ve
+  tamamlanmış olduğu için OLDUĞU GİBİ KORUNUP bu push'a dahil edildi.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

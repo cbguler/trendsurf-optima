@@ -1828,6 +1828,65 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
 # st.components.v1.html ile TAM KONTROL sahibi oluyoruz (bu teknik
 # projede zaten baska bir yerde - cerez yazma ozelliginde - basariyla
 # kullaniliyordu, bkz. modul basi import notu).
+def _hist_canli_ile_tamamla(hist, canli_fiyat):
+    """v2.0.7.289 (12 Eylul 2026, Bahri'nin bulgusu - "grafikte son
+    tarih eksik, seans sirasinda da gunun son verisi gorulmeli"):
+    5 yillik gecmis veriye, GUNCEL (canli) fiyati YANSITAN bir "bugun"
+    bari ekler/duzeltir. Gercek kok neden: yfinance, BIST icin en son
+    gunun Open/High/Low/Close alanlarini bazen NaN birakiyor (Hacim
+    dolu olsa bile) - canli.b.al fiyati kesinlestirmeden once - kod
+    bu NaN satirlari otomatik eledigi icin grafik o gunu HIC
+    GOSTERMIYORDU. Ayrica, seans devam ederken (gunun barı HENUZ HIC
+    olusmadan) da ayni sorun ortaya cikar.
+    - hist'in SON satiri NaN Close iceriyorsa: canli fiyatla DOLDURULUR
+      (yerine konur).
+    - hist'in SON GECERLI satiri bugunden ONCEYSE (bugunku bar hic
+      yok): canli fiyatla YENI bir "bugun" bari EKLENIR.
+    "Son_Fiyat" sutunu TUM kategorilerde (BIST/TEFAS/Doviz/Maden/
+    Kripto) zaten CANLI tutuldugu icin bu fonksiyon KATEGORIDEN
+    BAGIMSIZ, tum varlik turlerine ayni sekilde uygulanabilir.
+    HERHANGI bir adimda sorun cikarsa hist DEGISTIRILMEDEN (oldugu
+    gibi) donuyor - bu ozellik basarisiz olsa bile grafik calismaya
+    devam eder."""
+    if hist is None or hist.empty or canli_fiyat is None:
+        return hist
+    try:
+        canli_fiyat = float(canli_fiyat)
+        if canli_fiyat != canli_fiyat or canli_fiyat <= 0:  # NaN/gecersiz kontrolu
+            return hist
+
+        hist = hist.copy()
+        _bugun = pd.Timestamp.now(tz=hist.index.tz).normalize() if hist.index.tz else pd.Timestamp.now().normalize()
+        _son_close = hist["Close"].iloc[-1]
+        _son_tarih = hist.index[-1].normalize()
+
+        if pd.isna(_son_close):
+            # Son satir NaN - canli fiyatla DOLDUR (yerine koy)
+            _onceki_close = (float(hist["Close"].iloc[-2])
+                             if len(hist) >= 2 and not pd.isna(hist["Close"].iloc[-2])
+                             else canli_fiyat)
+            hist.loc[hist.index[-1], "Open"] = _onceki_close
+            hist.loc[hist.index[-1], "Close"] = canli_fiyat
+            hist.loc[hist.index[-1], "High"] = max(_onceki_close, canli_fiyat,
+                                                     float(hist["High"].iloc[-1]) if not pd.isna(hist["High"].iloc[-1]) else 0)
+            hist.loc[hist.index[-1], "Low"] = min(_onceki_close, canli_fiyat) if pd.isna(hist["Low"].iloc[-1]) else min(_onceki_close, canli_fiyat, float(hist["Low"].iloc[-1]))
+        elif _son_tarih < _bugun:
+            # Bugunku bar HIC YOK - yeni bir tane EKLE (seans devam
+            # ediyor olabilir ya da henuz gunluk veri yayinlanmadi)
+            _onceki_close = float(_son_close)
+            _yeni_satir = {
+                "Open": _onceki_close, "Close": canli_fiyat,
+                "High": max(_onceki_close, canli_fiyat),
+                "Low": min(_onceki_close, canli_fiyat),
+            }
+            if "Volume" in hist.columns:
+                _yeni_satir["Volume"] = 0
+            hist.loc[_bugun] = _yeni_satir
+        return hist
+    except Exception:
+        return hist
+
+
 def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     """candle_fig()'i kullanarak figuru olusturur, SONRA onu ham
     st.plotly_chart YERINE ozel bir HTML+JS sarmalayicisi ile gosterir.
@@ -5394,6 +5453,9 @@ if page=="Ana Sayfa":
                                              cat_ana, "5y")
                     if _hist_5y_ana is None or _hist_5y_ana.empty:
                         _hist_5y_ana = d["hist"]
+                    # v2.0.7.289: grafik, "Son_Fiyat" (zaten canli
+                    # tutulan) ile tamamlanip en guncel gunu/ani yansitir.
+                    _hist_5y_ana = _hist_canli_ile_tamamla(_hist_5y_ana, sel_row_ana.get("Son_Fiyat"))
                     render_candle_interactive(
                         _hist_5y_ana, sel_ana, key=f"ana_{sel_ana}",
                         varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
@@ -5730,6 +5792,28 @@ if page=="Ana Sayfa":
                            unsafe_allow_html=True)
             else:
                 st.caption("Skor bileşimi için yeterli veri yok.")
+
+        # v2.0.7.288 (12 Eylul 2026, Bahri'nin talebi - "Optima skor
+        # grafiginin hangi elemanlardan olustugu (grafikte olsun veya
+        # olmasin, tumu) konusunda bir bilgilendirme notu istiyorum"):
+        # pasta grafigi SADECE bu SEPETTE gercekten payi olan (sifira
+        # yuvarlanmayan) bilesenleri gosteriyor - bazi bilesenler
+        # (orn. Temettu Verimi, eger sepette temettu odeyen fon/hisse
+        # yoksa) grafikte HIC GORUNMEYEBILIR. Asagidaki not, FORMULUN
+        # TAMAMINI (grafikte olsun olmasin) aciklıyor.
+        st.caption(
+            "**Optima Skoru bileşenleri (tümü):** RSI Bölgesi (%25) + "
+            "Momentum/Getiri (%35) + Volatilite (%15) + Temel Analiz (%25). "
+            "Temel Analiz kendi içinde varlık türüne göre F/K "
+            "(Fiyat/Kazanç), PD/DD (Piyasa Değeri/Defter Değeri) ve "
+            "Temettü Verimi bileşenlerinden oluşur. Pasta grafiği "
+            "SADECE bu bütçe sepetinde gerçekten payı olan (sıfıra "
+            "yuvarlanmayan) bileşenleri gösterir - bir bileşenin "
+            "grafikte görünmemesi, sepetteki varlıkların o bileşen "
+            "için (örn. temettü ödemeyen varlıklar) katkısının "
+            "olmadığı anlamına gelir, formülden çıkarıldığı anlamına "
+            "gelmez."
+        )
 
 # ══════════════════════════════════════════════════════════════
 # PORTFÖYÜM
@@ -6306,6 +6390,7 @@ elif page=="Portföyüm":
                                         str(_sr.get("Kategori","")), "5y")
                 if _hist_5y_pf is None or _hist_5y_pf.empty:
                     _hist_5y_pf = _d["hist"]
+                _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"))
                 render_candle_interactive(_hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
                                            varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
 
@@ -6690,6 +6775,7 @@ elif page in CAT:
                                  str(sel_row.get("Kategori","")), "5y")
         if _hist_5y_cat is None or _hist_5y_cat.empty:
             _hist_5y_cat = d["hist"]
+        _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"))
         render_candle_interactive(_hist_5y_cat, sel, key=f"cat_{sel}",
                                    varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
