@@ -35,6 +35,43 @@ sonundaki Terimler Sözlüğü ve Sıkça Sorulan Sorular bölümlerine, herhang
 bir noktada aklınıza takılan bir terim veya sorun için doğrudan
 atlayabilirsiniz.
 
+## 1.1 Veri Kaynakları — Nereden Geliyor?
+
+Fiyat verilerinin doğruluğu ve güncelliği, uygulamanın en kritik
+kısmıdır. Her varlık sınıfı için EN AZ İKİ BAĞIMSIZ KAYNAK
+kullanılır — birinci kaynak herhangi bir nedenle geçici olarak veri
+sağlayamazsa, sistem otomatik olarak ikinci kaynağa geçer. Bu sayede
+tek bir kaynağın anlık sorunu, gördüğünüz grafiği veya fiyatı
+etkilemez.
+
+| **Varlık Türü**          | **Ana Kaynak**                          | **Yedek Kaynak**                    |
+|---------------------------|------------------------------------------|----------------------------------------|
+| BIST Hisseleri             | Gerçek zamanlı borsa verisi (borsapy)     | Yahoo Finance                          |
+| TEFAS Fonları               | Günlük TEFAS verisi (önbelleklenmiş)      | Canlı TEFAS sorgusu                    |
+| Döviz                      | canlidoviz.com (TL-doğrudan)              | Yahoo Finance                          |
+| Kıymetli Madenler          | canlidoviz.com (gram bazlı, TL-doğrudan)  | Yahoo Finance                          |
+| Kriptoparalar               | BtcTurk (TL-doğrudan)                     | Yahoo Finance                          |
+| BIST Temel Analiz (F/K, PD/DD, Temettü Verimi) | KAP (Kamuyu Aydınlatma Platformu) | Yahoo Finance |
+| Temettü Duyuruları          | KAP — şirketlerin resmi duyuruları        | *(bilinçli olarak tek kaynak — resmi duyuru olduğu için)* |
+| Halka Arz Bilgileri         | KAP — resmi halka arz belgeleri           | Statik yedek liste                     |
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Neden bazı veriler tek kaynaklı?</strong></p>
+<p>Temettü duyuruları ve halka arz belgeleri gibi RESMİ açıklamalarda
+KAP (şirketlerin kendi resmi beyan platformu) tek/öncelikli kaynak
+olarak kullanılır — bu tür verilerde ikinci bir "tahmini" kaynak
+eklemek doğruluğu artırmaz, tam tersine yanlış bilgi riski
+yaratabilir. Fiyat verilerinde ise (BIST/Döviz/Maden/Kripto/TEFAS) her
+zaman en az iki bağımsız kaynak zincirlenir.</p></td>
+</tr>
+</tbody>
+</table>
+
 # 2. Başlangıç — Kayıt ve Giriş
 
 ### Hesap Oluşturma

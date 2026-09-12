@@ -6550,5 +6550,43 @@ tamam, canlı doğrulama BEKLİYOR):**
     çalıştı.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI - PUSH BEKLİYOR] v2.0.7.292 (12 Eylül 2026, Bahri'nin
+  talebi — "varlıklar ve kaynaklar (her bir varlık için en az iki
+  kaynak) diye bir tablo yapmanı ve bunu hem proje notlarında hem de
+  el kitaplarında yer almasını istiyorum"): VERİ KAYNAKLARI TABLOSU
+  DÜZELTİLDİ VE ÜÇ YERE EKLENDİ.**
+  - **Önemli bulgu:** `el_kitabi_admin.md`'de ZATEN böyle bir tablo
+    VARDI ("2. Veri Kaynakları ve Yedek Mekanizmaları") - ama BIST/
+    Döviz/Maden satırları KODLA UYUŞMUYORDU. BIST satırı özellikle
+    v1.7'den beri bekleyen ama HİÇ UYGULANMAMIŞ olan "borsapy'ye
+    geçilecek" planını SANKİ ZATEN UYGULANMIŞ gibi gösteriyordu -
+    Bahri'nin "neden kaynak çeşitlendirme kuralını unutuyorsun"
+    sorusunun kökeni muhtemelen buydu.
+  - **Koddan satır satır doğrulanan GERÇEK zincir (`_get_hist_cached`,
+    app.py):**
+    | Varlık | 1. Kaynak | 2. Kaynak | 3. Kaynak |
+    |---|---|---|---|
+    | BIST | `borsapy.Ticker` (bugün eklendi) | yfinance (.IS) | — |
+    | TEFAS | Yerel JSON önbellek | `pytefas` | Excel sentetik |
+    | Döviz | `borsapy.FX` (canlidoviz.com) | yfinance (=X) | — |
+    | Değerli Madenler | `borsapy.FX` (canlidoviz.com, gram) | yfinance (USD çapraz) | — |
+    | Kripto | `borsapy.Crypto` (BtcTurk) | yfinance (USD çapraz) | — |
+    | BIST Temel Analiz | `kap_client.py` (KAP) | yfinance `.info` | — |
+    | Temettü Duyuruları | `temettu_client.py` (KAP) | **bilinçli tek kaynak** | — |
+    | Halka Arz | KAP RSC endpoint | Endeksler.xlsx | — |
+  - **Üç yere eklendi:**
+    1. `el_kitabi_admin.md` — yukarıdaki TAM teknik tablo (fonksiyon/
+       sınıf adlarıyla), düzeltme notuyla birlikte güncellendi.
+    2. `el_kitabi_abone.md` — yeni "1.1 Veri Kaynakları" alt bölümü,
+       aboneler için SADELEŞTİRİLMİŞ (teknik fonksiyon adı olmadan,
+       "canlidoviz.com", "BtcTurk", "KAP" gibi gerçek dünya isimleriyle)
+       bir versiyon.
+    3. PROJE_NOTLARI.md — bu not (kalıcı referans + değişiklik kaydı).
+  - **"En az iki kaynak" ilkesinin istisnaları açıkça belirtildi:**
+    Temettü Duyuruları ve Halka Arz gibi RESMİ AÇIKLAMA verilerinde
+    KAP bilinçli olarak tek/öncelikli kaynak - bu bir eksiklik değil,
+    doğruluk için bilinçli bir tasarım kararı (v2.0.7.229'da zaten
+    Bahri'nin kendi kararıyla yfinance'ten TAMAMEN vazgeçilmişti).
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

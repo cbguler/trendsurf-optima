@@ -72,16 +72,44 @@ görüntülenmez.</p></td>
 
 # 2. Veri Kaynakları ve Yedek Mekanizmaları
 
-| **Varlık Sınıfı**   | **Birincil Kaynak**               | **Yedek Kaynak**                             |
-|---------------------|-----------------------------------|----------------------------------------------|
-| BIST                | borsapy (BtcTurk üzerinden canlı) | yfinance (.IS suffix) → son bilinen fiyat    |
-| TEFAS               | TEFAS Next.js API                 | pytefas kütüphanesi                          |
-| Maden (TL)          | Bigpara HTML scraping             | yfinance (GC=F vb.) × USDTRY                 |
-| Döviz               | yfinance (=X suffix)              | TCMB XML API → EVDS API (TCMB_KEY)           |
-| Kripto              | BtcTurk (BTC/ETH doğrudan TL)     | yfinance USD × USD/TRY                       |
-| Temel Analiz (BIST) | kap_client.py → kap.org.tr        | yfinance info (P/E, beta, temettü verimi)    |
-| Halka Arz / Temettü | KAP RSC endpoint (Next.js)        | Endeksler.xlsx                               |
-| Fiyat Tespit Raporu | KAP PDF indirme + pdfplumber      | Tesseract OCR (tur) — taranmış sayfalar için |
+**Not (12 Eylül 2026 güncellemesi):** Bu tablo, koddaki gerçek kaynak
+zincirleriyle satır satır karşılaştırılıp düzeltildi — önceki sürüm
+BIST/Döviz/Maden için PLANLANMIŞ ama HENÜZ UYGULANMAMIŞ bir mimariyi
+tarif ediyordu (özellikle BIST satırı, v1.7'den beri kodda bekleyen
+ama hiç uygulanmamış bir TODO'yu erken yazılmış gibi gösteriyordu).
+Aşağıdaki tablo artık gerçek `_get_hist_cached()` (app.py) zincirini
+birebir yansıtıyor.
+
+| **Varlık Sınıfı**        | **1. Kaynak (öncelikli)**                                    | **2. Kaynak (yedek)**                                     | **3. Kaynak**                          |
+|--------------------------|---------------------------------------------------------------|-------------------------------------------------------------|------------------------------------------|
+| BIST (fiyat/mum grafiği) | `borsapy.Ticker(...)` (v2.0.7.290, 12 Eylül 2026'da eklendi — önceden SADECE yfinance kullanılıyordu) | yfinance (`.IS` suffix)                                       | —                                        |
+| TEFAS                    | Yerel JSON önbellek (worker.py gece üretir)                   | `pytefas` kütüphanesi (canlı, yavaş ama doğru)              | Excel'den sentetik türetim (son çare)   |
+| Döviz                    | `borsapy.FX(...)` (canlidoviz.com üzerinden TRY-direkt)        | yfinance (`=X` suffix)                                       | —                                        |
+| Değerli Madenler         | `borsapy.FX(...)` (canlidoviz.com, gram bazlı TRY-direkt)      | yfinance (USD çapraz × USDTRY türetilmiş)                    | —                                        |
+| Kripto                   | `borsapy.Crypto(...)` (BtcTurk, TRY doğrudan)                  | yfinance (USD çapraz × USDTRY türetilmiş)                    | —                                        |
+| Temel Analiz (BIST — F/K, PD/DD, Temettü Verimi) | `kap_client.py` → kap.org.tr                | yfinance `.info` (P/E, beta, temettü verimi)                 | —                                        |
+| Temettü Duyuruları (BIST)| `temettu_client.py` → KAP "Kar Payı Dağıtımı" bildirimleri     | **Yok — bilinçli tek kaynak** (v2.0.7.229: yfinance'ten TAMAMEN vazgeçildi, doğruluk için — bkz. PROJE_NOTLARI) | —      |
+| Halka Arz / Fiyat Tespit | KAP RSC endpoint (Next.js, resmi/otoriter)                     | Endeksler.xlsx (statik yedek liste)                          | —                                        |
+| Fiyat Tespit Raporu (PDF okuma) | pdfplumber (metin katmanlı PDF)                          | Tesseract OCR — tur (taranmış/görüntü sayfalar için)          | —                                        |
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ "En az iki kaynak" ilkesi ve istisnaları</strong></p>
+<p>Fiyat/mum grafiği verisi (BIST/Döviz/Maden/Kripto/TEFAS) İÇİN her
+zaman en az iki bağımsız kaynak zincirlenir — birincisi başarısız
+olursa (API kesintisi, eksik/NaN veri) otomatik olarak ikincisine
+düşülür. Temettü Duyuruları ve Halka Arz/Fiyat Tespit gibi RESMİ
+AÇIKLAMA verilerinde ise KAP (Kamuyu Aydınlatma Platformu) BİLİNÇLİ
+OLARAK tek/öncelikli kaynak olarak tutuluyor — çünkü bunlar şirketin
+kendi resmi beyanları, ikinci bir "tahmin" kaynağı eklemek doğruluğu
+ARTIRMAZ, aksine yanlış-pozitif riski yaratabilir.</p></td>
+</tr>
+</tbody>
+</table>
 
 <table>
 <colgroup>
