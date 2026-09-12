@@ -13,21 +13,42 @@ Konum: C:/Users/bahri/Desktop/TrendSurf_Optima/
 | admin.py                                                                               | Admin panel fonksiyonları, abone onaylama                                     |
 | emailer.py / emailer_standalone.py                                                     | Günlük e-posta rapor sistemi (manuel + GitHub Actions)                        |
 | alert_settings.py / peak_tracker.py / peak_alert_emailer.py / peak_check_standalone.py | Kâr realizasyonu uyarı sistemi (v2.0)                                         |
-| live_data.py                                                                           | Canlı veri overlay                                                            |
-| bigpara_client.py                                                                      | Altın/gümüş TL fiyat yedek kaynağı                                            |
+| live_data.py                                                                           | Canlı veri katmanı — borsapy tabanlı Döviz/Maden/Kripto geçmiş+canlı fiyat    |
+| bigpara_client.py                                                                      | Altın/gümüş TL fiyat yardımcı/tanılama kaynağı                                |
 | halka_arz_client.py / kap_client.py                                                    | KAP XHARZ endeks ve temel analiz verileri                                     |
 | upcoming_ipo_client.py                                                                 | Yaklaşan Halka Arzlar modülü — KAP RSC'den PDF indirme, önbellekleme          |
 | fiyat_tespit_parser.py                                                                 | Fiyat Tespit Raporu PDF ayrıştırıcı — Tip A/B/C/D + Türkçe OCR normalizasyonu |
-| temettu_client.py                                                                      | KAP XTMTU + yfinance temettü verileri                                         |
+| temettu_client.py                                                                      | KAP XTMTU temettü verileri (v2.0.7.229: yfinance'ten TAMAMEN KAP'a taşındı)   |
+| kap_liste_guncelle.py                                                                  | KAP_BIST.xlsx'i KAP'ın "bist-şirketler" sayfasından tarayıp güncelleyen admin betiği (elle onay gerektirir) |
+| dividend_engine.py                                                                     | Tüm varlık sınıfları için beklenen pasif gelir hesaplama motoru (BIST temettü, Kripto staking, TEFAS getiri) |
+| haber_izleme.py                                                                        | Beklenti Modu'nun otomatik haber tespit katmanı — GitHub Actions'ta 10 dk'da bir RSS tarar, AI ile doğrular |
+| portfolio_ledger.py                                                                    | Portföyüm muhasebe katmanı — satış işlemleri, komisyon/vergi düşülmüş net gerçekleşmiş kâr/zarar |
+| wake_app.py                                                                            | Streamlit Cloud'un ücretsiz katmanının uygulamayı uyutmasını önleyen ping betiği |
 | tefas_client.py                                                                        | TEFAS fon verileri                                                            |
-| tcmb_client.py                                                                         | TCMB döviz kuru yedek kaynağı                                                 |
-| signals.py                                                                             | Sinyal/Optima Skoru hesaplama motoru                                          |
+| tcmb_client.py                                                                         | TCMB döviz kuru yardımcı/tanılama kaynağı                                     |
+| signals.py / scoring.py                                                                | Sinyal/Optima Skoru hesaplama motoru (scoring.py: tek doğru kaynak, 5 kopyanın birleştirilmiş hali) |
 | firsat_radari.py                                                                       | Fırsat Radarı — 15 dk'lık tarama + alarm e-postaları (GitHub Actions)         |
 | data_health_check.py                                                                   | Veri akışı sağlık kontrolü — kategori tazeliği izleme + admin uyarı maili     |
 | update_tefas_evening.py                                                                | TEFAS akşam NAV güncellemesi (TRT 20:00/20:30 cron)                           |
 | pdf_text_extract.py                                                                    | PDF → metin (pdfplumber + gerektiğinde Türkçe OCR)                            |
 | temel_deger_hesaplama.py                                                               | Graham + Çarpan Bazlı Değer — özet kutusu ve Format-2 (LTM) metodolojisi      |
 | data_pipeline.py                                                                       | Veri pipeline orkestratör                                                     |
+| plotly_bundle.min.js                                                                   | İnteraktif grafiklerin (bkz. Bölüm 1.4) CDN'e bağımlı olmadan çalışması için repoya gömülü Plotly.js kütüphanesi (~4,5 MB) |
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#f3f4f6;border-left:5px solid #6b7280;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Tek seferlik tanılama betikleri</strong></p>
+<p><code>test_maden_kaynak.py</code> ve <code>test_tefas_bulk_fizibilite.py</code>,
+Oturum XVIII'de belirli bir soruyu yanıtlamak için yazılmış, ONGOING
+mimarinin PARÇASI OLMAYAN tek seferlik tanılama betikleridir — düzenli
+olarak çalıştırılmazlar, silinmeleri güvenlidir.</p></td>
+</tr>
+</tbody>
+</table>
 
 ## 1.2 Veri Dosyaları
 
@@ -69,6 +90,38 @@ görüntülenmez.</p></td>
 </tr>
 </tbody>
 </table>
+
+## 1.4 İnteraktif Grafik Sistemi (v2.0.7.270–291, Eylül 2026)
+
+Tüm mum grafikleri (Ana Sayfa/Portföyüm/BIST/TEFAS/Döviz/Değerli
+Madenler/Kriptolar detay sayfaları), Streamlit'in yerleşik
+`st.plotly_chart`'ı YERİNE `st.components.v1.html` ile özel bir HTML/JS
+sarmalayıcısı kullanır (`render_candle_interactive()`, app.py):
+
+- **Mouse tekerleği ile zaman aralığı ayarlama:** Tekerlek, standart
+  Plotly yakınlaştırması YAPMAZ — en son veri noktasını SABİT tutarak
+  sadece gösterilen pencerenin BAŞLANGICINI büyütüp küçültür. Aralık:
+  1 hafta – 5 yıl (ya da varlığın mevcut olan tüm geçmişi, hangisi
+  kısaysa).
+- **Grafiğe tıklama:** Tekerleğin işlevini (yakınlaştırma ↔ sayfa
+  kaydırma) tersine çevirir — küçük bir gösterge metni mevcut modu
+  gösterir.
+- **Y ekseni:** HER tekerlek hareketinde, o an GÖRÜNEN X aralığındaki
+  gerçek High/Low/Hacim değerlerinden YENİDEN hesaplanır (Plotly'nin
+  kendi `autorange`'ine hiç güvenilmez — bu, büyük veri dizilerinde
+  Plotly'nin `{dtype,bdata}` sıkıştırılmış "typed array" formatını
+  kullanması nedeniyle özel bir base64 çözücü gerektirir, bkz. app.py
+  içindeki `alanCoz()` JS fonksiyonu).
+- **Plotly.js kütüphanesi CDN'DEN DEĞİL,** repoya gömülü yerel
+  `plotly_bundle.min.js`'ten yükleniyor — ağ/CDN kesintisi grafiği
+  ETKİLEYEMEZ.
+- **Canlı fiyat tamamlama:** `_hist_canli_ile_tamamla()`, yfinance'in
+  bazen NaN bıraktığı en son gün verisini "Son_Fiyat" (zaten canlı
+  tutulan) ile doldurur/tamamlar; hafta sonu için (Kripto hariç)
+  gereksiz bar eklenmez.
+- **Grafiği Yorumla düğmesi:** Algoritma (MA20/MA50 kesişimi, destek/
+  direnç, ikili dip/tepe, hacim onayı) + varsa Gemini AI metni, yoksa
+  şablon metin.
 
 # 2. Veri Kaynakları ve Yedek Mekanizmaları
 
@@ -258,6 +311,68 @@ yeniden başlatmalarında değerlerin kaybolması sorununu kapattı (gece
 worker'ının Actions ortamında PDF çıkarımı başarısız olduğundan repo
 cache'i null kalıyordu). Şema: ipo_valuations.sql.
 
+## 3.6 Beklenti Modu / Haber İzleme (haber_izleme.py) — v2.0.7.154+
+
+GitHub Actions üzerinde 10 dakikada bir çalışır:
+
+1.  5 RSS haber kaynağını (Türkiye + küresel) okur, her haberi
+    `haber_akisi` tablosuna yazar (eşleşsin/eşleşmesin — sistemin
+    "sakin" olduğu bilgisi de değerlidir).
+
+2.  Önceden tanımlı kalıplara (jeopolitik, petrol, Fed, kredi notu,
+    TCMB kredibilite, kripto olay, PBoC teşvik vb.) ön-filtre ile
+    eşleşen haberleri bulur.
+
+3.  Eşleşen her haberi AI ile (önce Gemini, o başarısız olursa Groq
+    `llama-3.1-8b-instant`) doğrular — günlük bir AI çağrı bütçesi
+    vardır, dolarsa doğrulama o gün için durur.
+
+4.  AI onayladığı her haberi `otomatik_tespit_ekle()` ile
+    `beklenti_otomatik_tespit` tablosuna "bekliyor" durumunda ekler
+    (varsayılan 48 saat geçerlilik).
+
+`get_bekleyen_tespitler()` (db.py), kullanıcıya pop-up olarak
+GÖSTERİLECEK adayları şu üç şartla filtreler: şiddet=Yüksek + son 24
+saatte farklı bir kaynaktan teyit + kalıbın istatistiksel dayanağı
+olması (Admin Panel'den ayarlanır).
+
+**v2.0.7.287 (10 Eylül 2026) — iki yeni davranış:**
+
+- **24 saatlik red soğuma süresi:** Kullanıcı bir `kalip_key`'i
+  reddettiyse, o kalıbın YENİ bir haber makalesiyle gelen versiyonu
+  (farklı `tespit_id` olsa bile) 24 saat boyunca tekrar
+  gösterilmez — SQL sorgusuna `kalip_key` bazlı ikinci bir
+  `NOT EXISTS` koşulu eklendi.
+
+- **Aynı olay için tek pop-up:** Onaylanan (çoklu kaynak teyidi geçen)
+  tespitler artık `kalip_key`'e göre gruplanıp SADECE en yüksek
+  şiddetli/en yeni olanı temsilci olarak gösteriliyor — diğer
+  kaynakların bilgisi kaybolmuyor, temsilcinin teyit listesine
+  ekleniyor.
+
+**v2.0.7.286 — toplu yazma optimizasyonu:** "Tümünü Onayla"/"Tümünü
+Reddet" düğmeleri eskiden her tespit için AYRI bir Supabase bağlantısı
+açıyordu (N+1 sorunu, onlarca bekleyen tespitte gözle görülür yavaşlık
+yaratıyordu). `tespit_karar_toplu()` (db.py) artık TEK bir çok-satırlı
+INSERT ifadesiyle tüm kararları bir arada yazıyor.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Kişiye Özel Skor Etkisi</strong></p>
+<p>Bir tespitin onaylanması SADECE o kullanıcının Optima Skorunu
+etkiler (kullanici_tespit_karari tablosu, kullanici_id bazlı) - aynı
+haberi başka bir abone görüp FARKLI bir karar verebilir. Aynı kalıba
+ait birden fazla onaylı tespit varsa puan İKİ KEZ eklenmez (bkz. app.py
+"_beklenti_ayarlar" mantığı - en yüksek şiddet kazanır, kalıp tek kez
+sayılır).</p></td>
+</tr>
+</tbody>
+</table>
+
 # 4. GitHub ve Deployment
 
 ## 4.1 GitHub Repo
@@ -445,6 +560,49 @@ Eğer worker.py'nin yerel çıktısını manuel push etmek gerekirse:
 - git commit -m "veri guncelleme" && git push origin main
 
 # 8. Versiyon Geçmişi (Özet)
+
+### Ağustos–Eylül 2026 (v2.0.7.100 – v2.0.7.292) — Beklenti Modu, Kaynak Çeşitlendirme, İnteraktif Grafikler
+
+**Not:** Bu iki aylık dönemde ONLARCA ayrı oturumda çok sayıda küçük/
+orta ölçekli değişiklik yapıldı - burada sadece ANA TEMALAR
+özetlenmiştir. Belirli bir değişikliğin tam tarihini/gerekçesini
+arıyorsanız PROJE_NOTLARI.md'deki (proje kök dizini) kronolojik, tam
+kayıttan arayın - bu dosya YALNIZCA özet niteliğindedir.
+
+- **Beklenti Modu / Otomatik Haber Tespiti (v2.0.7.150–290):**
+  haber_izleme.py ile RSS+AI tabanlı otomatik olay tespiti kuruldu -
+  çoklu kaynak teyidi, kişiye özel onay/red, 24 saatlik red soğuma
+  süresi ve aynı olay için tek pop-up gruplaması ile olgunlaştırıldı
+  (bkz. Bölüm 3.6).
+
+- **Optima Skoru Birleştirme:** Beş ayrı formül kopyası (app.py,
+  worker.py, firsat_radari.py, live_data.py, temettu_client.py)
+  `scoring.py`'de TEK doğru kaynağa indirgendi - TUPRAS gibi
+  tutarsızlık örnekleri kalıcı olarak çözüldü.
+
+- **Temettü Verisi KAP'a Taşındı (v2.0.7.229):** temettu_client.py
+  yfinance'i tamamen bıraktı, KAP'ın resmi "Kar Payı Dağıtımı"
+  bildirimlerinden yapılandırılmış veri okuyor.
+
+- **BIST Kaynak Çeşitlendirme (v2.0.7.290):** v1.7'den beri bekleyen
+  ama hiç uygulanmamış "borsapy.Ticker'a geçiş" TODO'su tamamlandı -
+  BIST artık Döviz/Maden/Kripto ile TUTARLI şekilde önce borsapy,
+  yedek olarak yfinance kullanıyor (bkz. Bölüm 2).
+
+- **İnteraktif Grafik Sistemi (v2.0.7.270–291):** Mum grafikleri artık
+  mouse tekerleğiyle 1 hafta–5 yıl arası serbestçe kontrol edilebiliyor,
+  Plotly.js CDN'den değil repoya gömülü yerel dosyadan yükleniyor,
+  canlı fiyatla eksik/NaN son-gün verisi otomatik tamamlanıyor
+  (bkz. Bölüm 1.4).
+
+- **Sidebar/Grafik/UI cilası:** Sidebar hover-collapse (ilk render'da
+  açık, sonra daralan), "Grafiği Yorumla" düğmesi, tarih aralığı
+  göstergesi gibi çok sayıda küçük UX iyileştirmesi.
+
+- **Veri Sağlığı ve Güvenlik:** GitHub push protection ile API.txt
+  sızıntısı temizlendi (git filter-branch), GH_TOKEN fine-grained
+  token'a geçirildi, "Tümünü Reddet" gibi toplu işlemler N+1 sorgu
+  sorunundan kurtarıldı.
 
 ### 11 Temmuz 2026 (v2.0.7.4 – v2.0.7.29) — Beni Hatırla Kesin Çözümü, Portföy/Halka Arz/Temettü İyileştirmeleri
 

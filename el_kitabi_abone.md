@@ -418,6 +418,10 @@ sıfır).</p></td>
 | Optima Skor  | Varlığın mevcut sinyal puanı (0-100)  |
 | Alış Tarihi  | Pozisyonu açtığınız gün               |
 
+Bir pozisyona tıkladığınızda açılan detay grafiği, BIST detay
+sayfasındaki ile AYNI şekilde mouse tekerleğiyle kontrol edilir
+(bkz. Bölüm 7.1 "Grafiği Mouse Tekerleğiyle Kontrol Etme").
+
 ## 4.3 Pozisyon Düzenleme / Satış / Silme
 
 - Tabloda bir varlığın solundaki kutucuğu işaretlediğinizde iki buton
@@ -684,6 +688,42 @@ her zaman en üsttedir.
 - Mum grafik, Temel Analiz Raporu ve Skor Bileşimi'ni burada
   görebilirsiniz.
 
+### Grafiği Mouse Tekerleğiyle Kontrol Etme
+
+Mum grafiğinin üzerinde mouse tekerleğini kullanarak gösterilen zaman
+aralığını 1 hafta ile 5 yıl arasında (varlığın mevcut geçmişi neyse, o
+kadar) serbestçe ayarlayabilirsiniz — en son fiyat noktası HER ZAMAN
+sabit kalır, tekerlek sadece ne kadar geriye gideceğinizi büyütüp
+küçültür. Grafiğin altında, o an gösterilen tarih aralığı ve gün
+sayısı canlı olarak görüntülenir.
+
+Grafiğe TIKLADIĞINIZDA, tekerleğin işlevi tersine döner — bir daha
+tıklayana kadar tekerlek grafiği değil, sayfanın kendisini kaydırır.
+Sağ üstteki küçük etiket ("🔍 Tekerlek: Yakınlaştırma" / "↕️ Tekerlek:
+Sayfa kaydırma") o an hangi modda olduğunuzu gösterir.
+
+Grafiğin altındaki **"Grafiği Yorumla"** düğmesi, o an görünen
+dönem için otomatik bir teknik yorum üretir (hareketli ortalama
+kesişimleri, destek/direnç seviyeleri, hacim onayı gibi sinyalleri
+özetler) — bu bir yatırım tavsiyesi değildir, sadece grafikte
+zaten görünen bilgiyi yazıya döker.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Mobilde Tekerlek Yerine Periyot Düğmeleri</strong></p>
+<p>Dokunmatik ekranlarda "mouse tekerleği" olmadığı için, grafiğin
+üstündeki "Periyot" düğmeleri (1 Ay/3 Ay/6 Ay/1 Yıl/5 Yıl) her zaman
+kullanılabilir kalır — masaüstünde tekerlekle, mobilde bu düğmelerle
+aynı sonuca ulaşabilirsiniz. Bu davranış BIST/TEFAS/Döviz/Değerli
+Madenler/Kriptolar'ın TÜMÜNDE aynıdır.</p></td>
+</tr>
+</tbody>
+</table>
+
 <table>
 <colgroup>
 <col style="width: 100%" />
@@ -693,7 +733,8 @@ her zaman en üsttedir.
 <td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Veri Kaynağı</strong></p>
 <p>BIST fiyatları öncelikli olarak canlı kaynaktan çekilir; erişilemezse
 otomatik olarak yedek kaynağa geçilir. Gün içi fiyat değişimleri birkaç
-dakika gecikmeyle sisteme yansır.</p></td>
+dakika gecikmeyle sisteme yansır. (Bölüm 1.1'deki "Veri Kaynakları"
+tablosuna bakınız.)</p></td>
 </tr>
 </tbody>
 </table>
@@ -726,7 +767,9 @@ görüntülenir — performans karşılaştırması tek bakışta yapılabilir.
 
 Her fonun detay sayfasında Teknik Analiz raporları, Teknik Göstergeler,
 Mum Grafiği, Getiri ve risk analizleri ile fon karnesi, portföy dağılımı
-ve son işlem fiyatı görülebilir.
+ve son işlem fiyatı görülebilir. Mum grafiği, BIST detay sayfasındaki
+ile AYNI şekilde mouse tekerleğiyle kontrol edilir (bkz. Bölüm 7.1
+"Grafiği Mouse Tekerleğiyle Kontrol Etme").
 
 # 9. Döviz, Madenler ve Kriptolar
 
@@ -774,7 +817,10 @@ ve son işlem fiyatı görülebilir.
   sadece bu kategoride çalışır.
 
 - Kriptoların da BIST'de olduğu gibi işlem hacimleri grafikte
-  gösterilmektedir.
+  gösterilmektedir. Mum grafiği aynı BIST/TEFAS'taki gibi mouse
+  tekerleğiyle kontrol edilir (bkz. Bölüm 7.1) — tek fark, Kripto 7/24
+  işlem gördüğü için grafik hafta sonu da güncel kalır, diğer
+  kategorilerde hafta sonu için ayrı bir bar eklenmez.
 
 # 10. Halka Arz — Yaklaşan ve Devam Eden IPO'lar
 
@@ -939,7 +985,101 @@ MKK Veri Analiz Platformu (vap.org.tr) bağlantıları ve özet veriler.
 
 Her karta tıklayınca ilgili VAP sayfası yeni sekmede açılır.
 
-# 13. Terimler Sözlüğü — Değerler Ne Anlama Gelir?
+# 13. SonDakika Haberleri — Beklenti Modu
+
+Bu sayfa, dünya ve Türkiye piyasalarını etkileyebilecek büyük
+gelişmeleri (jeopolitik krizler, merkez bankası kararları, petrol arz
+şokları gibi) otomatik olarak izler ve önemli bulduklarını size
+onayınıza sunar — onayladıklarınız Optima Skoru hesaplamanıza dahil
+edilir.
+
+## 13.1 Nasıl Çalışır?
+
+Arka planda çalışan bir sistem, çok sayıda haber kaynağını sürekli
+tarar ve önceden tanımlı kalıplara (örn. "jeopolitik risk",
+"petrol arz sorunu", "Fed faiz sürprizi") uyan haberleri yapay zekâ
+ile doğrular. Bir haber şu ÜÇ ŞARTI birden karşılamadıkça size
+pop-up olarak GÖSTERİLMEZ:
+
+1.  **Önem derecesi Yüksek olmalı** — Düşük/Orta önemdeki tespitler
+    hiçbir zaman pop-up olarak gösterilmez.
+
+2.  **Birden fazla kaynaktan teyit edilmiş olmalı** — aynı olay,
+    farklı bir haber kaynağı tarafından son 24 saat içinde de
+    bildirilmiş olmalı. Tek kaynaktan gelen bir haber bu şartı
+    karşılamaz.
+
+3.  **İstatistiksel dayanağı olan bir kalıba uymalı** — sistem, hangi
+    olay türlerinin geçmişte piyasalar üzerinde ölçülebilir etkisi
+    olduğunu bilir; henüz araştırılmamış kalıplar pop-up
+    üretmez.
+
+## 13.2 Aynı Olay İçin Tek Pop-up
+
+Aynı olayı bildiren onlarca farklı haber kaynağı olabilir (örn. bir
+jeopolitik krizle ilgili 20 ayrı haber sitesi). Sistem bunların
+HEPSİNİ AYRI AYRI göstermez — aynı olaya ait tüm haberler TEK bir
+pop-up'ta birleştirilir, diğer kaynaklar "şu kaynaklar da teyit etti"
+listesinde görünür. Bir olayı reddettiğinizde, o olay 24 saat boyunca
+tekrar önünüze çıkmaz (yeni bir haber makalesiyle gelse bile).
+
+## 13.3 Onayla / Reddet Ne Yapar?
+
+- **Onayla:** Bu tespit, SİZİN Optima Skor hesaplamanıza dahil edilir
+  (diğer kullanıcıları etkilemez — her abone kendi kararını verir).
+  Etki, tespitin geçerlilik süresi (varsayılan 48 saat) boyunca
+  sürer, sonra otomatik olarak düşer.
+
+- **Reddet:** Bu tespit sizin skorunuzu HİÇ etkilemez.
+
+- **Tümünü Onayla:** Sadece yukarıdaki üç şartı (Yüksek önem + çoklu
+  kaynak teyidi + istatistiksel dayanak) karşılayan tespitleri tek
+  tıkla onaylar — şartları karşılamayanlar otomatik reddedilir.
+
+- **Tümünü Reddet:** Bekleyen TÜM tespitleri (şart aramaksızın) tek
+  tıkla reddeder.
+
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td style="background-color:#eaf2fb;border-left:5px solid #1b6ef3;padding:14px 16px;border-radius:4px;"><p><strong>ⓘ Aynı Olay İçin Puan İki Kez Eklenmez</strong></p>
+<p>Aynı olaya ait birden fazla tespiti onaylasanız bile (örn. iki farklı
+haberin aynı kalıba düşmesi), Optima Skor ayarlaması SADECE BİR KEZ
+uygulanır — en yüksek şiddetli olan geçerli sayılır. Toplu onayı
+güvenle kullanabilirsiniz.</p></td>
+</tr>
+</tbody>
+</table>
+
+# 14. Abonelik — Profil ve Hesap Ayarları
+
+Bu sayfa, hesabınızla ilgili kişisel ayarları tek bir yerde toplar.
+
+## 14.1 Profil ve İletişim Bilgileri
+
+Ad Soyad ve telefon numaranızı buradan güncelleyebilirsiniz.
+E-posta adresiniz giriş kimliğiniz olduğu için bu sayfadan
+değiştirilemez — değiştirmeniz gerekiyorsa yöneticiyle iletişime
+geçmeniz gerekir.
+
+## 14.2 Şifre Değiştirme
+
+Mevcut şifrenizi girip en az 6 karakterlik yeni bir şifre
+belirleyebilirsiniz.
+
+## 14.3 Otomatik Haber Tespiti — Aktif Onaylarınız
+
+Bölüm 13'te (SonDakika Haberleri) onayladığınız, hâlâ geçerlilik
+süresi dolmamış tüm haber etkilerinin bir özetini burada görürsünüz.
+**"Varsayılan Skor"** düğmesi, aktif onaylarınızın TÜMÜNÜ tek tıkla
+geri çeker — Optima Skorunuz anında haber etkisi olmayan (varsayılan)
+haline döner. Bu SADECE sizin hesabınızı etkiler, geçmiş kayıtlar
+silinmez ve diğer abonelerin kendi onayları değişmez.
+
+# 15. Terimler Sözlüğü — Değerler Ne Anlama Gelir?
 
 Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 ölçtüğünü ve nasıl okunması gerektiğini açıklar.
@@ -963,7 +1103,7 @@ Bu bölüm, uygulama genelinde karşınıza çıkan sayısal göstergelerin ne
 | Peak (Tepe Fiyat)                                          | Kâr realizasyonu uyarı sisteminin izlediği, bir varlığın şimdiye kadar gördüğü en yüksek fiyat. Bu tepeden belirlediğiniz oranda düşüş olduğunda uyarı tetiklenir.                                                                                                 |
 | Sinyal (Güçlü Al / Kademeli Al / Tut-İzle / Kademeli Sat / Net Sat) | Optima Skoru'nun kategorik karşılığıdır; yüksekten düşüğe doğru sıralanır: Güçlü Al, Kademeli Al, Tut-İzle, Kademeli Sat, Net Sat. Skor+trend+RSI koşullarının detaylı tablosu için bkz. Bölüm 3.2.                                                                                                                                          |
 
-# 14. Sıkça Sorulan Sorular
+# 16. Sıkça Sorulan Sorular
 
 ### Veriler ne sıklıkla güncellenir?
 
