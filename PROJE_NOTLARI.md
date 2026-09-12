@@ -6588,5 +6588,34 @@ tamam, canlı doğrulama BEKLİYOR):**
     doğruluk için bilinçli bir tasarım kararı (v2.0.7.229'da zaten
     Bahri'nin kendi kararıyla yfinance'ten TAMAMEN vazgeçilmişti).
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.293 (12
+  Eylül 2026, Bahri'nin bulgusu — iki ayrı konu): SON MUM KIRPILMASI +
+  OPTIMA SKOR PASTA GRAFİĞİ ORAN AÇIKLAMASI.**
+  - **(1) Son mum yarım görünüyordu:** X ekseninin sağ kenarı, en son
+    verinin TAM tarihine eşitleniyordu - ama bir mumun gövdesi kendi
+    tarihinin ETRAFINDA bir miktar genişlik kaplar, bu yüzden son
+    mumun yarısı bu kenarın DIŞINDA kalıp kırpılıyordu. Çözüm: sağ
+    kenara 12 saatlik bir tampon eklendi - hem `candle_fig()`'in
+    kendi ilk x-ekseni ayarında hem de `render_candle_interactive()`'in
+    JS'e geçtiği `SON_TARIH_MS` sabitinde (tekerlek etkileşimindeki
+    HER relayout çağrısını da kapsayacak şekilde) tutarlı olarak.
+  - **(2) Pasta grafiği oranları ile formül ağırlıkları çelişiyor gibi
+    görünüyordu - BU BİR HATA DEĞİL:** `optima_score_breakdown()`
+    (scoring.py) incelendi - RSI/Momentum/Volatilite/Temel Analiz'in
+    %25/%35/%15/%25 ağırlıkları FORMÜLÜN SABİT YAPISAL ağırlıklarıdır,
+    HİÇBİR ZAMAN değişmez. Ama pasta grafiğindeki yüzdeler, sepetteki
+    varlıkların HER bileşende GERÇEKTE ne kadar puan kazandığını
+    (maksimuma göre) yansıtır - VERİYE BAĞLIDIR. Örneğin sepetteki
+    varlıklar RSI'de görece güçlü, Volatilite'de görece zayıf puan
+    aldıysa, RSI'nin kazanılan toplam puana katkısı sabit %25
+    ağırlığın ÜZERİNDE görünür - bu matematiksel olarak DOĞRU ve
+    BEKLENEN bir durum (bir sınavda her bölüm eşit ağırlıklı olsa
+    bile, bir öğrenci bir bölümden diğerinden daha yüksek puan
+    alabilir - "kazanılan puanın payı" ile "bölümün ağırlığı" aynı
+    şey değildir). Caption metni bu ayrımı artık AÇIKÇA belirtiyor -
+    iki ayrı `st.caption()` ile "sabit formül ağırlıkları" ve "bu
+    sepetin gerçek kazanılan puan dağılımı" net şekilde ayrıştırıldı.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

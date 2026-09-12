@@ -1839,7 +1839,14 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=55, r=15, t=30, b=30))
 
-    fig.update_xaxes(range=[_uc_baslangic, _uc_son_tarih])
+    # v2.0.7.293 (12 Eylul 2026, Bahri'nin bulgusu - "11 Eylul goruluyor
+    # ama mum yarim gorunuyor"): son mumun GOVDESI kendi tarihinin
+    # ETRAFINDA bir miktar genislik kaplar - x ekseninin sag kenari TAM
+    # OLARAK son verinin tarihine esitse, mumun YARISI bu kenarin
+    # DISINDA kalip kirpiliyordu. Sag kenara gunun geri kalanini (12
+    # saat) tampon olarak ekleyerek son mumun TAMAMININ gorunmesi
+    # saglaniyor - baslangic tarihi DEGISMEDI, sadece sag kenar.
+    fig.update_xaxes(range=[_uc_baslangic, _uc_son_tarih + pd.Timedelta(hours=12)])
     return fig
 
 
@@ -1967,7 +1974,10 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     import re
     _has_volume = any(getattr(t, "yaxis", None) == "y2" for t in fig.data)
     _yukseklik = int(fig.layout.height or 480)
-    _son_tarih_ms = int(hist.index[-1].timestamp() * 1000)
+    # v2.0.7.293: son mumun tam gorunmesi icin sag kenara 12 saatlik
+    # tampon eklendi (candle_fig()'in kendi ic x-ekseni ayarindaki AYNI
+    # duzeltmeyle tutarli).
+    _son_tarih_ms = int(hist.index[-1].timestamp() * 1000) + (12 * 60 * 60 * 1000)
     _tam_baslangic_ms = int(hist.index[0].timestamp() * 1000)
     _min_pencere_ms = 7 * 24 * 60 * 60 * 1000  # en az 7 gunluk pencere
 
@@ -5829,26 +5839,43 @@ if page=="Ana Sayfa":
             else:
                 st.caption("Skor bileşimi için yeterli veri yok.")
 
-        # v2.0.7.288 (12 Eylul 2026, Bahri'nin talebi - "Optima skor
-        # grafiginin hangi elemanlardan olustugu (grafikte olsun veya
-        # olmasin, tumu) konusunda bir bilgilendirme notu istiyorum"):
-        # pasta grafigi SADECE bu SEPETTE gercekten payi olan (sifira
-        # yuvarlanmayan) bilesenleri gosteriyor - bazi bilesenler
-        # (orn. Temettu Verimi, eger sepette temettu odeyen fon/hisse
-        # yoksa) grafikte HIC GORUNMEYEBILIR. Asagidaki not, FORMULUN
-        # TAMAMINI (grafikte olsun olmasin) aciklıyor.
+        # v2.0.7.293 (12 Eylul 2026, Bahri'nin bulgusu - "grafikteki
+        # oranlar (orn. RSI %36,8) ile yazidaki agirliklar (RSI %25)
+        # celisiyor gibi gorunuyor"): Bu bir HATA DEGIL - iki FARKLI
+        # olcum. %25/%35/15/25 FORMULUN YAPISAL agirliklaridir (SABIT,
+        # hep aynidir). Pasta grafigindeki % ise bu SEPETTEKI varliklarin
+        # HER bilesende NE KADAR PUAN KAZANDIGINI (mumkun olan maksimuma
+        # gore) yansitir - orn. RSI'nin agirligi sabit %25 olsa da, eger
+        # sepetteki varliklar RSI'de COK IYI puan alip Volatilite'de
+        # DAHA AZ iyi puan aldiysa, RSI'nin KAZANILAN TOPLAM PUANA
+        # (payi) katkisi %25'ten YUKSEK gorunur - bu VERIYE BAGLI, veri
+        # her degistiginde bu oranlar da degisir. Asagidaki not artik bu
+        # ayrimi acikca belirtiyor.
         st.caption(
-            "**Optima Skoru bileşenleri (tümü):** RSI Bölgesi (%25) + "
-            "Momentum/Getiri (%35) + Volatilite (%15) + Temel Analiz (%25). "
-            "Temel Analiz kendi içinde varlık türüne göre F/K "
-            "(Fiyat/Kazanç), PD/DD (Piyasa Değeri/Defter Değeri) ve "
-            "Temettü Verimi bileşenlerinden oluşur. Pasta grafiği "
-            "SADECE bu bütçe sepetinde gerçekten payı olan (sıfıra "
+            "**Optima Skoru bileşenleri (sabit formül ağırlıkları):** "
+            "RSI Bölgesi (%25) + Momentum/Getiri (%35) + Volatilite "
+            "(%15) + Temel Analiz (%25). Temel Analiz kendi içinde "
+            "varlık türüne göre F/K (Fiyat/Kazanç), PD/DD (Piyasa "
+            "Değeri/Defter Değeri) ve Temettü Verimi bileşenlerinden "
+            "oluşur. **Bu ağırlıklar HER ZAMAN sabittir** — formülün "
+            "kendisi değişmez."
+        )
+        st.caption(
+            "**Pasta grafiğindeki yüzdeler ise FARKLI bir şeyi gösterir:** "
+            "bu sepetteki varlıkların her bileşende GERÇEKTE ne kadar "
+            "puan kazandığını (mümkün olan maksimuma göre) yansıtır. "
+            "Örneğin RSI'nin ağırlığı sabit %25 olsa da, sepetteki "
+            "varlıklar RSI'de görece güçlü, Volatilite'de görece zayıf "
+            "puan aldıysa, RSI'nin KAZANILAN toplam puana katkısı "
+            "%25'in ÜZERİNDE görünebilir — bu bir hata değil, sepetin "
+            "gerçek performans dağılımını yansıtır ve varlıklar/piyasa "
+            "değiştikçe bu oranlar da değişir. Pasta grafiği ayrıca "
+            "SADECE bu sepette gerçekten payı olan (sıfıra "
             "yuvarlanmayan) bileşenleri gösterir - bir bileşenin "
-            "grafikte görünmemesi, sepetteki varlıkların o bileşen "
-            "için (örn. temettü ödemeyen varlıklar) katkısının "
-            "olmadığı anlamına gelir, formülden çıkarıldığı anlamına "
-            "gelmez."
+            "grafikte görünmemesi, o bileşenin formülden çıkarıldığı "
+            "anlamına gelmez, sadece sepetteki varlıkların o bileşene "
+            "(örn. temettü ödemeyen varlıklar) katkısının olmadığı "
+            "anlamına gelir."
         )
 
 # ══════════════════════════════════════════════════════════════
