@@ -6387,5 +6387,36 @@ tamam, canlı doğrulama BEKLİYOR):**
     eklemek gibi).
   - **Doğrulama:** `python3 -m py_compile app.py db.py` temiz.
 
+- **[UYGULANDI, SÖZDİZİMİ+AST DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.287
+  (10 Eylül 2026, Bahri'nin talebi — "sistem, aynı olay için gelen her
+  haberi ayrı bir bekleyen kayıt olarak görmesin, reddedilen haber 24
+  saat geçmeden tekrar gündeme gelmesin"): `get_bekleyen_tespitler()`
+  (db.py) İKİ YENİ KURALLA GÜNCELLENDİ.**
+  - **(1) 24 saatlik red soğuma süresi:** Ana sorguya YENİ bir
+    `NOT EXISTS` koşulu eklendi - kullanıcı, AYNI `kalıp_key` için son
+    24 saatte HERHANGİ bir tespiti reddetmişse (farklı bir haber
+    makalesi/tespit_id olsa BİLE), o kalıbın YENİ bir versiyonu artık
+    24 saat boyunca pop-up olarak GÖSTERİLMİYOR. Eskiden "NOT EXISTS"
+    kontrolü SADECE aynı tespit_id için karar var mı diye bakıyordu -
+    farklı bir haber makalesi (farklı id) bu kontrolden GEÇİYOR, red
+    kalıcı olmuyordu.
+  - **(2) Aynı olay için tek pop-up:** Onaylanmış (çoklu kaynak
+    teyidi geçen) tespitler artık `kalıp_key`'e göre GRUPLANIYOR - her
+    grup için SADECE BİR TEMSİLCİ (en yüksek şiddetli, eşitlikte en
+    yeni) kullanıcıya gösteriliyor. Gruptaki DİĞER tüm haberlerin
+    kaynak/başlık/url bilgisi KAYBOLMUYOR - temsilcinin
+    `teyit_listesi`'ne (tekrarsız şekilde, aynı kaynak iki kez
+    eklenmeden) EKLENİYOR. Sonuç: 20 farklı kaynağın aynı jeopolitik
+    olayı bildirmesi artık 20 ayrı pop-up DEĞİL, "şu 19 kaynak da
+    teyit etti" notuyla TEK bir pop-up üretiyor.
+  - **Mevcut skor-güvenliği KORUNDU:** app.py'deki "aynı kalıp için
+    puan iki kez eklenmez" güvencesi (bkz. bir önceki not) zaten
+    kalıp_key bazlı çalışıyordu - bu değişiklik SADECE kaç pop-up
+    GÖRÜNDÜĞÜNÜ etkiliyor, skor hesaplama mantığına dokunmadı.
+  - **Doğrulama:** `python3 -m py_compile` + `ast.parse` temiz. Mantık
+    elle (20 satırlık sahte veri) izlenerek doğrulandı - gerçek
+    veritabanı sandbox'ta mevcut olmadığı için CANLI test edilemedi,
+    Bahri'nin canlı ortamda doğrulaması gerekiyor.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

@@ -1312,8 +1312,17 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         return []
 
     try:
-        # v2.0.7.209: "AND t1.siddet = 'Yüksek'" eklendi - Orta/Düşük
-        # şiddetteki tespitler ARTIK HİÇ POP-UP OLARAK ÇIKMIYOR.
+        # v2.0.7.287 (10 Eylul 2026, Bahri'nin talebi - "sistem, aynı
+        # olay için gelen her haberi ayrı bir bekleyen kayıt olarak
+        # görmesin, reddedilen haber 24 saat gecmeden tekrar gundeme
+        # gelmesin"): YENI KURAL - eger bu kullanici, AYNI kalip_key
+        # icin son 24 saatte bir tespiti REDDETMISSE, o kalibin YENI
+        # bir haberle tekrar gelen versiyonu da (FARKLI bir tespit_id
+        # olsa bile) ARTIK POP-UP OLARAK GOSTERILMIYOR - "NOT EXISTS"
+        # kontrolu ONCEDEN SADECE AYNI tespit_id icin karar var mi diye
+        # bakiyordu (farkli id = farkli haber makalesi oldugu icin bu
+        # kontrolden GECIYORDU, red kalici olmuyordu). Artik AYRICA
+        # "ayni kalip_key + reddedildi + son 24 saat" de eleniyor.
         rows = get_conn().execute(
             "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
             "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
@@ -1323,8 +1332,15 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
             "AND NOT EXISTS ("
             "  SELECT 1 FROM kullanici_tespit_karari k "
             "  WHERE k.tespit_id = t1.id AND k.kullanici_id = ?"
+            ") "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM kullanici_tespit_karari k2 "
+            "  JOIN beklenti_otomatik_tespit t2 ON t2.id = k2.tespit_id "
+            "  WHERE k2.kullanici_id = ? AND t2.kalip_key = t1.kalip_key "
+            "  AND k2.karar = 'reddedildi' "
+            "  AND k2.karar_zamani > now() - interval '24 hours'"
             ")",
-            (kullanici_id,)
+            (kullanici_id, kullanici_id)
         ).fetchall()
         if not rows:
             return []
@@ -1391,6 +1407,41 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         # v2.0.7.200: Python tarafinda filtreleme SQL'in ORDER BY'ini
         # kaybettirdi - en yeni once sirasi burada geri saglaniyor.
         onaylanan_satirlar.sort(key=lambda r: _v(r, "tespit_zamani", 6), reverse=True)
+
+        # v2.0.7.287 (10 Eylul 2026, Bahri'nin talebi - "aynı olay için
+        # gelen her haberi ayrı bir bekleyen kayıt olarak görmesin"):
+        # AYNI kalip_key'e ait BIRDEN FAZLA onaylanmis tespit varsa
+        # (orn. 20 farkli haber kaynagi ayni jeopolitik olayi
+        # bildiriyorsa), bunlarin HEPSI ayri ayri pop-up olarak
+        # gosterilmek YERINE, kalip_key'e gore GRUPLANIP tek bir
+        # TEMSILCI (en yuksek siddetli, esitlikte en yeni) SECILIYOR -
+        # digerlerinin kaynak/baslik bilgisi bu TEK temsilcinin teyit
+        # listesine EKLENIYOR (bilgi kaybi yok, sadece pop-up sayisi
+        # azaliyor).
+        _siddet_sirasi_grup = {"Düşük": 0, "Orta": 1, "Yüksek": 2}
+        _kalip_gruplari = {}
+        for r in onaylanan_satirlar:
+            _kalip_gruplari.setdefault(_v(r, "kalip_key", 1), []).append(r)
+
+        _temsilciler = []
+        _ekstra_teyit = {}  # temsilci_id -> [{"kaynak":..,"baslik":..,"url":..}, ...]
+        for _kalip, _grup in _kalip_gruplari.items():
+            _grup_sirali = sorted(
+                _grup,
+                key=lambda r: (_siddet_sirasi_grup.get(_v(r, "siddet", 2), 1), _v(r, "tespit_zamani", 6)),
+                reverse=True)
+            _temsilci = _grup_sirali[0]
+            _temsilciler.append(_temsilci)
+            _temsilci_id = _v(_temsilci, "id", 0)
+            _ekstra_teyit[_temsilci_id] = []
+            for _diger in _grup_sirali[1:]:
+                _ekstra_teyit[_temsilci_id].append({
+                    "kaynak": _v(_diger, "haber_kaynak", 5),
+                    "baslik": _v(_diger, "haber_basligi", 3),
+                    "url": _v(_diger, "haber_url", 4),
+                })
+        _temsilciler.sort(key=lambda r: _v(r, "tespit_zamani", 6), reverse=True)
+        onaylanan_satirlar = _temsilciler
     except Exception:
         return []
     _sonuc_listesi = _tespit_satirlarini_donustur(onaylanan_satirlar)
@@ -1399,7 +1450,13 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
     # teyit yok, ki bu duruma zaten hic ulasilmaz cunku teyitsiz
     # tespitler yukarida zaten elenmisti).
     for _d in _sonuc_listesi:
-        _d["teyit_listesi"] = teyit_bilgisi.get(_d.get("id"), [])
+        _birlesik_teyit = list(teyit_bilgisi.get(_d.get("id"), []))
+        _mevcut_kaynaklar = {_t["kaynak"] for _t in _birlesik_teyit} | {_d.get("haber_kaynak")}
+        for _ek in _ekstra_teyit.get(_d.get("id"), []):
+            if _ek["kaynak"] not in _mevcut_kaynaklar:
+                _birlesik_teyit.append(_ek)
+                _mevcut_kaynaklar.add(_ek["kaynak"])
+        _d["teyit_listesi"] = _birlesik_teyit
     return _sonuc_listesi
 
 
