@@ -1852,7 +1852,7 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
 # st.components.v1.html ile TAM KONTROL sahibi oluyoruz (bu teknik
 # projede zaten baska bir yerde - cerez yazma ozelliginde - basariyla
 # kullaniliyordu, bkz. modul basi import notu).
-def _hist_canli_ile_tamamla(hist, canli_fiyat):
+def _hist_canli_ile_tamamla(hist, canli_fiyat, kategori: str = ""):
     """v2.0.7.289 (12 Eylul 2026, Bahri'nin bulgusu - "grafikte son
     tarih eksik, seans sirasinda da gunun son verisi gorulmeli"):
     5 yillik gecmis veriye, GUNCEL (canli) fiyati YANSITAN bir "bugun"
@@ -1865,7 +1865,17 @@ def _hist_canli_ile_tamamla(hist, canli_fiyat):
     - hist'in SON satiri NaN Close iceriyorsa: canli fiyatla DOLDURULUR
       (yerine konur).
     - hist'in SON GECERLI satiri bugunden ONCEYSE (bugunku bar hic
-      yok): canli fiyatla YENI bir "bugun" bari EKLENIR.
+      yok): canli fiyatla YENI bir "bugun" bari EKLENIR - AMA SADECE
+      KRIPTO disindaki kategoriler icin bugun bir HAFTA ICI GUNSE
+      (v2.0.7.291, 12 Eylul 2026, Bahri'nin bulgusu - "hafta sonu
+      olmasina ragmen bos bir 12 Eylul goruyorum, 11 Eylul hala yok":
+      KESIN KOK NEDEN - BIST/TEFAS/Doviz/Maden HAFTA SONU ISLEM
+      GORMEZ, ama bu fonksiyon bunu bilmeden Cuma'nin kapanisini
+      TEKRARLAYAN GEREKSIZ bir "Cumartesi" bari ekliyordu - bu, Cuma
+      (gercek son islem gunu, orn. 11 Eylul) ile bitisik/CAKISIR gibi
+      gorunup GORSEL KARISIKLIK yaratiyordu, kullanici "11 Eylul
+      kayip" saniyordu. KRIPTO 7/24 islem gordugu icin ONUN icin
+      hafta sonu kontrolu YAPILMIYOR.)
     "Son_Fiyat" sutunu TUM kategorilerde (BIST/TEFAS/Doviz/Maden/
     Kripto) zaten CANLI tutuldugu icin bu fonksiyon KATEGORIDEN
     BAGIMSIZ, tum varlik turlerine ayni sekilde uygulanabilir.
@@ -1883,6 +1893,7 @@ def _hist_canli_ile_tamamla(hist, canli_fiyat):
         _bugun = pd.Timestamp.now(tz=hist.index.tz).normalize() if hist.index.tz else pd.Timestamp.now().normalize()
         _son_close = hist["Close"].iloc[-1]
         _son_tarih = hist.index[-1].normalize()
+        _hafta_sonu = _bugun.weekday() >= 5  # 5=Cumartesi, 6=Pazar
 
         if pd.isna(_son_close):
             # Son satir NaN - canli fiyatla DOLDUR (yerine koy)
@@ -1894,9 +1905,10 @@ def _hist_canli_ile_tamamla(hist, canli_fiyat):
             hist.loc[hist.index[-1], "High"] = max(_onceki_close, canli_fiyat,
                                                      float(hist["High"].iloc[-1]) if not pd.isna(hist["High"].iloc[-1]) else 0)
             hist.loc[hist.index[-1], "Low"] = min(_onceki_close, canli_fiyat) if pd.isna(hist["Low"].iloc[-1]) else min(_onceki_close, canli_fiyat, float(hist["Low"].iloc[-1]))
-        elif _son_tarih < _bugun:
+        elif _son_tarih < _bugun and not (_hafta_sonu and kategori.upper() != "KRIPTO"):
             # Bugunku bar HIC YOK - yeni bir tane EKLE (seans devam
-            # ediyor olabilir ya da henuz gunluk veri yayinlanmadi)
+            # ediyor olabilir ya da henuz gunluk veri yayinlanmadi) -
+            # KRIPTO DISINDA hafta sonuysa bu adim ATLANIR.
             _onceki_close = float(_son_close)
             _yeni_satir = {
                 "Open": _onceki_close, "Close": canli_fiyat,
@@ -5479,7 +5491,7 @@ if page=="Ana Sayfa":
                         _hist_5y_ana = d["hist"]
                     # v2.0.7.289: grafik, "Son_Fiyat" (zaten canli
                     # tutulan) ile tamamlanip en guncel gunu/ani yansitir.
-                    _hist_5y_ana = _hist_canli_ile_tamamla(_hist_5y_ana, sel_row_ana.get("Son_Fiyat"))
+                    _hist_5y_ana = _hist_canli_ile_tamamla(_hist_5y_ana, sel_row_ana.get("Son_Fiyat"), cat_ana)
                     render_candle_interactive(
                         _hist_5y_ana, sel_ana, key=f"ana_{sel_ana}",
                         varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
@@ -6414,7 +6426,7 @@ elif page=="Portföyüm":
                                         str(_sr.get("Kategori","")), "5y")
                 if _hist_5y_pf is None or _hist_5y_pf.empty:
                     _hist_5y_pf = _d["hist"]
-                _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"))
+                _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"), str(_sr.get("Kategori","")))
                 render_candle_interactive(_hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
                                            varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
 
@@ -6799,7 +6811,7 @@ elif page in CAT:
                                  str(sel_row.get("Kategori","")), "5y")
         if _hist_5y_cat is None or _hist_5y_cat.empty:
             _hist_5y_cat = d["hist"]
-        _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"))
+        _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"), str(sel_row.get("Kategori","")))
         render_candle_interactive(_hist_5y_cat, sel, key=f"cat_{sel}",
                                    varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 

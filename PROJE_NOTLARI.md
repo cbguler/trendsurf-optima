@@ -6523,5 +6523,32 @@ tamam, canlı doğrulama BEKLİYOR):**
     AYNISI gerçek CATES verisiyle izole test edildi - 691 satır,
     11 Eylül eksiksiz.
 
+- **[UYGULANDI, GERÇEK CATES VERİSİYLE HEM BIST HEM KRIPTO SENARYOSU
+  DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.291 (12 Eylül 2026, Bahri'nin
+  bulgusu - "hafta sonu olmasına rağmen boş bir 12 Eylül'ü bile
+  görüyorum ama 11 Eylül hâlâ yok"): KESİN KÖK NEDEN - HAFTA SONU
+  KONTROLÜ EKSİKTİ.**
+  - **Kesin kök neden:** v2.0.7.289'un "bugünkü bar hiç yoksa canlı
+    fiyatla ekle" mantığı, BIST/TEFAS/Döviz/Maden'in HAFTA SONU İŞLEM
+    GÖRMEDİĞİNİ bilmiyordu - Cumartesi/Pazar günü de çalışıp Cuma'nın
+    kapanışını TEKRARLAYAN GEREKSİZ bir "bugün" barı ekliyordu. Bu
+    yapay bar, Cuma'nın (gerçek son işlem günü, 11 Eylül) HEMEN
+    yanında görsel olarak ÇAKIŞIYOR/karışıyor gibi görünüyordu -
+    Bahri "11 Eylül kayıp" sanıyordu, oysa veri ZATEN doğruydu
+    (v2.0.7.290 ile), sadece yanına eklenen fazladan Cumartesi barı
+    kafa karıştırıyordu.
+  - **Çözüm:** `_hist_canli_ile_tamamla()`'ya `kategori` parametresi
+    eklendi - artık bugün hafta sonuysa (Cumartesi/Pazar) VE kategori
+    KRIPTO DEĞİLSE, "bugünkü bar ekle" adımı TAMAMEN ATLANIYOR. KRIPTO
+    7/24 işlem gördüğü için ondan MUAF - hafta sonu da normal şekilde
+    bar ekleniyor.
+  - **Doğrulama (gerçek CATES verisiyle, gerçek sandbox tarihi
+    Cumartesi 12 Eylül iken):** BIST kategorisiyle çağrıldığında satır
+    sayısı DEĞİŞMEDİ (691→691, 11 Eylül son bar olarak KALDI). KRIPTO
+    kategorisiyle çağrıldığında satır sayısı ARTTI (691→692, 12 Eylül
+    Cumartesi'si de EKLENDİ) - iki senaryo da TAM BEKLENEN gibi
+    çalıştı.
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
