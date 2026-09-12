@@ -1790,7 +1790,16 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
             height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=55, r=15, t=30, b=30))
-        fig.update_xaxes(**_eksen_ortak, rangeslider=dict(visible=False), row=1, col=1)
+        # v2.0.7.286 (10 Eylul 2026, Bahri'nin bulgusu - "X ekseninde
+        # tarih iki yerde gosteriliyor, ustteki gereksiz"): iki panelli
+        # (fiyat+hacim) duzende, UST panelin (row=1, fiyat) x-ekseni de
+        # _eksen_ortak'tan showticklabels=True miras aliyordu - bu,
+        # ALTTAKI (row=2, hacim) panelin zaten gosterdigi tarihleri
+        # TEKRAR gosteriyordu. Ust panelin tarih etiketleri KAPATILDI -
+        # shared_xaxes=True oldugu icin zaten AYNI tarihler, sadece
+        # ALTTA (tek yerde) gorunmesi yeterli.
+        fig.update_xaxes(**{**_eksen_ortak, "showticklabels": False},
+                         rangeslider=dict(visible=False), row=1, col=1)
         fig.update_xaxes(**_eksen_ortak, row=2, col=1)
         fig.update_yaxes(**_eksen_ortak, range=[_y_min, _y_max], autorange=False, row=1, col=1)
         fig.update_yaxes(**_eksen_ortak,
@@ -4711,15 +4720,19 @@ if page=="Ana Sayfa":
                 use_container_width=True)
 
         if _onayla_toplu_tiklandi:
-            from db import tespit_onayla as _to_toplu, tespit_reddet as _tr_toplu
-            _onaylanan_sayisi, _reddedilen_sayisi = 0, 0
-            for _t_toplu in _bekleyen_tespitler:
-                if _tespit_kriterleri_karsiliyor_mu(_t_toplu):
-                    if _to_toplu(_cur_user["id"] if _cur_user else None, _t_toplu["id"]):
-                        _onaylanan_sayisi += 1
-                else:
-                    if _tr_toplu(_cur_user["id"] if _cur_user else None, _t_toplu["id"]):
-                        _reddedilen_sayisi += 1
+            from db import tespit_karar_toplu as _karar_toplu
+            _onaylanacaklar = [t["id"] for t in _bekleyen_tespitler if _tespit_kriterleri_karsiliyor_mu(t)]
+            _reddedilecekler = [t["id"] for t in _bekleyen_tespitler if not _tespit_kriterleri_karsiliyor_mu(t)]
+            # v2.0.7.286 (10 Eylul 2026, Bahri'nin bulgusu - "Tumunu
+            # Reddet cok uzun suruyor, log ekliyorum"): ONCEKI kod her
+            # tespit icin AYRI bir DB cagrisi (AYRI baglanti) yapiyordu -
+            # dusinlerce bekleyen tespitte bu ONLARCA ag gidis-gelisi
+            # demekti. Artik onaylanacaklar VE reddedilecekler HER GRUP
+            # icin TEK BIR toplu sorguyla (bkz. tespit_karar_toplu)
+            # yaziliyor - toplam 2 DB cagrisina indi (kac tespit olursa
+            # olsun).
+            _onaylanan_sayisi = _karar_toplu(_cur_user["id"] if _cur_user else None, _onaylanacaklar, "onaylandi")
+            _reddedilen_sayisi = _karar_toplu(_cur_user["id"] if _cur_user else None, _reddedilecekler, "reddedildi")
             try:
                 _bekleyen_tespitler_onbellekli.clear()
                 _onaylanmis_tespitler_onbellekli.clear()
@@ -4732,11 +4745,12 @@ if page=="Ana Sayfa":
             st.rerun()
 
         if _reddet_toplu_tiklandi:
-            from db import tespit_reddet as _tr_hepsi
-            _reddedilen_hepsi_sayisi = 0
-            for _t_hepsi in _bekleyen_tespitler:
-                if _tr_hepsi(_cur_user["id"] if _cur_user else None, _t_hepsi["id"]):
-                    _reddedilen_hepsi_sayisi += 1
+            from db import tespit_karar_toplu as _karar_toplu_hepsi
+            _tum_id_listesi = [t["id"] for t in _bekleyen_tespitler]
+            # v2.0.7.286: ayni toplu-yazma optimizasyonu burada da -
+            # tek DB cagrisi, tum bekleyen tespitler icin.
+            _reddedilen_hepsi_sayisi = _karar_toplu_hepsi(
+                _cur_user["id"] if _cur_user else None, _tum_id_listesi, "reddedildi")
             try:
                 _bekleyen_tespitler_onbellekli.clear()
                 _onaylanmis_tespitler_onbellekli.clear()

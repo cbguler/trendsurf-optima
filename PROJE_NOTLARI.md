@@ -6345,5 +6345,47 @@ tamam, canlı doğrulama BEKLİYOR):**
     olur) kontrol etmesi önerildi.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, SÖZDİZİMİ DOĞRULANDI - PUSH BEKLİYOR] v2.0.7.286 (10
+  Eylül 2026, Bahri'nin bulgusu - 3 ayrı konu): X EKSENİ ÇİFT TARİH +
+  "TÜMÜNÜ REDDET" YAVAŞLIĞI (N+1 SORGU) DÜZELTİLDİ.**
+  - **(1) X ekseni çift tarih:** İki panelli (fiyat+hacim) grafik
+    düzeninde ÜST panelin (row=1, fiyat) x-ekseni de `_eksen_ortak`'tan
+    `showticklabels=True` miras alıyordu - ALTTAKİ (row=2, hacim) panel
+    zaten aynı tarihleri gösterdiği için bu GEREKSİZ bir tekrardı. Üst
+    panelin tarih etiketleri kapatıldı.
+  - **(2) "Tümünü Reddet"/"Tümünü Onayla" çok yavaş - KESİN KÖK NEDEN:**
+    `tespit_reddet()`/`tespit_onayla()` HER ÇAĞRIDA KENDİ Supabase
+    bağlantısını açıp kapatıyordu - "Tümünü Reddet" düğmesi bekleyen
+    HER tespit için AYRI AYRI bu fonksiyonları çağırıyordu (klasik N+1
+    sorgu sorunu). Onlarca bekleyen tespit varsa (Bahri'nin bildirdiği
+    durum - aynı jeopolitik/petrol olayı için onlarca haber), bu
+    ONLARCA ayrı ağ gidiş-gelişi demekti.
+  - **Çözüm:** `db.py`'ye yeni `tespit_karar_toplu(kullanici_id,
+    tespit_id_listesi, karar)` fonksiyonu eklendi - TEK bir bağlantı +
+    TEK bir çok-satırlı INSERT ifadesiyle (PostgreSQL VALUES listesi)
+    TÜM kararları bir arada yazıyor. "Tümünü Reddet" artık TEK bir DB
+    çağrısı (kaç tespit olursa olsun), "Tümünü Onayla" ise EN FAZLA
+    2 çağrı (onaylanacaklar + reddedilecekler grupları için).
+  - **(3) "Onaylarsam skor kaç kez etkilenir?" endişesi - ZATEN
+    GÜVENLİ:** Kod incelendi, app.py'de ZATEN şu güvence mevcut: "Aynı
+    kalıp için birden fazla onaylı tespit varsa... puan İKİ KEZ
+    eklenmez - YÜKSEK olan şiddet kazanır, kalıp tek kez sayılır."
+    Yani 20 haberin hepsi AYNI kalıba (`kalip_key`) düşüyorsa, Optima
+    Skor ayarlaması SADECE BİR KEZ uygulanıyor (en yüksek şiddetle) -
+    Bahri'nin hepsini onaylaması güvenli.
+  - **AÇIK/GELECEK İÇİN NOT:** `haber_izleme.py` incelendiğinde, HER
+    haberin AI tarafından doğrulanması durumunda `otomatik_tespit_ekle()`
+    ile YENİ bir bekleyen kayıt oluşturduğu, AYNI kalıp için ZATEN
+    bekleyen bir kayıt olup olmadığını KONTROL ETMEDİĞİ görüldü - bu,
+    "onlarca pop-up birikmesi" sorununun KÖK NEDENİ (skor güvenliği
+    etkilenmiyor ama KULLANICI DENEYİMİ açısından can sıkıcı). Sistem
+    zaten incelikli bir "çoklu kaynak teyidi" mantığı içerdiği için
+    (bkz. `get_bekleyen_tespitler` v2.0.7.199/200 notu), aceleyle
+    dokunmak riskli - Bahri onaylarsa AYRI bir görev olarak ele
+    alınmalı (aynı kalıp için zaten bekleyen bir kayıt varsa yeni bir
+    tane oluşturmak yerine mevcut kaydı güncellemek/teyit listesine
+    eklemek gibi).
+  - **Doğrulama:** `python3 -m py_compile app.py db.py` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

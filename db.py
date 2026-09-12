@@ -1497,6 +1497,40 @@ def tespit_reddet(kullanici_id, tespit_id: int):
         return False
 
 
+def tespit_karar_toplu(kullanici_id, tespit_id_listesi, karar: str) -> int:
+    """v2.0.7.286 (10 Eylul 2026, Bahri'nin bulgusu - "Tumunu Reddet
+    cok uzun suruyor"): TEK BIR baglanti/sorguyla, BIRDEN FAZLA
+    tespit_id icin ayni karari ('onaylandi'/'reddedildi') yazar.
+    ONCEKI YONTEM ("Tumunu Reddet"/"Tumunu Onayla" dugmeleri) her
+    tespit icin AYRI bir `tespit_reddet()`/`tespit_onayla()` cagrisi
+    yapiyordu - HER cagri KENDI Supabase baglantisini aciyor/kapatiyordu
+    (klasik N+1 sorunu) - dusinlerce bekleyen tespit varsa (Bahri'nin
+    bildirdigi durum), bu ONLARCA ayri ag gidis-gelisi anlamina
+    geliyordu. Artik TEK bir INSERT ifadesiyle, TEK bir baglantiyla
+    TUMU birden yaziliyor. Basariyla islenen kayit sayisini dondurur."""
+    if not kullanici_id or not tespit_id_listesi:
+        return 0
+    try:
+        conn = get_conn()
+        # Her tespit_id icin (kullanici_id, tespit_id, karar, now())
+        # dortlusunu tek bir VALUES listesinde birlestiriyoruz.
+        _degerler_sablonu = ", ".join(["(?, ?, ?, now())"] * len(tespit_id_listesi))
+        _parametreler = []
+        for _tid in tespit_id_listesi:
+            _parametreler.extend([kullanici_id, _tid, karar])
+        conn.execute(
+            f"INSERT INTO kullanici_tespit_karari (kullanici_id, tespit_id, karar, karar_zamani) "
+            f"VALUES {_degerler_sablonu} "
+            f"ON CONFLICT (kullanici_id, tespit_id) DO UPDATE SET karar=EXCLUDED.karar, karar_zamani=now()",
+            tuple(_parametreler))
+        conn.commit()
+        conn.close()
+        return len(tespit_id_listesi)
+    except Exception as e:
+        print(f"[db] tespit_karar_toplu hata: {e}", file=sys.stderr)
+        return 0
+
+
 # ── v2.0.7.254: Kullanici Aktivite/Sayfa Ziyaret Takibi (Admin Paneli) ───────
 def sayfa_ziyareti_kaydet(kullanici_id, sayfa: str) -> bool:
     """Bir SAYFA DEGISIKLIGINI kaydeder - app.py TARAFINDAN SADECE sayfa
