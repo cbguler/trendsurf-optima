@@ -6693,5 +6693,33 @@ tamam, canlı doğrulama BEKLİYOR):**
     zorunda kalındı (Döviz için 18 Temmuz 2026, şimdi KRIPTO/MADEN için
     12 Eylül 2026).
 
+- **[UYGULANDI, GERÇEK BTC/ETH/HNT VERİSİYLE DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.296 (12 Eylül 2026, Bahri'nin bulgusu — "Hiç bir kriptonun
+  verisi 31 günden geriye gitmiyor"): KESİN KÖK NEDEN BULUNDU -
+  BORSAPY'NİN "period" PARAMETRESİ YANLIŞ YORUMLANIYORDU (VERİ
+  EKSİKLİĞİ DEĞİLDİ).**
+  - **Önce doğrulama:** BTC ve ETH'nin de HNT gibi TAM OLARAK 31
+    satırda, TAM OLARAK AYNI başlangıç tarihinde (13 Ağustos)
+    durduğu doğrulandı - bu, HNT'ye özgü bir "kısa listeleme geçmişi"
+    OLMADIĞINI, sistemik bir sorun olduğunu kesinleştirdi.
+  - **Kesin kök neden:** `bp.Crypto(kod).history(period="5y")`
+    GERÇEKTE sadece ~30 günlük veri döndürüyordu - borsapy'nin
+    "period" string parametresi (en azından "5y" için) DOĞRU
+    İŞLENMİYORDU. `start`/`end` parametreleriyle AÇIKÇA test
+    edildiğinde, BtcTurk'ün GERÇEKTEN Ocak 2024'e (ve muhtemelen
+    daha eskiye) uzanan GERÇEK veri sunduğu doğrulandı - yani sorun
+    veri EKSİKLİĞİ DEĞİL, kütüphaneye YANLIŞ TALEPTE bulunulmasıydı.
+  - **Çözüm:** `get_kripto_history()` (live_data.py) artık "period"
+    string'ini borsapy'ye DOĞRUDAN geçirmek yerine, Python'da AÇIKÇA
+    hesaplanan `start`/`end` tarihleriyle çağırıyor. **Bu HÂLÂ gerçek
+    BtcTurk verisi** (sentetik/çapraz-kur DEĞİL) - sadece kütüphaneye
+    DOĞRU şekilde talep ediliyor, v2.0.7.295'teki "sadece gerçek
+    kaynak" ilkesini hiç ihlal etmiyor.
+  - **Doğrulama (gerçek fonksiyonla, gerçek BtcTurk API'siyle):**
+    BTC: 1828 satır, 2021-09-11'e kadar (TAM 5 yıl). ETH: aynı. HNT:
+    703 satır, 2024-10-10'a kadar (GERÇEK listeleme tarihi - önceki
+    "31 gün" tamamen yanlıştı).
+  - **Doğrulama:** `python3 -m py_compile` temiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**

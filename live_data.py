@@ -1013,11 +1013,33 @@ def get_maden_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
 
 @st.cache_data(ttl=900, show_spinner=False)
 def get_kripto_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
-    """KRIPTO ticker (BTC, ETH, vb.) icin TRY-direkt OHLC tarihce (BtcTurk)."""
+    """KRIPTO ticker (BTC, ETH, vb.) icin TRY-direkt OHLC tarihce (BtcTurk).
+
+    v2.0.7.296 (12 Eylul 2026, Bahri'nin bulgusu - "Hic bir kriptonun
+    verisi 31 gunden geriye gitmiyor"): KESIN KOK NEDEN BULUNDU -
+    `bp.Crypto(...).history(period="5y")` GERCEKTE sadece ~30 GUNLUK
+    veri donduruyordu (BTC/ETH/HNT UCU DE, TAM AYNI 31 satir/AYNI
+    baslangic tarihiyle) - bu, borsapy kutuphanesinin "period" string
+    parametresini (en azindan "5y" icin) DOGRU islemedigini gosteriyor.
+    DOGRUDAN `start`/`end` tarihleriyle test edildiginde, BtcTurk'un
+    GERCEKTEN cok daha eski (en az Ocak 2024'e, muhtemelen daha
+    eskiye) GERCEK veri sundugu dogrulandi - yani sorun veri
+    EKSIKLIGI DEGIL, "period" parametresinin YANLIS YORUMLANMASIYDI.
+    Cozum: "period" stringi yerine ARTIK ACIKCA hesaplanan `start`/`end`
+    tarihleri kullaniliyor - bu HALA GERCEK BtcTurk verisi (sentetik/
+    capraz-kur DEGIL), sadece kutuphaneye DOGRU sekilde talep ediliyor."""
     if not BORSAPY_OK:
         return pd.DataFrame()
+    _PERIYOT_GUN = {"1mo": 31, "3mo": 92, "6mo": 183, "1y": 366, "5y": 1827}
+    _gun_sayisi = _PERIYOT_GUN.get(period, 31)
     try:
-        h = _borsapy_zaman_asimili(lambda: bp.Crypto(_kripto_bp_code(ticker)).history(period=period, interval="1d"), timeout=10)
+        import datetime as _dt
+        _bitis = _dt.datetime.now()
+        _baslangic = _bitis - _dt.timedelta(days=_gun_sayisi)
+        h = _borsapy_zaman_asimili(
+            lambda: bp.Crypto(_kripto_bp_code(ticker)).history(
+                start=_baslangic, end=_bitis, interval="1d"),
+            timeout=15)
         return _normalize_ohlc(h)
     except Exception:
         return pd.DataFrame()
