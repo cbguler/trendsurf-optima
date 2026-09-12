@@ -943,6 +943,35 @@ class _HistEmptyError(Exception):
                                               # v2.0.4.x+1: basarisiz sonuclar _HistEmptyError
                                               # firlatir - Streamlit exception'i cache'lemez,
                                               # yani gecici aksaklik her cagrida yeniden denenir.
+def _usd_hist_try_cevir(usd_hist: pd.DataFrame) -> pd.DataFrame:
+    """v2.0.7.294 (12 Eylul 2026, Bahri'nin bulgusu - HNT kripto
+    grafiginde son gunun fiyati (~0.50) digerleriyle (~23-24) TAMAMEN
+    UYUMSUZDU): USD-denominasyonlu bir OHLC gecmisini (yfinance'ten,
+    KRIPTO/MADEN yedek yolu) GERCEKTEN USDTRY ile carpip TL'ye cevirir.
+    ONCEKI KOD bu adimi HIC YAPMIYORDU - yorumda "USD x USDTRY
+    turetilmis" yaziyordu ama gercekte HAM USD degeri DOGRUDAN TL gibi
+    donduruluyordu. Her tarih icin USDTRY'nin O GUNKU degerini kullanir
+    (tek bir sabit kur DEGIL) - boylece cok yillik bir gecmiste kur
+    degisimi de dogru yansitilir. USDTRY verisi alinamazsa (cok nadir),
+    ham USD veriyi (cevrilmemis, ama en azindan HATASIZ CALISAN bir
+    sonuc) dondurur - sessizce yanlis TL degeri UYDURMAKTANSA."""
+    try:
+        _usdtry_hist = _ld_fx_history("USDTRY", "5y")
+        if _usdtry_hist is None or _usdtry_hist.empty:
+            return usd_hist
+        _kur_serisi = _usdtry_hist["Close"].reindex(
+            usd_hist.index, method="ffill").bfill()
+        if _kur_serisi.isna().any():
+            return usd_hist
+        _sonuc = usd_hist.copy()
+        for _kol in ["Open", "High", "Low", "Close"]:
+            if _kol in _sonuc.columns:
+                _sonuc[_kol] = _sonuc[_kol] * _kur_serisi.values
+        return _sonuc
+    except Exception:
+        return usd_hist
+
+
 def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
     # TEFAS — önce yerel JSON cache, sonra pytefas, son çare sentetik
     if category == "TEFAS":
@@ -996,7 +1025,16 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         hist = _ld_maden_history(ticker, period)
         if hist is not None and not hist.empty and len(hist) >= 5:
             return hist
-        # Yedek: yfinance (eski yontem, USD x USDTRY turetilmis)
+        # v2.0.7.294 (12 Eylul 2026, Bahri'nin bulgusu - "HNT grafiginde
+        # 12 Eylul fiyati (~0.50) diger gunlerle (~23-24) UYUMSUZ"):
+        # KESIN KOK NEDEN - bu yedek yolun yorumu "USD x USDTRY
+        # turetilmis" diyordu AMA KODUN KENDISI HICBIR CARPMA
+        # YAPMIYORDU - yfinance'in HAM USD fiyati DOGRUDAN TL gibi
+        # donduruluyordu. borsapy gecici olarak basarisiz oldugunda
+        # (Streamlit Cloud'a ozgu bir ag/API sorunu olabilir, sandbox'ta
+        # HER ZAMAN tekrarlanmayabilir) bu yedek yol devreye giriyor ve
+        # YANLIŞ (cevrilmemis) fiyat gosteriyordu. Artik GERCEKTEN
+        # USDTRY ile carpip TL'ye ceviriyor.
         try:
             import yfinance as yf
             from data_pipeline import _format_yf_symbol
@@ -1005,7 +1043,8 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 _sym = yf_symbol.strip()
             _h = yf.Ticker(_sym).history(period=period, auto_adjust=True)
             if not _h.empty and len(_h) >= 5:
-                return _h[["Open","High","Low","Close"]].dropna()
+                _h = _h[["Open","High","Low","Close"]].dropna()
+                return _usd_hist_try_cevir(_h)
         except Exception:
             pass
         raise _HistEmptyError()
@@ -1029,7 +1068,8 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         )
         if _btcturk_yeterli and not _btcturk_5y_kisa:
             return hist
-        # Yedek: yfinance BTC-USD turetilmis
+        # Yedek: yfinance BTC-USD turetilmis, USDTRY ile TL'ye cevrilir
+        # (v2.0.7.294 - bkz. MADEN blogundaki AYNI hata icin yukaridaki not)
         try:
             import yfinance as yf
             from data_pipeline import _format_yf_symbol
@@ -1041,6 +1081,7 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 if "Volume" in _h.columns:
                     _cols.append("Volume")
                 _h = _h[_cols].dropna(subset=["Open","High","Low","Close"])
+                _h = _usd_hist_try_cevir(_h)
                 # "5y" ozelinde: yfinance'in gercek araligi BtcTurk'ten
                 # DAHA UZUNSA yfinance'i kullan, degilse (ikisi de
                 # kisaysa ya da BtcTurk zaten daha uzunsa) elimizdeki

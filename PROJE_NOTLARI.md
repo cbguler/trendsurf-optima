@@ -6617,5 +6617,35 @@ tamam, canlı doğrulama BEKLİYOR):**
     sepetin gerçek kazanılan puan dağılımı" net şekilde ayrıştırıldı.
   - **Doğrulama:** `python3 -m py_compile` temiz.
 
+- **[UYGULANDI, GERÇEK USDTRY VERİSİYLE DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.294 (12 Eylül 2026, Bahri'nin bulgusu — "HNT grafiğinde 12
+  Eylül fiyatı (~0,50) diğer günlerle (~23-24) tamamen uyumsuz, bu
+  nasıl bir çelişki"): SİSTEMİK BİR HATA BULUNDU - KRIPTO/MADEN'İN
+  YFİNANCE YEDEK YOLU HİÇ TL'YE ÇEVRİLMİYORDU.**
+  - **Kesin kök neden:** `_get_hist_cached()`'in HEM KRIPTO HEM MADEN
+    dallarındaki yfinance yedek yolu, yorumlarında "USD x USDTRY
+    türetilmiş" YAZIYORDU ama kodun KENDİSİ hiçbir çarpma işlemi
+    YAPMIYORDU - yfinance'in HAM USD fiyatı doğrudan TL gibi
+    döndürülüyordu. Birincil kaynak (borsapy) geçici olarak
+    başarısız olduğunda (Streamlit Cloud'a özgü bir ağ/API sorunu
+    olabilir - bu SANDBOX'ta HER ZAMAN tekrarlanmayabilir) bu yedek
+    yol devreye giriyor ve YANLIŞ (çevrilmemiş) bir fiyat
+    gösteriyordu - HNT örneğinde gerçek ~23-24 TL yerine ~0,50
+    "TL" (aslında çevrilmemiş USD) gösterilmişti.
+  - **Çözüm:** Yeni `_usd_hist_try_cevir(usd_hist)` yardımcı
+    fonksiyonu eklendi - `_ld_fx_history("USDTRY", "5y")`'den HER
+    TARİH için o günün GERÇEK USDTRY kurunu alıp (tek bir sabit kur
+    DEĞİL - çok yıllık geçmişte kur değişimini de doğru yansıtır)
+    Open/High/Low/Close'u bu kurla çarpıyor. KRIPTO ve MADEN'in HER
+    İKİSİNİN de yfinance yedek yoluna uygulandı.
+  - **Doğrulama:** Sahte bir USD-denominasyonlu seri (Bahri'nin
+    ekran görüntüsündeki TAM DEĞERLERLE, ~0,50 civarı), gerçek
+    `get_fx_history("USDTRY")` verisiyle çevrildi - sonuç ~24-25 TL
+    aralığına düştü, bu da borsapy'nin GERÇEK HNTTRY verisiyle
+    (~23-24 TL) TUTARLI. `python3 -m py_compile` temiz.
+  - **Güvenlik notu:** USDTRY verisi HERHANGİ bir nedenle alınamazsa,
+    fonksiyon ÇEVRİLMEMİŞ (ama en azından HATASIZ çalışan) veriyi
+    döndürür - sessizce YANLIŞ bir TL değeri UYDURMAK yerine.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
