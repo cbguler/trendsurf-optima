@@ -1056,7 +1056,31 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
             return hist  # yfinance denemesi basarisiz oldu, BtcTurk'un kisa da olsa verisi olsun
         raise _HistEmptyError()
 
-    # BIST - simdilik yfinance (v1.7'de borsapy.Ticker'a gecilecek)
+    # v2.0.7.290 (12 Eylul 2026, Bahri'nin bulgusu - "daha once kaynak
+    # cesitlendirme konusunu ele almistik, neden unutuyorsun?"): KESIN
+    # BULGU - kodda v1.7'den beri bekleyen bir TODO vardi: "BIST -
+    # simdilik yfinance (v1.7'de borsapy.Ticker'a gecilecek)". Doviz/
+    # Maden/Kripto ZATEN borsapy'ye gecirilmisti (yukaridaki bloklar),
+    # ama BIST bu gecisi HIC ALMAMISTI - yfinance'in BIST icin en son
+    # gunun Open/High/Low/Close alanlarini bazen NaN birakmasi sorununun
+    # KOK NEDENI buydu. `bp.Ticker(ticker).history()` gercek veriyle
+    # test edildi: 11 Eylul'u EKSIKSIZ donduruyor (yfinance'in NaN
+    # biraktigi TAM O GUN). Artik borsapy ONCE deneniyor, yfinance
+    # SADECE yedek (borsapy basarisiz olursa).
+    try:
+        import borsapy as bp
+        _bp_hist = bp.Ticker(ticker).history(period=period, interval="1d")
+        if _bp_hist is not None and not _bp_hist.empty and len(_bp_hist) >= 5:
+            _bp_cols = ["Open", "High", "Low", "Close"]
+            if "Volume" in _bp_hist.columns:
+                _bp_cols.append("Volume")
+            _bp_hist = _bp_hist[_bp_cols].dropna(subset=["Open","High","Low","Close"])
+            if not _bp_hist.empty:
+                return _bp_hist
+    except Exception:
+        pass
+
+    # BIST - yfinance (borsapy basarisiz olursa yedek)
     from data_pipeline import _format_yf_symbol
     sym = _format_yf_symbol(ticker, category)
     if yf_symbol and yf_symbol.strip() and "=F" in str(yf_symbol):

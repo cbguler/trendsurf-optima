@@ -6490,5 +6490,38 @@ tamam, canlı doğrulama BEKLİYOR):**
   dosyayı "modified/uncommitted" gösteriyordu - içerik doğru ve
   tamamlanmış olduğu için OLDUĞU GİBİ KORUNUP bu push'a dahil edildi.
 
+- **[UYGULANDI, GERÇEK CATES VERİSİYLE DOĞRULANDI - PUSH BEKLİYOR]
+  v2.0.7.290 (12 Eylül 2026, Bahri'nin uyarısı - "daha önce kaynak
+  çeşitlendirme konusunu ele almıştık, neden unutuyorsun?"): BIST
+  İÇİN UNUTULMUŞ BİR TODO BULUNDU VE UYGULANDI - GERÇEK KÖK NEDEN
+  BUYMUŞ.**
+  - **Bahri haklıydı - kodda ŞU AN'A KADAR UYGULANMAMIŞ, v1.7'den beri
+    bekleyen bir TODO vardı:** `# BIST - simdilik yfinance (v1.7'de
+    borsapy.Ticker'a gecilecek)`. Döviz/Maden/Kripto ZATEN
+    borsapy'ye geçirilmişti (aynı fonksiyonun diğer kategori
+    blokları) - ama BIST bu geçişi HİÇ ALMAMIŞTI, hâlâ SADECE
+    yfinance kullanıyordu. v2.0.7.289'daki "canlı fiyatla yama"
+    çözümüm bu ASIL kaynak-çeşitlendirme eksikliğini GÖRMEDİ.
+  - **Doğrulama:** `bp.Ticker('CATES').history(period='5y')` gerçek
+    veriyle test edildi - 11 Eylül'ü **eksiksiz** döndürüyor
+    (Open=64.70, High=68.10, Low=64.45, Close=67.00) - yfinance'in
+    NaN bıraktığı TAM O GÜN. 691 satır, 1,47 saniyede.
+  - **Çözüm:** BIST artık ÖNCE `bp.Ticker(ticker).history(...)`
+    (borsapy) deniyor - başarılı olursa DOĞRUDAN kullanılıyor.
+    Sadece borsapy başarısız olursa (ör. geçici kesinti) yfinance'e
+    DÜŞÜLÜYOR - Döviz/Maden/Kripto'daki AYNI "önce borsapy, yedek
+    yfinance" deseni artık BIST için de tutarlı şekilde uygulanıyor.
+  - **v2.0.7.289 ile ilişkisi:** O düzeltme (canlı Son_Fiyat ile
+    NaN/eksik son-gün tamamlama) HÂLÂ FAYDALI - bu YENİ düzeltme
+    KÖK NEDENİ (yfinance'in BIST için NaN bırakması) ortadan
+    kaldırıyor, ama seans DEVAM EDERKEN (borsapy'nin GÜNLÜK verisi
+    de bugünü henüz hiç içermeyebilir) v2.0.7.289'un "bugün barı
+    yoksa ekle" mantığı hâlâ devrede - ikisi TAMAMLAYICI.
+  - **`borsapy>=0.10.0` zaten `requirements.txt`'te** (Döviz/Maden/
+    Kripto için zaten kullanıldığından) - ek bağımlılık gerekmedi.
+  - **Doğrulama:** `python3 -m py_compile` temiz. Eklenen mantığın
+    AYNISI gerçek CATES verisiyle izole test edildi - 691 satır,
+    11 Eylül eksiksiz.
+
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
