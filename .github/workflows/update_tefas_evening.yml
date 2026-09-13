@@ -47,15 +47,54 @@ name: TEFAS Aksam Guncelle
 # Actions dakikası, commit/push yok (aşağıdaki "git diff --cached
 # --quiet" kontrolü zaten böyle çalışıyordu).
 
+# v2.0.7.297 (13 Eylul 2026, Bahri'nin talebi - "gun icinde 08:00-22:00
+# arasinda TEFAS degisiklikleri aninda gelsin, geri kalan saatlerde daha
+# calm olsun"): YUKARIDAKI schedule BLOGU TAMAMEN KALDIRILDI, YERINE
+# cron-job.org + workflow_dispatch GECILDI.
+#
+# KANIT (Bahri'nin Actions ekran goruntuleri, 13 Eylul): 309 run'lik
+# gecmis incelendi - yukaridaki 24 slotluk (12 sabah + 12 ogleden sonra,
+# primer+2dk yedek) cron yapilandirmasina ragmen, gercekte GUNDE SADECE
+# ~4 CIFT (8) run tetikleniyordu, her biri nominal saatinden 30dk-2.5
+# saat GEC. Ayrica bir run (#307, 13 Eylul 12:25 civari) "Startup
+# failure" ile basarisiz oldu - GitHub'in kendi altyapi sorunuydu (is
+# hic baslamadi), workflow kodunda hata degildi. Bu, haber_izleme.yml'de
+# (v2.0.7.182) ve firsat_radari/send_email.yml'de zaten tespit edilip
+# cozulmus AYNI "GitHub'in schedule'i best-effort, sik/yakin araliklarda
+# GUVENILMEZ" sorunu - 2 dakikalik yedek offset bunu cozmuyor, cunku
+# sorun tek bir slotun kacmasi degil, slotlarin cogunun HIC tetiklenmemesi.
+#
+# COZUM (send_email.yml v2.0.3.8'den beri kanitlanmis ayni yontem):
+# schedule bloğu SILINDI, sadece workflow_dispatch kaldi. Tetikleme
+# artik cron-job.org'dan (mevcut suresiz "cron-job-tetikleyici" token'i,
+# sadece bu repo + Actions:write) disaridan API cagrisiyla yapiliyor:
+#   POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/update_tefas_evening.yml/dispatches
+#   Body: {"ref":"main"}
+#
+# IKI AYRI cron-job.org isi KURULMASI GEREKIYOR (Bahri'nin gun/gece
+# ayrimi talebi icin - tek cron-job.org isi tek bir siklik destekler,
+# bu adim git push ile yapilamaz, Bahri'nin dashboard'dan kurmasi
+# gerekiyor - mevcut "TrendSurf Haber Izleme" isini cogaltmakla ayni
+# yontem):
+#   1) "TrendSurf TEFAS Gunduz" - her 30 dakikada bir, TRT 08:00-21:30
+#      arasi (dakika: 0,30 - saat: 8,9,10,11,12,13,14,15,16,17,18,19,20,21
+#      - saat dilimi Europe/Istanbul olarak ayarlanmali)
+#   2) "TrendSurf TEFAS Gece" - 3 saatte bir, TRT 22:00/01:00/04:00/07:00
+#      (dakika: 0 - saat: 22,1,4,7 - saat dilimi Europe/Istanbul)
+# Gunduz penceresinin son kontrolu (21:30) ile gece isinin ilk kontrolu
+# (22:00) arasinda bosluk yok, 08:00-22:00 tam kapsaniyor.
+#
+# concurrency bloğu eklendi (haber_izleme.yml ile ayni mantik): 30
+# dakikalik gunduz araligi dusunulunce, bir calismanin beklenenden uzun
+# surup bir sonraki tetiklemeyle CAKISMASINI (ayni anda iki git push)
+# engellemek icin.
+
 on:
-  schedule:
-    # TRT 07:00,07:30,08:00,08:30,09:00,09:30 = UTC 04:00-06:30 (30 dk aralikla)
-    - cron: '0,30 4,5,6 * * *'      # Birincil - sabah yogun pencere
-    - cron: '2,32 4,5,6 * * *'      # Yedek (2 dk offset) - sabah yogun pencere
-    # TRT 10,12,14,16,18,20 = UTC 07,09,11,13,15,17 (2 saatte bir, eskisi gibi)
-    - cron: '0 7,9,11,13,15,17 * * *'   # Birincil - gunun geri kalani
-    - cron: '2 7,9,11,13,15,17 * * *'   # Yedek (2 dk offset) - gunun geri kalani
   workflow_dispatch:
+
+concurrency:
+  group: tefas-aksam-guncelle
+  cancel-in-progress: false
 
 jobs:
   update_tefas:

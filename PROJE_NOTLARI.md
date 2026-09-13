@@ -6723,3 +6723,44 @@ tamam, canlı doğrulama BEKLİYOR):**
 
 **Yeni bir oturumda "acaba X daha önce denendi mi" sorusu varsa, önce bu
 dosyayı ve `git log --oneline` çıktısını kontrol et.**
+
+- **[KOD HAZIR - PUSH BEKLİYOR, CRON-JOB.ORG KURULUMU BAHRI'DEN BEKLİYOR]
+  v2.0.7.297 (13 Eylül 2026, O&M4, Bahri'nin talebi — "gün içinde
+  08:00-22:00 arası TEFAS değişiklikleri anında gelsin, geri kalan
+  saatlerde daha calm olsun"): update_tefas_evening.yml GITHUB'IN KENDİ
+  schedule TETİKLEYİCİSİNDEN cron-job.org + workflow_dispatch'E
+  TAŞINDI.**
+  - **Kanıt (Bahri'nin GitHub Actions ekran görüntüleri):** "TEFAS
+    Aksam Guncelle" workflow'unun 309 run'lık geçmişi incelendi -
+    yml'deki 24 slotluk (12 sabah + 12 öğleden sonra, primer+2dk yedek)
+    cron yapılandırmasına rağmen gerçekte günde sadece ~4 çift (8) run
+    tetikleniyordu, her biri nominal saatinden 30dk-2.5 saat geç. Ayrıca
+    run #307 (13 Eylül ~12:25) "Startup failure" ile başarısız oldu -
+    annotation'da GitHub'ın kendi "unexpected error, otomatik
+    bildirildik" mesajı vardı (request ID: 529a87e6-af55-11f1-8b17-
+    ab3a9d2f1dd0) - workflow kodunda hata değil, GitHub'ın kendi
+    altyapı sorunu, kendiliğinden geçti (#308/#309 hemen sonra normal
+    süresinde başarılı oldu).
+  - **Kesin teşhis:** Bu, haber_izleme.yml (v2.0.7.182) ve firsat_radari/
+    send_email.yml'de zaten çözülmüş "GitHub'ın schedule'ı best-effort,
+    sık/yakın aralıklarda GÜVENİLMEZ" sorununun aynısı - 2 dakikalık
+    yedek offset bunu çözmüyor çünkü sorun tek bir slotun kaçması değil,
+    slotların çoğunun hiç tetiklenmemesi.
+  - **Uygulanan çözüm (kod tarafı, TAMAMLANDI):** `on: schedule:` bloğu
+    tamamen silindi, sadece `workflow_dispatch:` kaldı. `concurrency:`
+    bloğu eklendi (`group: tefas-aksam-guncelle`) - artan sıklıkla
+    (gündüz 30 dakikada bir) çakışan çalışmaları engellemek için.
+  - **BAHRI'DEN BEKLENEN (kod dışı, git push ile yapılamaz):** cron-job.org
+    dashboard'ından İKİ AYRI iş kurulmalı (mevcut "cron-job-tetikleyici"
+    süresiz token'ı ile, "TrendSurf Haber Izleme" işini çoğaltmakla aynı
+    yöntem):
+    1) "TrendSurf TEFAS Gunduz" - her 30 dakikada bir, TRT 08:00-21:30
+       (dakika 0,30 - saat 8-21 - saat dilimi Europe/Istanbul)
+       POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/update_tefas_evening.yml/dispatches
+       Body: {"ref":"main"}
+    2) "TrendSurf TEFAS Gece" - 3 saatte bir, TRT 22:00/01:00/04:00/07:00
+       (dakika 0 - saat 22,1,4,7 - saat dilimi Europe/Istanbul), aynı
+       endpoint ve body.
+  - **Doğrulama:** `python3 -c "import yaml; yaml.safe_load(...)"` ile
+    YAML sözdizimi temiz, `on`/`concurrency`/`jobs` yapısı bozulmadı.
+    py.compile gerekmiyor (yml dosyası, Python değil).
