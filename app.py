@@ -4495,6 +4495,34 @@ def _render_karsilastirma(_cur_user, portfolio):
     with st.spinner("Geçmiş piyasa verileri hesaplanıyor (BIST100/Altın/Dolar/Mevduat/Tahvil/Repo/portföy varlıkları)..."):
         _seriler = _kiyaslama_gunluk_serileri(portfolio)
 
+    # GEÇİCİ TEŞHİS BLOĞU (14 Eylül 2026, O&M4, Bahri'nin bulgusu -
+    # "Getiri Kıyaslaması" grafiği ~1500%'e çıkıp aniden çakılıyor,
+    # "Deneme" grafiğinde BAG -100%'e düşüyor ama tablo +8,66% kâr
+    # gösteriyor): dıştan (pytefas ile doğrudan test) alınan ham TEFAS
+    # verisi TAMAMEN TEMİZ çıktı (5 fonun 3 aylık geçmişinde hiçbir
+    # anormallik yok) - yani sorun kaynak veride değil, TSO'nun kendi
+    # önbellek/hesaplama katmanında. Bu blok, UYGULAMANIN GERÇEKTE
+    # KULLANDIĞI (yerel JSON cache dahil) ticker serilerini olduğu gibi
+    # gösteriyor - hangi ticker'ın hangi tarihte ne değer taşıdığını
+    # görüp kesin teşhis koymak için. TEŞHİS BİTİNCE BU BLOK SİLİNMELİ.
+    with st.expander("GEÇİCİ TEŞHİS — ticker bazında ham veri (işin bitince sil)", expanded=False):
+        _ts_debug, _gun_debug, _bas_debug = _kiyaslama_ticker_serileri_cek(portfolio)
+        if _ts_debug:
+            for _tkr_dbg, _s_dbg in _ts_debug.items():
+                _medyan_dbg = float(_s_dbg.median())
+                st.write(
+                    f"**{_tkr_dbg}** — {len(_s_dbg)} gün · min={_s_dbg.min():.4f} · "
+                    f"max={_s_dbg.max():.4f} · medyan={_medyan_dbg:.4f} · "
+                    f"son değer={_s_dbg.iloc[-1]:.4f} ({_s_dbg.index[-1].date()})"
+                )
+                if _medyan_dbg > 0:
+                    _sapma_dbg = _s_dbg[(_s_dbg > _medyan_dbg * 3) | (_s_dbg < _medyan_dbg / 3)]
+                    if not _sapma_dbg.empty:
+                        st.error(f"ANORMALLİK BULUNDU — {_tkr_dbg}:")
+                        st.dataframe(_sapma_dbg.rename("Değer"))
+        else:
+            st.write("`_ticker_seri` boş döndü — hiçbir ticker için geçmiş veri çekilememiş.")
+
     if not _seriler:
         st.info("Karşılaştırma için geçerli alış tarihi olan pozisyon bulunamadı.")
         return
