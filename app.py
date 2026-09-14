@@ -1808,14 +1808,30 @@ def _grafik_yorumu_sablon(t: dict, ticker: str, birim: str = "TL") -> str:
     )
 
 
-def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: str = "TL") -> str:
+def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: str = "TL",
+                         nominal_gun: int = None) -> str:
     """Ana giris noktasi: once sayisal analiz hesaplanir (algoritma),
     sonra elde varsa Gemini ile dogal cumleler uretilir, YOKSA/hata
     olursa sabit sablona (_grafik_yorumu_sablon) dusulur - ozellik
-    HER DURUMDA calisir, sadece metin kalitesi degisir."""
+    HER DURUMDA calisir, sadece metin kalitesi degisir.
+
+    v2.0.7.300 (14 Eylul 2026, O&M4, Bahri'nin bulgusu - "grafik 90 gun
+    diyor, analiz 132 gun diyor, celiskili"): KOK NEDEN - grafigin
+    kendisi (v2.0.7.275'ten beri, BILEREK) her zaman 5 yillik veri
+    cekip ekranda sadece SON N TAKVIM GUNUNU gosteriyor (varsayilan_gun);
+    ama 'Grafigi Yorumla' fonksiyonuna giden 'hist' AYRI bir cagriyla
+    (enrich() icinde get_hist(..., "3mo")) geliyor - "3mo" borsapy/
+    yfinance'ta ~90 ISLEM GUNU demek, bu da haftasonu/tatiller yuzunden
+    ~130+ TAKVIM GUNUNE yayiliyor. Iki sayi da DOGRU ama FARKLI seyi
+    olcuyor (gorunen takvim penceresi vs cekilen islem gunu sayisi).
+    COZUM: metnin basligindaki gun sayisi artik HESAPLANMIYOR, cagiran
+    yerden (Periyot secimine karsilik gelen NOMINAL deger, _PERIYOT_GUN_MAP)
+    aliniyor - boylece grafikle HER ZAMAN aynı sayiyi gosterir."""
     t = _grafik_teknik_analiz(hist)
     if not t:
         return "Bu varlık için yeterli geçmiş veri bulunmuyor (en az 20 günlük veri gerekir)."
+    if nominal_gun:
+        t["donem_gun_sayisi"] = int(nominal_gun)
 
     # v2.0.7.299: tum ISO tarihleri Turkce formata cevirip t'ye ekliyoruz -
     # hem sablon hem Gemini prompt'u tek noktadan Turkce tarih kullansin.
@@ -5733,7 +5749,8 @@ if page=="Ana Sayfa":
                     if st.session_state.get(_grafik_yorum_key_ana):
                         with st.spinner("Grafik analiz ediliyor..."):
                             _yorum_metni_ana = _grafik_yorumu_uret(
-                                d["hist"], sel_ana, str(sel_row_ana.get("Kategori", "")))
+                                d["hist"], sel_ana, str(sel_row_ana.get("Kategori", "")),
+                                nominal_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
                         st.markdown(_yorum_metni_ana)
                 else:
                     st.warning(f"{sel_ana} icin gecmis fiyat verisi yuklenemedi.")
@@ -6685,7 +6702,8 @@ elif page=="Portföyüm":
                 if st.session_state.get(_grafik_yorum_key_pf):
                     with st.spinner("Grafik analiz ediliyor..."):
                         _yorum_metni_pf = _grafik_yorumu_uret(
-                            _d["hist"], _sel_tkr, str(_sr.get("Kategori", "")))
+                            _d["hist"], _sel_tkr, str(_sr.get("Kategori", "")),
+                            nominal_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
                     st.markdown(_yorum_metni_pf)
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
@@ -7068,7 +7086,8 @@ elif page in CAT:
             st.session_state[_grafik_yorum_key] = not st.session_state.get(_grafik_yorum_key, False)
         if st.session_state.get(_grafik_yorum_key):
             with st.spinner("Grafik analiz ediliyor..."):
-                _yorum_metni = _grafik_yorumu_uret(d["hist"], sel, cat_code)
+                _yorum_metni = _grafik_yorumu_uret(d["hist"], sel, cat_code,
+                                                    nominal_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
             st.markdown(_yorum_metni)
     else:
         st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")

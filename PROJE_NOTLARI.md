@@ -6828,3 +6828,24 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     tarihleri ve hesaplanmış hedefleri kullanacak şekilde) - ama
     Bahri'nin GEMINI_API_KEY'i tanımlı olmadığı için şu an fiilen
     SABIT ŞABLON çalışıyor, Gemini yolu devrede değil.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.300 (14 Eylül 2026, O&M4,
+  Bahri'nin bulgusu - "grafik 90 gün diyor, analiz 132 gün diyor,
+  çelişkili"): "Grafiği Yorumla" başlığındaki gün sayısı artık HER
+  ZAMAN grafikle eşleşiyor.**
+  - **Kök neden (çelişki değil, iki farklı ölçüm):** Grafik
+    (v2.0.7.275'ten beri BİLEREK) her zaman 5 yıllık veri çekip
+    ekranda sadece son N TAKVİM GÜNÜNÜ gösteriyor. "Grafiği Yorumla"ya
+    giden veri ise `enrich()` içinde `get_hist(..., "3mo")` ile ayrı
+    çekiliyor - "3mo" borsapy/yfinance'ta ~90 İŞLEM GÜNÜ demek, bu da
+    hafta sonu/tatiller yüzünden ~130+ TAKVİM GÜNÜNE yayılıyor. Bu
+    v2.0.7.299'dan önce hiç görünmüyordu çünkü eski şablon hiç gün
+    sayısı yazmıyordu - yeni "{TICKER} {N} Günlük Grafik Analizi"
+    başlığı bunu ilk kez görünür kıldı.
+  - **Çözüm:** `_grafik_yorumu_uret()`'e `nominal_gun` parametresi
+    eklendi - artık gün sayısını KENDİ HESAPLAMIYOR, çağıran yerden
+    (`_PERIYOT_GUN_MAP.get(period_val, 90)`, grafiğin kullandığı AYNI
+    değer) alıyor. 3 çağrı yeri de (Ana Sayfa, Portföyüm, Kategori
+    detay) güncellendi.
+  - **Doğrulama:** CATES gerçek verisiyle test edildi - başlık artık
+    "90 Günlük" diyor (grafikteki "(90 gün)" ile birebir aynı).
