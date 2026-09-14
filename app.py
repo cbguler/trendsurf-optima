@@ -1450,6 +1450,35 @@ def clickable_table(df_show, key, sel_ticker="", col_cfg=None):
 # anahtari VARSA Gemini ile, YOKSA sabit bir sablonla yapilir - boylece
 # ozellik st.secrets'ta GEMINI_API_KEY/GROQ_API_KEY tanimli olmasa BILE
 # calisir (daha sade ama eksiksiz bir metinle).
+#
+# v2.0.7.299 (14 Eylul 2026, O&M4, Bahri'nin talebi): tarihler artik
+# ISO ("2026-05-21") yerine Turkce ("21 Mayis 2026") formatta; ayrica
+# "Kritik Seviyeler" bolumu artik SADECE mevcut destek/direnci degil,
+# o seviye KIRILIRSA fiyatin gidebilecegi BIR SONRAKI hedefi de
+# hesapliyor (Bahri'nin verdigi ornek formata gore). Hedefler
+# UYDURULMUYOR: ya gercek bir onceki pivot (ikinci direnc/destek) ya da
+# klasik "olculu hareket" (measured move) projeksiyonu kullaniliyor.
+_AYLAR_TR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+             "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+
+
+def _tarih_tr(tarih) -> str:
+    """ISO tarih string'i ("2026-05-21", saatli/saat dilimli halleri
+    dahil) ya da bir Timestamp/date nesnesini "21 Mayıs 2026" seklinde
+    Turkce formata cevirir. Gecersiz/bos girdide oldugu gibi doner."""
+    from datetime import datetime as _dt_tr
+    if tarih is None or tarih == "":
+        return ""
+    if isinstance(tarih, str):
+        try:
+            tarih = _dt_tr.strptime(tarih[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return tarih
+    elif hasattr(tarih, "date") and callable(getattr(tarih, "date")):
+        tarih = tarih.date()
+    return f"{tarih.day} {_AYLAR_TR[tarih.month - 1]} {tarih.year}"
+
+
 def _grafik_teknik_analiz(hist: pd.DataFrame) -> dict:
     """Bir varligin OHLCV gecmisinden teknik analiz icin gereken TUM
     sayisal degerleri hesaplar. Yetersiz veri (20 gunden az) varsa
@@ -1468,6 +1497,7 @@ def _grafik_teknik_analiz(hist: pd.DataFrame) -> dict:
         "son_fiyat": son_fiyat,
         "ma20": float(ma20.iloc[-1]),
         "ma50": float(ma50.iloc[-1]) if ma50 is not None and ma50.notna().iloc[-1] else None,
+        "donem_gun_sayisi": int((pr.index[-1] - pr.index[0]).days) if len(pr) > 1 else 0,
     }
 
     if ma50 is not None and ma50.notna().iloc[-1]:
@@ -1512,11 +1542,39 @@ def _grafik_teknik_analiz(hist: pd.DataFrame) -> dict:
     altteki_dipler = [d for d in dipler if d[1] < son_fiyat]
     ana_destek = max(altteki_dipler, key=lambda d: d[1]) if altteki_dipler else (
         (hist.index[-1], float(lows.min())))
+    tum_dipler_sirali = sorted(dipler, key=lambda d: d[1])
+    ikinci_destek = next((d for d in tum_dipler_sirali if d[1] < ana_destek[1]), None)
 
     sonuc["ana_direnc"] = {"tarih": str(ana_direnc[0].date()), "fiyat": ana_direnc[1]}
     sonuc["ikinci_direnc"] = ({"tarih": str(ikinci_direnc[0].date()), "fiyat": ikinci_direnc[1]}
                                if ikinci_direnc else None)
     sonuc["ana_destek"] = {"tarih": str(ana_destek[0].date()), "fiyat": ana_destek[1]}
+    sonuc["ikinci_destek"] = ({"tarih": str(ikinci_destek[0].date()), "fiyat": ikinci_destek[1]}
+                               if ikinci_destek else None)
+
+    # v2.0.7.299: kirilim hedefleri. Once GERCEK bir sonraki pivot
+    # denenir (ikinci_direnc/ikinci_destek); yukari yonde yoksa klasik
+    # "olculu hareket" (measured move) projeksiyonu kullanilir - bu
+    # yonde HER ZAMAN direnc uzerine pozitif bir aralik eklendigi icin
+    # guvenlidir. Asagi yonde ise olculu hareket kullanilmiyor (buyuk
+    # bir araligin ana_destek'ten cikarilmasi bazen eksi/anlamsiz bir
+    # fiyat uretebiliyordu) - bunun yerine HER ZAMAN gercek, gozlenmis
+    # bir deger olan donem ici en dusuk fiyat kullaniliyor. Hicbir
+    # sayi rastgele uydurulmuyor.
+    _aralik = max(ana_direnc[1] - ana_destek[1], 0.0)
+    if ikinci_direnc is not None:
+        sonuc["yukari_kirilim_hedefi"] = {"fiyat": ikinci_direnc[1], "kaynak": "onceki_zirve"}
+    elif _aralik > 0:
+        sonuc["yukari_kirilim_hedefi"] = {"fiyat": ana_direnc[1] + _aralik, "kaynak": "olculu_hareket"}
+    else:
+        sonuc["yukari_kirilim_hedefi"] = None
+    _donem_dusuk_deger = float(pr.min())
+    if ikinci_destek is not None:
+        sonuc["asagi_kirilim_hedefi"] = {"fiyat": ikinci_destek[1], "kaynak": "onceki_dip"}
+    elif _donem_dusuk_deger < ana_destek[1]:
+        sonuc["asagi_kirilim_hedefi"] = {"fiyat": _donem_dusuk_deger, "kaynak": "donem_dusugu"}
+    else:
+        sonuc["asagi_kirilim_hedefi"] = None
 
     def _ikili_var_mi(noktalar, tolerans=0.03):
         if len(noktalar) < 2:
@@ -1547,53 +1605,206 @@ def _grafik_teknik_analiz(hist: pd.DataFrame) -> dict:
 
 def _grafik_yorumu_sablon(t: dict, ticker: str, birim: str = "TL") -> str:
     """AI KULLANILAMADIGINDA (anahtar yok veya AI hatasi) devreye giren,
-    SABIT ama EKSIKSIZ sablon - Bahri'nin verdigi formata sadik kalir,
-    sadece cumleler daha mekanik/dogrudandir."""
+    SABIT ama EKSIKSIZ sablon.
+
+    v2.0.7.299 (14 Eylul 2026, O&M4, Bahri'nin talebi): format tamamen
+    Bahri'nin verdigi ornege gore yeniden yazildi - genel bir giris
+    paragrafi, "{TICKER} {N} Gunluk Grafik Analizi" basligi, 4 maddelik
+    yapisal ozet (Trend/Ortalamalar/Hacim/Son Durum), ve en onemlisi
+    "Kritik Seviyeler ve Fiyat Hedefleri" artik bir TABLO - her seviyenin
+    KIRILMASI durumunda fiyatin nereye gidebilecegini de gosteriyor.
+    Tarihler artik Turkce ("21 Mayıs 2026")."""
     def _f(x):
         return fmt_tr(x, 2 if x < 1000 else 0)
-    ma_metni = ""
+
+    yon_yukselen = t["fiyat_ma_ustunde"]
+    trend_kelime = "Yükselen Trend" if yon_yukselen else "Düşen Trend"
+    donem_gun = t.get("donem_gun_sayisi") or 90
+
+    # ── Genel giris paragrafi (sabit, egitici baglam) ──────────────
+    giris = (
+        "Teknik analizde kritik destek veya direnç seviyelerinin aşılması "
+        "durumunda fiyatın izleyebileceği potansiyel hedef noktalarını "
+        "belirlemek analizin temel unsurlarından biridir. Direnç "
+        "kırılımlarında formasyon hedefleri, geçmiş zirveler veya ölçülü "
+        "hareket (measured move) projeksiyonları yukarı yönlü hedef "
+        "oluştururken; destek kırılımlarında ise alt hareketli ortalamalar "
+        "ve önceki dip seviyeleri aşağı yönlü hedef olarak takip edilir."
+    )
+
+    baslik = f"**{ticker} {donem_gun} Günlük Grafik Analizi**"
+
+    # ── Madde 1: Trend Yapısı ───────────────────────────────────────
+    if yon_yukselen:
+        trend_madde = (
+            f"**Trend Yapısı ({trend_kelime}):** {t['donem_en_dusuk']['tarih_tr']} tarihli "
+            f"~{_f(t['donem_en_dusuk']['fiyat'])} {birim} dip seviyesinden itibaren yükseliş "
+            f"kazanan {ticker}, {t['donem_en_yuksek']['tarih_tr']} tarihinde ~"
+            f"{_f(t['donem_en_yuksek']['fiyat'])} {birim} seviyesine kadar ivme kazanmıştır; "
+            f"güncel fiyat ~{_f(t['son_fiyat'])} {birim}."
+        )
+    else:
+        trend_madde = (
+            f"**Trend Yapısı ({trend_kelime}):** {t['donem_en_yuksek']['tarih_tr']} tarihli "
+            f"~{_f(t['donem_en_yuksek']['fiyat'])} {birim} zirve seviyesinden itibaren gerileyen "
+            f"{ticker}, {t['donem_en_dusuk']['tarih_tr']} tarihinde ~"
+            f"{_f(t['donem_en_dusuk']['fiyat'])} {birim} seviyesine kadar düşüş kaydetmiştir; "
+            f"güncel fiyat ~{_f(t['son_fiyat'])} {birim}."
+        )
+
+    # ── Madde 2: Hareketli Ortalamalar ──────────────────────────────
     if t.get("ma50") is not None:
         iliski = "üzerinde" if t["ma20_ma50_iliski"] == "MA20_USTUNDE_MA50" else "altında"
         kesisim_metni = ""
         if t.get("son_kesisim") == "golden_cross":
-            kesisim_metni = " Kısa süre önce MA20, MA50'yi yukarı kesti (Golden Cross)."
+            kesisim_metni = " Kısa süre önce MA20, MA50'yi yukarı kesmiştir (Golden Cross)."
         elif t.get("son_kesisim") == "death_cross":
-            kesisim_metni = " Kısa süre önce MA20, MA50'yi aşağı kesti (Death Cross)."
-        konum = "üzerinde seyrediyor, kısa-orta vadeli ivme pozitif" if t["fiyat_ma_ustunde"] else "altında seyrediyor, kısa-orta vadeli ivme zayıf"
-        ma_metni = (f"MA20 çizgisi MA50'nin {iliski}.{kesisim_metni} "
-                    f"Fiyat, ortalamaların {konum}.")
-    formasyon = ""
-    if t.get("ikili_dip"):
-        (t1, p1), (t2, p2) = t["ikili_dip"]
-        formasyon = f"Grafikte {t1}-{t2} aralığında ~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Dip (Double Bottom) görülüyor."
-    elif t.get("ikili_tepe"):
-        (t1, p1), (t2, p2) = t["ikili_tepe"]
-        formasyon = f"Grafikte {t1}-{t2} aralığında ~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Tepe (Double Top) görülüyor."
+            kesisim_metni = " Kısa süre önce MA20, MA50'yi aşağı kesmiştir (Death Cross)."
+        konum = ("üzerinde seyretmesi yükseliş trendinin gücünü göstermektedir" if yon_yukselen
+                 else "altında seyretmesi düşüş trendinin baskısını göstermektedir")
+        ma_madde = (
+            f"**Hareketli Ortalamalar (MA20 & MA50):** Kısa vadeli MA20 (~{_f(t['ma20'])} {birim}) "
+            f"ile orta vadeli MA50 (~{_f(t['ma50'])} {birim}), MA20'nin MA50'nin {iliski} "
+            f"seyretmesiyle {trend_kelime.lower()}i teyit etmektedir.{kesisim_metni} "
+            f"Fiyatın ortalamaların {konum}."
+        )
+    else:
+        ma_madde = (
+            f"**Hareketli Ortalamalar (MA20):** ~{_f(t['ma20'])} {birim} seviyesindeki MA20'nin "
+            f"{'üzerinde' if yon_yukselen else 'altında'} seyreden fiyat, MA50 için yeterli geçmiş "
+            f"veri bulunmadığından sadece MA20 ile değerlendirilmiştir."
+        )
 
-    hacim_notu = ""
+    # ── Madde 3: Hacim Analizi ───────────────────────────────────────
     if t.get("hacim_var") and t.get("hacim_guncel_ort20_orani"):
         oran = t["hacim_guncel_ort20_orani"]
-        hacim_notu = (f" Güncel hacim, 20 günlük ortalamanın {oran:.1f} katı"
-                       + (" - kırılım varsa güçlü destekleniyor." if oran > 1.2 else " - ortalama seviyede."))
+        if oran > 1.2:
+            hacim_madde = (
+                f"**Hacim Analizi:** Güncel hacim, 20 günlük ortalamanın {oran:.1f} katı - "
+                f"bu, mevcut fiyat hareketinin hacimle desteklendiğine ve olası bir kırılımın "
+                f"güvenilirliğinin arttığına işaret etmektedir."
+            )
+        else:
+            hacim_madde = (
+                f"**Hacim Analizi:** Güncel hacim, 20 günlük ortalamanın {oran:.1f} katı - "
+                f"ortalama seviyede seyretmekte, belirgin bir hacim onayı henüz oluşmamıştır."
+            )
+    else:
+        hacim_madde = "**Hacim Analizi:** Bu varlık için hacim verisi bulunmuyor."
 
-    ikinci_direnc_str = ""
-    if t.get("ikinci_direnc"):
-        ikinci_direnc_str = f" Bu da aşılırsa bir sonraki hedef ~{_f(t['ikinci_direnc']['fiyat'])} {birim} ({t['ikinci_direnc']['tarih']}) olur."
+    # ── Madde 4: Formasyon / Son Durum ──────────────────────────────
+    formasyon_cumle = ""
+    if t.get("ikili_dip"):
+        (t1, p1), (t2, p2) = t["ikili_dip"]
+        formasyon_cumle = (f" Ayrıca {_tarih_tr(t1)} - {_tarih_tr(t2)} aralığında "
+                            f"~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Dip "
+                            f"(Double Bottom) formasyonu görülmektedir.")
+    elif t.get("ikili_tepe"):
+        (t1, p1), (t2, p2) = t["ikili_tepe"]
+        formasyon_cumle = (f" Ayrıca {_tarih_tr(t1)} - {_tarih_tr(t2)} aralığında "
+                            f"~{_f((p1+p2)/2)} {birim} seviyesinde bir İkili Tepe "
+                            f"(Double Top) formasyonu görülmektedir.")
+    son_durum_madde = (
+        f"**Son Durum:** Fiyat şu anda ~{_f(t['son_fiyat'])} {birim} seviyesinde, "
+        f"ana direnç ~{_f(t['ana_direnc']['fiyat'])} {birim} ile ana destek "
+        f"~{_f(t['ana_destek']['fiyat'])} {birim} arasında hareket etmektedir."
+        f"{formasyon_cumle}"
+    )
+
+    # ── Kritik Seviyeler ve Fiyat Hedefleri (TABLO) ─────────────────
+    def _ilk_harf_buyuk(s: str) -> str:
+        """s.capitalize() KULLANMA - o TUM string'i kucuk harfe cevirip
+        sadece ilk harfi buyutur, icindeki 'TL'/'MA20' gibi kisaltmalari
+        bozar ('tl' olur). Bu sadece ILK karakteri buyutur, gerisine
+        dokunmaz."""
+        return s[:1].upper() + s[1:] if s else s
+
+    def _hedef_kaynagi_cumle(hedef):
+        if not hedef:
+            return "Bu seviyenin ötesinde belirgin bir geçmiş referans yok."
+        if hedef["kaynak"] == "onceki_zirve":
+            return f"fiyatın bir sonraki hedefi ~{_f(hedef['fiyat'])} {birim} önceki zirve olur."
+        if hedef["kaynak"] == "onceki_dip":
+            return f"fiyatın bir sonraki hedefi ~{_f(hedef['fiyat'])} {birim} önceki dip olur."
+        if hedef["kaynak"] == "donem_dusugu":
+            return f"fiyatın bir sonraki hedefi dönem içindeki en düşük seviye olan ~{_f(hedef['fiyat'])} {birim} olur."
+        return (f"ölçülü hareket (measured move) projeksiyonuna göre fiyatın "
+                f"~{_f(hedef['fiyat'])} {birim} seviyesine yönelmesi beklenir.")
+
+    direnc_hedef_cumle = _hedef_kaynagi_cumle(t.get("yukari_kirilim_hedefi"))
+    destek_hedef_cumle = _hedef_kaynagi_cumle(t.get("asagi_kirilim_hedefi"))
+
+    ma20_str = f"~{_f(t['ma20'])} {birim} (MA20)"
+    if yon_yukselen:
+        kisa_vadeli_satir = (
+            f"| Kısa Vadeli Destek | {ma20_str} | Fiyatın bu seviyenin altına sarkması "
+            f"durumunda düşüş onayı alınır ve fiyat ilk olarak ana destek seviyesine "
+            f"çekilebilir. |"
+        )
+    else:
+        kisa_vadeli_satir = (
+            f"| Kısa Vadeli Direnç | {ma20_str} | Fiyatın bu seviyeyi hacimli aşması "
+            f"durumunda toparlanma onayı alınır ve fiyat ilk olarak ana direnç "
+            f"seviyesine yönelebilir. |"
+        )
+
+    if t.get("ma50") is not None:
+        ana_alt_str = f"~{_f(t['ma50'])} {birim} (MA50)"
+        ana_alt_var = True
+    elif yon_yukselen:
+        ana_alt_str = f"~{_f(t['ana_destek']['fiyat'])} {birim} ({t['ana_destek']['tarih_tr']})"
+        ana_alt_var = True
+    elif t.get("ikinci_direnc"):
+        # MA50 yok VE dusen trend: "ana_destek" (bir dip) buraya asla
+        # konmaz - o bir direnc degil. Onun yerine GERCEK ikinci bir
+        # direnc varsa o kullanilir.
+        ana_alt_str = f"~{_f(t['ikinci_direnc']['fiyat'])} {birim} ({t['ikinci_direnc']['tarih_tr']})"
+        ana_alt_var = True
+    else:
+        ana_alt_str = ""
+        ana_alt_var = False
+    if yon_yukselen:
+        ana_alt_satir = (
+            f"| Ana Destek | {ana_alt_str} | Kısa vadeli destek kırılırsa ana hedef ve "
+            f"karar noktası bu seviyedir. {_ilk_harf_buyuk(destek_hedef_cumle)} Bu seviyenin de "
+            f"kırılması trendin tamamen tersine döndüğüne işaret eder. |"
+        )
+    elif ana_alt_var:
+        ana_alt_satir = (
+            f"| Ana Direnç (2.) | {ana_alt_str} | Kısa vadeli direnç aşılırsa ana hedef "
+            f"ve karar noktası bu seviyedir. Bu seviyenin de aşılması trendin tamamen "
+            f"tersine döndüğüne işaret eder. |"
+        )
+    else:
+        ana_alt_satir = (
+            "| Ana Direnç (2.) | Yeterli veri yok | MA50 hesaplanamayacak kadar kısa "
+            "geçmiş ve ikinci bir direnç noktası bulunamadı. |"
+        )
+
+    tablo = (
+        "**Kritik Seviyeler ve Fiyat Hedefleri**\n\n"
+        "| Seviye Tipi | Fiyat Noktası | Kırılım Durumunda İzlenecek Hedefler |\n"
+        "|---|---|---|\n"
+        f"| Ana Direnç | ~{_f(t['ana_direnc']['fiyat'])} {birim} "
+        f"({t['ana_direnc']['tarih_tr']}) | Bu seviye yukarı yönlü hacimli kırılırsa, "
+        f"{direnc_hedef_cumle} |\n"
+        f"{kisa_vadeli_satir}\n"
+        f"{ana_alt_satir}"
+    )
 
     return (
-        f"**Mevcut Trend:** {ticker}, {t['donem_en_dusuk']['tarih']} tarihli "
-        f"~{_f(t['donem_en_dusuk']['fiyat'])} {birim} dip seviyesinden "
-        f"{t['donem_en_yuksek']['tarih']} tarihli ~{_f(t['donem_en_yuksek']['fiyat'])} {birim} "
-        f"zirvesi arasında hareket ediyor; güncel fiyat ~{_f(t['son_fiyat'])} {birim}.\n\n"
-        f"**Ortalamaların Durumu:** {ma_metni or 'Yeterli veri yok.'}\n\n"
-        + (f"**Formasyon:** {formasyon}\n\n" if formasyon else "")
-        + f"**Kritik Seviyeler:**\n"
-        f"- Direnç: ~{_f(t['ana_direnc']['fiyat'])} {birim} ({t['ana_direnc']['tarih']}).{ikinci_direnc_str}\n"
-        f"- Destek: ~{_f(t['ana_destek']['fiyat'])} {birim} ({t['ana_destek']['tarih']})."
-        f"{hacim_notu}\n\n"
+        f"{giris}\n\n{baslik}\n\n"
+        f"- {trend_madde}\n"
+        f"- {ma_madde}\n"
+        f"- {hacim_madde}\n"
+        f"- {son_durum_madde}\n\n"
+        f"{tablo}\n\n"
+        f"Grafikteki mevcut görünüm, fiyatın {'ana destek' if yon_yukselen else 'ana direnç'} "
+        f"seviyesine olan mesafesini ve {'ana direnç' if yon_yukselen else 'ana destek'} "
+        f"seviyesini sınama ihtimalini takip etmeyi gerektirmektedir.\n\n"
         f"*Bu otomatik bir teknik özet olup yatırım tavsiyesi değildir. "
-        f"Doğrudan alım yerine direncin hacimli kırılımı veya destek "
-        f"seviyesine geri çekilme beklemek riski azaltan bir yaklaşımdır.*"
+        f"Doğrudan alım/satım yerine belirtilen seviyelerin hacimli kırılımını veya "
+        f"seviyeye geri çekilmeyi beklemek riski azaltan bir yaklaşımdır.*"
     )
 
 
@@ -1606,6 +1817,13 @@ def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: s
     if not t:
         return "Bu varlık için yeterli geçmiş veri bulunmuyor (en az 20 günlük veri gerekir)."
 
+    # v2.0.7.299: tum ISO tarihleri Turkce formata cevirip t'ye ekliyoruz -
+    # hem sablon hem Gemini prompt'u tek noktadan Turkce tarih kullansin.
+    for _alan in ("ana_direnc", "ikinci_direnc", "ana_destek", "ikinci_destek",
+                  "donem_en_dusuk", "donem_en_yuksek"):
+        if t.get(_alan):
+            t[_alan]["tarih_tr"] = _tarih_tr(t[_alan]["tarih"])
+
     api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
     if not api_key:
         return _grafik_yorumu_sablon(t, ticker, birim)
@@ -1613,33 +1831,51 @@ def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: s
     try:
         import requests, json as _json
         prompt = f"""Sen bir teknik analiz asistanisin. Asagidaki HESAPLANMIS sayisal
-verileri kullanarak, ASAGIDAKI FORMATI BIREBIR izleyen, Turkce, kisa ve net
-bir teknik analiz metni yaz. SAYILARI UYDURMA - sadece verilenleri kullan.
+verileri kullanarak, ASAGIDAKI FORMATI BIREBIR izleyen, Turkce, gorece
+detayli bir teknik analiz metni yaz. SAYILARI UYDURMA - sadece verilenleri
+kullan. TUM TARIHLERI Turkce formatta yaz (orn. "21 Mayıs 2026"), ISO
+formatta ("2026-05-21") YAZMA - asagida verilen "_tr" ekli alanlari kullan.
 
 Varlik: {ticker} ({kategori})
+Donem: {t.get('donem_gun_sayisi')} gun
 Guncel fiyat: {t['son_fiyat']:.2f} {birim}
-Donem en dusugu: {t['donem_en_dusuk']['fiyat']:.2f} {birim} ({t['donem_en_dusuk']['tarih']})
-Donem en yuksegi: {t['donem_en_yuksek']['fiyat']:.2f} {birim} ({t['donem_en_yuksek']['tarih']})
+Donem en dusugu: {t['donem_en_dusuk']['fiyat']:.2f} {birim} ({t['donem_en_dusuk']['tarih_tr']})
+Donem en yuksegi: {t['donem_en_yuksek']['fiyat']:.2f} {birim} ({t['donem_en_yuksek']['tarih_tr']})
 MA20: {t.get('ma20')}, MA50: {t.get('ma50')}
 MA20/MA50 iliskisi: {t.get('ma20_ma50_iliski')}, son kesisim: {t.get('son_kesisim')}
 Fiyat MA20 ustunde mi: {t.get('fiyat_ma_ustunde')}
 Ana direnc: {t['ana_direnc']}
 Ikinci direnc: {t.get('ikinci_direnc')}
 Ana destek: {t['ana_destek']}
+Ikinci destek: {t.get('ikinci_destek')}
+Yukari kirilim hedefi (direnc asilirsa): {t.get('yukari_kirilim_hedefi')}
+Asagi kirilim hedefi (destek kirilirsa): {t.get('asagi_kirilim_hedefi')}
 Ikili dip var mi: {t.get('ikili_dip') is not None}
 Ikili tepe var mi: {t.get('ikili_tepe') is not None}
 Hacim guncel/ort20 orani: {t.get('hacim_guncel_ort20_orani')}
 
-Format (Markdown basliklarla):
-**Mevcut Trend:** ...
-**Ortalamaların Durumu:** ...
-**Kritik Seviyeler:**
-- Direnç: ...
-- Destek: ...
+Format (Markdown, BIREBIR bu yapida):
+Once, teknik analizde kirilim sonrasi hedef belirlemenin onemini anlatan
+1 genel giris paragrafi.
 
-Sonda tek cumlelik bir not: dogrudan alim yerine kirilim/geri cekilme
-beklemenin riski nasil azalttigina dair. "Yatirim tavsiyesi degildir" ifadesini
-mutlaka ekle. En fazla 180 kelime."""
+**{ticker} {{donem}} Gunluk Grafik Analizi**
+
+- **Trend Yapısı (...):** ...
+- **Hareketli Ortalamalar (MA20 & MA50):** ...
+- **Hacim Analizi:** ...
+- **Son Durum:** ...
+
+**Kritik Seviyeler ve Fiyat Hedefleri**
+
+| Seviye Tipi | Fiyat Noktası | Kırılım Durumunda İzlenecek Hedefler |
+|---|---|---|
+| Ana Direnç | ... | Kırılırsa gidebilecegi hedef (verilen yukari_kirilim_hedefi'ni kullan) |
+| Kısa Vadeli Destek/Direnç (MA20) | ... | ... |
+| Ana Destek/Direnç (MA50 varsa, yoksa ikinci destek/direnc) | ... | (verilen asagi_kirilim_hedefi'ni kullan) |
+
+Sonda 1 kapanis cumlesi (mevcut durumun hangi seviyeleri sinadigi), ardindan
+ayri bir satirda italik: "Bu otomatik bir teknik özet olup yatırım tavsiyesi
+değildir." ifadesini mutlaka ekle. En fazla 280 kelime."""
         url = ("https://generativelanguage.googleapis.com/v1beta/models/"
                "gemini-2.5-flash:generateContent")
         resp = requests.post(

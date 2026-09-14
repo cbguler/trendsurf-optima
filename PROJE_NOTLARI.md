@@ -6793,3 +6793,38 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Temizlik:** Teşhis bloğu kaldırıldı, `app.py` v2.0.7.297
     boyutuna (420.099 bayt) geri döndü (418.287 bayt - blok
     çıkarıldıktan sonraki gerçek boyut).
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.299 (14 Eylül 2026, O&M4,
+  Bahri'nin talebi): "Grafiği Yorumla" özelliği yeniden tasarlandı.**
+  - **Tarih formatı:** Tüm tarihler artık ISO ("2026-05-21") yerine
+    Türkçe ("21 Mayıs 2026") - yeni `_tarih_tr()` yardımcı fonksiyonu
+    ile. `_ikili_dip`/`_ikili_tepe`'nin çiğ Timestamp'lerinin
+    (saat/saat dilimi dahil çirkin haliyle) sızdığı yer de düzeldi.
+  - **Format:** Bahri'nin verdiği örneğe göre baştan yazıldı - sabit
+    eğitici giriş paragrafı, "{TICKER} {N} Günlük Grafik Analizi"
+    başlığı, 4 maddelik yapı (Trend Yapısı/Hareketli Ortalamalar/
+    Hacim Analizi/Son Durum), ve en önemlisi "Kritik Seviyeler ve
+    Fiyat Hedefleri" artık bir TABLO - her seviye KIRILIRSA fiyatın
+    nereye gidebileceğini de hesaplayıp gösteriyor.
+  - **Kırılım hedefleri NASIL hesaplanıyor (uydurulmuyor):** Önce
+    gerçek bir sonraki pivot (ikinci direnç/destek) denenir; yukarı
+    yönde yoksa ölçülü hareket (measured move: direnç-destek
+    aralığının yukarı taşınması) kullanılır; aşağı yönde ise ölçülü
+    hareket KULLANILMIYOR (eksi/anlamsız fiyat üretebiliyordu) - onun
+    yerine her zaman gerçek, gözlenmiş bir değer olan dönem içi en
+    düşük fiyat kullanılıyor.
+  - **Trend yönüne göre MA20/MA50 rolü değişiyor:** Yükselen trendde
+    MA20 "Kısa Vadeli Destek", MA50 "Ana Destek"; düşen trendde MA20
+    "Kısa Vadeli Direnç", MA50 "Ana Direnç (2.)" oluyor. MA50
+    hesaplanamayacak kadar az veri varsa (düşen trend özelinde) bir
+    destek pivotu yanlışlıkla "direnç" diye ETİKETLENMİYOR - bunun
+    yerine gerçek bir ikinci direnç aranıyor, yoksa "yeterli veri yok"
+    dürüstçe yazılıyor.
+  - **Test edilen 3 senaryo (gerçek CATES verisi + 2 sentetik):**
+    yükselen trend (gerçek borsapy verisi), düşen trend (MA50 var),
+    düşen trend + az veri (MA50 yok) - üçü de hatasız, eksi fiyatsız,
+    "TL"→"tl" bozulması olmadan çalıştı.
+  - **Gemini prompt'u da güncellendi** (aynı yeni formatı, Türkçe
+    tarihleri ve hesaplanmış hedefleri kullanacak şekilde) - ama
+    Bahri'nin GEMINI_API_KEY'i tanımlı olmadığı için şu an fiilen
+    SABIT ŞABLON çalışıyor, Gemini yolu devrede değil.
