@@ -6849,3 +6849,46 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     detay) güncellendi.
   - **Doğrulama:** CATES gerçek verisiyle test edildi - başlık artık
     "90 Günlük" diyor (grafikteki "(90 gün)" ile birebir aynı).
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.301 (14 Eylül 2026, O&M4,
+  Bahri'nin talebi - "grafiği açtığım tarih aralığına göre yorum
+  yapılmalı"): "Grafiği Yorumla" artık fare tekerlegiyle zumlanan
+  ARALIĞI analiz ediyor - nominal Periyot seçimini DEĞİL.**
+  - **Seçilen yöntem:** Bahri'ye iki seçenek sunuldu (elle tarih
+    aralığı seçici [sağlam] vs fare zumunu otomatik yakalayan bileşen
+    [karmaşık, riskli] + net bir geri dönüş planı ["başarısız olursa
+    geriye dön"]). Bahri 2.'yi seçti - denendi ve BAŞARILI oldu,
+    geri dönüşe gerek kalmadı.
+  - **Nasıl çalışıyor:** Grafik artık npm/React derlemesi OLMADAN,
+    Streamlit'in kendi belgelenmiş custom component postMessage
+    protokolünü (componentReady/setComponentValue/setFrameHeight) ELLE
+    uyguluyor. Fare tekerlegiyle zumlanan aralık DEBOUNCE'lu (600ms)
+    olarak Python'a bildiriliyor - her tekerlek hareketinde DEĞİL
+    (yoksa her hareket bir Streamlit rerun'u tetikleyip zumu keserdi).
+  - **"Tek app.py" kuralıyla çelişmemesi için:** bileşenin index.html'i
+    GIT REPOSUNA eklenmedi - `/tmp/tso_zoom_bilesen/<key>/` altına
+    çalışma zamanında (anahtar başına bir kez) yazılıyor.
+  - **DOĞRULAMA (varsayım değil, gerçek test):** Bu, projenin
+    "kesin/varsayımsız çözüm" ilkesine (bkz. v2.0.7.281) uyularak,
+    gerçek `app.py` kodundan çıkarılıp Playwright + Chromium ile GERÇEK
+    bir tarayıcıda uçtan uca test edildi: gerçek mum grafiği, yerel
+    plotly.js (CDN değil - CDN'in bu sanal ortamda sertifika hatası
+    verdiği de ayrıca gözlemlendi, bu yüzden production'daki "yerel
+    dosyadan yükle" kararının [v2.0.7.283] ne kadar doğru olduğu bir
+    kez daha teyit edildi), gerçek `Plotly.relayout` çağrısı, 600ms
+    debounce beklendi, Python tarafının doğru aralığı aldığı ve
+    `_grafik_yorum_hist_sec`'in doğru dilimlediği (93 satır, tam
+    eşleşme) SOMUT olarak görüldü.
+  - **Bilinen davranış değişikliği (Bahri'ye açıkça belirtildi):**
+    Zumlama artık ~600ms durakladıktan sonra bir Streamlit rerun'u
+    tetikliyor (öncesinde tamamen istemci taraflıydı, sunucuya hiç
+    gitmiyordu). Bu, "Grafiği Yorumla"nın doğru aralığı görebilmesi
+    için GEREKLİ bir değişim.
+  - **Geri düşme (fallback):** JS köprüsü herhangi bir nedenle
+    başarısız olursa (örn. çok eski bir tarayıcı) `zoom_araligi`
+    None kalır, `_grafik_yorum_hist_sec` otomatik olarak ESKİ
+    davranışa (nominal Periyot) düşer - özellik hiçbir zaman tamamen
+    kaybolmaz.
+  - **3 çağrı yeri de** (Ana Sayfa, Portföyüm, Kategori detay)
+    güncellendi - `render_candle_interactive` artık `(fig,
+    zoom_araligi)` tuple'ı döndürüyor.

@@ -1808,6 +1808,24 @@ def _grafik_yorumu_sablon(t: dict, ticker: str, birim: str = "TL") -> str:
     )
 
 
+def _grafik_yorum_hist_sec(hist_5y: pd.DataFrame, zoom_araligi: dict, nominal_gun: int):
+    """v2.0.7.301 (Bahri'nin talebi - "grafiği açtığım tarih aralığına
+    göre yorum yapılmalı"): kullanıcı grafiği fare tekerlegiyle
+    zumlamışsa (zoom_araligi dolu), 'Grafiği Yorumla' O ARALIĞI analiz
+    eder - nominal Periyot seçimi DEĞİL. Zumlanmamışsa (None - JS
+    köprüsü henüz veri göndermedi ya da başarısız oldu) davranış
+    ESKİSİ GİBİ kalır: tam 5 yıllık veriden nominal_gun kadar geriye
+    gidilir. Dönüş: (kullanılacak_hist, o araliktaki_gun_sayisi)."""
+    if zoom_araligi and zoom_araligi.get("baslangic") and zoom_araligi.get("bitis"):
+        try:
+            dilim = hist_5y.loc[zoom_araligi["baslangic"]:zoom_araligi["bitis"]]
+            if not dilim.empty and len(dilim) >= 5:
+                return dilim, int(zoom_araligi.get("gun") or nominal_gun)
+        except Exception:
+            pass
+    return hist_5y, nominal_gun
+
+
 def _grafik_yorumu_uret(hist: pd.DataFrame, ticker: str, kategori: str, birim: str = "TL",
                          nominal_gun: int = None) -> str:
     """Ana giris noktasi: once sayisal analiz hesaplanir (algoritma),
@@ -2199,12 +2217,35 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
       cevriliyor.
     JS herhangi bir nedenle calismazsa kullanici yine de "Periyot"
     dugmeleriyle araligi degistirebilir - bu ozellik basarisiz olsa
-    bile uygulama islevini kaybetmez."""
+    bile uygulama islevini kaybetmez.
+
+    v2.0.7.301 (14 Eylul 2026, O&M4, Bahri'nin talebi - "grafiği açtığım
+    tarih aralığına göre yorum yapılmalı"): Grafik artik SADECE tek
+    yonlu (Python -> tarayici) degil, ayni zamanda fare tekerlegiyle
+    secilen g/orunen tarih araligini TARAYICIDAN PYTHON'A da bildiriyor.
+    Bu, npm/React derlemesi OLMADAN, Streamlit'in kendi belgelenmis
+    postMessage protokolu ELLE uygulanarak yapildi (componentReady/
+    setComponentValue/setFrameHeight) - GERCEK bir tarayicida
+    (Playwright + Chromium, yerel plotly.js ile - CDN degil, ayni
+    v2.0.7.283 nedeniyle) uctan uca DOGRULANDI: relayout -> 600ms
+    debounce -> Python'da deger goruldu, sozde/varsayimsal degil.
+    Debounce (600ms) BILEREK eklendi - eklenmeseydi HER tekerlek
+    hareketinde tam sayfa yeniden calisirdi (Streamlit rerun), zumu
+    kesintiye ugratirdi. 'Tek app.py' kuraliyla celismemesi icin
+    bilesenin index.html'i GIT REPOSUNA eklenmiyor - /tmp altinda
+    (anahtar/key basina bir kez) calisma zamaninda olusturuluyor.
+    JS bu koprude BASARISIZ olursa (ornegin eski bir tarayici) zoom
+    araligi Python'a hic ulasmaz - cagiran taraf None alir ve
+    NOMINAL Periyot secimine (eskisi gibi) duser, ozellik kaybolmaz.
+
+    Donus degeri: (fig, zoom_araligi). zoom_araligi ya None (henuz
+    zumlenmedi/JS basarisiz oldu) ya da {"baslangic":"YYYY-MM-DD",
+    "bitis":"YYYY-MM-DD","gun":int} sozlugu."""
     fig = candle_fig(hist, ticker, varsayilan_gun=varsayilan_gun)
     if fig is None:
-        return None
+        return None, None
 
-    import re
+    import re, tempfile
     _has_volume = any(getattr(t, "yaxis", None) == "y2" for t in fig.data)
     _yukseklik = int(fig.layout.height or 480)
     # v2.0.7.293: son mumun tam gorunmesi icin sag kenara 12 saatlik
@@ -2233,6 +2274,17 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     </script>
     <script>
     (function() {{
+        // v2.0.7.301: Streamlit ozel bilesen protokolu - ELLE (npm/React
+        // OLMADAN) uygulaniyor. Playwright ile GERCEK tarayicida
+        // dogrulandi (bkz. fonksiyonun docstring'i).
+        function sendMessageToStreamlit(type, data) {{
+            var outData = Object.assign({{isStreamlitMessage: true, type: type}}, data || {{}});
+            window.parent.postMessage(outData, "*");
+        }}
+        function setComponentValue(value) {{
+            sendMessageToStreamlit("streamlit:setComponentValue", {{value: value, dataType: "json"}});
+        }}
+
         // v2.0.7.283: Plotly.js artik YUKARIDA, CDN'den DEGIL,
         // repoya gomulu yerel dosyadan (_plotly_js_govde_yukle())
         // dogrudan gomuldu - bu script bloğu calistiginda Plotly
@@ -2330,6 +2382,23 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
             return sonuc;
         }}
 
+        // v2.0.7.301: fare tekerlegiyle secilen araligi Python'a
+        // bildiren fonksiyon - DEBOUNCE'lu (600ms) cagriliyor, HER
+        // tekerlek hareketinde degil (yoksa her hareket bir Streamlit
+        // rerun'u tetikler, zumu kesintiye ugratirdi).
+        var _zoomGonderZamanlayici = null;
+        function zoomDegeriGonder() {{
+            var xr = chartDiv.layout.xaxis.range;
+            if (!xr) return;
+            var b = new Date(xr[0]), s = new Date(xr[1]);
+            var gunSayisi = Math.round((s - b) / (24*60*60*1000));
+            setComponentValue({{
+                baslangic: b.toISOString().slice(0, 10),
+                bitis: s.toISOString().slice(0, 10),
+                gun: gunSayisi
+            }});
+        }}
+
         function tarihEtiketiGuncelle() {{
             var xr = chartDiv.layout.xaxis.range;
             if (!xr) return;
@@ -2339,6 +2408,9 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
                 return d.toLocaleDateString('tr-TR', {{day:'2-digit', month:'short', year:'numeric'}});
             }};
             tarihDiv.textContent = fmt(b) + " – " + fmt(s) + "  (" + gunSayisi + " gün)";
+
+            if (_zoomGonderZamanlayici) clearTimeout(_zoomGonderZamanlayici);
+            _zoomGonderZamanlayici = setTimeout(zoomDegeriGonder, 600);
         }}
 
         Plotly.newPlot(chartDiv, figData.data, figData.layout,
@@ -2380,11 +2452,30 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
             }}
             Plotly.relayout(chartDiv, _guncelleme);
         }}, {{passive: false}});
+
+        // v2.0.7.301: bilesen protokolu - HAZIR ve YUKSEKLIK bildirimi.
+        // Gercek yukseklik onceden bilindigi (Python tarafinda
+        // hesaplandigi) icin dinamik olcum yerine SABIT deger
+        // gonderiliyor - eski components.html(height=...) ile AYNI.
+        sendMessageToStreamlit("streamlit:componentReady", {{apiVersion: 1}});
+        sendMessageToStreamlit("streamlit:setFrameHeight", {{height: {_yukseklik + 35}}});
     }})();
     </script>
     """
-    components.html(_html, height=_yukseklik + 35)
-    return fig
+    # v2.0.7.301: components.html() YERINE declare_component() - ilki
+    # tek yonlu (Python->JS), ikincisi JS->Python donus degeri
+    # destekliyor (zoom araligi icin sart). 'Tek app.py' kuraliyla
+    # celismemek icin index.html GIT'E EKLENMIYOR, /tmp altinda anahtar
+    # basina bir klasorde calisma zamaninda yaziliyor (ayni klasor
+    # tekrar tekrar kullanilir, disk sismez).
+    _guvenli_anahtar = re.sub(r'[^a-zA-Z0-9_]', '_', key)
+    _bilesen_dizin = os.path.join(tempfile.gettempdir(), "tso_zoom_bilesen", _guvenli_anahtar)
+    os.makedirs(_bilesen_dizin, exist_ok=True)
+    with open(os.path.join(_bilesen_dizin, "index.html"), "w", encoding="utf-8") as _f:
+        _f.write(_html)
+    _bilesen = components.declare_component(f"tso_zoom_{_guvenli_anahtar}", path=_bilesen_dizin)
+    _zoom_araligi = _bilesen(default=None, key=f"zoom_state_{_guvenli_anahtar}")
+    return fig, _zoom_araligi
 
 
 def render_teknik_gostergeler(d, son_fiyat):
@@ -5735,7 +5826,7 @@ if page=="Ana Sayfa":
                     # v2.0.7.289: grafik, "Son_Fiyat" (zaten canli
                     # tutulan) ile tamamlanip en guncel gunu/ani yansitir.
                     _hist_5y_ana = _hist_canli_ile_tamamla(_hist_5y_ana, sel_row_ana.get("Son_Fiyat"), cat_ana)
-                    render_candle_interactive(
+                    _fig_ana, _zoom_ana = render_candle_interactive(
                         _hist_5y_ana, sel_ana, key=f"ana_{sel_ana}",
                         varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
@@ -5748,9 +5839,13 @@ if page=="Ana Sayfa":
                         st.session_state[_grafik_yorum_key_ana] = not st.session_state.get(_grafik_yorum_key_ana, False)
                     if st.session_state.get(_grafik_yorum_key_ana):
                         with st.spinner("Grafik analiz ediliyor..."):
+                            # v2.0.7.301: zumlanmis araligi varsa ONU
+                            # analiz et, yoksa eskisi gibi nominal Periyot.
+                            _yorum_hist_ana, _yorum_gun_ana = _grafik_yorum_hist_sec(
+                                _hist_5y_ana, _zoom_ana, _PERIYOT_GUN_MAP.get(period_val, 90))
                             _yorum_metni_ana = _grafik_yorumu_uret(
-                                d["hist"], sel_ana, str(sel_row_ana.get("Kategori", "")),
-                                nominal_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
+                                _yorum_hist_ana, sel_ana, str(sel_row_ana.get("Kategori", "")),
+                                nominal_gun=_yorum_gun_ana)
                         st.markdown(_yorum_metni_ana)
                 else:
                     st.warning(f"{sel_ana} icin gecmis fiyat verisi yuklenemedi.")
@@ -6688,8 +6783,9 @@ elif page=="Portföyüm":
                 if _hist_5y_pf is None or _hist_5y_pf.empty:
                     _hist_5y_pf = _d["hist"]
                 _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"), str(_sr.get("Kategori","")))
-                render_candle_interactive(_hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
-                                           varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
+                _fig_pf, _zoom_pf = render_candle_interactive(
+                    _hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
+                    varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
 
                 # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
                 # yorumla butonu tam istedigim gibi olmus, bunu
@@ -6701,9 +6797,13 @@ elif page=="Portföyüm":
                     st.session_state[_grafik_yorum_key_pf] = not st.session_state.get(_grafik_yorum_key_pf, False)
                 if st.session_state.get(_grafik_yorum_key_pf):
                     with st.spinner("Grafik analiz ediliyor..."):
+                        # v2.0.7.301: zumlanmis araligi varsa ONU analiz
+                        # et, yoksa eskisi gibi nominal Periyot.
+                        _yorum_hist_pf, _yorum_gun_pf = _grafik_yorum_hist_sec(
+                            _hist_5y_pf, _zoom_pf, _PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
                         _yorum_metni_pf = _grafik_yorumu_uret(
-                            _d["hist"], _sel_tkr, str(_sr.get("Kategori", "")),
-                            nominal_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
+                            _yorum_hist_pf, _sel_tkr, str(_sr.get("Kategori", "")),
+                            nominal_gun=_yorum_gun_pf)
                     st.markdown(_yorum_metni_pf)
             else:
                 st.info(f"{_sel_tkr} için geçmiş fiyat verisi yüklenemedi.")
@@ -7074,8 +7174,9 @@ elif page in CAT:
         if _hist_5y_cat is None or _hist_5y_cat.empty:
             _hist_5y_cat = d["hist"]
         _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"), str(sel_row.get("Kategori","")))
-        render_candle_interactive(_hist_5y_cat, sel, key=f"cat_{sel}",
-                                   varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
+        _fig_cat, _zoom_cat = render_candle_interactive(
+            _hist_5y_cat, sel, key=f"cat_{sel}",
+            varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
         # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
         # BIST/TEFAS/Doviz/Degerli Madenler/Kriptolar'in HEPSINDE (bu
@@ -7086,8 +7187,12 @@ elif page in CAT:
             st.session_state[_grafik_yorum_key] = not st.session_state.get(_grafik_yorum_key, False)
         if st.session_state.get(_grafik_yorum_key):
             with st.spinner("Grafik analiz ediliyor..."):
-                _yorum_metni = _grafik_yorumu_uret(d["hist"], sel, cat_code,
-                                                    nominal_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
+                # v2.0.7.301: zumlanmis araligi varsa ONU analiz et,
+                # yoksa eskisi gibi nominal Periyot.
+                _yorum_hist, _yorum_gun = _grafik_yorum_hist_sec(
+                    _hist_5y_cat, _zoom_cat, _PERIYOT_GUN_MAP.get(period_val, 90))
+                _yorum_metni = _grafik_yorumu_uret(_yorum_hist, sel, cat_code,
+                                                    nominal_gun=_yorum_gun)
             st.markdown(_yorum_metni)
     else:
         st.warning(f"{sel} için geçmiş fiyat verisi yüklenemedi.")
