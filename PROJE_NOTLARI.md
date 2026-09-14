@@ -6764,3 +6764,32 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Doğrulama:** `python3 -c "import yaml; yaml.safe_load(...)"` ile
     YAML sözdizimi temiz, `on`/`concurrency`/`jobs` yapısı bozulmadı.
     py.compile gerekmiyor (yml dosyası, Python değil).
+
+- **[ÇÖZÜLDÜ - GEÇİCİ TEŞHİS BLOĞU KALDIRILDI] Getiri Kıyaslaması /
+  Pozisyon Bazlı Getiri grafiklerinde anormallik (14 Eylül 2026, O&M4,
+  Bahri'nin bulgusu): "Getiri Kıyaslaması" grafiği ~1500%'e çıkıp
+  aniden gerçek değere (+7,81%) çakılıyordu; "Pozisyon Bazlı Getiri"
+  grafiğinde BAG -100%'e düşüyordu ama tablo BAG'ı +8,66% kârda
+  gösteriyordu.**
+  - **Dışlanan ihtimal:** pytefas ile HTS/MTG/HOY/CVL/BAG'ın 3 aylık
+    tam geçmişi (özellikle 3 Ağustos alış tarihi civarı) doğrudan test
+    edildi - TAMAMEN TEMİZ, hiçbir anormallik yok. Kaynak veri (TEFAS)
+    suçlu değil.
+  - **Not (düzeltme):** Bu 5 ticker BIST hissesi DEĞİL, TEFAS fon
+    kodu - ilk teşhis denemesi (borsapy/yfinance testi) bu yüzden
+    yanlış kaynağa bakıyordu, sonuç anlamsız çıktı.
+  - **Geçici teşhis:** app.py'ye "Getiri Kıyaslaması"nın altına, o an
+    UYGULAMANIN GERÇEKTE kullandığı ticker serilerini (yerel
+    tefas_cache dahil) gösteren bir expander eklendi.
+  - **Gözlem (kesin kanıtlanmamış ama zamanlama tam örtüşüyor):**
+    v2.0.7.297'nin (TEFAS'ın cron-job.org'a taşınması, 30 dk'da bir
+    güvenilir tetikleme) canlıya alınmasından kısa süre sonra, teşhis
+    bloğu HİÇBİR anormallik göstermedi - grafikler kendiliğinden
+    düzelmiş görünüyor. Olası açıklama: eski düzensiz GitHub
+    schedule'ının bıraktığı bayat/eksik yerel TEFAS önbelleği, yeni
+    güvenilir tetiklemeyle tazelendi. Bu KANITLANMIŞ bir kök neden
+    DEĞİL, sadece gözlemlenen bir korelasyon - ileride tekrarlarsa bu
+    not başlangıç noktası olarak kullanılmalı.
+  - **Temizlik:** Teşhis bloğu kaldırıldı, `app.py` v2.0.7.297
+    boyutuna (420.099 bayt) geri döndü (418.287 bayt - blok
+    çıkarıldıktan sonraki gerçek boyut).
