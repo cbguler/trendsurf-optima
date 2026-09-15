@@ -6892,3 +6892,40 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **3 çağrı yeri de** (Ana Sayfa, Portföyüm, Kategori detay)
     güncellendi - `render_candle_interactive` artık `(fig,
     zoom_araligi)` tuple'ı döndürüyor.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.302 (15 Eylül 2026, O&M4,
+  Bahri'nin talebi - "KAP, TEFAS, TCMB ve diğer kaynaklarımızın
+  bildirimlerini de değerlendirelim"): TCMB'nin kendi resmi basın
+  duyuruları RSS'i 6. haber kaynağı olarak eklendi.**
+  - **Neden AA Ekonomi'den farklı:** v2.0.7.207'de kaldırılan AA
+    Ekonomi bir HABER AJANSIYDI (olayları yorumlayıp raporluyor,
+    editoryal çerçeveleme riski taşıyor). TCMB'nin kendi basın
+    duyurusu ise kendi eylemi hakkında BİRİNCİL KAYNAK - üçüncü
+    tarafın yorumu yok, tıpkı zaten kullandığımız KAP bildirimleri
+    gibi. Tarafsızlık ilkesiyle çelişmiyor.
+  - **Doğrulama:** Canlı test edildi - feedparser ile 20 giriş
+    döndü, en güncel girdi bir gün önceki (14 Eylül).
+  - **Araştırılan diğer kaynaklar:**
+    - TEFAS: Ayrı bir bildirim kaynağı YOK - TEFAS fonlarının kamuyu
+      aydınlatma yükümlülüğü zaten KAP üzerinden yürütülüyor. KAP
+      çözülünce TEFAS otomatik kapsanmış olacak.
+    - KAP (hisse-özel bildirimler, ör. bugünkü CATES VBTS tedbiri):
+      resmi REST API'si var ama Borsa İstanbul A.Ş. ile ÜCRETLİ veri
+      dağıtım sözleşmesi gerektiriyor - kapalı yol. Ama KAP'ın
+      HERKESE AÇIK web sitesinde gerçek, ücretsiz, kimlik doğrulama
+      GEREKTİRMEYEN bir uç nokta bulundu:
+      `https://www.kap.org.tr/tr/api/batch-news/file-by-year/{mkkMemberOid}/{yıl}`
+      - şirketin o yılki TÜM bildirimlerini (HTML olarak, .doc
+        uzantılı ama aslında düz HTML) döndürüyor.
+      - CATES için CANLI test edildi: bugünkü (15 Eylül) VBTS
+        tedbiri bildirimi TAM METİN olarak içeride bulundu - kelimesi
+        kelimesine haberdeki metinle eşleşiyor.
+      - `mkkMemberOid` her şirket için `sirket-bilgileri/ozet/{slug}`
+        sayfasının HTML'sinde gömülü JSON içinde bulunuyor (`slug`
+        zaten KAP_BIST.xlsx'te - kap_client.py'nin kullandığı AYNI
+        kaynak).
+      - Mimari önerisi (henüz İNŞA EDİLMEDİ, Bahri'nin onayı
+        bekleniyor): haber_izleme.py'nin AYNI deseni (Supabase
+        "bekliyor" kuyruğu + app.py'de onay UI'ı) - ama 6 makro
+        kalıp yerine PORTFÖYDEKİ HER TICKER için ayrı ayrı "yeni
+        bildirim var mı" kontrolü.

@@ -212,6 +212,19 @@ _RSS_KAYNAKLARI = [
     # kaçakçılığından hapis yatıyor; tarafsızlık/güvenilirlik açısından
     # riskli bulundu.
     ("Philippine Star Business", "https://www.philstar.com/rss/business"),
+    # v2.0.7.302 (15 Eylul 2026, O&M4, Bahri'nin talebi - "TCMB gibi
+    # veri aldigimiz kaynaklarin bildirimlerini de degerlendirelim"):
+    # TCMB'nin KENDI resmi basin duyurulari RSS'i eklendi. ONEMLI AYRIM:
+    # bu, v2.0.7.207'de kaldirilan AA Ekonomi (devlet HABER AJANSI,
+    # olaylari YORUMLAYIP RAPORLUYOR - editoryal cerceveleme riski) ile
+    # AYNI KATEGORIDE DEGIL. Bu, TCMB'nin KENDI eylemi hakkinda BIRINCIL
+    # KAYNAK duyurusu (faiz karari, PPK ozeti) - ucuncu bir tarafin
+    # yorumu/cercevelemesi yok, tipki bir sirketin kendi KAP bildirimi
+    # gibi (zaten kap_client.py ile veri kaynagimiz). Canli test edildi
+    # (15 Eylul 2026): 20 giris, en guncel dun. Onceden "tcmb_kredibilite"
+    # kalibi TCMB'yi SADECE DOLAYLI (ucuncu taraf kaynaklarda TCMB gecen
+    # haberlerden) yakaliyordu - artik dogrudan, gecikmesiz kaynak da var.
+    ("TCMB Basin Duyurulari", "https://tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Bottom+Menu/Diger/RSS/Basin+Duyurulari"),
 ]
 
 # ══════════════════════════════════════════════════════════════
