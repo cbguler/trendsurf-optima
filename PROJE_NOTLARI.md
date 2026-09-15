@@ -7004,3 +7004,28 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   TÜM import'lar tekrar denendi, `haber_izleme.py` gerçek ortamda
   (Supabase kimlik bilgisi olmadan bile) sonuna kadar hatasız
   çalıştı - 484 haber tarandı, temiz çıkış kodu (0) ile bitti.
+
+- **[KOD HAZIR - PUSH BEKLİYOR, İZLENMESİ GEREKİYOR] v2.0.7.305 (15
+  Eylül 2026, O&M4, Bahri'nin bulgusu - v2.0.7.304 düzeltmesinden
+  sonra çalıştırmalar 8-11 dakika sürüyor, 10 dakikalık
+  `timeout-minutes` sınırına çok yakın/bazen üstünde):
+  `timeout-minutes` 10'dan 20'ye çıkarıldı - güvenlik payı.**
+  - **Gözlem (kesin kanıtlanmamış ama makul):** TCMB eklenince
+    (v2.0.7.302) kaynak sayısı 6'dan 7'ye çıktı, taranan haber sayısı
+    arttı - `haber_islendi_mi()` HER haber için AYRI bir Supabase
+    bağlantısı açıyor (havuzlama yok, bkz. v2.0.7.142 - iki çöküşe
+    yol açtığı için bilinçli olarak vazgeçilmiş), bu yüzden toplam
+    süre de arttı.
+  - **DİKKAT EDİLMESİ GEREKEN AYRI BİR RİSK:** cron-job.org 10
+    dakikada bir yeni çalıştırma tetikliyor; eğer her çalıştırma
+    gerçekten 10 dakikaya yakın/üstü sürüyorsa, `concurrency:
+    cancel-in-progress: false` yüzünden ÇALIŞTIRMALAR BİRİKEBİLİR
+    (kuyruğa yığılabilir) - canlı ekran görüntüsünde tam bu desen
+    görüldü (çok sayıda ardışık çalıştırma). Bu PR sadece zaman
+    aşımını büyütüyor, ALTTAKİ verimlilik sorununu (haber başına
+    ayrı bağlantı) ÇÖZMÜYOR. Eğer birikme devam ederse bir SONRAKİ
+    adım: ya toplu (batch) sorgulamaya geçmek ya da tetikleme
+    sıklığını (10 dk) azaltmak gerekebilir.
+  - **Doğrulanması gereken:** Bahri'nin canlı çalıştırması (push
+    sonrası, #3330) tamamlanıp tamamlanmadığı, tamamlandıysa gerçek
+    süresi kontrol edilmeli.
