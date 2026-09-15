@@ -420,6 +420,29 @@ def init_db():
     except Exception as e:
         print(f"[db] haber_akisi ozet sutunu migration hatasi: {e}", file=sys.stderr)
 
+    # v2.0.7.302 (15 Eylul 2026, O&M4, Bahri'nin talebi - "KAP, TEFAS,
+    # TCMB ve diger kaynaklarimizin bildirimlerini de degerlendirelim"):
+    # PORTFOYDEKI HER TICKER icin ayri KAP bildirim takibi. Bu, YUKARIDAKI
+    # beklenti_otomatik_tespit'ten (macro Beklenti Modu kaliplari, bir
+    # skor formulune uygulanan) BILEREK AYRI bir tablo - kap bildirimleri
+    # bir skoru DEGISTIRMEZ, sadece OKUNACAK bilgidir (VBTS tedbiri,
+    # sermaye artirimi, temettu karari vb.) - onay/red is akisi GEREKMEZ,
+    # kullaniciya gosterilir, o okur/kapatir. UNIQUE kisitlamasi ayni
+    # bildirimin farkli calistirmalarda TEKRAR eklenmesini (dogal olarak,
+    # ON CONFLICT DO NOTHING ile) engeller.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS kap_bildirim_takip (
+        id              SERIAL PRIMARY KEY,
+        ticker          TEXT NOT NULL,
+        kap_baslik      TEXT NOT NULL,
+        gonderen        TEXT,
+        gonderim_tarihi TIMESTAMP NOT NULL,
+        icerik_ozet     TEXT,
+        onemli_mi       BOOLEAN NOT NULL DEFAULT TRUE,
+        tespit_tarihi   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ticker, gonderim_tarihi, kap_baslik)
+    )""")
+
     # v2.0.7.160: Gemini ücretsiz katman günlük istek limiti BELİRSİZ
     # (üçüncü taraf kaynaklar 20/50/250/500/1500 gibi çelişkili rakamlar
     # veriyor, Aralık 2025'te bir kez düşürüldüğü bildirildi). Bu yüzden
@@ -957,7 +980,91 @@ def get_haber_akisi(saat: int = 48, limit: int = 300) -> list:
     return sonuc
 
 
-def haber_akisi_temizle(gun: int = 7):
+def kap_bildirim_ekle(ticker: str, kap_baslik: str, gonderen: str,
+                       gonderim_tarihi, icerik_ozet: str, onemli_mi: bool = True) -> bool:
+    """kap_bildirim_izleme.py her yeni bildirim icin bunu cagirir. UNIQUE
+    kisitlamasi (ticker, gonderim_tarihi, kap_baslik) sayesinde ayni
+    bildirim tekrar tekrar eklenmez - ON CONFLICT DO NOTHING ile
+    sessizce atlanir, hata FIRLATMAZ."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO kap_bildirim_takip "
+            "(ticker, kap_baslik, gonderen, gonderim_tarihi, icerik_ozet, onemli_mi) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT (ticker, gonderim_tarihi, kap_baslik) DO NOTHING",
+            (ticker.upper(), kap_baslik, gonderen, gonderim_tarihi, icerik_ozet, bool(onemli_mi)))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] kap_bildirim_ekle hata: {e}", file=sys.stderr)
+        return False
+
+
+def get_tum_portfoy_tickerlari() -> list:
+    """kap_bildirim_izleme.py bunu cagirir - TUM kullanicilarin
+    portfoyundeki BENZERSIZ ticker'lari doner (hangi kullanicida
+    oldugu onemli degil, checker HERKESIN elindeki her seyi kontrol
+    eder - goruntuleme asamasinda kullaniciya gore filtrelenir, bkz.
+    get_yeni_kap_bildirimleri). KAP sadece BIST/TEFAS uyeleri icin
+    anlamli oldugundan asset_type bu ikisiyle sinirlandirildi."""
+    try:
+        rows = get_conn().execute(
+            "SELECT DISTINCT ticker FROM portfolio "
+            "WHERE UPPER(asset_type) IN ('BIST','TEFAS')"
+        ).fetchall()
+    except Exception as e:
+        print(f"[db] get_tum_portfoy_tickerlari hata: {e}", file=sys.stderr)
+        return []
+    return [(r["ticker"] if isinstance(r, dict) else r[0]) for r in rows]
+
+
+def get_yeni_kap_bildirimleri(kullanici_id, saat: int = 72) -> list:
+    """app.py bunu cagirir - SADECE bu kullanicinin PORTFOYUNDE OLAN
+    ticker'lar icin, son `saat` icinde tespit edilmis bildirimleri
+    doner. Onay/red YOK (bkz. tablo yorumu) - bu salt-okunur bir
+    bilgilendirme listesidir."""
+    try:
+        rows = get_conn().execute(
+            "SELECT k.ticker, k.kap_baslik, k.gonderen, k.gonderim_tarihi, "
+            "k.icerik_ozet, k.onemli_mi "
+            "FROM kap_bildirim_takip k "
+            "WHERE k.tespit_tarihi > now() - interval '%s hours' "
+            "AND k.ticker IN (SELECT DISTINCT ticker FROM portfolio WHERE user_id = ?) "
+            "ORDER BY k.gonderim_tarihi DESC" % int(saat),
+            (kullanici_id,)
+        ).fetchall()
+    except Exception as e:
+        print(f"[db] get_yeni_kap_bildirimleri hata: {e}", file=sys.stderr)
+        return []
+    sonuc = []
+    for r in rows:
+        def _kv(k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+        sonuc.append({
+            "ticker": _kv("ticker", 0), "kap_baslik": _kv("kap_baslik", 1),
+            "gonderen": _kv("gonderen", 2), "gonderim_tarihi": _kv("gonderim_tarihi", 3),
+            "icerik_ozet": _kv("icerik_ozet", 4), "onemli_mi": _kv("onemli_mi", 5),
+        })
+    return sonuc
+
+
+def kap_bildirim_temizle(gun: int = 14):
+    """14 gunden eski KAP bildirim kayitlarini siler - tablo sinirsiz
+    buyumesin (haber_akisi_temizle ile ayni mantik)."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "DELETE FROM kap_bildirim_takip WHERE tespit_tarihi < now() - interval '%s days'"
+            % int(gun))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kap_bildirim_temizle hata: {e}", file=sys.stderr)
+
+
+
     """v2.0.7.160: 7 gunden eski haberleri siler - tablo sinirsiz buyumesin.
     haber_izleme.py her turun sonunda cagirir."""
     try:

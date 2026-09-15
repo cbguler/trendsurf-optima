@@ -1,0 +1,56 @@
+name: KAP Bildirim Izleme
+
+# v2.0.7.302 (15 Eylul 2026, O&M4, Bahri'nin talebi - "CATES'te VBTS
+# tedbiri haberini gozden kacirdik, KAP/TEFAS/TCMB kaynaklarimizin
+# bildirimlerini de degerlendirelim"): Portfoydeki HER TICKER icin
+# KAP'in (Kamuyu Aydinlatma Platformu) o sirkete OZEL bildirimlerini
+# (VBTS tedbiri, sermaye artirimi, temettu karari vb.) takip eden YENI
+# bir katman - haber_izleme.yml'nin (6 MAKRO kalip) tamamen AYRI,
+# tamamlayici versiyonu.
+#
+# BASTAN cron-job.org + workflow_dispatch kullaniliyor - GitHub'in
+# kendi schedule tetikleyicisinin best-effort/guvenilmez davranisi
+# BUGUN (ayni O&M4 oturumunda, bkz. v2.0.7.297/301) TEFAS
+# guncellemesinde SOMUT olarak kanitlandigi icin, bu YENI workflow'da
+# ayni hatayi TEKRARLAMAMAK icin GitHub schedule'i HIC EKLENMEDI:
+#   POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/kap_bildirim_izleme.yml/dispatches
+#   Body: {"ref":"main"}
+#   Auth: mevcut fine-grained PAT (haber_izleme.yml/send_email.yml ile
+#         AYNI token, "TrendSurf Haber Izleme" isini cogaltarak kurulur)
+#
+# Onerilen siklik: 10 dakikada bir (Bahri'nin onayi, haber_izleme.yml
+# ile ayni).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: kap-bildirim-izleme
+  cancel-in-progress: false
+
+jobs:
+  izle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          # requests: KAP'a HTTP istekleri icin.
+          # psycopg2-binary: db.py'nin Supabase baglantisi icin.
+          # pandas + openpyxl: kap_client.py'nin KAP_BIST.xlsx okumasi icin.
+          pip install requests psycopg2-binary pandas openpyxl --quiet
+
+      - name: KAP bildirim izleme calistir
+        run: python kap_bildirim_izleme.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

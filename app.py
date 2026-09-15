@@ -3591,6 +3591,40 @@ if _bekleyen_tespitler:
         f"bölümüne gidin. Hiçbiri siz onaylamadan Optima Skor'a uygulanmaz."
     )
 
+# v2.0.7.302 (15 Eylül 2026, O&M4, Bahri'nin talebi - "CATES'te VBTS
+# tedbiri haberini gözden kaçırdık"): YUKARIDAKİ otomatik tespit
+# sistemiyle KASITLI olarak AYRI - bu, portföydeki HER TICKER için
+# KAP'ın (Kamuyu Aydınlatma Platformu) o şirkete özel bildirimlerini
+# gösteriyor (VBTS tedbiri, sermaye artırımı, temettü kararı vb.).
+# Bir skoru DEĞİŞTİRMEZ, sadece OKUNACAK bilgidir - bu yüzden
+# Onayla/Reddet YOK, sadece bilgilendirme banner'ı.
+try:
+    from db import get_yeni_kap_bildirimleri as _gykb_raw
+
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _yeni_kap_bildirimleri_onbellekli(_kid):
+        return _gykb_raw(_kid)
+
+    _yeni_kap_bildirimleri = (
+        _yeni_kap_bildirimleri_onbellekli(_cur_user["id"]) if _cur_user else [])
+except Exception:
+    _yeni_kap_bildirimleri = []
+
+_onemli_kap_bildirimleri = [b for b in _yeni_kap_bildirimleri if b.get("onemli_mi")]
+if _onemli_kap_bildirimleri:
+    with st.expander(
+        f"📋 **Portföyünüzdeki hisselerle ilgili {len(_onemli_kap_bildirimleri)} yeni "
+        f"KAP bildirimi var** (son 72 saat)", expanded=False
+    ):
+        for _b in _onemli_kap_bildirimleri:
+            st.markdown(
+                f"**{_b['ticker']}** — {_b['kap_baslik']} "
+                f"({_b['gonderen']}, {_b['gonderim_tarihi']})"
+            )
+            if _b.get("icerik_ozet"):
+                st.caption(_b["icerik_ozet"][:400])
+            st.markdown("---")
+
 # v2.0.7.159 (Bahri'nin talebi, 19 Ağustos 2026 — "bir mesaj kutusunun
 # çıkmasını tercih ederim, mobildeki uygulamayı da düşünmek lazım"):
 # Onay bekleyen tespitler artık sadece Ana Sayfa'daki listede değil,

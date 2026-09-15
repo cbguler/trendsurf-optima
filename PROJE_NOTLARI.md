@@ -6929,3 +6929,57 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
         "bekliyor" kuyruğu + app.py'de onay UI'ı) - ama 6 makro
         kalıp yerine PORTFÖYDEKİ HER TICKER için ayrı ayrı "yeni
         bildirim var mı" kontrolü.
+
+- **[KOD HAZIR - PUSH BEKLİYOR, cron-job.org KURULUMU BEKLİYOR]
+  v2.0.7.302 devamı: KAP hisse-özel bildirim izleme TAM OLARAK
+  İNŞA EDİLDİ ve CANLI verilerle test edildi.**
+  - **Yeni dosya `kap_bildirim_izleme.py`:** her portföy ticker'ı için
+    (`db.get_tum_portfoy_tickerlari()` - BIST/TEFAS asset_type'ları)
+    `mkkMemberOid`'i bulur (KAP_BIST.xlsx slug'ından, `sirket-bilgileri/
+    ozet/{slug}` sayfasının gömülü JSON'ından regex ile - yerel JSON
+    cache'e yazılır, her turda tekrar çekilmez), sonra
+    `batch-news/file-by-year/{oid}/{yıl}` uç noktasından son 36 saatteki
+    bildirimleri çeker, Supabase'e yazar.
+  - **Test sırasında bulunan VE DÜZELTİLEN 3 gerçek hata (varsayım
+    değil, canlı veriyle):**
+    1. `mkkMemberOid` regex'i escape edilmemiş tırnak bekliyordu -
+       gerçek sayfa JSON'u bir JS string'i İÇİNDE olduğu için tırnaklar
+       `\"` şeklinde escape'liydi. Regex `\\?"..."` ile esnetildi.
+    2. Batch-news uç noktası yanıtı ham HTML DEĞİL, İÇİNDE tek bir
+       .doc (aslında düz HTML) dosyası olan bir ZIP ARŞİVİ - önce
+       `zipfile` ile açılması gerekiyordu, ilk versiyon bunu atlayıp
+       sessizce 0 bildirim buluyordu.
+    3. İçerik özeti çıkarımı: "Açıklamalar" kelimesi belgede İKİ KEZ
+       geçiyor (önce boş bir tablo sütun başlığı, sonra gerçek
+       içeriğin öncesinde) - ilkini almak sadece metadata veriyordu.
+       "Bildirim İçeriği" çapa noktası olarak kullanılınca doğru
+       (ikinci) "Açıklamalar" yakalandı.
+  - **Doğrulama (CATES, canlı):** 49/49 bildirim doğru ayrıştırıldı,
+    bugünkü VBTS bildiriminin TAM METNİ (haberle birebir eşleşen)
+    doğru çıkarıldı, 17 rutin "Pay Bazında Devre Kesici" bildirimi
+    doğru şekilde `onemli_mi=False` işaretlendi, uçtan uca
+    `calistir()` fonksiyonu (mock db ile) 2 yeni kayıt tespit etti
+    (1 önemli VBTS + 1 rutin devre kesici).
+  - **BİLİNEN KAPSAM SINIRI:** KAP_BIST.xlsx SADECE BIST hisselerini
+    kapsıyor - TEFAS fonları (BAG/MTG/HOY/CVL/HTS) için bu dosyada
+    slug YOK, bu yüzden v1'de TEFAS fonları sessizce atlanıyor
+    ("mkkMemberOid bulunamadı"). TEFAS fonları da KAP üyesi olduğu
+    için teorik olarak kapsanabilir ama bunlar için ayrı bir slug
+    kaynağı bulunması GEREKİYOR - bu SONRAKİ bir iş.
+  - **Yeni tablo `kap_bildirim_takip` (db.py, init_db() içinde) -
+    BİLEREK `beklenti_otomatik_tespit`ten AYRI:** o tablo skor
+    formülüne uygulanan, onay/red akışlı MAKRO tespitler için; bu ise
+    hisse-özel, skor DEĞİŞTİRMEYEN, salt-okunur bilgilendirmedir.
+    Yeni db.py fonksiyonları: `kap_bildirim_ekle` (UNIQUE ile doğal
+    dedup), `get_tum_portfoy_tickerlari`, `get_yeni_kap_bildirimleri`
+    (kullanıcıya özel filtre), `kap_bildirim_temizle` (14 gün).
+  - **app.py:** mevcut "Onay Bekleyen Otomatik Tespitler" banner'ının
+    hemen altına, HER SAYFADA görünen ayrı bir katlanabilir bölüm
+    eklendi - onay YOK, sadece bilgilendirme.
+  - **Workflow `kap_bildirim_izleme.yml`:** BAŞTAN cron-job.org +
+    workflow_dispatch (bugünkü TEFAS dersinden - GitHub'ın kendi
+    schedule'ı hiç denenmedi).
+  - **BAHRİ'DEN BEKLENEN:** cron-job.org'da "TrendSurf Haber
+    Izleme"yi çoğaltarak yeni bir iş kur - "TrendSurf KAP Bildirim"
+    adıyla, 10 dakikada bir, aynı endpoint kalıbı (workflow adı
+    `kap_bildirim_izleme.yml` olarak değişecek).
