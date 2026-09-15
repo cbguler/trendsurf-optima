@@ -7120,3 +7120,44 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     (`kap.org.tr/tr/sirket-bildirimleri/{slug}`, KAP_SLUG_MAP'ten)
     bağlantı eklendi, tek bir bildirime sahte/tahmini bir link
     UYDURULMADI.
+
+- **[KOD HAZIR - PUSH BEKLİYOR, CANLI VERİ BEKLENİYOR] v2.0.7.309 (15
+  Eylül 2026, O&M4, Bahri'nin bulgusu - v2.0.7.305/306'dan (timeout
+  20dk + kaynak başına 15 habere düşürme) SONRA BİLE çalışmalar hâlâ
+  uzun sürüyor): TAHMİN ETMEK YERİNE KANIT TOPLAMAYA geçildi.**
+  - **Düzeltilen yanlış varsayım:** Önceki analizlerde "7 kaynak" var
+    sanılıyordu - GERÇEKTE 22 kaynak var (BBC World, Investing.com TR,
+    BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, Halk
+    TV, NPR Business, Handelsblatt Finanzen, Sky News, BBC Business,
+    Sky News Business, ABC News Australia, Euronews, ANSA, Meduza, CBC
+    Business, Yle News, RTÉ Business, Africanews, Philippine Star
+    Business, TCMB). "TCMB'nin yüksek eşleşme oranı" hipotezi bu
+    yüzden muhtemelen eksikti - 22 kaynağın TAMAMI hacme katkı
+    veriyor, sadece TCMB değil.
+  - **Test edilen VE dışlanan ihtimal:** Tüm 22 kaynağın gerçek ağ
+    yanıt süresi CANLI test edildi - hepsi hızlı (toplam ~10 saniye,
+    hiçbiri yavaş/asılı kalmıyor). RSS ÇEKME aşaması suçlu DEĞİL.
+  - **Hâlâ en olası açıklama (ama artık VARSAYIM değil, doğrulanacak):**
+    22 kaynak × kaynak başına en fazla 15 haber ≈ 300 haber, her biri
+    için ayrı bir Supabase bağlantısı (havuzlama YOK - v2.0.7.142'de
+    İKİ AYRI ÇÖKÜŞE yol açtığı için BİLİNÇLİ olarak kaldırılmıştı,
+    "ileride çok daha dikkatli test edilerek ele alınabilir" notuyla).
+    Bağlantı başına gecikme GitHub Actions runner'ından Supabase'e
+    benim sandbox'ımdakinden FARKLI/DAHA YAVAŞ olabilir - bunu kesin
+    olarak SADECE canlı ortamda ölçebiliriz.
+  - **Bu yüzden ZARARSIZ bir zamanlama enstrümantasyonu eklendi**
+    (sadece `print` - HİÇBİR davranış değişmiyor): her kaynağın
+    işlenmesi bitince "ZAMANLAMA: {kaynak} bitti (+X sn bu kaynak,
+    toplam Y sn)" satırı yazdırılıyor, sonunda "TOPLAM SÜRE" veriliyor.
+    Yerel testte (Supabase kimlik bilgisi olmadan, db çağrıları hızlı
+    hata veriyor) 22 kaynak ~10 saniyede bitti - CANLI ortamda gerçek
+    (yavaş olması beklenen) süreler görülecek.
+  - **BEKLENEN BİR SONRAKİ ADIM:** Bahri bir çalıştırma yapıp
+    "ZAMANLAMA" satırlarını paylaşacak - hangi kaynağın/aşamanın
+    (veritabanı kontrolleri mi, `time.sleep(1)` mi, AI çağrıları mı)
+    gerçekte en çok zamanı yediği KESİN olarak görülecek. Bağlantı
+    yeniden kullanımı (v2.0.7.142'nin bıraktığı "ileride dikkatli
+    test edilerek" notu) SADECE bu veri gerçekten veritabanı
+    bağlantılarını işaret ederse, ve TEK BİR ÇALIŞMA İÇİNDE yeniden
+    kullanım (gerçek "havuzlama" değil, o v2.0.7.142'nin app.py
+    bağlamındaki farklı/daha riskli senaryosuydu) olarak ele alınmalı.

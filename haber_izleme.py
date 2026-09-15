@@ -878,11 +878,22 @@ def main():
                     haber_akisi_ekle, haber_akisi_ceviri_yaz, haber_akisi_temizle,
                     ai_cagri_sayisi_bugun, ai_cagri_kaydet, get_cevrilmemis_haberler)
 
+    # v2.0.7.309 (15 Eylul 2026, O&M4, Bahri'nin bulgusu - v2.0.7.305/306
+    # (timeout 20 dk + kaynak basina 15 habere dusurme) SONRASINDA BILE
+    # calismalar hala uzun suruyor): TAHMIN ETMEYI BIRAKIP KANIT TOPLAMAYA
+    # gecildi. Bu zamanlayici, HANGI asamanin (RSS cekme mi, veritabani
+    # kontrolleri mi, AI dogrulama mi) gercekte ne kadar surdugunu log'a
+    # yazdiriyor - bir sonraki calistirmada KESIN cevap alinacak. Sadece
+    # print ekliyor, HICBIR davranisi degistirmiyor - risksiz.
+    import time as _time_mod
+    _tur_baslangic = _time_mod.time()
+
     print(f"[haber_izleme] Baslangic: {datetime.datetime.now().isoformat()}")
     # v2.0.7.162: kaliplar HER TURDA yeniden yuklenir (script her calistiginda
     # tazeden basliyor, onceki turdan hafiza yok) - Admin Panelinde yapilan
     # bir degisiklik EN GEC 10 dakika icinde (bir sonraki tur) devreye girer.
     _kaliplari_yukle()
+    print(f"[haber_izleme] ZAMANLAMA: kaliplar yuklendi (+{_time_mod.time()-_tur_baslangic:.1f} sn)")
     if not _DERLENMIS_KALIPLAR:
         print("[haber_izleme] UYARI: hic aktif kalip yuklenemedi - bu tur "
               "hicbir haberi tespit edemeyecek (haberler yine de akisa "
@@ -893,6 +904,7 @@ def main():
     akisa_eklenen = 0
 
     for kaynak_adi, rss_url in _RSS_KAYNAKLARI:
+        _kaynak_baslangic = _time_mod.time()
         try:
             feed = feedparser.parse(rss_url)
         except Exception as e:
@@ -988,6 +1000,10 @@ def main():
             haber_islendi_isaretle(url)
             time.sleep(1)  # API rate limit icin kucuk bir bekleme
 
+        print(f"[haber_izleme] ZAMANLAMA: {kaynak_adi} bitti "
+              f"(+{_time_mod.time()-_kaynak_baslangic:.1f} sn bu kaynak, "
+              f"toplam {_time_mod.time()-_tur_baslangic:.1f} sn)")
+
     # ── v2.0.7.161: TOPLU CEVIRI (veritabani tabanli, kendini onarir) ──
     # v2.0.7.160'ta bu blok bellekteki `ceviri_kuyrugu`ndan besleniyordu:
     # o turda Gemini cagrisi basarisiz olursa haberler SONSUZA KADAR
@@ -1072,7 +1088,8 @@ def main():
           f"{akisa_eklenen} akisa eklendi, {cevrilen} baslik cevrildi "
           f"(Gemini: {cevrilen_gemini}, Groq: {cevrilen_groq}, ucretsiz yedek: {cevrilen_yedek}), "
           f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi. "
-          f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}")
+          f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}. "
+          f"TOPLAM SURE: {_time_mod.time()-_tur_baslangic:.1f} sn")
 
 
 if __name__ == "__main__":
