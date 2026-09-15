@@ -190,16 +190,13 @@ def _yillik_bildirimleri_cek(mkk_member_oid: str, yil: int) -> list:
 
 
 def calistir():
-    """v2.0.7.310 (15 Eylul 2026, O&M4): haber_izleme.py'de CANLI kanitla
-    dogrulanan AYNI toplu-baglanti-yeniden-kullanim mekanizmasi burada da
-    uygulandi - bu script daha az veritabani islemi yapiyor (ticker basina
-    birkac cagri) ama ayni "havuzlama yok" maliyeti gecerli, tutarlilik
-    icin ayni desen kullanildi."""
-    db.toplu_mod_ac()
-    try:
-        _calistir_asil()
-    finally:
-        db.toplu_mod_kapat()
+    """v2.0.7.311 (15 Eylul 2026, O&M4): v2.0.7.310'da eklenen
+    db.toplu_mod_ac()/kapat() KALDIRILDI - haber_izleme.py'nin canli
+    log'unda bu mekanizmanin hicbir zaman gercekten calismadigi
+    (baglanti hep "canli degil" sayilip yeniden aciliyordu) bulundu,
+    muhtemelen Supabase'in transaction pooler baglanti turuyle uyumsuz.
+    Detaylar icin PROJE_NOTLARI.md v2.0.7.311 girdisine bakin."""
+    _calistir_asil()
 
 
 def _calistir_asil():

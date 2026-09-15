@@ -1093,21 +1093,25 @@ def _calistir_asil():
 
 
 def main():
-    """v2.0.7.310 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla - gercek
-    calisma log'unda ~330-350 ayri Supabase baglantisi, ~12 dakika SOMUT
-    olarak olculdu): asil isi yapan _calistir_asil() DEGISTIRILMEDI - sadece
-    onun etrafina, TEK bu script'in calismasi suresince paylasilan bir
-    baglanti kullanilmasini SAGLAYAN ince bir sarmalayici eklendi.
-    db.toplu_mod_ac()/toplu_mod_kapat() TAMAMEN AYRI, opt-in bir mekanizma -
-    app.py buna HIC dokunmuyor, mevcut davranisi degismiyor. try/finally
-    ile, script ORTASINDA bir hata olsa BILE paylasilan baglantinin
-    GERCEKTEN kapandigindan (sizdirilmadigindan) emin olunuyor."""
-    import db
-    db.toplu_mod_ac()
-    try:
-        _calistir_asil()
-    finally:
-        db.toplu_mod_kapat()
+    """v2.0.7.311 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla - GERI
+    ALMA): v2.0.7.310'da eklenen db.toplu_mod_ac()/toplu_mod_kapat()
+    KALDIRILDI. Canli log ~780 kez "onbellekteki baglanti canli degil
+    (ProgrammingError), yenisi aciliyor" gosterdi - yani baglanti HICBIR
+    ZAMAN gercekten yeniden kullanilamadi, sadece basarisiz bir on-kontrol
+    (pre-ping) denemesi her cagriya EK yuk bindirdi, HICBIR fayda
+    saglamadan. En olasi sebep: Supabase'in kullanilan baglanti dizesi
+    muhtemelen bir "transaction pooler" - bu tur baglantilarda TEK bir
+    baglantiyi birden fazla ayri sorgu icin acik tutmak sunucu tarafinda
+    guvenilir calismiyor (pooler, her ISLEM sonunda alttaki fiziksel
+    baglantiyi BASKA bir istemciye devredebiliyor). Bu, KESIN
+    DOGRULANMADAN (baglanti dizesinin turu gizli bilgi, gorulemiyor)
+    derinlestirilmesi riskli bir alan - fayda sifir, risk devam ederken
+    en sorumlu adim GERI ALMAKTI. db.py'deki toplu_mod_ac()/kapat()
+    mekanizmasi KOD OLARAK KALDI (baska bir yerden cagrilmadigi surece
+    hicbir etkisi yok) - ileride Supabase baglanti dizesinin turu net
+    olarak dogrulanirsa (Session/Direct ise BU KEZ gercekten
+    calisabilir) yeniden denenebilir."""
+    _calistir_asil()
 
 
 if __name__ == "__main__":

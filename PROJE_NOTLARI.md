@@ -7213,3 +7213,47 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     (10-15 dakikadan 1-2 dakikaya) ya da yeni, garip bir hata
     (özellikle "connection already closed" tarzı) görülürse HEMEN
     bildir - bu, hassas bir alan, geri alınması gerekebilir.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.311 (15 Eylül 2026, O&M4,
+  Bahri'nin CANLI kanıtıyla): v2.0.7.310 GERİ ALINDI - işe yaramadı.**
+  - **Kanıt (gerçek çalışma log'u, #3349, 12m 36s):** Log'da "[db]
+    Toplu mod: onbellekteki bağlantı canlı değil (ProgrammingError),
+    yenisi açılıyor." satırı **~780 KEZ** tekrarlandı - yani paylaşılan
+    bağlantı HİÇBİR ZAMAN gerçekten yeniden kullanılamadı, her seferinde
+    "canlı değil" sayılıp reddedildi ve yenisi açıldı. Sonuç: hem hiçbir
+    fayda sağlanmadı HEM DE her çağrıya başarısız bir ön-kontrol
+    (pre-ping) denemesi fazladan yük bindirdi.
+  - **En olası neden (KESİN DOĞRULANAMADI - bağlantı dizesi gizli
+    bilgi, görülemiyor):** Supabase'in kullanılan bağlantı dizesi
+    muhtemelen bir **"transaction pooler"** (işlem havuzlayıcı, tipik
+    olarak 6543 portu) - bu modda pooler, her SQL İŞLEMİ (transaction)
+    bitince alttaki fiziksel bağlantıyı BAŞKA bir istemciye
+    devredebiliyor. Bizim yaklaşımımız (tek "bağlantı" nesnesini uzun
+    süre açık tutup üzerinde birbirinden bağımsız birçok sorgu
+    çalıştırmak) bu modla YAPISAL OLARAK uyumsuz olabilir - "Session"
+    ya da "Direct" bağlantı (tipik 5432 portu) kullanılıyor olsaydı bu
+    sorun muhtemelen YAŞANMAZDI.
+  - **Neden derinleştirilmeden GERİ ALINDI:** Fayda SIFIR, risk
+    (bilinmeyen bir pooler davranışına güvenerek üretim script'lerini
+    değiştirmeye devam etmek) devam ediyordu - en sorumlu adım
+    buydu. `db.py`'deki `toplu_mod_ac()/toplu_mod_kapat()` mekanizması
+    KOD OLARAK kaldı (çağrılmadığı sürece hiçbir etkisi yok) - eğer
+    Bahri Supabase Dashboard'dan bağlantı dizesinin GERÇEKTEN
+    "Session"/"Direct" mi yoksa "Transaction pooler" mi olduğunu
+    doğrularsa (Settings > Database > Connection string), ve
+    "Session"/"Direct" ise, bu mekanizma o zaman GERÇEKTEN
+    denenebilir - şu an için ERTELENDİ.
+  - **v2.0.7.309'un ZAMANLAMA teşhis logları KORUNDU** (hâlâ değerli) -
+    bu çalıştırmanın kendi log'u "TOPLAM SÜRE: 756.5 sn" (12.6 dakika)
+    gösterdi, gözlemlenen gerçek süreyle (12m36s) tutarlı - yani
+    v2.0.7.310'un başarısız pre-ping denemeleri toplam süreyi
+    ÖNCEKİNE (v2.0.7.306/309, ~10-20 dakika aralığı) yakın tuttu, daha
+    da KÖTÜLEŞTİRMEDİ ama İYİLEŞTİRMEDİ de.
+  - **GÜNCEL DURUM:** Haber izleme süreleri 10-20 dakika aralığında
+    kalmaya devam edecek (v2.0.7.311 sonrası, saf "her çağrıda yeni
+    bağlantı" davranışına dönülmüş oluyor - v2.0.7.306'nın 15 habere
+    düşürme ve v2.0.7.305'in 20 dakikalık zaman aşımı hâlâ geçerli,
+    bu yüzden zaman aşımına uğramadan tamamlanmaya devam etmeli).
+    Kalıcı bir hız iyileştirmesi için ÖNCE bağlantı dizesi türünün
+    doğrulanması gerekiyor - bu, Bahri'nin yapması gereken (Supabase
+    Dashboard'a girmesi gerekiyor, koddan görülemez) bir sonraki adım.
