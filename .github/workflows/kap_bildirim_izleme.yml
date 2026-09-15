@@ -48,7 +48,15 @@ jobs:
           # requests: KAP'a HTTP istekleri icin.
           # psycopg2-binary: db.py'nin Supabase baglantisi icin.
           # pandas + openpyxl: kap_client.py'nin KAP_BIST.xlsx okumasi icin.
-          pip install requests psycopg2-binary pandas openpyxl --quiet
+          # v2.0.7.303 (15 Eylul 2026, canli hata - "ModuleNotFoundError:
+          # No module named 'streamlit'"): kap_bildirim_izleme.py,
+          # kap_client.py'den KAP_SLUG_MAP/KAP_HEADERS'i import ediyor -
+          # kap_client.py'nin KENDISI en ustte "import streamlit as st"
+          # yapiyor (cache mekanizmasi icin), bu yuzden streamlit de
+          # KURULMASI GEREKIYORDU. haber_izleme.yml'nin listesinde
+          # streamlit yok cunku o hicbir streamlit-bagimli modul import
+          # etmiyor - bu workflow'un durumu FARKLI.
+          pip install requests psycopg2-binary pandas openpyxl streamlit --quiet
 
       - name: KAP bildirim izleme calistir
         run: python kap_bildirim_izleme.py
