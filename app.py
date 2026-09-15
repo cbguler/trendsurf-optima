@@ -3610,6 +3610,62 @@ try:
 except Exception:
     _yeni_kap_bildirimleri = []
 
+
+def _kap_icerik_temizle(metin: str, baslik: str = "") -> str:
+    """v2.0.7.307 (15 Eylul 2026, O&M4, Bahri'nin bulgusu - "yazılar
+    okunmuyor"): kap_bildirim_izleme.py'nin ham metinden cektigi ozet,
+    KAP'in kendi form alanlarini (Gonderim Tarihi/Bildirim Tipi/Yil/
+    Periyot/Ilgili Sirketler/Ilgili Fonlar/Yapilan Aciklama Guncelleme
+    mi? vb.) OLDUGU GIBI iceriyordu - bunlar zaten UI'da ayri ayri
+    gosteriliyor ya da hicbir bilgi degeri tasimiyor. Bu etiketler
+    bildirim TURUNE gore FARKLI SIRADA/bicimde gelebiliyor (CATES'te
+    parantezli liste, AKFGY'de virgullu duz liste gibi) - bu yuzden
+    ANCHOR/konum bazli degil, HER YERDE eslesen REGEX temizligi
+    kullaniliyor. Zaten Supabase'de saklanmis ESKI kayitlar icin de
+    (yeniden tarama beklemeden) calisir, cunku bu fonksiyon GOSTERIM
+    ANINDA calisiyor."""
+    if not metin:
+        return metin
+    import re
+    if baslik:
+        metin = metin.replace(baslik, "", 1)
+    desenler = [
+        r"Gönderim Tarihi:\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}",
+        r"Bildirim Tipi:\S*",
+        r"\bYıl:\s*",
+        r"\bPeriyot:\s*",
+        r"İlgili Şirketler\s*\[[^\]]*\]",
+        r"İlgili Şirketler\s+(?:[A-ZÇĞİÖŞÜ0-9]+(?:,\s*)?)+(?=\s|$)",
+        r"İlgili Fonlar\s*\[[^\]]*\]",
+        r"Yapılan Açıklama (?:Güncelleme|Düzeltme) mi\?\s*(?:Evet|Hayır)\s*(?:\((?:Yes|No)\))?",
+        r"Konuya İlişkin Daha Önce Yapılan Açıklamanın Tarihi\s*-?\s*"
+        r"(?:\d{2}\.\d{2}\.\d{4}(?:\s+\d{2}:\d{2}:\d{2})?)?",
+        r"\bBildirim İçeriği\b",
+        r"\bAçıklamalar\b",
+    ]
+    for desen in desenler:
+        metin = re.sub(desen, " ", metin)
+    metin = re.sub(r"\s+", " ", metin).strip()
+    # v2.0.7.307: metnin ICINDEKI tarihler de ("15/09/2026 tarihli
+    # islemlerden...") Turkce formata cevriliyor - sadece basliktaki
+    # tek tarih degil, aciklama govdesindeki TUM tarihler. NOT:
+    # _tarih_tr() SADECE ISO ("YYYY-MM-DD") string'leri anliyor -
+    # buradaki tarihler GG.AA.YYYY oldugu icin ONCE elle parse edilip
+    # SONRA _tarih_tr()'e ISO olarak veriliyor (ilk denemede bu adim
+    # atlanip dogrudan _tarih_tr'e GG.AA.YYYY verilmisti, sessizce
+    # HICBIR SEY CEVRILMEMISTI - bu, testte fark edildi).
+    def _icteki_tarih_cevir(eslesme):
+        try:
+            g, a, y = re.split(r"[./]", eslesme.group(0))
+            return _tarih_tr(f"{y}-{a}-{g}")
+        except Exception:
+            return eslesme.group(0)
+    metin = re.sub(r"\d{2}[./]\d{2}[./]\d{4}", _icteki_tarih_cevir, metin)
+    # Basliktan hemen sonra kalan yalniz "Türkçe" dil isaretini at.
+    metin = re.sub(r"^Türkçe\s+", "", metin)
+    return metin
+
+
 _onemli_kap_bildirimleri = [b for b in _yeni_kap_bildirimleri if b.get("onemli_mi")]
 if _onemli_kap_bildirimleri:
     with st.expander(
@@ -3619,10 +3675,11 @@ if _onemli_kap_bildirimleri:
         for _b in _onemli_kap_bildirimleri:
             st.markdown(
                 f"**{_b['ticker']}** — {_b['kap_baslik']} "
-                f"({_b['gonderen']}, {_b['gonderim_tarihi']})"
+                f"({_b['gonderen']}, {_tarih_tr(_b['gonderim_tarihi'])})"
             )
-            if _b.get("icerik_ozet"):
-                st.caption(_b["icerik_ozet"][:400])
+            _temiz_ozet = _kap_icerik_temizle(_b.get("icerik_ozet", ""), _b.get("kap_baslik", ""))
+            if _temiz_ozet:
+                st.caption(_temiz_ozet[:400])
             st.markdown("---")
 
 # v2.0.7.159 (Bahri'nin talebi, 19 Ağustos 2026 — "bir mesaj kutusunun

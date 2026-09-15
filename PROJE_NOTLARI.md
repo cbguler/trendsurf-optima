@@ -7066,3 +7066,36 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     çalıştırmanın süresi kontrol edilmeli - hâlâ 15-20 dakikaya
     yakınsa, bağlantı yeniden kullanımı konusunu (dikkatli, test
     edilerek) tekrar gündeme almak gerekecek.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.307 (15 Eylül 2026, O&M4,
+  Bahri'nin bulgusu - KAP bildirim izleme CANLIDA ÇALIŞIYOR
+  doğrulandı [CATES + AKFGY yakalandı], ama "yazılar okunmuyor,
+  tarihler Türkçe olsun"): app.py'de yeni `_kap_icerik_temizle()`
+  fonksiyonu + `_tarih_tr()` yeniden kullanımı eklendi.**
+  - **Sorun:** `kap_bildirim_izleme.py`'nin çıkardığı özet, KAP'ın
+    form alanlarını (Gönderim Tarihi/Bildirim Tipi/Yıl/Periyot/İlgili
+    Şirketler/İlgili Fonlar/Yapılan Açıklama Düzeltme mi? vb.)
+    OLDUĞU GİBİ içeriyordu - bunlar zaten UI'da ayrı gösteriliyor ya
+    da hiçbir bilgi değeri taşımıyor.
+  - **Neden ANCHOR yerine REGEX temizliği seçildi:** bu alanlar
+    bildirim TÜRÜNE göre FARKLI SIRADA geliyor - CATES'te "İlgili
+    Şirketler [CITAS, CATES, SELEC]" (parantezli), AKFGY'de "İlgili
+    Şirketler AKFGY, BULGS, INFO, LIDFA" (virgüllü düz liste, sırası
+    da farklı yerde). Konum bazlı bir kesme bu yüzden güvenilir
+    değildi - HER YERDE eşleşen regex'ler kullanıldı.
+  - **Neden DÜZELTME UYGULAMA KATMANINDA (app.py, gösterim anında)
+    yapıldı, tarayıcı script'inde DEĞİL:** Supabase'de ZATEN kayıtlı
+    olan eski (CATES/AKFGY) bildirimler de YENİDEN TARAMA
+    BEKLEMEDEN hemen düzelsin diye - `kap_bildirim_izleme.py`'ye
+    dokunulmadı, sadece app.py'nin okurken uyguladığı temizlik
+    değişti.
+  - **İçerik İÇİNDEKİ tarihler de** ("15/09/2026 tarihli
+    işlemlerden...") Türkçe'ye çevriliyor - sadece başlıktaki tek
+    tarih değil. NOT: `_tarih_tr()` SADECE ISO ("YYYY-MM-DD")
+    string bekliyor - metindeki GG.AA.YYYY tarihler önce elle
+    parse edilip ISO'ya çevrilip SONRA `_tarih_tr()`'e veriliyor
+    (ilk denemede bu adım atlanmış, tarihler sessizce hiç
+    çevrilmemişti - test sırasında bulundu, düzeltildi).
+  - **Test edildi (gerçek CATES + AKFGY metinleriyle):** her ikisi
+    de artık sadece anlamlı açıklama cümlesini gösteriyor, tüm
+    tarihler "15 Eylül 2026" formatında.
