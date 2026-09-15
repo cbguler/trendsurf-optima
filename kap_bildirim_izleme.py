@@ -190,13 +190,15 @@ def _yillik_bildirimleri_cek(mkk_member_oid: str, yil: int) -> list:
 
 
 def calistir():
-    """v2.0.7.311 (15 Eylul 2026, O&M4): v2.0.7.310'da eklenen
-    db.toplu_mod_ac()/kapat() KALDIRILDI - haber_izleme.py'nin canli
-    log'unda bu mekanizmanin hicbir zaman gercekten calismadigi
-    (baglanti hep "canli degil" sayilip yeniden aciliyordu) bulundu,
-    muhtemelen Supabase'in transaction pooler baglanti turuyle uyumsuz.
-    Detaylar icin PROJE_NOTLARI.md v2.0.7.311 girdisine bakin."""
-    _calistir_asil()
+    """v2.0.7.312 (15 Eylul 2026, O&M4): haber_izleme.py'deki AYNI
+    yeniden-etkinlestirme - Session pooler'a (SUPABASE_DB_URL_SESSION)
+    gecildikten sonra toplu mod tekrar acildi. Detaylar icin
+    PROJE_NOTLARI.md v2.0.7.312 girdisine bakin."""
+    db.toplu_mod_ac()
+    try:
+        _calistir_asil()
+    finally:
+        db.toplu_mod_kapat()
 
 
 def _calistir_asil():

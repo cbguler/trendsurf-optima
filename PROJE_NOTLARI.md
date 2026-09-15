@@ -7257,3 +7257,33 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     Kalıcı bir hız iyileştirmesi için ÖNCE bağlantı dizesi türünün
     doğrulanması gerekiyor - bu, Bahri'nin yapması gereken (Supabase
     Dashboard'a girmesi gerekiyor, koddan görülemez) bir sonraki adım.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.312 (15 Eylül 2026, O&M4,
+  Bahri'nin doğruladığı kanıt - port 6543): v2.0.7.310'un fikri DOĞRU
+  çıktı, sadece YANLIŞ bağlantı türüyle deniyorduk.**
+  - **Doğrulama:** Bahri Supabase Dashboard'dan mevcut `SUPABASE_DB_URL`'in
+    port **6543** (Transaction pooler) kullandığını doğruladı - bu,
+    v2.0.7.311'deki hipotezi KESİNLEŞTİRDİ.
+  - **Çözüm:** Bahri, AYNI bağlantı dizesinin **port 5432**'li halini
+    (Session pooler - Supabase'in "persistent backend needing IPv4"
+    için tasarladığı, tam bizim senaryomuz) yeni bir GitHub secret'i
+    olarak (`SUPABASE_DB_URL_SESSION`) kaydetti.
+  - **Değişiklik:** `haber_izleme.yml` ve `kap_bildirim_izleme.yml`
+    workflow'ları artık `SUPABASE_DB_URL` ortam değişkenini
+    `secrets.SUPABASE_DB_URL_SESSION`'dan alıyor - **SADECE bu iki
+    batch script için**. `app.py`'nin kendi Supabase bağlantısı
+    (Transaction pooler, port 6543) HİÇ DEĞİŞMEDİ.
+  - **db.py'ye HİÇBİR yeni değişiklik yapılmadı** - v2.0.7.310'da
+    yazılan `toplu_mod_ac()/toplu_mod_kapat()` mekanizması zaten
+    doğruydu, sadece YANLIŞ bağlantı türüyle test ediliyordu.
+    `haber_izleme.py`'nin `main()`'i ve `kap_bildirim_izleme.py`'nin
+    `calistir()`'i tekrar bu mekanizmayı çağıracak şekilde geri
+    değiştirildi (v2.0.7.311'in geri alması geri alındı).
+  - **Test edildi (sahte psycopg2 ile):** Tüm çalışma boyunca **sadece
+    1 bağlantı** oluşturuldu, hiç "onbellekteki bağlantı canlı değil"
+    hatası ALINMADI (v2.0.7.310'un testinde defalarca alınıyordu) -
+    bu, kök nedenin gerçekten bağlantı TÜRÜ olduğunu doğruluyor.
+  - **BEKLENEN:** Bu sefer gerçek çalıştırmalarda süre DRAMATİK şekilde
+    düşmeli (10-20 dakikadan, muhtemelen 1-2 dakikaya). Push sonrası
+    ilk çalıştırmanın "ZAMANLAMA" loglarını ve TOPLAM SÜRE'sini
+    doğrulamak gerekiyor.

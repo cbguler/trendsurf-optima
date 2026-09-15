@@ -1093,25 +1093,32 @@ def _calistir_asil():
 
 
 def main():
-    """v2.0.7.311 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla - GERI
-    ALMA): v2.0.7.310'da eklenen db.toplu_mod_ac()/toplu_mod_kapat()
-    KALDIRILDI. Canli log ~780 kez "onbellekteki baglanti canli degil
-    (ProgrammingError), yenisi aciliyor" gosterdi - yani baglanti HICBIR
-    ZAMAN gercekten yeniden kullanilamadi, sadece basarisiz bir on-kontrol
-    (pre-ping) denemesi her cagriya EK yuk bindirdi, HICBIR fayda
-    saglamadan. En olasi sebep: Supabase'in kullanilan baglanti dizesi
-    muhtemelen bir "transaction pooler" - bu tur baglantilarda TEK bir
-    baglantiyi birden fazla ayri sorgu icin acik tutmak sunucu tarafinda
-    guvenilir calismiyor (pooler, her ISLEM sonunda alttaki fiziksel
-    baglantiyi BASKA bir istemciye devredebiliyor). Bu, KESIN
-    DOGRULANMADAN (baglanti dizesinin turu gizli bilgi, gorulemiyor)
-    derinlestirilmesi riskli bir alan - fayda sifir, risk devam ederken
-    en sorumlu adim GERI ALMAKTI. db.py'deki toplu_mod_ac()/kapat()
-    mekanizmasi KOD OLARAK KALDI (baska bir yerden cagrilmadigi surece
-    hicbir etkisi yok) - ileride Supabase baglanti dizesinin turu net
-    olarak dogrulanirsa (Session/Direct ise BU KEZ gercekten
-    calisabilir) yeniden denenebilir."""
-    _calistir_asil()
+    """v2.0.7.312 (15 Eylul 2026, O&M4, Bahri'nin dogruladigi kanit -
+    YENIDEN ETKINLESTIRME): v2.0.7.311'de KOK NEDEN kesin dogrulandi -
+    Bahri Supabase Dashboard'dan SUPABASE_DB_URL'in :6543 (Transaction
+    pooler) oldugunu teyit etti. Transaction pooler modunda, pooler her
+    ISLEM (transaction) bitince alttaki fiziksel baglantiyi BASKA bir
+    istemciye devredebiliyor - bu yuzden v2.0.7.310'un "tek baglantiyi
+    uzun sure acik tutma" yaklasimi HICBIR ZAMAN calismadi (canli log:
+    ~780 kez "onbellekteki baglanti canli degil" hatasi).
+
+    COZUM: Bu iki batch script (haber_izleme.py, kap_bildirim_izleme.py)
+    ARTIK ayri bir GitHub secret'i (SUPABASE_DB_URL_SESSION - Supabase'in
+    Session pooler'i, :5432, tam olarak "persistent backend needing
+    IPv4" senaryosu icin tasarlanmis) kullanacak sekilde workflow
+    dosyalari guncellendi (bkz. .github/workflows/*.yml). Session pooler,
+    tek bir istemciye AYNI fiziksel baglantiyi (birden fazla ayri islem
+    boyunca) GARANTI ediyor - bu yuzden v2.0.7.310'un ayni mekanizmasi
+    (db.toplu_mod_ac()/kapat()) burada YENIDEN ETKINLESTIRILDI, kod
+    DEGISMEDI, SADECE hangi baglanti dizesinin kullanildigi degisti.
+    app.py'nin kendi SUPABASE_DB_URL'i (Transaction pooler) HIC
+    DEGISMEDI - bu degisiklik SADECE bu iki batch script'i etkiliyor."""
+    import db
+    db.toplu_mod_ac()
+    try:
+        _calistir_asil()
+    finally:
+        db.toplu_mod_kapat()
 
 
 if __name__ == "__main__":

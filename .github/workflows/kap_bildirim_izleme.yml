@@ -61,4 +61,5 @@ jobs:
       - name: KAP bildirim izleme calistir
         run: python kap_bildirim_izleme.py
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # v2.0.7.312: haber_izleme.yml ile ayni sebep - Session pooler.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
