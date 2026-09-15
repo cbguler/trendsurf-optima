@@ -190,6 +190,19 @@ def _yillik_bildirimleri_cek(mkk_member_oid: str, yil: int) -> list:
 
 
 def calistir():
+    """v2.0.7.310 (15 Eylul 2026, O&M4): haber_izleme.py'de CANLI kanitla
+    dogrulanan AYNI toplu-baglanti-yeniden-kullanim mekanizmasi burada da
+    uygulandi - bu script daha az veritabani islemi yapiyor (ticker basina
+    birkac cagri) ama ayni "havuzlama yok" maliyeti gecerli, tutarlilik
+    icin ayni desen kullanildi."""
+    db.toplu_mod_ac()
+    try:
+        _calistir_asil()
+    finally:
+        db.toplu_mod_kapat()
+
+
+def _calistir_asil():
     db.init_db()
     tickerlar = db.get_tum_portfoy_tickerlari()
     print(f"[kap_bildirim_izleme] {len(tickerlar)} ticker kontrol edilecek: {tickerlar}")

@@ -224,10 +224,72 @@ class _CompatConn:
         self._conn.rollback()
 
     def close(self):
+        # v2.0.7.310 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla -
+        # haber_izleme.py'nin gercek log'unda ~330-350 ayri baglanti,
+        # ~12 dakika surdugu SOMUT olarak olculdu): TOPLU MOD aktifse
+        # (bkz. toplu_mod_ac()) bu, PAYLASILAN toplu-calisma baglantisidir -
+        # her db.py fonksiyonu kendi isini bitirince .close() cagiriyor
+        # (tek kullanimlik baglanti VARSAYIMIYLA yazilmislar) - eger bu
+        # PAYLASILAN baglantiyi burada GERCEKTEN kapatirsak, TOPLU
+        # MOD'un butun amaci (tek calismada TEK baglanti) bosa cikar.
+        # Bu yuzden toplu moddaki PAYLASILAN baglanti icin close() sessizce
+        # HICBIR SEY YAPMAZ - gercek kapama SADECE toplu_mod_kapat()
+        # tarafindan, calismanin gercekten bittigi an yapilir.
+        global _toplu_baglanti_onbellek
+        if _TOPLU_MOD["aktif"] and self._conn is _toplu_baglanti_onbellek:
+            return
         try:
             self._conn.close()
         except Exception:
             pass
+
+
+# ============================================================================
+# v2.0.7.310: TOPLU MOD - SADECE tek seferlik, dogrusal calisan BATCH
+# script'ler (haber_izleme.py, kap_bildirim_izleme.py) icin, BILEREK
+# app.py'nin (Streamlit, uzun omurlu, cok sayida ayri rerun) senaryosuna
+# HICBIR SEKILDE dokunmuyor - varsayilan KAPALI, hicbir mevcut davranis
+# degismez. v2.0.7.142'nin havuzlama COKMELERINDEN (bkz. _CompatConn
+# ustundeki not) KOKTEN FARKLI bir senaryo: (1) BIR TEK baglanti (havuz
+# YOK - "havuz tukenmesi" cokme turu bu yuzden BURADA IMKANSIZ), (2)
+# SADECE tek, kisa (dakikalar suren) bir script calismasi icinde -
+# Supabase pooler'inin saatlerce/gunlerce IDLE bir baglantiyi sessizce
+# dusurmesi senaryosu (2. cokme turu) bu kisa sure icinde COK DUSUK
+# ihtimal, AMA yine de "sunucu tarafinda dusurulmus baglanti" ihtimaline
+# karsi HER get_conn() cagrisinda PRE-PING (SELECT 1) ile kontrol
+# ediliyor - dusmusse SESSIZCE yeni baglanti aciliyor, hicbir hata
+# disariya sizmiyor. Bu, gecmis notun aciqca istedigi "pre-ping / retry-
+# on-execute" tasarimidir.
+_TOPLU_MOD = {"aktif": False}
+_toplu_baglanti_onbellek = None
+
+
+def toplu_mod_ac():
+    """SADECE haber_izleme.py/kap_bildirim_izleme.py gibi tek seferlik,
+    calisip biten batch script'lerin main()/calistir() basinda cagirmasi
+    icin. app.py BUNU ASLA CAGIRMAMALI - Streamlit'in uzun omurlu, cok
+    sayida ayri rerun yaptigi baglamda bu KESINLIKLE test edilmedi ve
+    v2.0.7.142'nin ele aldigi TAM O riskli senaryoyu yeniden getirebilir."""
+    global _toplu_baglanti_onbellek
+    _TOPLU_MOD["aktif"] = True
+    _toplu_baglanti_onbellek = None
+    print("[db] Toplu mod ACIK - bu calisma boyunca TEK baglanti yeniden kullanilacak.",
+          file=sys.stderr)
+
+
+def toplu_mod_kapat():
+    """Toplu modu kapatir VE varsa gercekten bekleyen paylasilan
+    baglantiyi kapatir. Batch script'in main()'inin SONUNDA (try/finally
+    icinde, hata olsa bile calisacak sekilde) cagrilmali."""
+    global _toplu_baglanti_onbellek
+    _TOPLU_MOD["aktif"] = False
+    if _toplu_baglanti_onbellek is not None:
+        try:
+            _toplu_baglanti_onbellek.close()
+        except Exception:
+            pass
+        _toplu_baglanti_onbellek = None
+    print("[db] Toplu mod KAPALI - paylasilan baglanti kapatildi.", file=sys.stderr)
 
 
 # ============================================================================
@@ -236,11 +298,36 @@ class _CompatConn:
 def get_conn() -> _CompatConn:
     """Supabase PostgreSQL baglantisi dondurur - basit, kanitlanmis
     guvenilir yontem (havuzlama v2.0.7.142'de KALDIRILDI, bkz.
-    _CompatConn'un modul ustu notu - iki ayri cokme turune yol acmisti)."""
+    _CompatConn'un modul ustu notu - iki ayri cokme turune yol acmisti).
+
+    v2.0.7.310: Toplu mod ACIKSA (bkz. toplu_mod_ac()), her cagrida SIFIRDAN
+    yeni baglanti acmak yerine, ONCE onbellekteki paylasilan baglantinin
+    HALA CANLI olup olmadigi PRE-PING (SELECT 1) ile kontrol edilir - canliysa
+    O DONER (yeni baglanti YOK), degilse (sunucu tarafinda dusurulmus olabilir)
+    SESSIZCE yeni bir tane acilip onbelleklenir. Toplu mod KAPALIYSA (varsayilan,
+    app.py dahil TUM diger her yer) davranis v2.0.7.142'den beri AYNEN korunur -
+    her cagrida sifirdan yeni baglanti."""
+    global _toplu_baglanti_onbellek
     if not PSYCOPG2_OK:
         raise RuntimeError(
             "psycopg2-binary yuklu degil. requirements.txt'e ekleyin: psycopg2-binary>=2.9"
         )
+
+    if _TOPLU_MOD["aktif"] and _toplu_baglanti_onbellek is not None:
+        try:
+            _pre_ping_cur = _toplu_baglanti_onbellek.cursor()
+            _pre_ping_cur.execute("SELECT 1")
+            _pre_ping_cur.close()
+            return _CompatConn(_toplu_baglanti_onbellek)
+        except Exception as e:
+            print(f"[db] Toplu mod: onbellekteki baglanti canli degil ({type(e).__name__}), "
+                  f"yenisi aciliyor.", file=sys.stderr)
+            try:
+                _toplu_baglanti_onbellek.close()
+            except Exception:
+                pass
+            _toplu_baglanti_onbellek = None
+
     url = _get_db_url()
     if not url:
         raise RuntimeError(
@@ -267,6 +354,10 @@ def get_conn() -> _CompatConn:
         raise RuntimeError(
             f"Supabase baglantisi acilamadi ({type(e).__name__}): {err_msg}"
         ) from e
+
+    if _TOPLU_MOD["aktif"]:
+        _toplu_baglanti_onbellek = pg_conn
+
     return _CompatConn(pg_conn)
 
 

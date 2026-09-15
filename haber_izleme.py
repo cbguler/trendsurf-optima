@@ -870,7 +870,7 @@ def _ucretsiz_yedek_ceviri(haberler):
     return sonuc
 
 
-def main():
+def _calistir_asil():
     global _ardisik_429_goruldu
     _ardisik_429_goruldu = False  # v2.0.7.164: her tur temiz baslar
 
@@ -1090,6 +1090,24 @@ def main():
           f"{on_filtre_gecen} on-filtreden gecti, {ai_dogrulanan} AI ile dogrulandi. "
           f"Bugunku toplam AI cagrisi: {ai_cagri_sayisi_bugun()}/{_GUNLUK_AI_BUTCESI}. "
           f"TOPLAM SURE: {_time_mod.time()-_tur_baslangic:.1f} sn")
+
+
+def main():
+    """v2.0.7.310 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla - gercek
+    calisma log'unda ~330-350 ayri Supabase baglantisi, ~12 dakika SOMUT
+    olarak olculdu): asil isi yapan _calistir_asil() DEGISTIRILMEDI - sadece
+    onun etrafina, TEK bu script'in calismasi suresince paylasilan bir
+    baglanti kullanilmasini SAGLAYAN ince bir sarmalayici eklendi.
+    db.toplu_mod_ac()/toplu_mod_kapat() TAMAMEN AYRI, opt-in bir mekanizma -
+    app.py buna HIC dokunmuyor, mevcut davranisi degismiyor. try/finally
+    ile, script ORTASINDA bir hata olsa BILE paylasilan baglantinin
+    GERCEKTEN kapandigindan (sizdirilmadigindan) emin olunuyor."""
+    import db
+    db.toplu_mod_ac()
+    try:
+        _calistir_asil()
+    finally:
+        db.toplu_mod_kapat()
 
 
 if __name__ == "__main__":

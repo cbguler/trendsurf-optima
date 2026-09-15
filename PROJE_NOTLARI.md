@@ -7161,3 +7161,55 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     bağlantılarını işaret ederse, ve TEK BİR ÇALIŞMA İÇİNDE yeniden
     kullanım (gerçek "havuzlama" değil, o v2.0.7.142'nin app.py
     bağlamındaki farklı/daha riskli senaryosuydu) olarak ele alınmalı.
+
+- **[KOD HAZIR - PUSH BEKLİYOR, KRİTİK - DİKKATLE İZLENMELİ] v2.0.7.310
+  (15 Eylül 2026, O&M4, Bahri'nin CANLI kanıtıyla): "havuzlama yok"
+  maliyeti NİHAYET SOMUT KANIT ile doğrulandı ve GÜVENLİ, opt-in bir
+  yöntemle çözüldü.**
+  - **Kanıt (gerçek çalışma log'u, #3336):** 293 haber tarandı, sadece
+    19'u yeniydi - geri kalan 274'ü için bile ayrı ayrı veritabanı
+    kontrolü yapıldı (~330-350 toplam bağlantı), toplam 12 dakika sürdü.
+    "TCMB'nin yüksek eşleşme oranı" ve "22 kaynak" hipotezleri YANLIŞ
+    değildi ama asıl baskın maliyet ("zaten işlenmiş" kontrolü bile
+    ayrı bağlantı gerektiriyor) DAHA ÖNCE fark edilmemişti - günlük AI
+    çağrı sınırı (86/120) da Gemini'nin sık 429 (Too Many Requests)
+    vermesine yol açıyordu, ayrıca bir 65 saniyelik bekleme ekliyordu.
+  - **ÇOK DİKKATLİ yaklaşılan bir alan:** v2.0.7.142'de tam bağlantı
+    HAVUZLAMASI (psycopg2.pool) İKİ AYRI ÇÖKÜŞE yol açmıştı ("havuz
+    tükenmesi" ve "sunucu tarafında sessizce düşürülmüş bağlantı").
+    v2.0.7.310 KASITLI olarak FARKLI, çok daha dar bir tasarım:
+    1. GERÇEK HAVUZ YOK - sadece TEK bir önbelleklenmiş bağlantı, bu
+       yüzden "havuz tükenmesi" senaryosu YAPISAL OLARAK İMKANSIZ.
+    2. SADECE tek seferlik, kısa (dakikalar süren) BATCH script'ler
+       (haber_izleme.py, kap_bildirim_izleme.py) için - app.py'nin
+       uzun ömürlü Streamlit bağlamına HİÇ DOKUNULMADI, `get_conn()`
+       varsayılan (toplu mod KAPALI) davranışı v2.0.7.142'den beri
+       BİREBİR AYNI kalıyor.
+    3. HER `get_conn()` çağrısında PRE-PING (`SELECT 1`) ile önbellekteki
+       bağlantının GERÇEKTEN canlı olup olmadığı kontrol ediliyor -
+       "sunucu tarafında düşürülmüş bağlantı" ihtimaline karşı BİLEREK
+       eklendi (v2.0.7.142'nin notunun AÇIKÇA istediği "pre-ping/retry-
+       on-execute" tasarımı budur).
+    4. Var olan db.py fonksiyonlarının HER BİRİNİN kendi işini bitirince
+       çağırdığı `.close()`, toplu moddaki PAYLAŞILAN bağlantı için
+       BİLEREK sessiz bir no-op yapıldı (yoksa ilk fonksiyon paylaşılan
+       bağlantıyı gerçekten kapatırdı, tasarımın amacı boşa çıkardı).
+  - **Test edilen (gerçek Supabase olmadan, sahte psycopg2 ile TAM
+    kontrol akışı):**
+    - Toplu mod KAPALIYKEN: her çağrı hâlâ ayrı bağlantı açıyor
+      (mevcut davranış KORUNMUŞ, doğrulandı).
+    - Toplu mod AÇIKKEN: 3 ayrı `get_conn()` çağrısı AYNI bağlantıyı
+      döndürdü.
+    - `.close()` çağrısı paylaşılan bağlantıyı GERÇEKTEN kapatmadı.
+    - Bağlantı "düşmüş" gibi simüle edilince (`_acik=False`), bir
+      SONRAKİ `get_conn()` çağrısı bunu pre-ping ile YAKALADI ve
+      SESSİZCE yeni bir bağlantı açtı.
+    - `toplu_mod_kapat()` paylaşılan bağlantıyı GERÇEKTEN kapattı.
+    - **TAM `haber_izleme.py` çalışması (295 haber, 22 kaynak) UÇTAN
+      UCA simüle edildi: toplam SADECE 1 bağlantı oluşturuldu**
+      (önceden 300+ olurdu) - script hatasız tamamlandı.
+  - **BAHRİ'DEN İSTENEN:** Push sonrası ilk birkaç çalıştırmanın
+    süresini YAKINDAN izle - eğer süre dramatik şekilde düşmezse
+    (10-15 dakikadan 1-2 dakikaya) ya da yeni, garip bir hata
+    (özellikle "connection already closed" tarzı) görülürse HEMEN
+    bildir - bu, hassas bir alan, geri alınması gerekebilir.
