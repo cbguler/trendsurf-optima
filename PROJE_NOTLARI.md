@@ -7099,3 +7099,24 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Test edildi (gerçek CATES + AKFGY metinleriyle):** her ikisi
     de artık sadece anlamlı açıklama cümlesini gösteriyor, tüm
     tarihler "15 Eylül 2026" formatında.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.308 (15 Eylül 2026, O&M4,
+  Bahri'nin bulgusu - v2.0.7.307'den sonra hâlâ "silik yazılı ve
+  küçük fontlu, cümle yarıda kesiliyor, gerekirse linkine tıklayıp
+  tam habere gitmek gerekli"): v2.0.7.307 SADECE metnin İÇERİĞİNİ
+  temizlemişti - GÖSTERİM ŞEKLİ ayrı, çözülmemiş bir sorunmuş.**
+  - **Küçük/soluk yazı sorunu:** `st.caption()` Streamlit'te BİLEREK
+    küçük/soluk stil kullanıyor (ikincil bilgi için tasarlanmış,
+    ana içerik için değil) - normal `st.markdown()` ile değiştirildi.
+  - **Cümle ortasında kesilme sorunu:** Sabit `[:400]` karakter
+    sınırı yerine artık: sınır 600'e çıkarıldı VE mümkünse en yakın
+    cümle sonundan (". ") kesiliyor - kelimenin ortasında kesilmiyor.
+    Test edilen gerçek VBTS bildirimi (677 karakter) artık tam bir
+    cümlede ("...değerlendirilir.") kesilip "(…)" ile işaretleniyor.
+  - **"Tam habere git" linki:** KAP'ın verisinde HER bildirime özel
+    bir bağlantı YOK (sadece bazı bildirimler birbirine çapraz
+    referans veriyor, hepsinde değil - araştırıldı, doğrulandı) - bu
+    yüzden dürüstçe şirketin KAP'taki TAM bildirim listesine
+    (`kap.org.tr/tr/sirket-bildirimleri/{slug}`, KAP_SLUG_MAP'ten)
+    bağlantı eklendi, tek bir bildirime sahte/tahmini bir link
+    UYDURULMADI.

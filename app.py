@@ -3672,6 +3672,21 @@ if _onemli_kap_bildirimleri:
         f"📋 **Portföyünüzdeki hisselerle ilgili {len(_onemli_kap_bildirimleri)} yeni "
         f"KAP bildirimi var** (son 72 saat)", expanded=False
     ):
+        # v2.0.7.308 (15 Eylül 2026, O&M4, Bahri'nin bulgusu - "yine silik
+        # yazılı ve küçük fontlu, cümle de yarıda kesiliyor, gerekirse
+        # linkine tıklayıp tam habere gitmek gerekli"): v2.0.7.307
+        # SADECE metnin İÇERİĞİNİ temizlemişti - GÖSTERİM ŞEKLİ ayrı bir
+        # sorunmuş. `st.caption()` Streamlit'te BİLEREK küçük/soluk stil
+        # kullanıyor (ikincil bilgi için tasarlanmış) - normal `st.markdown`
+        # ile değiştirildi. Kesme noktası da artık rastgele 400. karakter
+        # DEĞİL, mümkünse bir CÜMLE SONU (". ") - böylece kelimenin
+        # ortasında kesilmiyor. Tam metin için KAP linki: her bildirime
+        # özel bir bağlantı KAP'ın verisinde YOK (sadece bazı bildirimler
+        # BAŞKA bir bildirime capraz referans veriyor, hepsinde değil) -
+        # bu yüzden dürüstçe şirketin KAP'taki TAM bildirim listesine
+        # (özel bir bildirime değil) bağlantı veriliyor.
+        from kap_client import KAP_SLUG_MAP
+
         for _b in _onemli_kap_bildirimleri:
             st.markdown(
                 f"**{_b['ticker']}** — {_b['kap_baslik']} "
@@ -3679,7 +3694,21 @@ if _onemli_kap_bildirimleri:
             )
             _temiz_ozet = _kap_icerik_temizle(_b.get("icerik_ozet", ""), _b.get("kap_baslik", ""))
             if _temiz_ozet:
-                st.caption(_temiz_ozet[:400])
+                _sinir = 600
+                if len(_temiz_ozet) > _sinir:
+                    _kesme = _temiz_ozet.rfind(". ", 0, _sinir)
+                    _goster = (_temiz_ozet[:_kesme + 1] if _kesme > 200
+                               else _temiz_ozet[:_sinir]) + " (…)"
+                else:
+                    _goster = _temiz_ozet
+                st.markdown(_goster)
+            _slug_url = KAP_SLUG_MAP.get(_b["ticker"])
+            if _slug_url:
+                _slug = _slug_url.rstrip("/").split("/")[-1]
+                st.markdown(
+                    f"[KAP'ta {_b['ticker']} bildirim listesinin tamamı →]"
+                    f"(https://www.kap.org.tr/tr/sirket-bildirimleri/{_slug})"
+                )
             st.markdown("---")
 
 # v2.0.7.159 (Bahri'nin talebi, 19 Ağustos 2026 — "bir mesaj kutusunun
