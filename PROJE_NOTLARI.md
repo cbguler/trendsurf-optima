@@ -6983,3 +6983,24 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     Izleme"yi çoğaltarak yeni bir iş kur - "TrendSurf KAP Bildirim"
     adıyla, 10 dakikada bir, aynı endpoint kalıbı (workflow adı
     `kap_bildirim_izleme.yml` olarak değişecek).
+
+- **[DÜZELTİLDİ] v2.0.7.304 (15 Eylül 2026, O&M4, Bahri'nin bulgusu -
+  GitHub'dan gelen başarısızlık e-postası): v2.0.7.302'de db.py'ye
+  KAP fonksiyonları eklenirken `haber_akisi_temizle`'nin TANIM
+  SATIRI (`def haber_akisi_temizle(gun: int = 7):`) yanlışlıkla
+  silinmişti - str_replace ile bir fonksiyonu diğerinin ÖNÜNE
+  eklerken, eski konumdaki tek satırlık "çapa" (anchor) yeni metne
+  yeniden EKLENMEYİ unutulmuştu. Fonksiyonun GÖVDESİ (docstring +
+  kod) olduğu gibi kaldığı için `py_compile` bunu YAKALAMADI (iki
+  fonksiyon gövdesi sözdizimsel olarak geçerli şekilde birleşmiş
+  oluyordu) - haber_izleme.py'nin `from db import ... haber_akisi_temizle`
+  satırı ÇALIŞTIRILINCA (import zamanında) patladı, bu yüzden
+  "Failed in 6 seconds" (henüz RSS taramasına bile başlamadan).
+  **Ders:** bundan sonra bir fonksiyonu/bloğu mevcut bir tanımın
+  HEMEN ÖNÜNE eklerken, o tanım satırının KENDİSİNİ de yeni metnin
+  SONUNA aynen tekrar dahil etmek şart - sadece "çapa" olarak
+  kullanıp atlamak sessizce fonksiyon kaybına yol açabiliyor.
+  **Doğrulama:** `db.py`'den `haber_izleme.py`'nin ihtiyaç duyduğu
+  TÜM import'lar tekrar denendi, `haber_izleme.py` gerçek ortamda
+  (Supabase kimlik bilgisi olmadan bile) sonuna kadar hatasız
+  çalıştı - 484 haber tarandı, temiz çıkış kodu (0) ile bitti.

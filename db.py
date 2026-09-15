@@ -1064,7 +1064,7 @@ def kap_bildirim_temizle(gun: int = 14):
         print(f"[db] kap_bildirim_temizle hata: {e}", file=sys.stderr)
 
 
-
+def haber_akisi_temizle(gun: int = 7):
     """v2.0.7.160: 7 gunden eski haberleri siler - tablo sinirsiz buyumesin.
     haber_izleme.py her turun sonunda cagirir."""
     try:
