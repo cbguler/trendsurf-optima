@@ -7029,3 +7029,40 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Doğrulanması gereken:** Bahri'nin canlı çalıştırması (push
     sonrası, #3330) tamamlanıp tamamlanmadığı, tamamlandıysa gerçek
     süresi kontrol edilmeli.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.306 (15 Eylül 2026, O&M4,
+  Bahri'nin bulgusu — #3330 10 dakikada, #3331 20 dakikada bile
+  BİTMEDEN zaman aşımına uğradı, v2.0.7.305'in timeout artışı TEK
+  BAŞINA yetmedi): kaynak başına taranan haber sayısı 30'dan 15'e
+  düşürüldü.**
+  - **#3330 doğrulaması:** "Error: The operation was canceled" (10dk
+    17sn'de) - script ÇÖKMEMİŞ, sadece eski zaman aşımına takılmış.
+    `_get_db_url: ... OK` satırının 400+ kez tekrarlanması bir hata
+    değil, kasıtlı ayrıntılı teşhis logu (her veritabanı işlemi bunu
+    yazdırıyor, havuzlama olmadığı için işlem sayısı = bağlantı
+    sayısı).
+  - **#3331 (20 dakikayı da aştı) - kök neden KESİN TEK BİR ŞEY
+    DEĞİL, üst üste binen faktörler:**
+    1. TCMB'nin RSS'indeki NEREDEYSE HER başlık zaten "TCMB"
+       geçtiği için mevcut "tcmb_kredibilite" anahtar kelime
+       filtresinden geçiyor - bu, önceden nadiren tetiklenen "AI
+       doğrulama çağrısı + eşleşen haber başına kasıtlı 1sn bekleme"
+       yolunu ŞİMDİ çok daha sık çalıştırıyor.
+    2. Zaten bilinen "haber başına ayrı veritabanı bağlantısı"
+       (havuzlama yok, v2.0.7.142'de İKİ ÇÖKÜŞE yol açtığı için
+       BİLİNÇLİ olarak vazgeçilmiş) maliyeti, kaynak sayısı 6'dan
+       7'ye çıkınca toplam süreyi büyüttü.
+    3. 429 (hız sınırı) tekrar deneme mantığı zaten savunmalı
+       yazılmış (bir kez 429 görülünce turun geri kalanında hiç
+       beklemiyor) - bu TEK BAŞINA 20 dakikayı açıklamıyor, yukarıdaki
+       ikisiyle BİRLİKTE etkili.
+  - **Seçilen çözüm (bilerek EN DÜŞÜK RİSKLİ olan):** bağlantı
+    yeniden kullanımı (tek çalışmada tek bağlantı) KÖKTEN bir çözüm
+    olurdu ama v2.0.7.142'deki geçmiş çöküşler yüzünden BURADA
+    denenmedi. Onun yerine kaynak başına 30 → 15 haber - 10 dakikada
+    bir zaten çalıştığı için pratikte hiçbir şey kaçırılmaz, ama
+    toplam hacim kabaca yarıya iniyor.
+  - **İZLENMESİ GEREKEN:** Bu değişiklik sonrası ilk birkaç
+    çalıştırmanın süresi kontrol edilmeli - hâlâ 15-20 dakikaya
+    yakınsa, bağlantı yeniden kullanımı konusunu (dikkatli, test
+    edilerek) tekrar gündeme almak gerekecek.

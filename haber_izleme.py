@@ -899,7 +899,28 @@ def main():
             print(f"[haber_izleme] {kaynak_adi} RSS okunamadi: {e}")
             continue
 
-        for entry in feed.entries[:30]:  # her kaynaktan en yeni 30 haber
+        for entry in feed.entries[:15]:  # v2.0.7.306: 30'dan 15'e dusuruldu
+            # (15 Eylul 2026, O&M4, Bahri'nin bulgusu - TCMB eklenince
+            # calismalar 10, sonra 20 dakikayi asip zaman asimina
+            # ugramaya basladi). KOK NEDEN KESIN TEK BIR SEY DEGIL, birkac
+            # faktorun UST USTE BINMESI: (1) TCMB'nin RSS'indeki NEREDEYSE
+            # HER baslik zaten "TCMB" gectigi icin mevcut
+            # "tcmb_kredibilite" anahtar kelime filtresinden GECIYOR - bu,
+            # once nadiren tetiklenen "AI dogrulama + 1sn bekleme" yolunu
+            # simdi COK daha sik calistiriyor; (2) zaten bilinen "haber
+            # basina ayri veritabani baglantisi" (havuzlama yok) maliyeti,
+            # kaynak sayisi 6'dan 7'ye cikinca (ustune TCMB'nin yuksek
+            # eslesme orani binince) toplam sureyi 10 dakikadan (v2.0.7.305
+            # ONCESI zaten sinira YAKINDI) 20+ dakikaya tasidi. Kalici,
+            # daha kokten cozum (baglantiyi tek calismada YENIDEN
+            # KULLANMAK) AYRI, daha riskli bir degisiklik - gecmiste
+            # baglanti havuzlamasi DENENMIS ve IKI FARKLI COKUSE yol
+            # acmisti (bkz. v2.0.7.142) - o yuzden BURADA dokunulmadi.
+            # Bunun yerine en DUSUK RISKLI onlem seçildi: kaynak basina
+            # taranan haber sayisini yariya indirmek - 10 dakikada bir
+            # zaten calistigi icin 15 haber pratikte hicbir seyi
+            # KACIRMAZ (bu ust sinir, esas olarak ilk calisma/uzun
+            # kesinti sonrasi icin bir guvenlik tavani).
             url = entry.get("link", "")
             if not url:
                 continue
