@@ -4831,22 +4831,19 @@ def _kiyaslama_gunluk_serileri(portfolio):
         if _oran and _oran > 0:
             _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
 
-    # 5) TÜİK TÜFE - TCMB EVDS'ten tam otomatik (v2.0.7.313, Bahri'nin
-    # talebi: "portföyümün getirisi enflasyonun altında mı üstünde mi").
-    # DİĞER EVDS serilerinden farklı olarak burada TAM TARİHSEL seri
-    # kullanılıyor (baslangic'tan bugüne) - "oran x gün/365" basit faiz
-    # YAKLAŞIMI DEĞİL, gerçek endeks değerlerinin kendi oranı.
-    _tufe_seri, _tufe_hata = _tufe_endeks_serisi_cek(_baslangic.isoformat())
-    if _tufe_seri is not None and len(_tufe_seri) >= 1:
-        _tufe_hazir = _seri_hazirla(_tufe_seri)
-        if float(_tufe_hazir.iloc[0]) > 0:
-            _sonuc["TÜİK Enflasyon"] = (_tufe_hazir / float(_tufe_hazir.iloc[0]) - 1) * 100
+    # v2.0.7.318 (16 Eylül 2026, Bahri'nin AÇIK talimatı - "Asla ve
+    # katta sahte TÜİK verilerinin bu uygulamada yer almasını
+    # istemiyorum nokta"): v2.0.7.313'te eklenen TÜİK TÜFE (EVDS
+    # TP.FG.J0) TAMAMEN KALDIRILDI - o seri kodu araştırma sırasında
+    # KESİN doğrulanamamıştı (bkz. eski `_tufe_endeks_serisi_cek`
+    # docstring'i), Bahri bu belirsizliği "sahte veri" riski olarak
+    # değerlendirdi ve özelliğin TAMAMEN çıkarılmasını istedi - "düzeltmek"
+    # değil, KALDIRMAK istendi. `_tufe_endeks_serisi_cek` fonksiyonunun
+    # kendisi de silindi (bkz. aşağıda `_evds_referans_oranlari_cek`'in
+    # hemen üstü).
 
-    # 6) ENAG - elle girilen aylık oranlarla (v2.0.7.313 - ENAG'ın kendi
-    # sitesi bot erişimini engelliyor, resmi API yok, güvenilir üçüncü
-    # taraf kaynak bulunamadı - "elle veri girişi asla kabul edilemez"
-    # kuralının Bahri'nin ONAYIYLA verilen TEK istisnası, çünkü ENAG
-    # ayda sadece 1 kez güncelleniyor).
+    # 5) ENAG - artık TAM OTOMATİK (v2.0.7.317, enag_izleme.py'nin
+    # Halk TV'den tespit ettiği veriler) - elle giriş YOK.
     _enag_oranlari = enag_oranlari_getir()
     if _enag_oranlari:
         _enag_seri, _enag_eksik_aylar = _enflasyon_gunluk_seri(
@@ -4950,74 +4947,6 @@ def _en_yuksek_vadeli_mevduat_cek():
         return None, f"{type(_e).__name__}: {_e}"
 
 
-@st.cache_data(ttl=21600, show_spinner=False)
-def _tufe_endeks_serisi_cek(baslangic_iso: str):
-    """v2.0.7.313 (16 Eylul 2026, Bahri'nin talebi - "portfoyumun getirisi
-    enflasyonun altinda mi ustunde mi"): TUIK TUFE Genel Endeksi'ni (2003=100)
-    TCMB EVDS'ten CEKER - "elle veri girisi asla kabul edilemez" (v2.0.7.129)
-    kuralina uygun, mevduat/tahvil/repo ile AYNI otomatik yontem.
-
-    Seri kodu TP.FG.J0 (TUFE Genel Endeksi, aylik) - digger EVDS
-    entegrasyonlarindan (_evds_seri_cek) FARKLI olarak burada TEK bir son
-    deger degil, `baslangic_iso`'dan bugune TAM TARIHSEL SERI cekiliyor
-    (aylik cozunurlukte - TUIK/EVDS TUFE'yi aylik yayinliyor).
-
-    ONEMLI - DOGRULAMA GEREKIYOR: Bu seri kodu (TP.FG.J0) arastirma
-    sirasinda KESIN olarak DOGRULANAMADI (EVDS'in kendi kod katalogu
-    canli test edilemedi - gercek EVDS_API_KEY olmadan). Fonksiyon,
-    donen ilk deger MAKUL bir TUFE endeks araligi (1000-10000 arasi,
-    2026 itibariyla bilinen gercek deger ~3500-4200) DISINDAYSA
-    bunu bir HATA olarak isaretliyor, SESSIZCE yanlis veri
-    GOSTERMIYOR - ilk canli calistirmada Bahri'nin sonucu dogrulamasi
-    gerekiyor.
-
-    Donus: (pd.Series (tarih->endeks degeri) ya da None, hata_detayi)."""
-    try:
-        _key = os.environ.get("EVDS_API_KEY", "")
-        if not _key:
-            try:
-                _key = st.secrets.get("EVDS_API_KEY", "")
-            except Exception:
-                _key = ""
-        if not _key:
-            return None, "EVDS_API_KEY tanımlı değil"
-        try:
-            from evds import evdsAPI
-        except Exception as e:
-            return None, f"'evds' paketi import edilemedi: {type(e).__name__}: {e}"
-        import datetime as _dt_tufe
-        e = evdsAPI(_key)
-        _baslangic_d = _dt_tufe.date.fromisoformat(baslangic_iso)
-        # EVDS aylik veri icin ay basindan istemek daha guvenilir.
-        _istek_baslangic = _baslangic_d.replace(day=1)
-        bugun = _dt_tufe.date.today()
-        df = e.get_data(["TP.FG.J0"],
-                         startdate=_istek_baslangic.strftime("%d-%m-%Y"),
-                         enddate=bugun.strftime("%d-%m-%Y"))
-        if df is None or df.empty:
-            return None, "EVDS'ten TÜFE için boş sonuç döndü (TP.FG.J0)"
-        _kolon = "TP_FG_J0"
-        if _kolon not in df.columns:
-            _aday_kolonlar = [c for c in df.columns if c != "Tarih" and c != "YEARWEEK"]
-            if not _aday_kolonlar:
-                return None, f"EVDS yanıtında beklenen sütun yok: {list(df.columns)}"
-            _kolon = _aday_kolonlar[-1]
-        _seri = df.set_index("Tarih")[_kolon].dropna().astype(float)
-        if _seri.empty:
-            return None, "EVDS TÜFE serisinde geçerli değer yok"
-        # Makul aralik kontrolu - yanlis seri kodu SESSIZCE guvenilmesin.
-        _son_deger = float(_seri.iloc[-1])
-        if not (500 <= _son_deger <= 20000):
-            return None, (f"TP.FG.J0'dan gelen değer ({_son_deger}) beklenen "
-                          f"TÜFE endeks aralığı (500-20000) dışında - seri "
-                          f"kodu yanlış olabilir, DOĞRULAMA gerekiyor.")
-        _seri.index = pd.to_datetime(_seri.index, dayfirst=True, errors="coerce")
-        _seri = _seri[_seri.index.notna()].sort_index()
-        return _seri, None
-    except Exception as _dis_hata:
-        return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
-
-
 def _enflasyon_gunluk_seri(aylik_oranlar: dict, gun_araligi, baslangic):
     """v2.0.7.313 (v2.0.7.314'te DUZELTILDI - ilk versiyonda ay
     kaydirma hatasi vardi, testte bulundu): Elde SADECE AYLIK oranlar
@@ -5117,7 +5046,7 @@ def _render_karsilastirma(_cur_user, portfolio):
 
     if "BIST 100" not in _seriler:
         st.caption(
-            "⚠ BIST 100 karşılaştırması şu an yüklenemedi (Yahoo Finance "
+            "BIST 100 karşılaştırması şu an yüklenemedi (Yahoo Finance "
             "tarafında geçici bir sorun olabilir) - sayfayı birkaç dakika "
             "sonra yenilemeyi deneyin."
         )
@@ -5132,10 +5061,14 @@ def _render_karsilastirma(_cur_user, portfolio):
     # (ör. tek seçili varlık için ayrı bir bar grafiği) ileride
     # düşünülebilir - burada TÜMÜNÜ AYNI ANDA basmak yanlış çıktı.
     _renkler = {
-        "Portföyünüz": "#1d4ed8", "BIST 100": "#111827", "Altın": "#b45309",
+        "Portföyünüz": "#1d4ed8", "BIST 100": "#111827",
+        # v2.0.7.318 (16 Eylül 2026, Bahri'nin talebi): "Altın" rengi
+        # daha ALTIN rengine benzesin diye #b45309 (kahverengimsi amber)
+        # yerine klasik altın tonu #d4af37 kullanıldı.
+        "Altın": "#d4af37",
         "Dolar/TL": "#15803d", "Vadeli Mevduat": "#a21caf",
         "Devlet Tahvili": "#4338ca", "Repo": "#b91c1c",
-        "TÜİK Enflasyon": "#ea580c", "ENAG Enflasyon": "#dc2626",
+        "ENAG Enflasyon": "#dc2626",
     }
     # v2.0.7.169 (Bahri'nin bulgusu, 20 Ağustos 2026 — "çizgi ve etiket
     # renkleri ile çizgi kalınlıkları ayırt edici değil, anlaşılır hale
@@ -5147,13 +5080,15 @@ def _render_karsilastirma(_cur_user, portfolio):
         "Portföyünüz": "solid", "BIST 100": "dash", "Altın": "solid",
         "Dolar/TL": "dot", "Vadeli Mevduat": "dashdot",
         "Devlet Tahvili": "longdash", "Repo": "longdashdot",
-        "TÜİK Enflasyon": "dash", "ENAG Enflasyon": "dot",
+        # v2.0.7.318 (Bahri'nin talebi): ENAG artık KALIN, DÜZ kırmızı
+        # çizgi (noktalı değil) - genişlik asagida ozel olarak ayarlandı.
+        "ENAG Enflasyon": "solid",
     }
     fig = go.Figure()
     for _ad, _seri in _seriler.items():
         fig.add_trace(go.Scatter(
             x=_seri.index, y=_seri.values, mode="lines", name=_ad,
-            line=dict(width=4 if _ad == "Portföyünüz" else 2.75,
+            line=dict(width=4 if _ad in ("Portföyünüz", "ENAG Enflasyon") else 2.75,
                       color=_renkler.get(_ad, "#374151"),
                       dash=_desenler.get(_ad, "solid")),
             hovertemplate="<b>" + _ad + "</b>: %{y:.2f}%<extra></extra>",
@@ -5206,61 +5141,29 @@ def _render_karsilastirma(_cur_user, portfolio):
     # ve özet satırı bunu zaten İÇERİYOR ama dolaylı (sayıları kendi
     # kendine çıkarmak gerekiyor) - burada AÇIKÇA "üstünde/altında" diye
     # ifade eden ayrı bir bölüm.
-    if "Portföyünüz" in _seriler and ("TÜİK Enflasyon" in _seriler or "ENAG Enflasyon" in _seriler):
+    # v2.0.7.318 (16 Eylül 2026, Bahri'nin talebi - emoji/simge KULLANMA
+    # kuralı çiğnenmişti, düzeltildi): 🟢/🔴/⚠ TAMAMEN kaldırıldı, düz
+    # metin kullanılıyor. TÜİK karşılaştırması da (bkz. yukarıdaki not)
+    # TAMAMEN kaldırıldığı için sadece ENAG'a göre kıyaslanıyor.
+    if "Portföyünüz" in _seriler and "ENAG Enflasyon" in _seriler:
         st.divider()
         st.markdown("**Enflasyona Karşı Performans**")
         _portfoy_son = float(_seriler["Portföyünüz"].iloc[-1])
-        for _enf_ad in ("TÜİK Enflasyon", "ENAG Enflasyon"):
-            if _enf_ad not in _seriler:
-                continue
-            _enf_son = float(_seriler[_enf_ad].iloc[-1])
-            _fark = _portfoy_son - _enf_son
-            _durum = "üstünde" if _fark >= 0 else "altında"
-            _renk_ikon = "🟢" if _fark >= 0 else "🔴"
-            st.markdown(
-                f"{_renk_ikon} Portföyünüz, **{_enf_ad}**'a göre "
-                f"**{abs(_fark):.1f} puan {_durum}** "
-                f"(Portföy: {fmt_tr_isaretli(_portfoy_son, 1, yuzde=True)}, "
-                f"{_enf_ad}: {fmt_tr_isaretli(_enf_son, 1, yuzde=True)})"
-            )
+        _enf_son = float(_seriler["ENAG Enflasyon"].iloc[-1])
+        _fark = _portfoy_son - _enf_son
+        _durum = "üstünde" if _fark >= 0 else "altında"
+        st.markdown(
+            f"Portföyünüz, **ENAG Enflasyon**'a göre "
+            f"**{abs(_fark):.1f} puan {_durum}** "
+            f"(Portföy: {fmt_tr_isaretli(_portfoy_son, 1, yuzde=True)}, "
+            f"ENAG Enflasyon: {fmt_tr_isaretli(_enf_son, 1, yuzde=True)})"
+        )
         if st.session_state.get("_enag_eksik_aylar_uyarisi"):
             st.caption(
-                "⚠ ENAG için eksik ay(lar) var, kümülatif hesap bu ayları "
+                "ENAG için eksik ay(lar) var, kümülatif hesap bu ayları "
                 "0% olarak sayıyor (gerçekte olduğundan düşük çıkabilir): "
                 + ", ".join(st.session_state["_enag_eksik_aylar_uyarisi"])
             )
-        if "TÜİK Enflasyon" not in _seriler:
-            st.caption(
-                "⚠ TÜİK/TÜFE karşılaştırması şu an yüklenemedi "
-                "(TCMB EVDS bağlantısında bir sorun olabilir)."
-            )
-
-    # v2.0.7.317 (16 Eylül 2026, Bahri'nin talebi - "elle giriş asla
-    # olmamalı, otomatik giriş ve otonom yönetim esas olmalıdır"):
-    # v2.0.7.313'teki ELLE GİRİŞ FORMU TAMAMEN KALDIRILDI. ENAG artık
-    # `enag_izleme.py` (ayrı bir GitHub Actions workflow) tarafından
-    # Halk TV'nin "ENAG ... enflasyonunu açıkladı" haberinden OTOMATİK
-    # çekiliyor - CANLI doğrulandı (Ağustos 2026 verisiyle test edildi).
-    # Burada sadece SALT-OKUNUR bir durum notu kalıyor - herhangi bir
-    # veri girişi/düzenleme arayüzü YOK.
-    with st.expander("ENAG Verisi Hakkında"):
-        st.caption(
-            "ENAG'ın kendi sitesi otomatik erişime kapalı ve resmi bir "
-            "API'si yok. Bunun yerine `enag_izleme.py` (otomatik "
-            "çalışan, ayrı bir görev), ENAG her ay yeni veriyi "
-            "açıkladığında bunu haber kaynaklarından (Halk TV) "
-            "otomatik tespit edip buraya kaydediyor - elle giriş "
-            "YOKTUR."
-        )
-        from db import enag_oranlari_getir as _enag_oranlari_getir_render
-        _enag_mevcut = _enag_oranlari_getir_render()
-        if _enag_mevcut:
-            st.caption("Kayıtlı aylar: " + ", ".join(
-                f"{_AYLAR_TR[int(k[5:7]) - 1]} {k[:4]} (%{fmt_tr(v)})"
-                for k, v in sorted(_enag_mevcut.items(), reverse=True)[:6]
-            ))
-        else:
-            st.caption("Henüz kayıtlı ENAG verisi yok.")
 
 
 def _render_pozisyon_karsilastirma(_cur_user, portfolio):
@@ -5373,6 +5276,29 @@ def _render_pozisyon_karsilastirma(_cur_user, portfolio):
             font=dict(size=11, color=_renk_pk),
         )
     fig2.add_hline(y=0, line_width=1, line_color="rgba(120,120,120,0.4)")
+
+    # v2.0.7.318 (16 Eylül 2026, Bahri'nin talebi): bu grafiğe de ENAG
+    # enflasyon çizgisi eklendi - kalın, düz kırmızı (ana Getiri
+    # Kıyaslaması'yla AYNI görsel dil). Bu fonksiyon KENDİ KENDİNE YETEN
+    # olduğu için (bkz. yukarıdaki docstring) ENAG serisi BURADA AYRICA
+    # hesaplanıyor - ana karşılaştırma fonksiyonuyla veri PAYLAŞILMIYOR.
+    from db import enag_oranlari_getir as _enag_oranlari_getir_pk
+    _enag_oranlari_pk = _enag_oranlari_getir_pk()
+    if _enag_oranlari_pk:
+        _enag_seri_pk, _ = _enflasyon_gunluk_seri(
+            _enag_oranlari_pk, _gun_araligi_pk, _baslangic_pk)
+        fig2.add_trace(go.Scatter(
+            x=_enag_seri_pk.index, y=_enag_seri_pk.values, mode="lines",
+            name="ENAG Enflasyon",
+            line=dict(width=4, color="#dc2626", dash="solid"),
+            hovertemplate="<b>ENAG Enflasyon</b>: %{y:.2f}%<extra></extra>",
+        ))
+        fig2.add_annotation(
+            x=_enag_seri_pk.index[-1], y=float(_enag_seri_pk.iloc[-1]),
+            text=" ENAG Enflasyon", showarrow=False, xanchor="left",
+            font=dict(size=11, color="#dc2626"),
+        )
+
     fig2.update_layout(
         template="plotly_white", height=420,
         # v2.0.7.172: sağ uçtaki etiketlerin sığması için sağ kenar
@@ -6858,6 +6784,11 @@ elif page=="Portföyüm":
     for _etiket, _w in _footer_kolonlar:
         if _etiket == "ETIKET":
             _icerik = "<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;'>TOPLAM PORTFÖY DEĞERİ</b>"
+        elif _etiket == "Alış":
+            # v2.0.7.318 (16 Eylul 2026, Bahri'nin talebi): Alis MALIYETI
+            # toplami da (_total_maliyet, KZ%'nin paydasi olarak zaten
+            # HESAPLANMISTI) footer'a, KENDI sutununun ALTINA eklendi.
+            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_maliyet)} TL</b>"
         elif _etiket == "TOPLAM":
             _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
         elif _etiket == "KZ":

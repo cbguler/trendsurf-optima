@@ -7413,3 +7413,38 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     çoğaltarak "TrendSurf ENAG Izleme" adında yeni bir iş kur - GÜNDE
     1 KEZ (örneğin her gün saat 09:00), workflow adı
     `enag_izleme.yml` olacak şekilde.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.318 (16 Eylül 2026, Bahri'nin
+  5 maddelik talebi) - Portföyüm sayfasında beş değişiklik.**
+  1. **Portföy Varlıkları Tablosu footer'ı:** "Alış" sütununun ALTINA
+     toplam alış maliyeti (`_total_maliyet`, zaten K/Z% hesabı için
+     var olan değer) eklendi - artık her sütunun toplamı KENDİ
+     sütununun altında.
+  2. **Getiri Kıyaslaması renkleri:** Altın rengi `#b45309` (kahverengi
+     amber) → `#d4af37` (klasik altın tonu). ENAG çizgisi noktalı
+     (dot) → KALIN (width=4) DÜZ (solid) kırmızı.
+  3. **TÜİK/TÜFE TAMAMEN KALDIRILDI** (Bahri'nin AÇIK talimatı - "Asla
+     ve katta sahte TÜİK verilerinin bu uygulamada yer almasını
+     istemiyorum nokta"): v2.0.7.313'te eklenen, seri kodu (TP.FG.J0)
+     araştırma sırasında KESİN doğrulanamamış olan TÜİK entegrasyonu -
+     `_tufe_endeks_serisi_cek()` fonksiyonu SİLİNDİ, `_renkler`/
+     `_desenler` sözlüklerinden ve "Enflasyona Karşı Performans"
+     karşılaştırmasından çıkarıldı. Bahri bu belirsizliği düzeltilecek
+     bir hata değil, TAMAMEN KALDIRILMASI gereken bir risk olarak
+     değerlendirdi.
+  4. **Emoji/simge kuralı ihlali düzeltildi:** "Enflasyona Karşı
+     Performans" bölümündeki 🟢/🔴 simgeleri ve ⚠ işaretleri TAMAMEN
+     kaldırıldı, düz metne çevrildi - standart kural ("TSO UI'da asla
+     emoji kullanılmaz") burada çiğnenmişti. Fark edilen AYNI türden
+     BAŞKA bir ihlal (BIST 100 uyarı satırındaki ⚠, benim eklemediğim
+     önceden var olan bir satır) de aynı anda düzeltildi.
+  5. **"ENAG Verisi Hakkında" bölümü TAMAMEN KALDIRILDI** - artık
+     hiçbir açıklama/bilgi kutusu yok.
+  6. **Pozisyon Bazlı Getiri Karşılaştırması grafiğine ENAG eklendi:**
+     Bu fonksiyon "kendi kendine yeten" tasarımı gereği ENAG serisini
+     KENDİSİ ayrıca hesaplıyor (ana karşılaştırmayla veri paylaşmıyor)
+     - aynı kalın/düz/kırmızı stil.
+  - **Doğrulama:** Dokunulan üç fonksiyonun (`_kiyaslama_gunluk_serileri`,
+    `_render_karsilastirma`, `_render_pozisyon_karsilastirma`) hepsi
+    AST tabanlı otomatik isim taramasından temiz geçti, `grep` ile
+    TÜİK/TÜFE'ye hiçbir kod referansı kalmadığı doğrulandı.
