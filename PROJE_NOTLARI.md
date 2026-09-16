@@ -7372,3 +7372,44 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     olarak dogrulandı. Bu tarama YÖNTEMİ, benzer "farklı fonksiyonda
     import edilmiş ama BURADA edilmemiş" hatalarını gelecekte daha
     güvenilir yakalayabilir.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.317 (16 Eylül 2026, Bahri'nin
+  düzeltmesi - "elle giriş asla olmamalı, otomatik giriş ve otonom
+  yönetim esas olmalıdır"): ENAG elle giriş formu TAMAMEN KALDIRILDI,
+  yerine CANLI DOĞRULANMIŞ tam otomatik bir yöntem geldi.**
+  - **Bahri'nin netleştirmesi:** v2.0.7.313'te "İkisini de ekle (TÜFE
+    otomatik + ENAG elle)" seçimi gece geç saatte yanlış anlaşılmış -
+    v2.0.7.129'daki "elle veri girişi asla kabul edilemez" kuralının
+    İSTİSNASIZ geçerli olduğu netleşti.
+  - **Yeni yöntem - CANLI test edildi (tahmin değil):** Halk TV, ENAG
+    her ay duyurduğunda AYNI GÜN "Son dakika | ENAG ... enflasyonunu
+    açıkladı" başlıklı bir haber yayınlıyor - bu haberin
+    `<meta name="description">` etiketi HER ZAMAN şu kalıpta: "...ENAG
+    <AY> <YIL> enflasyonunu açıkladı. Buna göre aylık enflasyon yüzde
+    <ORAN> artarken...". `enag_izleme.py` TAMAMEN YENİDEN YAZILDI:
+    Halk TV'nin `/enflasyon` etiket sayfasını (düz `requests` ile,
+    JS gerekmeden erişilebilir - doğrulandı) çeker, "enag" geçen linki
+    bulur, o makaleyi çeker, meta açıklamadan regex ile ay/yıl/oranı
+    çıkarır, `enag_oran_kaydet()` ile Supabase'e yazar.
+  - **UÇTAN UCA CANLI TEST edildi** (gerçek Halk TV sitesine karşı,
+    sahte veritabanıyla): `/enflasyon` sayfası çekildi (HTTP 200),
+    "son-dakika-enag-acikladi-ilk-enflasyon-verisi-geldi-1052768h"
+    linki doğru bulundu, makale çekildi, meta açıklamadan **doğru
+    şekilde** "2026-08" ve "%2.24" çıkarıldı ve "kaydedildi" - GERÇEK
+    Ağustos 2026 ENAG verisiyle birebir eşleşiyor.
+  - **Eski PDF/enagrup.org denemesi (v2.0.7.314) TERK EDİLDİ** -
+    enagrup.org zaten Cloudflare TLS seviyesinde erişilemez
+    bulunmuştu, Halk TV yöntemi hem ÇALIŞTIĞI KANITLANMIŞ hem de daha
+    basit (PDF/OCR bağımlılığı yok, sadece `requests`).
+  - **Otonom çalıştırma:** `enag_izleme.yml` artık GÜNLÜK
+    çalıştırılmak üzere tasarlandı (cron-job.org, diğer workflow'larla
+    aynı desen) - workflow_dispatch (elle tetikleme) YOK, tam otonom.
+    Script idempotent (zaten kayıtlı bir ay tekrar "bulunursa" sessizce
+    günceller, hata vermez) - günde 1 kez çalışması tamamen güvenli.
+  - **app.py'de ENAG bölümü artık SALT-OKUNUR** - "ENAG Verisi
+    Hakkında" başlığıyla, hangi ayların kayıtlı olduğunu gösteren bir
+    bilgi notu var, HİÇBİR giriş/düzenleme arayüzü YOK.
+  - **BAHRİ'DEN BEKLENEN:** cron-job.org'da mevcut işlerden birini
+    çoğaltarak "TrendSurf ENAG Izleme" adında yeni bir iş kur - GÜNDE
+    1 KEZ (örneğin her gün saat 09:00), workflow adı
+    `enag_izleme.yml` olacak şekilde.

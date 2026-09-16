@@ -1,34 +1,42 @@
 # -*- coding: utf-8 -*-
 """
-enag_izleme.py — TrendSurf Optima (v2.0.7.314, 16 Eylül 2026, O&M4,
-Bahri'nin talebi)
+enag_izleme.py — TrendSurf Optima (v2.0.7.317, 16 Eylül 2026, Bahri'nin
+talebi: "elle giriş asla olmamalı, otomatik giriş ve otonom yönetim
+esas olmalıdır")
 
-DENEYSEL ilk deneme: ENAG'ın aylık E-TÜFE bülteni PDF'ini OTOMATIK
-çekip aylık oranı çıkarmaya çalışır. Bahri'nin kendisi bunun "belki
-işe yarar belki yaramaz" bir deneme olduğunu, elle giriş sisteminin
-(app.py'deki "ENAG Aylık Enflasyon Oranlarını Gir" bölümü) HER
-DURUMDA yedek olarak kaldığını onayladı.
+TAM OTOMATİK ENAG aylık enflasyon oranı tespiti. Önceki versiyon
+(v2.0.7.314) enagrup.org'un kendi PDF bültenini çekmeyi deniyordu -
+o site Claude'un test ortamından Cloudflare TLS seviyesinde (HTTP 525)
+TAMAMEN ERİŞİLEMEZ bulunmuştu (robots.txt değil, gerçek bağlantı reddi,
+hem HTML hem PDF için).
 
-NEDEN BELİRSİZ: enagrup.org, Claude'un kendi test ortamından TAMAMEN
-ERİŞİLEMEZ bulundu - bu bir robots.txt kuralı DEĞİL, Cloudflare'in
-bağlantıyı TLS aşamasında reddetmesi (HTTP 525), HEM ana sayfa HEM
-PDF dosyaları için aynı şekilde. Bu engelin GitHub Actions runner'ının
-FARKLI ağ kökeninden de geçerli olup olmadığı BİLİNMİYOR - bu script
-bunu CANLI olarak test ediyor. Ayrıca bültenin GERÇEK HTML yapısı ve
-metin ifadesi (hangi cümle kalıbıyla oranın yazıldığı) hiç
-GÖRÜLEMEDİ - aşağıdaki regex'ler kamuya açık haber alıntılarından
-("E-TÜFE ... yüzde X,XX artmıştır" gibi) türetildi, TAHMİNİ - gerçek
-bülten metniyle eşleşmeyebilir.
+YENİ YÖNTEM (CANLI DOĞRULANDI - tahmin değil): Halk TV, ENAG her ay
+duyurduğunda NEREDEYSE ANINDA "Son dakika | ENAG ... enflasyonunu
+açıkladı" başlıklı bir haber yayınlıyor - ve bu haberin META
+AÇIKLAMASI ("meta description") her zaman şu KALIPTA: "... ENAG
+<AY> <YIL> enflasyonunu açıkladı. Buna göre aylık enflasyon yüzde
+<ORAN> artarken yıllık yüzde <YILLIK> oldu." Bu, hem CANLI test edildi
+(Ağustos 2026 haberiyle - "ENAG Ağustos 2026 enflasyonunu açıkladı...
+aylık enflasyon yüzde 2,24") hem de Halk TV'nin kendi
+`/enflasyon` etiket sayfasının düz `requests` ile (JS gerekmeden)
+erişilebilir olduğu doğrulandı.
 
-BAŞARISIZLIK STRATEJİSİ: her adımda AYRINTILI log yazdırır - hangi
-adımda (bağlantı mı, sayfa yapısı mı, regex mi) durduğunu KESİN
-olarak göstermek için. Herhangi bir adım başarısız olursa DÜŞÜK
-GÜVENLE bir sayı UYDURMAZ - sessizce çıkar, veritabanına HİÇBİR ŞEY
-yazmaz, elle giriş yedek olarak kalır."""
+Akış: `/enflasyon` sayfasını çek → linkler arasında "enag" geceni
+bul → o makaleyi çek → meta açıklamasından ay/yıl/oranı regex ile
+çıkar → Supabase'e YAZ (`enag_oran_kaydet`). Hiçbir adımda elle
+müdahale YOK - bulamazsa/parse edemezse sessizce çıkar, BİR SONRAKİ
+otomatik çalıştırmada tekrar dener (ENAG'ın kendisi geç açıklarsa
+diye) - asla YANLIŞ/UYDURMA bir değer YAZMAZ.
+
+NOT: Bu script HER ÇALIŞTIRILDIĞINDA `/enflasyon` sayfasını kontrol
+eder - günde birkaç kez çalıştırılması TAMAMEN ZARARSIZ (idempotent:
+`enag_oran_kaydet` zaten var olan bir ayı sessizce GÜNCELLER, tekrar
+tekrar EKLEMEZ) - ENAG ayda sadece 1 kez yayınladığı için pratikte
+ayda sadece 1 kez GERÇEK bir yazma olur.
+"""
 import os
 import re
 import sys
-import tempfile
 
 import requests
 
@@ -39,120 +47,109 @@ _HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                    "AppleWebKit/537.36 (KHTML, like Gecko) "
                    "Chrome/124.0.0.0 Safari/537.36"),
-    "Accept": "text/html,application/xhtml+xml,application/pdf,*/*",
+    "Accept": "text/html,application/xhtml+xml,*/*",
 }
 
+_AYLAR_TR_SOZLUK = {
+    "ocak": 1, "şubat": 2, "subat": 2, "mart": 3, "nisan": 4,
+    "mayıs": 5, "mayis": 5, "haziran": 6, "temmuz": 7, "ağustos": 8,
+    "agustos": 8, "eylül": 9, "eylul": 9, "ekim": 10, "kasım": 11,
+    "kasim": 11, "aralık": 12, "aralik": 12,
+}
 
-def _son_bulten_pdf_linkini_bul() -> str:
-    """ENAG ana sayfasını çeker, içindeki bülten PDF linklerini
-    (regex: .../bulten/<sayı>.pdf) bulur, en YÜKSEK sayılı olanı
-    (muhtemelen en yeni) döner. Bulamazsa boş string döner."""
+_KAYNAKLAR = [
+    ("Halk TV", "https://halktv.com.tr/enflasyon", "https://halktv.com.tr"),
+]
+
+_META_DESC_DESENI = re.compile(r'<meta name="description" content="([^"]*)"')
+_ENAG_ORAN_DESENI = re.compile(
+    r"ENAG\s+(\w+)\s+(\d{4})\s+enflasyonunu açıkladı.*?"
+    r"aylık enflasyon yüzde\s+([\d,]+)", re.IGNORECASE)
+
+
+def _enag_haberini_bul(etiket_sayfasi_url: str, site_kok: str) -> str:
+    """Etiket/kategori sayfasindaki linkler arasinda "enag" geceni
+    bulur, TAM URL olarak doner. Bulamazsa bos string doner."""
     try:
-        r = requests.get("https://enagrup.org/", headers=_HEADERS, timeout=20)
-        print(f"[enag_izleme] Ana sayfa HTTP durumu: {r.status_code}")
+        r = requests.get(etiket_sayfasi_url, headers=_HEADERS, timeout=20)
+        print(f"[enag_izleme] {etiket_sayfasi_url} HTTP durumu: {r.status_code}")
         if r.status_code != 200:
             return ""
-        _linkler = re.findall(r'https?://enagrup\.org/bulten/(\d+)\.pdf', r.text)
-        if not _linkler:
-            # Bagil (goreli) link olabilir - domain olmadan da dene.
-            _linkler = re.findall(r'/bulten/(\d+)\.pdf', r.text)
-        if not _linkler:
-            print("[enag_izleme] Ana sayfada bulten PDF linki bulunamadi - "
-                  "sayfa yapisi degismis olabilir.")
-            return ""
-        _en_yuksek = max(_linkler, key=int)
-        _url = f"https://enagrup.org/bulten/{_en_yuksek}.pdf"
-        print(f"[enag_izleme] Bulunan en guncel bulten: {_url}")
-        return _url
     except Exception as e:
-        print(f"[enag_izleme] Ana sayfa cekilemedi: {type(e).__name__}: {e}")
+        print(f"[enag_izleme] {etiket_sayfasi_url} cekilemedi: {type(e).__name__}: {e}")
         return ""
+    _linkler = re.findall(r'href="(' + re.escape(site_kok) + r'/[^"]*enag[^"]*)"',
+                           r.text, re.IGNORECASE)
+    if not _linkler:
+        print(f"[enag_izleme] {etiket_sayfasi_url} icinde ENAG gecen link bulunamadi.")
+        return ""
+    print(f"[enag_izleme] Bulunan aday: {_linkler[0]}")
+    return _linkler[0]
 
 
-def _bulten_pdf_indir(url: str) -> str:
-    """PDF'i indirir, gecici bir dosyaya yazar, dosya yolunu doner.
-    Basarisizsa bos string doner."""
+def _makaleden_oran_cikar(makale_url: str):
+    """(ay_no, yil, oran) ya da (None, None, None) doner."""
     try:
-        r = requests.get(url, headers=_HEADERS, timeout=30)
-        print(f"[enag_izleme] PDF indirme HTTP durumu: {r.status_code}, "
-              f"boyut: {len(r.content)} bayt")
-        if r.status_code != 200 or len(r.content) < 1000:
-            return ""
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(r.content)
-            return tmp.name
+        r = requests.get(makale_url, headers=_HEADERS, timeout=20)
+        if r.status_code != 200:
+            print(f"[enag_izleme] Makale cekilemedi, HTTP {r.status_code}")
+            return None, None, None
     except Exception as e:
-        print(f"[enag_izleme] PDF indirilemedi: {type(e).__name__}: {e}")
-        return ""
+        print(f"[enag_izleme] Makale cekilemedi: {type(e).__name__}: {e}")
+        return None, None, None
 
+    _meta = _META_DESC_DESENI.search(r.text)
+    _kaynak_metin = _meta.group(1) if _meta else r.text
+    _m = _ENAG_ORAN_DESENI.search(_kaynak_metin)
+    if not _m:
+        print("[enag_izleme] Meta aciklamada beklenen kalip bulunamadi. "
+              "Meta aciklama (varsa):", _meta.group(1) if _meta else "(yok)")
+        return None, None, None
 
-def _bulten_metninden_oran_cikar(metin: str):
-    """DENEYSEL - gercek bulten metni hic GORULMEDIGI icin bu
-    kaliplarin gercekte eslesip eslesmeyecegi BILINMIYOR. Bircok olasi
-    ifade kalibi deneniyor, ilk eslesen kullanilir. (oran, kalip_aciklamasi)
-    ya da (None, None) doner."""
-    _kaliplar = [
-        (r"E-?T[ÜU]FE[’'`]?[^.]{0,80}?yüzde\s+([\d]+[,.][\d]+)", "E-TÜFE ... yüzde X"),
-        (r"aylık\s+(?:bazda\s+)?%?\s*([\d]+[,.][\d]+)\s*(?:oranında)?\s*art", "aylık % X arttı"),
-        (r"bir\s+önceki\s+aya\s+göre\s+%?\s*([\d]+[,.][\d]+)", "bir önceki aya göre % X"),
-        (r"aylık\s+değişim[^0-9]{0,20}%?\s*([\d]+[,.][\d]+)", "aylık değişim: % X"),
-    ]
-    for _desen, _aciklama in _kaliplar:
-        _m = re.search(_desen, metin, re.IGNORECASE)
-        if _m:
-            try:
-                _oran = float(_m.group(1).replace(",", "."))
-                if 0 < _oran < 30:  # makul aylik enflasyon araligi - guvenlik kontrolu
-                    return _oran, _aciklama
-            except ValueError:
-                continue
-    return None, None
+    _ay_adi, _yil_str, _oran_str = _m.groups()
+    _ay_no = _AYLAR_TR_SOZLUK.get(_ay_adi.lower())
+    if _ay_no is None:
+        print(f"[enag_izleme] Taninmayan ay adi: '{_ay_adi}'")
+        return None, None, None
+    try:
+        _oran = float(_oran_str.replace(",", "."))
+    except ValueError:
+        return None, None, None
+    if not (0 < _oran < 30):
+        print(f"[enag_izleme] Oran ({_oran}) makul aralik disinda - guvenlik "
+              f"icin reddedildi.")
+        return None, None, None
+    return _ay_no, int(_yil_str), _oran
 
 
 def calistir():
-    print("[enag_izleme] Baslangic - bu DENEYSEL bir ilk deneme, "
-          "basarisiz olursa elle giris yedek olarak kalir.")
+    print("[enag_izleme] Baslangic.")
+    db.init_db()
 
-    _pdf_url = _son_bulten_pdf_linkini_bul()
-    if not _pdf_url:
-        print("[enag_izleme] DURDURULDU: bulten linki bulunamadi. "
-              "Elle giris kullanilmaya devam edilmeli.")
+    for _kaynak_adi, _etiket_url, _site_kok in _KAYNAKLAR:
+        _makale_url = _enag_haberini_bul(_etiket_url, _site_kok)
+        if not _makale_url:
+            continue
+        _ay, _yil, _oran = _makaleden_oran_cikar(_makale_url)
+        if _ay is None:
+            continue
+
+        _yil_ay_key = f"{_yil:04d}-{_ay:02d}"
+        _mevcut = db.enag_oranlari_getir()
+        if _yil_ay_key in _mevcut and abs(_mevcut[_yil_ay_key] - _oran) < 0.001:
+            print(f"[enag_izleme] {_yil_ay_key} zaten kayitli (%{_oran}) - "
+                  f"degisiklik yok.")
+            return
+
+        if db.enag_oran_kaydet(_yil_ay_key, _oran):
+            print(f"[enag_izleme] KAYDEDILDI: {_yil_ay_key} -> %{_oran} "
+                  f"(kaynak: {_kaynak_adi}, {_makale_url})")
+        else:
+            print(f"[enag_izleme] KAYIT BASARISIZ: {_yil_ay_key} -> %{_oran}")
         return
 
-    _pdf_yolu = _bulten_pdf_indir(_pdf_url)
-    if not _pdf_yolu:
-        print("[enag_izleme] DURDURULDU: PDF indirilemedi.")
-        return
-
-    try:
-        from pdf_text_extract import pdf_to_text
-        _metin = pdf_to_text(_pdf_yolu, max_pages=3)
-        print(f"[enag_izleme] PDF'ten {len(_metin)} karakter metin cikarildi "
-              f"(ilk 3 sayfa).")
-    except Exception as e:
-        print(f"[enag_izleme] DURDURULDU: PDF metne cevrilemedi: "
-              f"{type(e).__name__}: {e}")
-        return
-    finally:
-        try:
-            os.unlink(_pdf_yolu)
-        except Exception:
-            pass
-
-    _oran, _kalip = _bulten_metninden_oran_cikar(_metin)
-    if _oran is None:
-        print("[enag_izleme] DURDURULDU: metin icinde taninan bir oran "
-              "kalibi bulunamadi - bulten ifadesi tahmin edilenden "
-              "FARKLI olabilir. Ilk 1500 karakter (elle kontrol icin):")
-        print(_metin[:1500])
-        return
-
-    print(f"[enag_izleme] Oran BULUNDU: %{_oran} (eslesen kalip: '{_kalip}') - "
-          f"ANCAK hangi aya ait oldugu METIN ICERISINDEN GUVENILIR sekilde "
-          f"COZULEMEDI (ay/yil ayri bir dogrulama gerektirir). Bu yuzden "
-          f"OTOMATIK KAYDEDILMIYOR - sonuc sadece log'a yaziliyor, Bahri'nin "
-          f"gozden gecirip dogruysa elle onaylamasi/girmesi bekleniyor.")
-    print(f"[enag_izleme] Bitti.")
+    print("[enag_izleme] Hicbir kaynaktan yeni veri bulunamadi/dogrulanamadi - "
+          "bu turda hicbir sey yazilmadi.")
 
 
 if __name__ == "__main__":

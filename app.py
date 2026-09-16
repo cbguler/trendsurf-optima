@@ -5235,52 +5235,32 @@ def _render_karsilastirma(_cur_user, portfolio):
                 "(TCMB EVDS bağlantısında bir sorun olabilir)."
             )
 
-    with st.expander("ENAG Aylık Enflasyon Oranlarını Gir / Güncelle"):
-        import datetime as _dt_enag
-        from db import enag_oranlari_getir as _enag_oranlari_getir_render
+    # v2.0.7.317 (16 Eylül 2026, Bahri'nin talebi - "elle giriş asla
+    # olmamalı, otomatik giriş ve otonom yönetim esas olmalıdır"):
+    # v2.0.7.313'teki ELLE GİRİŞ FORMU TAMAMEN KALDIRILDI. ENAG artık
+    # `enag_izleme.py` (ayrı bir GitHub Actions workflow) tarafından
+    # Halk TV'nin "ENAG ... enflasyonunu açıkladı" haberinden OTOMATİK
+    # çekiliyor - CANLI doğrulandı (Ağustos 2026 verisiyle test edildi).
+    # Burada sadece SALT-OKUNUR bir durum notu kalıyor - herhangi bir
+    # veri girişi/düzenleme arayüzü YOK.
+    with st.expander("ENAG Verisi Hakkında"):
         st.caption(
             "ENAG'ın kendi sitesi otomatik erişime kapalı ve resmi bir "
-            "API'si yok - bu yüzden (Bahri'nin onayıyla, sadece bu tek "
-            "istisna için) ayda bir kez, ENAG yeni ayı açıkladığında "
-            "burada elle girilir. Değer, TÜM kullanıcılar için ortaktır."
+            "API'si yok. Bunun yerine `enag_izleme.py` (otomatik "
+            "çalışan, ayrı bir görev), ENAG her ay yeni veriyi "
+            "açıkladığında bunu haber kaynaklarından (Halk TV) "
+            "otomatik tespit edip buraya kaydediyor - elle giriş "
+            "YOKTUR."
         )
+        from db import enag_oranlari_getir as _enag_oranlari_getir_render
         _enag_mevcut = _enag_oranlari_getir_render()
-        ec1, ec2, ec3 = st.columns([1, 1, 1])
-        with ec1:
-            _enag_yil = st.number_input(
-                "Yıl", min_value=2020, max_value=2035,
-                value=_dt_enag.date.today().year, step=1, key="enag_yil_input")
-        with ec2:
-            _enag_ay = st.selectbox(
-                "Ay", list(range(1, 13)),
-                format_func=lambda a: _AYLAR_TR[a - 1],
-                index=_dt_enag.date.today().month - 2
-                if _dt_enag.date.today().month >= 2 else 11,
-                key="enag_ay_input")
-        with ec3:
-            _enag_oran_str = st.text_input(
-                "Aylık Oran (%)", key="enag_oran_input", placeholder="Örn: 2,24")
-        if st.button("Kaydet", key="enag_oran_kaydet_btn"):
-            try:
-                _oran_deger = parse_tr(_enag_oran_str) if _enag_oran_str.strip() else None
-            except Exception:
-                _oran_deger = None
-            if _oran_deger is None:
-                st.error("Geçerli bir sayı girin (örn: 2,24).")
-            else:
-                _yil_ay_key = f"{int(_enag_yil):04d}-{int(_enag_ay):02d}"
-                from db import enag_oran_kaydet
-                if enag_oran_kaydet(_yil_ay_key, _oran_deger):
-                    st.success(f"{_AYLAR_TR[_enag_ay - 1]} {_enag_yil} için %{fmt_tr(_oran_deger)} kaydedildi.")
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.error("Kaydedilemedi - lütfen tekrar deneyin.")
         if _enag_mevcut:
             st.caption("Kayıtlı aylar: " + ", ".join(
                 f"{_AYLAR_TR[int(k[5:7]) - 1]} {k[:4]} (%{fmt_tr(v)})"
                 for k, v in sorted(_enag_mevcut.items(), reverse=True)[:6]
             ))
+        else:
+            st.caption("Henüz kayıtlı ENAG verisi yok.")
 
 
 def _render_pozisyon_karsilastirma(_cur_user, portfolio):

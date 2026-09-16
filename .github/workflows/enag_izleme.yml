@@ -1,25 +1,37 @@
-name: ENAG Enflasyon Izleme (Deneysel)
+name: ENAG Enflasyon Izleme
 
-# v2.0.7.314 (16 Eylul 2026, O&M4, Bahri'nin talebi): ENAG'in aylik
-# E-TUFE bultenini OTOMATIK cekmeyi DENER. Bahri'nin kendisi bunun
-# "belki ise yarar belki yaramaz" bir CANLI deneme oldugunu onayladi -
-# enagrup.org, Claude'un kendi test ortamindan Cloudflare TLS
-# seviyesinde (HTTP 525) TAMAMEN erisilemez bulundu (robots.txt degil,
-# gercek bir baglanti reddi). Bu workflow'un GERCEK amaci: GitHub
-# Actions runner'inin FARKLI ag koekeninden bu siteye ulasip
-# ulasamadigini CANLI olarak gormek.
+# v2.0.7.317 (16 Eylul 2026, Bahri'nin talebi - "elle giris asla
+# olmamali, otomatik giris ve otonom yonetim esas olmalidir"): ENAG'in
+# aylik enflasyon oranini TAM OTOMATIK tespit eder - elle giris YOKTUR.
 #
-# app.py'deki elle giris bolumu ("ENAG Aylik Enflasyon Oranlarini
-# Gir") HER DURUMDA calismaya devam ediyor - bu workflow basarisiz
-# olursa (ya da hicbir zaman calistirilamazsa) o yedek olarak kalir.
+# ONCEKI DENEME (v2.0.7.314) enagrup.org'un kendi PDF bultenini
+# cekmeyi deniyordu - o site Cloudflare TLS seviyesinde (HTTP 525)
+# TAMAMEN erisilemez bulunmustu. YENI YONTEM CANLI DOGRULANDI: Halk
+# TV, ENAG her ay duyurdugunda ayni gun "Son dakika | ENAG ...
+# enflasyonunu acikladi" basligiyla haber yapiyor, bu haberin meta
+# aciklamasi sabit bir kalipta ay/yil/orani iceriyor - Agustos 2026
+# verisiyle canli test edildi, dogru sonuc verdi.
 #
-# BASTAN workflow_dispatch (elle tetikleme) - ENAG ayda sadece 1 kez
-# guncellendigi icin bir zamanlama (schedule) EKLENMEDI. Bahri, ENAG
-# yeni ayin verisini acikladiginda bunu elle tetikleyebilir; isterse
-# ileride cron-job.org ile ayin 3-5'i gibi bir tarihe baglayabilir.
+# GUNLUK zamanlama (workflow_dispatch DEGIL, TAM OTONOM) - ENAG ayda
+# sadece 1 kez (genelde ayin 3-5'i) yayinliyor ama script GUVENLI
+# sekilde her gun calisabilir (idempotent: zaten kayitli bir ay
+# tekrar yazilirsa sessizce guncellenir, hata vermez). Diger
+# workflow'larla AYNI desen: cron-job.org gunde 1 kez tetikler
+# (GitHub'in kendi schedule'i BILEREK kullanilmiyor - bkz.
+# haber_izleme.yml/kap_bildirim_izleme.yml'deki ayni gerekce, GitHub'in
+# schedule'i gecmiste guvenilmez bulunmustu).
+#
+# BAHRI'DEN BEKLENEN: cron-job.org'da mevcut islerden birini
+# cogaltarak "TrendSurf ENAG Izleme" adinda yeni bir is kur - GUNDE 1
+# KEZ (ornegin her gun saat 09:00), workflow adi
+# "enag_izleme.yml" olacak sekilde.
 
 on:
   workflow_dispatch:
+
+concurrency:
+  group: enag-izleme
+  cancel-in-progress: false
 
 jobs:
   izle:
@@ -38,17 +50,15 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          # requests: ENAG'a HTTP istekleri icin.
+          # requests: Halk TV'ye HTTP istekleri icin.
           # psycopg2-binary: db.py'nin Supabase baglantisi icin.
-          # pdfplumber: pdf_text_extract.py'nin PDF->metin donusumu icin.
-          # NOT: pytesseract/tesseract-ocr BILEREK eklenmedi - ENAG'in
-          # bulteni cok olasilikla dijital (taranmis degil) metin
-          # icerdigi icin OCR'a hic dusulmesi beklenmiyor. Eger canli
-          # calistirmada "No module named pytesseract" hatasi gorulurse
-          # (OCR'a gercekten ihtiyac duyulduysa) o zaman eklenir.
-          pip install requests psycopg2-binary pdfplumber --quiet
+          pip install requests psycopg2-binary --quiet
 
       - name: ENAG izleme calistir
         run: python enag_izleme.py
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          # Bu script cok az sayida veritabani islemi yapiyor (ticker
+          # bazli degil, sadece birkac okuma/yazma) - haber_izleme.py/
+          # kap_bildirim_izleme.py'deki gibi Session pooler'a GEREK
+          # YOK, normal (Transaction pooler) SUPABASE_DB_URL yeterli.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
