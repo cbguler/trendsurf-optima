@@ -7335,3 +7335,24 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     "Portföyünüz, TÜİK/ENAG'a göre X puan üstünde/altında" diyen açık bir
     karşılaştırma metni eklendi (🟢/🔴 ikonlarla) - Bahri'nin sorusunu
     dolaylı değil DOĞRUDAN yanıtlıyor.
+
+- **[DÜZELTİLDİ] v2.0.7.315 (16 Eylül 2026, Bahri'nin canlı hatasıyla):
+  v2.0.7.313'te İKİ ayrı hata bulundu - ikisi de "yeni kod eklerken
+  var olan bir satırı yanlışlıkla silme" türünden (bu O&M oturumunda
+  BİRKAÇ KEZ tekrarlanan bir hata deseni).**
+  1. `_kiyaslama_gunluk_serileri()`'ne import eklerken
+     `_ticker_seri, _gun_araligi, _baslangic = _kiyaslama_ticker_serileri_cek(portfolio)`
+     satırı YANLIŞLIKLA SİLİNMİŞ - `NameError: _ticker_seri is not
+     defined` ile canlıda patladı. Satır geri eklendi.
+  2. ENAG giriş formunda `datetime.date.today()` kullanılmış ama
+     `datetime` modülü app.py'de HİÇBİR YERDE (üst seviyede) import
+     edilmemiş - codebase'in geri kalanı hep YEREL (fonksiyon içi)
+     `import datetime as takma_ad` deseniyle çalışıyor. Yerel import
+     eklendi (`import datetime as _dt_enag`).
+  - **Bu sefer YAPILAN EK DOĞRULAMA (önceki hataların tekrarını
+    önlemek için):** `_kiyaslama_gunluk_serileri`, `_tufe_endeks_serisi_cek`,
+    `_enflasyon_gunluk_seri`, `_evds_referans_oranlari_cek`,
+    `_render_karsilastirma` fonksiyonlarının TAMAMI satır satır
+    baştan sona okunup kontrol edildi (sadece hatayı veren satır
+    değil) - `fmt_tr_isaretli` imzası, `_AYLAR_TR`'nin gerçekten
+    modül seviyesinde olduğu gibi detaylar da doğrulandı.

@@ -4716,6 +4716,8 @@ def _kiyaslama_gunluk_serileri(portfolio):
     bir widget etkileşiminde) baştan hesaplanmıyor."""
     import datetime as _dt_ks
     from db import enag_oranlari_getir
+
+    _ticker_seri, _gun_araligi, _baslangic = _kiyaslama_ticker_serileri_cek(portfolio)
     if _ticker_seri is None:
         return None
 
@@ -5234,6 +5236,7 @@ def _render_karsilastirma(_cur_user, portfolio):
             )
 
     with st.expander("ENAG Aylık Enflasyon Oranlarını Gir / Güncelle"):
+        import datetime as _dt_enag
         st.caption(
             "ENAG'ın kendi sitesi otomatik erişime kapalı ve resmi bir "
             "API'si yok - bu yüzden (Bahri'nin onayıyla, sadece bu tek "
@@ -5245,13 +5248,13 @@ def _render_karsilastirma(_cur_user, portfolio):
         with ec1:
             _enag_yil = st.number_input(
                 "Yıl", min_value=2020, max_value=2035,
-                value=datetime.date.today().year, step=1, key="enag_yil_input")
+                value=_dt_enag.date.today().year, step=1, key="enag_yil_input")
         with ec2:
             _enag_ay = st.selectbox(
                 "Ay", list(range(1, 13)),
                 format_func=lambda a: _AYLAR_TR[a - 1],
-                index=datetime.date.today().month - 2
-                if datetime.date.today().month >= 2 else 11,
+                index=_dt_enag.date.today().month - 2
+                if _dt_enag.date.today().month >= 2 else 11,
                 key="enag_ay_input")
         with ec3:
             _enag_oran_str = st.text_input(
