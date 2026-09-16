@@ -7479,3 +7479,34 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Test edildi:** CVL/HTS/HOY/BAG için `_synthetic_from_excel()`
     artık DOĞRU son fiyatlarla (portföy tablosuyla BİREBİR eşleşen:
     CVL 1,596018, HTS 59,005845, HOY 0,365909, BAG 1,050564) bitiyor.
+
+---
+
+## OTURUM DEVRİ (16 Eylül 2026, O&M4 sonu - görsel limiti nedeniyle yeni sohbete geçiliyor)
+
+**Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı** - yukarıdaki 7000+ satırlık geçmişte çok sayıda eski "PUSH BEKLİYOR" etiketi artık GEÇERSİZ (zaten push edilmiş) - asıl GÜNCEL durum burada.
+
+### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.297 - v2.0.7.319 arası, hepsi push edildi):
+- TEFAS Akşam/Gündüz Güncelle: cron-job.org üzerinden otomatik, sorunsuz.
+- KAP Bildirim İzleme: otomatik çalışıyor, gerçek bildirimler (CATES VBTS, AKFGY hak kullanımı) yakalanıyor, okunabilir formatta gösteriliyor.
+- ENAG Enflasyon İzleme: TAM OTOMATİK (Halk TV üzerinden, elle giriş YOK), günlük cron-job.org tetiklemesi kuruldu.
+- Getiri Kıyaslaması: TÜİK KALDIRILDI (Bahri'nin talebiyle - doğrulanamamış EVDS seri kodu riski), ENAG kalın/düz kırmızı çizgiyle gösteriliyor, altın rengi düzeltildi, Pozisyon Bazlı grafiğe de ENAG eklendi.
+- Portföy Varlıkları Tablosu footer'ında artık Alış toplamı da var.
+- TEFAS grafik anomalisi (fonların aynı günde toplu "sıçraması") ÇÖZÜLDÜ - sentetik seri artık `optimized_universe.csv`'den doğru fiyat kullanıyor, rastgele "100" varsayımı kaldırıldı.
+
+### ⚠️ HEMEN YAPILMASI GEREKEN - PUSH BEKLEYEN TEK ŞEY:
+**v2.0.7.320 (db.py)** - "Beklenti Modu Haber Izleme" çalışmalarının hâlâ 13-22 dakika sürmesinin (ve "onbellekteki bağlantı canlı değil" hatasının Session pooler'a geçilmesine RAĞMEN ~100 kez tekrarlanmasının) olası kök nedenine yönelik bir düzeltme. Teori: db.py fonksiyonları (örn. `get_kaliplar()`) SELECT-only sorgular çalıştırıp `commit()` çağırmıyor; toplu modda `.close()` hiçbir şey yapmadığı için transaction açık kalıyor; RSS çekerken geçen sürede Supabase'in pooler'ı bunu "idle in transaction" ile sessizce öldürüyor. Çözüm: `.close()` artık commit() çağırıyor. **Bu, gerçek Supabase olmadan test edilebilen en iyi kanıt ama KESİN garanti YOK - aynı soruna 3. deneme.**
+
+**Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
+1. `db.py`'yi (bu sohbette zaten teslim edildi, indirme linki hâlâ erişilebilir olabilir - değilse yeni sohbette aynı düzeltme yeniden üretilebilir, açıklama yukarıda yeterli detayda) proje köküne kopyala.
+2. `git add db.py PROJE_NOTLARI.md && git commit -m "v2.0.7.320: ..." && git pull --no-rebase --no-edit && git push`
+3. Elle bir "Beklenti Modu Haber Izleme" tetikle, "Search logs" → "Toplu mod" ara - eşleşme sayısı 0'a yakınsa ÇÖZÜLMÜŞ demektir; hâlâ yüksekse (~100) teori YANLIŞ, dördüncü bir açıdan bakılması gerekecek.
+
+### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
+cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.320 doğrulandıktan (ya da başka bir çözüm bulunduktan) sonra, GERÇEK ölçülen çalışma süresine göre uygun bir sıklığa (muhtemelen 15-20 dakika, kesin süre netleşince) geri ayarlanmalı.
+
+### AÇIK/ERTELENMİŞ FİKİR (henüz KOD YAZILMADI):
+Bahri, önemli bir KAP bildirimi (CATES'teki VBTS gibi) geldiğinde bunun Optima Skor'a yansıtılması ve `haber_izleme.py`'deki gibi kullanıcı onaylı bir mekanizma kurulması fikrini önerdi. Bu oturumda AKFGY özelinde bir DÜZELTME yapılmadı çünkü araştırma AKFGY'nin aslında bir KAP kısıtlaması OLMADIĞINI (sadece rutin temettü/hak kullanımı bildirimleri) gösterdi - CATES'in skoru zaten düşük (33,0/"TUT İZLE"). Genel fikir hâlâ geçerli, Bahri'nin onayı/önceliklendirmesi bekleniyor - inşa edilip edilmeyeceği netleşmedi.
+
+### Yeni sohbet için ilk adım:
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "HEMEN YAPILMASI GEREKEN" maddesiyle devam et.

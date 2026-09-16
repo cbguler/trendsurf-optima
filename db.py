@@ -224,19 +224,40 @@ class _CompatConn:
         self._conn.rollback()
 
     def close(self):
-        # v2.0.7.310 (15 Eylul 2026, O&M4, Bahri'nin CANLI kanitiyla -
-        # haber_izleme.py'nin gercek log'unda ~330-350 ayri baglanti,
-        # ~12 dakika surdugu SOMUT olarak olculdu): TOPLU MOD aktifse
-        # (bkz. toplu_mod_ac()) bu, PAYLASILAN toplu-calisma baglantisidir -
+        # v2.0.7.310 (15 Eylul 2026, O&M4): TOPLU MOD aktifse (bkz.
+        # toplu_mod_ac()) bu, PAYLASILAN toplu-calisma baglantisidir -
         # her db.py fonksiyonu kendi isini bitirince .close() cagiriyor
         # (tek kullanimlik baglanti VARSAYIMIYLA yazilmislar) - eger bu
         # PAYLASILAN baglantiyi burada GERCEKTEN kapatirsak, TOPLU
         # MOD'un butun amaci (tek calismada TEK baglanti) bosa cikar.
-        # Bu yuzden toplu moddaki PAYLASILAN baglanti icin close() sessizce
-        # HICBIR SEY YAPMAZ - gercek kapama SADECE toplu_mod_kapat()
-        # tarafindan, calismanin gercekten bittigi an yapilir.
+        #
+        # v2.0.7.320 (16 Eylul 2026, Bahri'nin CANLI kanitiyla - Session
+        # pooler'a gecildikten SONRA BILE ayni "onbellekteki baglanti
+        # canli degil (ProgrammingError)" hatasi ~100 kez tekrarlandi -
+        # yani sorun pooler TURU degilmis): KOK NEDEN BULUNDU - close()
+        # burada eskiden TAMAMEN HICBIR SEY yapmiyordu (sadece "return").
+        # db.py fonksiyonlarinin COGU (orn. get_kaliplar()) SELECT-only
+        # birden fazla sorgu calistirip ASLA commit() cagirmiyor (yazma
+        # islemi olmadigi icin gereksiz sayiliyordu) - sadece .close()
+        # cagiriyorlar. Toplu modda o .close() hicbir sey yapmayinca,
+        # o SORGULARIN ACTIGI TRANSACTION AC IK KALIYORDU. RSS kaynaklarini
+        # cekerken gecen saniyeler/onlarca saniye boyunca bu acik islem
+        # ASILI kaliyor - Supabase'in pooler'i (Transaction VEYA Session,
+        # ikisinde de ayni hata gorulduğu icin ikisi de etkileniyor)
+        # muhtemelen bir "idle in transaction" zaman asimiyla bunu
+        # SESSIZCE olduruyor - bir sonraki sorgu (pre-ping dahil) da
+        # tam bu yuzden ProgrammingError ile pathliyor.
+        # COZUM: TCP baglantiyi KAPATMIYORUZ (toplu modun amaci hala
+        # bu) ama ACIK KALAN TRANSACTION'I commit() ile SONLANDIRIYORUZ -
+        # boylece db.py fonksiyonu isini bitirip .close() dedigi AN
+        # transaction temizleniyor, sonraki cagriya kadar ACIK ASILI
+        # KALMIYOR.
         global _toplu_baglanti_onbellek
         if _TOPLU_MOD["aktif"] and self._conn is _toplu_baglanti_onbellek:
+            try:
+                self._conn.commit()
+            except Exception:
+                pass
             return
         try:
             self._conn.close()
