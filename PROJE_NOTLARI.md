@@ -7287,3 +7287,51 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     düşmeli (10-20 dakikadan, muhtemelen 1-2 dakikaya). Push sonrası
     ilk çalıştırmanın "ZAMANLAMA" loglarını ve TOPLAM SÜRE'sini
     doğrulamak gerekiyor.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.313/314 (16 Eylül 2026,
+  Bahri'nin talebi - "portföyümün getirisi ENAG enflasyonunun
+  altında mı üstünde mi"): "Getiri Kıyaslaması" bölümüne TÜİK TÜFE
+  (otomatik) + ENAG (deneysel otomatik + elle yedek) eklendi.**
+  - **TÜİK TÜFE (v2.0.7.313, TAM OTOMATİK):** Yeni
+    `_tufe_endeks_serisi_cek()` - TCMB EVDS'ten `TP.FG.J0` (TÜFE Genel
+    Endeksi) serisiyle, portföyün başlangıcından bugüne TAM TARİHSEL
+    seri çekiliyor. **DOĞRULAMA GEREKİYOR:** bu seri kodu araştırma
+    sırasında KESİN doğrulanamadı (gerçek EVDS_API_KEY ile canlı test
+    edilemedi) - fonksiyon dönen değeri makul bir TÜFE aralığında
+    (500-20000) olup olmadığını kontrol ediyor, değilse hata veriyor
+    (sessizce yanlış veri GÖSTERMİYOR). İlk canlı çalıştırmada Bahri'nin
+    sonucu gerçek TÜİK rakamlarıyla (örn. Ağustos 2026: %31,51 yıllık)
+    karşılaştırıp doğrulaması gerekiyor.
+  - **ENAG - iki katmanlı çözüm:**
+    1. **Elle giriş (garanti çalışır):** Yeni `enag_aylik_enflasyon`
+       tablosu (global, tüm kullanıcılar ortak) + Portföyüm sayfasında
+       "ENAG Aylık Enflasyon Oranlarını Gir/Güncelle" bölümü. ENAG'ın
+       kendi sitesi bot erişimini TAMAMEN engelliyor (robots.txt değil,
+       Cloudflare TLS seviyesinde HTTP 525 - hem HTML hem PDF için aynı)
+       ve resmi API'si yok - "elle veri girişi asla kabul edilemez"
+       kuralının (v2.0.7.129) Bahri'nin ONAYIYLA verilen TEK istisnası
+       (ENAG ayda sadece 1 kez güncellendiği için düşük risk).
+    2. **Deneysel otomatik (v2.0.7.314, SONUCU BELİRSİZ):** Yeni
+       `enag_izleme.py` + `.github/workflows/enag_izleme.yml` - ENAG'ın
+       ana sayfasından bülten PDF linkini bulup indirmeyi, sonra
+       `upcoming_ipo_client.py`'de KULLANILAN AYNI `pdf_text_extract.py`
+       altyapısıyla metne çevirip regex ile oranı çıkarmayı DENER. Bu
+       BİLEREK "algıla ama otomatik KAYDETME" şeklinde tasarlandı - hangi
+       AYA ait olduğu metinden güvenilir çözülemediği için, bulunan oranı
+       sadece LOG'a yazıyor, veritabanına yazmıyor. GERÇEK SORU: bu site
+       GitHub Actions'ın ağ kökeninden erişilebilir mi (Claude'un kendi
+       test ortamından KESİN olarak erişilemez bulundu) - bu SADECE canlı
+       çalıştırmayla öğrenilebilir.
+  - **Hesaplama mantığı (`_enflasyon_gunluk_seri`) - iki hata bulunup
+    düzeltildi (testte yakalandı, canlıya hiç gitmedi):** ilk versiyon
+    hem başlangıç ayını yanlışlıkla tamamen atlıyordu hem de bir ayın
+    oranını o ayın KENDİ başında (bitmeden önce) uyguluyordu. Düzeltilmiş
+    mantık: başlangıç ayı DAHİL her tamamlanmış ay sayılıyor, her ayın
+    oranı o ay BİTTİĞİNDE (bir sonraki ayın 1'inde) sıçrama olarak
+    ekleniyor - basamak fonksiyonu, gündelik sahte hassasiyet YOK. Elle
+    hesaplamayla birebir doğrulandı (8 aylık gerçek ENAG verisiyle test
+    edildi: %31,57 kümülatif - manuel bileşik faiz hesabıyla tam eşleşti).
+  - **"Üstünde/altında" özel bölüm:** Grafik ve özet satırının altına,
+    "Portföyünüz, TÜİK/ENAG'a göre X puan üstünde/altında" diyen açık bir
+    karşılaştırma metni eklendi (🟢/🔴 ikonlarla) - Bahri'nin sorusunu
+    dolaylı değil DOĞRUDAN yanıtlıyor.

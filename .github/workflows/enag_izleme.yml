@@ -1,0 +1,54 @@
+name: ENAG Enflasyon Izleme (Deneysel)
+
+# v2.0.7.314 (16 Eylul 2026, O&M4, Bahri'nin talebi): ENAG'in aylik
+# E-TUFE bultenini OTOMATIK cekmeyi DENER. Bahri'nin kendisi bunun
+# "belki ise yarar belki yaramaz" bir CANLI deneme oldugunu onayladi -
+# enagrup.org, Claude'un kendi test ortamindan Cloudflare TLS
+# seviyesinde (HTTP 525) TAMAMEN erisilemez bulundu (robots.txt degil,
+# gercek bir baglanti reddi). Bu workflow'un GERCEK amaci: GitHub
+# Actions runner'inin FARKLI ag koekeninden bu siteye ulasip
+# ulasamadigini CANLI olarak gormek.
+#
+# app.py'deki elle giris bolumu ("ENAG Aylik Enflasyon Oranlarini
+# Gir") HER DURUMDA calismaya devam ediyor - bu workflow basarisiz
+# olursa (ya da hicbir zaman calistirilamazsa) o yedek olarak kalir.
+#
+# BASTAN workflow_dispatch (elle tetikleme) - ENAG ayda sadece 1 kez
+# guncellendigi icin bir zamanlama (schedule) EKLENMEDI. Bahri, ENAG
+# yeni ayin verisini acikladiginda bunu elle tetikleyebilir; isterse
+# ileride cron-job.org ile ayin 3-5'i gibi bir tarihe baglayabilir.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  izle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          # requests: ENAG'a HTTP istekleri icin.
+          # psycopg2-binary: db.py'nin Supabase baglantisi icin.
+          # pdfplumber: pdf_text_extract.py'nin PDF->metin donusumu icin.
+          # NOT: pytesseract/tesseract-ocr BILEREK eklenmedi - ENAG'in
+          # bulteni cok olasilikla dijital (taranmis degil) metin
+          # icerdigi icin OCR'a hic dusulmesi beklenmiyor. Eger canli
+          # calistirmada "No module named pytesseract" hatasi gorulurse
+          # (OCR'a gercekten ihtiyac duyulduysa) o zaman eklenir.
+          pip install requests psycopg2-binary pdfplumber --quiet
+
+      - name: ENAG izleme calistir
+        run: python enag_izleme.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}

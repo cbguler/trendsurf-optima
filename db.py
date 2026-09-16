@@ -683,6 +683,26 @@ def init_db():
         PRIMARY KEY (user_id, rate_name)
     )""")
 
+    # v2.0.7.313 (16 Eylul 2026, Bahri'nin talebi - "portfoyumun getirisi
+    # ENAG enflasyonunun altinda mi ustunde mi"): ENAG'in KENDI sitesi
+    # bot erisimini ENGELLIYOR (robots.txt) ve resmi bir API'si YOK -
+    # arastirilan ucuncu taraf kaynaklarda da (hesapkurdu.com, oranoranti.
+    # com.tr) canli/yapisal ENAG verisi BULUNAMADI. Bahri'nin kendisi
+    # BUNU bilerek onayladi: "elle veri girisi asla kabul edilemez"
+    # kuralinin (v2.0.7.129, mevduat/tahvil/repo icin) TEK istisnasi -
+    # ENAG ayda SADECE 1 kez guncellendigi icin (gunluk bir oran degil)
+    # elle giris burada mevduat/tahvil/repo'daki gibi "guncel olmayan
+    # veri" riski tasimiyor. TUIK TUFE ICIN ISE (ayni ozellik kapsaminda)
+    # OTOMATIK EVDS entegrasyonu YAPILDI (bkz. app.py
+    # _tufe_endeks_serisi_cek) - ENAG SADECE bunun mumkun olmadigi
+    # durumda, bilerek sinirli bir istisna.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS enag_aylik_enflasyon (
+        yil_ay            TEXT PRIMARY KEY,
+        aylik_oran        DOUBLE PRECISION NOT NULL,
+        guncelleme_tarihi TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
     # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
     # abonelerin uygulama kullanim istatistiklerini gormek): her SAYFA
     # DEGISIKLIGINDE (her tiklamada DEGIL - bkz. app.py'deki kayit
@@ -1153,6 +1173,46 @@ def kap_bildirim_temizle(gun: int = 14):
         conn.close()
     except Exception as e:
         print(f"[db] kap_bildirim_temizle hata: {e}", file=sys.stderr)
+
+
+def enag_oran_kaydet(yil_ay: str, aylik_oran: float) -> bool:
+    """v2.0.7.313: ENAG'in bir ayina ait aylik enflasyon oranini
+    kaydeder/gunceller (upsert). yil_ay formati 'YYYY-MM' (orn. '2026-08').
+    TUM kullanicilar icin ORTAK/GLOBAL tek bir tablo - ENAG orani herkes
+    icin ayni, kullaniciya ozel degil (benchmark_rates'ten farkli olarak)."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO enag_aylik_enflasyon (yil_ay, aylik_oran, guncelleme_tarihi) "
+            "VALUES (?, ?, now()) "
+            "ON CONFLICT (yil_ay) DO UPDATE SET "
+            "aylik_oran = EXCLUDED.aylik_oran, guncelleme_tarihi = now()",
+            (yil_ay, float(aylik_oran)))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] enag_oran_kaydet hata: {e}", file=sys.stderr)
+        return False
+
+
+def enag_oranlari_getir() -> dict:
+    """v2.0.7.313: Kayitli TUM ENAG aylik oranlarini {yil_ay: oran} sozlugu
+    olarak doner - app.py bunu kumulatif enflasyon serisi olusturmak icin
+    kullanir (bkz. _enag_kumulatif_seri)."""
+    try:
+        rows = get_conn().execute(
+            "SELECT yil_ay, aylik_oran FROM enag_aylik_enflasyon"
+        ).fetchall()
+    except Exception as e:
+        print(f"[db] enag_oranlari_getir hata: {e}", file=sys.stderr)
+        return {}
+    sonuc = {}
+    for r in rows:
+        yil_ay = r["yil_ay"] if isinstance(r, dict) else r[0]
+        oran = r["aylik_oran"] if isinstance(r, dict) else r[1]
+        sonuc[yil_ay] = float(oran)
+    return sonuc
 
 
 def haber_akisi_temizle(gun: int = 7):

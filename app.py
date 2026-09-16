@@ -4715,8 +4715,7 @@ def _kiyaslama_gunluk_serileri(portfolio):
     5 dakika önbellekli - Portföyüm sayfası her rerun olduğunda (herhangi
     bir widget etkileşiminde) baştan hesaplanmıyor."""
     import datetime as _dt_ks
-
-    _ticker_seri, _gun_araligi, _baslangic = _kiyaslama_ticker_serileri_cek(portfolio)
+    from db import enag_oranlari_getir
     if _ticker_seri is None:
         return None
 
@@ -4830,6 +4829,32 @@ def _kiyaslama_gunluk_serileri(portfolio):
         if _oran and _oran > 0:
             _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
 
+    # 5) TÜİK TÜFE - TCMB EVDS'ten tam otomatik (v2.0.7.313, Bahri'nin
+    # talebi: "portföyümün getirisi enflasyonun altında mı üstünde mi").
+    # DİĞER EVDS serilerinden farklı olarak burada TAM TARİHSEL seri
+    # kullanılıyor (baslangic'tan bugüne) - "oran x gün/365" basit faiz
+    # YAKLAŞIMI DEĞİL, gerçek endeks değerlerinin kendi oranı.
+    _tufe_seri, _tufe_hata = _tufe_endeks_serisi_cek(_baslangic.isoformat())
+    if _tufe_seri is not None and len(_tufe_seri) >= 1:
+        _tufe_hazir = _seri_hazirla(_tufe_seri)
+        if float(_tufe_hazir.iloc[0]) > 0:
+            _sonuc["TÜİK Enflasyon"] = (_tufe_hazir / float(_tufe_hazir.iloc[0]) - 1) * 100
+
+    # 6) ENAG - elle girilen aylık oranlarla (v2.0.7.313 - ENAG'ın kendi
+    # sitesi bot erişimini engelliyor, resmi API yok, güvenilir üçüncü
+    # taraf kaynak bulunamadı - "elle veri girişi asla kabul edilemez"
+    # kuralının Bahri'nin ONAYIYLA verilen TEK istisnası, çünkü ENAG
+    # ayda sadece 1 kez güncelleniyor).
+    _enag_oranlari = enag_oranlari_getir()
+    if _enag_oranlari:
+        _enag_seri, _enag_eksik_aylar = _enflasyon_gunluk_seri(
+            _enag_oranlari, _gun_araligi, _baslangic)
+        _sonuc["ENAG Enflasyon"] = _enag_seri
+        if _enag_eksik_aylar:
+            st.session_state["_enag_eksik_aylar_uyarisi"] = _enag_eksik_aylar
+    else:
+        st.session_state["_enag_eksik_aylar_uyarisi"] = None
+
     return _sonuc
 
 
@@ -4924,6 +4949,132 @@ def _en_yuksek_vadeli_mevduat_cek():
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
+def _tufe_endeks_serisi_cek(baslangic_iso: str):
+    """v2.0.7.313 (16 Eylul 2026, Bahri'nin talebi - "portfoyumun getirisi
+    enflasyonun altinda mi ustunde mi"): TUIK TUFE Genel Endeksi'ni (2003=100)
+    TCMB EVDS'ten CEKER - "elle veri girisi asla kabul edilemez" (v2.0.7.129)
+    kuralina uygun, mevduat/tahvil/repo ile AYNI otomatik yontem.
+
+    Seri kodu TP.FG.J0 (TUFE Genel Endeksi, aylik) - digger EVDS
+    entegrasyonlarindan (_evds_seri_cek) FARKLI olarak burada TEK bir son
+    deger degil, `baslangic_iso`'dan bugune TAM TARIHSEL SERI cekiliyor
+    (aylik cozunurlukte - TUIK/EVDS TUFE'yi aylik yayinliyor).
+
+    ONEMLI - DOGRULAMA GEREKIYOR: Bu seri kodu (TP.FG.J0) arastirma
+    sirasinda KESIN olarak DOGRULANAMADI (EVDS'in kendi kod katalogu
+    canli test edilemedi - gercek EVDS_API_KEY olmadan). Fonksiyon,
+    donen ilk deger MAKUL bir TUFE endeks araligi (1000-10000 arasi,
+    2026 itibariyla bilinen gercek deger ~3500-4200) DISINDAYSA
+    bunu bir HATA olarak isaretliyor, SESSIZCE yanlis veri
+    GOSTERMIYOR - ilk canli calistirmada Bahri'nin sonucu dogrulamasi
+    gerekiyor.
+
+    Donus: (pd.Series (tarih->endeks degeri) ya da None, hata_detayi)."""
+    try:
+        _key = os.environ.get("EVDS_API_KEY", "")
+        if not _key:
+            try:
+                _key = st.secrets.get("EVDS_API_KEY", "")
+            except Exception:
+                _key = ""
+        if not _key:
+            return None, "EVDS_API_KEY tanımlı değil"
+        try:
+            from evds import evdsAPI
+        except Exception as e:
+            return None, f"'evds' paketi import edilemedi: {type(e).__name__}: {e}"
+        import datetime as _dt_tufe
+        e = evdsAPI(_key)
+        _baslangic_d = _dt_tufe.date.fromisoformat(baslangic_iso)
+        # EVDS aylik veri icin ay basindan istemek daha guvenilir.
+        _istek_baslangic = _baslangic_d.replace(day=1)
+        bugun = _dt_tufe.date.today()
+        df = e.get_data(["TP.FG.J0"],
+                         startdate=_istek_baslangic.strftime("%d-%m-%Y"),
+                         enddate=bugun.strftime("%d-%m-%Y"))
+        if df is None or df.empty:
+            return None, "EVDS'ten TÜFE için boş sonuç döndü (TP.FG.J0)"
+        _kolon = "TP_FG_J0"
+        if _kolon not in df.columns:
+            _aday_kolonlar = [c for c in df.columns if c != "Tarih" and c != "YEARWEEK"]
+            if not _aday_kolonlar:
+                return None, f"EVDS yanıtında beklenen sütun yok: {list(df.columns)}"
+            _kolon = _aday_kolonlar[-1]
+        _seri = df.set_index("Tarih")[_kolon].dropna().astype(float)
+        if _seri.empty:
+            return None, "EVDS TÜFE serisinde geçerli değer yok"
+        # Makul aralik kontrolu - yanlis seri kodu SESSIZCE guvenilmesin.
+        _son_deger = float(_seri.iloc[-1])
+        if not (500 <= _son_deger <= 20000):
+            return None, (f"TP.FG.J0'dan gelen değer ({_son_deger}) beklenen "
+                          f"TÜFE endeks aralığı (500-20000) dışında - seri "
+                          f"kodu yanlış olabilir, DOĞRULAMA gerekiyor.")
+        _seri.index = pd.to_datetime(_seri.index, dayfirst=True, errors="coerce")
+        _seri = _seri[_seri.index.notna()].sort_index()
+        return _seri, None
+    except Exception as _dis_hata:
+        return None, f"{type(_dis_hata).__name__}: {_dis_hata}"
+
+
+def _enflasyon_gunluk_seri(aylik_oranlar: dict, gun_araligi, baslangic):
+    """v2.0.7.313 (v2.0.7.314'te DUZELTILDI - ilk versiyonda ay
+    kaydirma hatasi vardi, testte bulundu): Elde SADECE AYLIK oranlar
+    varken (ENAG icin), bunlardan GUNLUK bir kumulatif getiri serisi
+    uretir. `aylik_oranlar` = {"YYYY-MM": oran_yuzde} sozlugu.
+
+    Yontem - BASAMAK FONKSIYONU (linear interpolasyon YAPILMAZ - ENAG
+    zaten sadece AYLIK veri yayinliyor, gunluk sahte hassasiyet
+    UYDURULMAZ): baslangic ayi DAHIL, HENUZ BITMEMIS olan (bugunku
+    ay) HARIC her ay "tamamlanmis" sayilir - baslangic ayinin bir
+    kismi icin tam ayin oranini uygulamak basit bir yaklaşiklama
+    (ENAG zaten kismi-ay verisi vermiyor). Her tamamlanmis ayin orani,
+    O AYIN BITTIGI an (yani BIR SONRAKI ayin ilk gunu) kumulatif urune
+    sicrama olarak eklenir.
+
+    Eksik ay varsa (Bahri henuz girmemisse), o ay ATLANIR (0% katki) -
+    donen ikinci deger, eksik aylarin listesidir (UI'da uyari icin)."""
+    import datetime as _dt_es
+    _bugun = _dt_es.date.today()
+    _tamamlanmis_aylar = []
+    _y, _a = baslangic.year, baslangic.month
+    while (_y, _a) < (_bugun.year, _bugun.month):
+        _tamamlanmis_aylar.append((_y, _a))
+        if _a == 12:
+            _y, _a = _y + 1, 1
+        else:
+            _a += 1
+
+    _eksik_aylar = [f"{y:04d}-{a:02d}" for (y, a) in _tamamlanmis_aylar
+                    if f"{y:04d}-{a:02d}" not in aylik_oranlar]
+    _kumulatif_carpan = 1.0
+    _basamaklar = {}  # {bu_carpanin_GECERLI_OLDUGU_ilk_tarih: kumulatif_carpan}
+    _basamaklar[pd.Timestamp(baslangic)] = 1.0
+    for (_y, _a) in _tamamlanmis_aylar:
+        _ay_str = f"{_y:04d}-{_a:02d}"
+        if _ay_str in aylik_oranlar:
+            _kumulatif_carpan *= (1 + aylik_oranlar[_ay_str] / 100.0)
+        # Bu ayin orani, ay BITTIKTEN SONRA (bir sonraki ayin ilk
+        # gununden itibaren) gecerli olur.
+        if _a == 12:
+            _sonraki = pd.Timestamp(_y + 1, 1, 1)
+        else:
+            _sonraki = pd.Timestamp(_y, _a + 1, 1)
+        _basamaklar[_sonraki] = _kumulatif_carpan
+
+    _sirali_tarihler = sorted(_basamaklar.keys())
+    _degerler = []
+    for _gun in gun_araligi:
+        _carpan = 1.0
+        for _tarih in _sirali_tarihler:
+            if _gun >= _tarih:
+                _carpan = _basamaklar[_tarih]
+            else:
+                break
+        _degerler.append((_carpan - 1) * 100)
+    return pd.Series(_degerler, index=gun_araligi), _eksik_aylar
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
 def _evds_referans_oranlari_cek():
     """v2.0.7.131 - Mevduat (en yüksek, hesapkurdu.com) + Tahvil/Repo
     (TCMB EVDS) TEK seferde çekilir (6 saat cache - bu oranlar günde en
@@ -4982,6 +5133,7 @@ def _render_karsilastirma(_cur_user, portfolio):
         "Portföyünüz": "#1d4ed8", "BIST 100": "#111827", "Altın": "#b45309",
         "Dolar/TL": "#15803d", "Vadeli Mevduat": "#a21caf",
         "Devlet Tahvili": "#4338ca", "Repo": "#b91c1c",
+        "TÜİK Enflasyon": "#ea580c", "ENAG Enflasyon": "#dc2626",
     }
     # v2.0.7.169 (Bahri'nin bulgusu, 20 Ağustos 2026 — "çizgi ve etiket
     # renkleri ile çizgi kalınlıkları ayırt edici değil, anlaşılır hale
@@ -4993,6 +5145,7 @@ def _render_karsilastirma(_cur_user, portfolio):
         "Portföyünüz": "solid", "BIST 100": "dash", "Altın": "solid",
         "Dolar/TL": "dot", "Vadeli Mevduat": "dashdot",
         "Devlet Tahvili": "longdash", "Repo": "longdashdot",
+        "TÜİK Enflasyon": "dash", "ENAG Enflasyon": "dot",
     }
     fig = go.Figure()
     for _ad, _seri in _seriler.items():
@@ -5045,6 +5198,85 @@ def _render_karsilastirma(_cur_user, portfolio):
         "piyasa koşullarına bağlıdır, tek bir dönemden genel bir sonuç "
         "çıkarmak yanıltıcı olabilir."
     )
+
+    # v2.0.7.313 (16 Eylül 2026, Bahri'nin talebi - "portföyümün getirisi
+    # enflasyonun altında mı üstünde mi olduğunu görmem gerekli"): grafik
+    # ve özet satırı bunu zaten İÇERİYOR ama dolaylı (sayıları kendi
+    # kendine çıkarmak gerekiyor) - burada AÇIKÇA "üstünde/altında" diye
+    # ifade eden ayrı bir bölüm.
+    if "Portföyünüz" in _seriler and ("TÜİK Enflasyon" in _seriler or "ENAG Enflasyon" in _seriler):
+        st.divider()
+        st.markdown("**Enflasyona Karşı Performans**")
+        _portfoy_son = float(_seriler["Portföyünüz"].iloc[-1])
+        for _enf_ad in ("TÜİK Enflasyon", "ENAG Enflasyon"):
+            if _enf_ad not in _seriler:
+                continue
+            _enf_son = float(_seriler[_enf_ad].iloc[-1])
+            _fark = _portfoy_son - _enf_son
+            _durum = "üstünde" if _fark >= 0 else "altında"
+            _renk_ikon = "🟢" if _fark >= 0 else "🔴"
+            st.markdown(
+                f"{_renk_ikon} Portföyünüz, **{_enf_ad}**'a göre "
+                f"**{abs(_fark):.1f} puan {_durum}** "
+                f"(Portföy: {fmt_tr_isaretli(_portfoy_son, 1, yuzde=True)}, "
+                f"{_enf_ad}: {fmt_tr_isaretli(_enf_son, 1, yuzde=True)})"
+            )
+        if st.session_state.get("_enag_eksik_aylar_uyarisi"):
+            st.caption(
+                "⚠ ENAG için eksik ay(lar) var, kümülatif hesap bu ayları "
+                "0% olarak sayıyor (gerçekte olduğundan düşük çıkabilir): "
+                + ", ".join(st.session_state["_enag_eksik_aylar_uyarisi"])
+            )
+        if "TÜİK Enflasyon" not in _seriler:
+            st.caption(
+                "⚠ TÜİK/TÜFE karşılaştırması şu an yüklenemedi "
+                "(TCMB EVDS bağlantısında bir sorun olabilir)."
+            )
+
+    with st.expander("ENAG Aylık Enflasyon Oranlarını Gir / Güncelle"):
+        st.caption(
+            "ENAG'ın kendi sitesi otomatik erişime kapalı ve resmi bir "
+            "API'si yok - bu yüzden (Bahri'nin onayıyla, sadece bu tek "
+            "istisna için) ayda bir kez, ENAG yeni ayı açıkladığında "
+            "burada elle girilir. Değer, TÜM kullanıcılar için ortaktır."
+        )
+        _enag_mevcut = enag_oranlari_getir()
+        ec1, ec2, ec3 = st.columns([1, 1, 1])
+        with ec1:
+            _enag_yil = st.number_input(
+                "Yıl", min_value=2020, max_value=2035,
+                value=datetime.date.today().year, step=1, key="enag_yil_input")
+        with ec2:
+            _enag_ay = st.selectbox(
+                "Ay", list(range(1, 13)),
+                format_func=lambda a: _AYLAR_TR[a - 1],
+                index=datetime.date.today().month - 2
+                if datetime.date.today().month >= 2 else 11,
+                key="enag_ay_input")
+        with ec3:
+            _enag_oran_str = st.text_input(
+                "Aylık Oran (%)", key="enag_oran_input", placeholder="Örn: 2,24")
+        if st.button("Kaydet", key="enag_oran_kaydet_btn"):
+            try:
+                _oran_deger = parse_tr(_enag_oran_str) if _enag_oran_str.strip() else None
+            except Exception:
+                _oran_deger = None
+            if _oran_deger is None:
+                st.error("Geçerli bir sayı girin (örn: 2,24).")
+            else:
+                _yil_ay_key = f"{int(_enag_yil):04d}-{int(_enag_ay):02d}"
+                from db import enag_oran_kaydet
+                if enag_oran_kaydet(_yil_ay_key, _oran_deger):
+                    st.success(f"{_AYLAR_TR[_enag_ay - 1]} {_enag_yil} için %{fmt_tr(_oran_deger)} kaydedildi.")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error("Kaydedilemedi - lütfen tekrar deneyin.")
+        if _enag_mevcut:
+            st.caption("Kayıtlı aylar: " + ", ".join(
+                f"{_AYLAR_TR[int(k[5:7]) - 1]} {k[:4]} (%{fmt_tr(v)})"
+                for k, v in sorted(_enag_mevcut.items(), reverse=True)[:6]
+            ))
 
 
 def _render_pozisyon_karsilastirma(_cur_user, portfolio):
