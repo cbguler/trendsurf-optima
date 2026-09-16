@@ -7356,3 +7356,19 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     baştan sona okunup kontrol edildi (sadece hatayı veren satır
     değil) - `fmt_tr_isaretli` imzası, `_AYLAR_TR`'nin gerçekten
     modül seviyesinde olduğu gibi detaylar da doğrulandı.
+
+- **[DÜZELTİLDİ] v2.0.7.316 (16 Eylül 2026): v2.0.7.315'in "tam
+  kontrol ettim" iddiasına rağmen BİR HATA DAHA çıktı -
+  `_render_karsilastirma` içinde `enag_oranlari_getir()` çağrılıyordu
+  ama bu fonksiyonun KENDİ import'u yoktu (sadece FARKLI bir fonksiyon
+  olan `_kiyaslama_gunluk_serileri`'de import edilmişti - Python'da
+  fonksiyonlar arası import PAYLAŞILMAZ).**
+  - Düzeltildi: `_render_karsilastirma`'nın kendi ENAG bölümüne de
+    `from db import enag_oranlari_getir` eklendi.
+  - **Bu sefer AST (soyut sözdizim ağacı) tabanlı OTOMATİK bir
+    tarama yazıldı** - gözle kontrol yerine, dokunulan 5 fonksiyonun
+    HER BİRİNDEKİ her ismin gerçekten tanımlı (parametre/yerel
+    atama/import/genel modül seviyesi) olup olmadığı programatik
+    olarak dogrulandı. Bu tarama YÖNTEMİ, benzer "farklı fonksiyonda
+    import edilmiş ama BURADA edilmemiş" hatalarını gelecekte daha
+    güvenilir yakalayabilir.

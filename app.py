@@ -5237,13 +5237,14 @@ def _render_karsilastirma(_cur_user, portfolio):
 
     with st.expander("ENAG Aylık Enflasyon Oranlarını Gir / Güncelle"):
         import datetime as _dt_enag
+        from db import enag_oranlari_getir as _enag_oranlari_getir_render
         st.caption(
             "ENAG'ın kendi sitesi otomatik erişime kapalı ve resmi bir "
             "API'si yok - bu yüzden (Bahri'nin onayıyla, sadece bu tek "
             "istisna için) ayda bir kez, ENAG yeni ayı açıkladığında "
             "burada elle girilir. Değer, TÜM kullanıcılar için ortaktır."
         )
-        _enag_mevcut = enag_oranlari_getir()
+        _enag_mevcut = _enag_oranlari_getir_render()
         ec1, ec2, ec3 = st.columns([1, 1, 1])
         with ec1:
             _enag_yil = st.number_input(
