@@ -7448,3 +7448,34 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     `_render_karsilastirma`, `_render_pozisyon_karsilastirma`) hepsi
     AST tabanlı otomatik isim taramasından temiz geçti, `grep` ile
     TÜİK/TÜFE'ye hiçbir kod referansı kalmadığı doğrulandı.
+
+- **[KOD HAZIR - PUSH BEKLİYOR] v2.0.7.319 (16 Eylül 2026, Bahri'nin
+  bulgusu - "neredeyse tüm TEFAS fon grafikleri aynı günde büyük bir
+  düşüş gösteriyor"): TEFAS grafik anomalisi kök nedeniyle bulundu ve
+  düzeltildi.**
+  - **Kök neden (CANLI doğrulandı):** `tefas_client.py`'deki
+    `fetch_fund_history()`, gerçek pytefas API'si başarısız olduğunda
+    (CVL/HTS/HOY/BAG için CANLI test edildi - başarısız olduğu
+    doğrulandı) `_synthetic_from_excel()`'e düşüyor - bu fonksiyon
+    `optimized_universe.csv` (ANA portföy tablosunun kullandığı,
+    doğru, "asla sıfıra ezme" korumalı kaynak) DEĞİL, tamamen AYRI ve
+    DAHA DAR bir kaynak (`load_excel_all()` - sadece yerel BEFAS
+    Excel dosyalarına bakıyor) kullanıyordu. CVL/HTS/HOY/BAG bu yerel
+    BEFAS dosyalarında eşleşmiyor - `Son_Fiyat` SESSİZCE 0.0 kalıyordu
+    (CANLI doğrulandı: gerçekten 0.0 döndü). `_synthetic_price_series`
+    de fiyat≤0 olduğunda RASTGELE "100.0" değerine yaslanıyordu - CVL
+    testinde seri TAM 100.0000'de bitiyordu, bu da grafikte "bugün
+    aniden sıçrama/düşüş" görüntüsünü yaratıyordu. Portföydeki BİRDEN
+    FAZLA fon AYNI ANDA etkilendiği için (hepsi BEFAS'ta eşleşmiyordu)
+    "toplu, aynı günlük anomali" görünümü ortaya çıkıyordu.
+  - **Çözüm:** Yeni `_optimized_universe_satiri_bul()` - sentetik seri
+    artık ÖNCE `optimized_universe.csv`'yi (güvenilir kaynak) dener,
+    SADECE orada bulunamazsa eski BEFAS-Excel yöntemine düşer. Ayrıca
+    hem `_synthetic_from_excel` hem `_synthetic_price_series`'teki
+    "rastgele 100.0 varsay" davranışı TAMAMEN KALDIRILDI - artık
+    gerçekten geçerli bir fiyat yoksa UYDURMAK yerine BOŞ SERİ
+    döndürülüyor (grafik "veri yok" gösterir, yanlış sayı GÖSTERMEZ -
+    bu proje genelindeki "asla veri uydurma" ilkesiyle tutarlı).
+  - **Test edildi:** CVL/HTS/HOY/BAG için `_synthetic_from_excel()`
+    artık DOĞRU son fiyatlarla (portföy tablosuyla BİREBİR eşleşen:
+    CVL 1,596018, HTS 59,005845, HOY 0,365909, BAG 1,050564) bitiyor.

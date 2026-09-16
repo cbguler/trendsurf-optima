@@ -282,17 +282,58 @@ def _fetch_via_pytefas(ticker: str, kind: str,
     return pd.DataFrame()
 
 
+def _optimized_universe_satiri_bul(ticker: str):
+    """v2.0.7.319 (16 Eylul 2026, Bahri'nin bulgusu - "birden fazla TEFAS
+    fonu ayni gunde birlikte anormal bir dusus gosteriyor"): KOK NEDEN -
+    `_synthetic_from_excel` SADECE `load_excel_all()`'un BEFAS-yerel-
+    Excel eslesmesine guveniyordu; CVL/HTS/HOY/BAG gibi bazi fonlar o
+    yerel Excel'de eslesmiyor, Son_Fiyat SESSIZCE 0.0 kaliyordu -
+    `_synthetic_price_series` de fiyat<=0 oldugunda rastgele "100.0"a
+    yaslaniyordu (CVL testinde CANLI dogrulandi: seri TAM 100.0000'de
+    bitiyordu). Oysa `optimized_universe.csv` (update_tefas_evening.py
+    tarafindan yazilan, "onceki gecerli fiyati asla sifira ezme"
+    korumasi OLAN, ANA portfoy tablosunun zaten dogru gosterdigi
+    kaynak) HER ZAMAN dogru bir fiyata sahip. Bu fonksiyon O dosyayi
+    ONCE dener - bulamazsa None doner, cagiran eski BEFAS yontemine
+    duser."""
+    try:
+        _csv_yolu = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "optimized_universe.csv")
+        if not os.path.exists(_csv_yolu):
+            return None
+        df = pd.read_csv(_csv_yolu, on_bad_lines="skip")
+        match = df[(df["Ticker"] == ticker.upper()) & (df["Kategori"] == "TEFAS")]
+        if match.empty:
+            return None
+        row = match.iloc[0]
+        if float(row.get("Son_Fiyat", 0) or 0) <= 0:
+            return None
+        return row
+    except Exception:
+        return None
+
+
 def _synthetic_from_excel(ticker: str, period: str = "1y",
                            excel_dir: str = "") -> pd.DataFrame:
     """Excel getiri verilerinden sentetik günlük seri üretir."""
-    df_all = load_excel_all(excel_dir)
-    if df_all.empty:
-        return pd.DataFrame()
-    match = df_all[df_all["Ticker"] == ticker.upper()]
-    if match.empty:
-        return pd.DataFrame()
-    row = match.iloc[0]
+    # v2.0.7.319: ONCE optimized_universe.csv (guvenilir, sifira
+    # dusurulmez) denenir - bkz. _optimized_universe_satiri_bul.
+    row = _optimized_universe_satiri_bul(ticker)
+    if row is None:
+        df_all = load_excel_all(excel_dir)
+        if df_all.empty:
+            return pd.DataFrame()
+        match = df_all[df_all["Ticker"] == ticker.upper()]
+        if match.empty:
+            return pd.DataFrame()
+        row = match.iloc[0]
     base = float(row.get("Son_Fiyat", 0) or 0)
+    if base <= 0:
+        # v2.0.7.319: eski davranis (rastgele "100.0" varsayimi) BILEREK
+        # KALDIRILDI - gercekten hicbir gecerli fiyat bulunamadiysa
+        # UYDURMAK yerine bos seri donduruluyor (grafik "veri yok"
+        # gosterir, yanlis bir sayi GOSTERMEZ).
+        return pd.DataFrame()
     return _synthetic_price_series(
         ret1m=float(row.get("Ret1M",0) or 0),
         ret3m=float(row.get("Ret3M",0) or 0),
@@ -307,8 +348,16 @@ def _synthetic_from_excel(ticker: str, period: str = "1y",
 def _synthetic_price_series(
         ret1m, ret3m, ret6m, ret1y, ret3y, ret5y,
         period="1y", base_price=0.0) -> pd.DataFrame:
+    # v2.0.7.319 (16 Eylul 2026): eskiden fiyat<=0 oldugunda rastgele
+    # "100.0" varsayiliyordu - bu TAM OLARAK CVL/HTS/HOY/BAG'da
+    # gorulen "ayni gunde birden fazla fonun anormal dususu" hatasinin
+    # kok nedeniydi. Artik gecerli bir fiyat yoksa BOS SERI donuluyor -
+    # cagiran (_synthetic_from_excel) zaten bunu bu noktaya varmadan
+    # kontrol ediyor, ama defansif olarak burada da tekrarlandi.
+    if base_price <= 0:
+        return pd.DataFrame()
     today = datetime.now().replace(day=1)
-    base  = base_price if base_price > 0 else 100.0
+    base  = base_price
     raw_points: Dict[int, float] = {0: base}
     for ret, months in [(ret1m,1),(ret3m,3),(ret6m,6),
                         (ret1y,12),(ret3y,36),(ret5y,60)]:
