@@ -7480,33 +7480,116 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     artık DOĞRU son fiyatlarla (portföy tablosuyla BİREBİR eşleşen:
     CVL 1,596018, HTS 59,005845, HOY 0,365909, BAG 1,050564) bitiyor.
 
+- **v2.0.7.321 (17 Eylül 2026, Bahri'nin bulgusu - "son veri 1 eylül
+  tarihinden, grafiklerde anormallikler var", ILU/BAG/CVL ekran
+  görüntüleriyle): TEFAS sentetik seri KÖK NEDENİ bulundu ve
+  düzeltildi - ilk yükleme commit'inden beri var olan bir hata.**
+  - **Kök neden (CANLI doğrulandı):** `tefas_client.py` içindeki
+    `_synthetic_price_series()`, pytefas'ta eşleşmeyen fonlar için
+    (ILU/BAG/CVL/HTS/HOY gibi) üretilen sentetik seride "bugün"ü
+    `datetime.now().replace(day=1)` ile AYIN 1'İNE SABİTLİYORDU - bu
+    satır projenin İLK YÜKLEME commit'inden beri buradaydı, hiç fark
+    edilmemişti. Sonuç: bu fonların sentetik geçmiş serisi bugün ayın
+    kaçı olursa olsun HER ZAMAN 1'inde bitiyordu. CANLI TEST (düzeltme
+    öncesi): ILU/BAG/CVL üçü de "son tarih: 2026-09-01" ile bitti
+    (asıl bugün 17 Eylül).
+  - **İkincil bozulma:** `_hist_canli_ile_tamamla()` (v2.0.7.289),
+    son tarih bugünden önceyse tek bir "bugün" barı ekliyor - ayın
+    1'i ile bugün arasında haftalarca boşluk olduğunda bu, grafikte
+    "düz çizgiyle bugüne sıçrama" ve MA20/MA50 hareketli
+    ortalamalarının o boşluk boyunca gerçek dışı bir eğim çizmesine
+    yol açıyordu (ekran görüntülerindeki izole "-" işareti ve
+    MA çizgilerinin anormal rampası bu ikinci etkiydi).
+  - **Çözüm:** `today = datetime.now().replace(day=1)` →
+    `today = datetime.now()`. CANLI TEST (düzeltme sonrası):
+    ILU/BAG/CVL üçü de artık "son tarih: 2026-09-17" (gerçek bugün)
+    ile, `optimized_universe.csv`'deki güncel Son_Fiyat ile BİREBİR
+    eşleşen bir kapanışla bitiyor.
+  - **Not:** Bu, önceki "TEFAS grafik anomalisi" (v2.0.7.319, aynı gün
+    içinde toplu sıçrama) hatasından FARKLI ve ondan BAĞIMSIZ bir
+    hata - o zaten optimized_universe.csv'yi doğru kullanıyordu, asıl
+    sorun "bugün" tarihinin kendisinin yanlış hesaplanmasıydı.
+
+- **v2.0.7.322 (17 Eylül 2026, Bahri'nin talebi - SPK'nin 17 Eylül
+  2026 tarihli ve 2026/60 sayılı Bülteni): SPK tarafından TEFAS'ta
+  alım-satıma kapatılan 7 portföy yönetim şirketinin fonları için
+  Optima Skor sıfırlandı.**
+  - **Olay (web araştırmasıyla doğrulandı):** Pusula Portföy'de
+    başlayan ve Tera Portföy'ün iki fonunda temerrüt ilanına kadar
+    büyüyen likidite krizi sonrası SPK; Tera, Pusula, Hedef, Atlas,
+    A1 Capital, Pardus ve Bulls Portföy'ün TEFAS'ta işlem gören TÜM
+    yatırım fonlarının alım-satıma kapatılmasına, bunlardan 130
+    tanesinin de tasfiye edilmesine karar verdi. **ÖNEMLİ:** karar
+    hisse senetlerini KAPSAMIYOR - sadece bu 7 şirketin TEFAS
+    fonlarını kapsıyor (bazı haber başlıklarındaki "hisse" ibaresi
+    genel BIST oynaklığından kaynaklanıyor, ayrı ve mevcut/rutin bir
+    VBTS mekanizması - bu SPK kararıyla doğrudan ilgisi yok).
+  - **Uygulama:** Yeni `spk_tedbir_fonlari.py` modülü - 7 şirketin adını
+    içeren bir liste + `tasfiye_kapsaminda_mi(ad)` yardımcı fonksiyonu.
+    `load_universe()`'in EN SONUNA (tüm overlay'lerden - Fırsat Radarı
+    dahil - SONRA, hiçbiri tarafından ezilemeyecek şekilde) bir kontrol
+    eklendi: TEFAS kategorisinde, adı bu 7 şirketten birini içeren her
+    fonun Optima_Skor'u 0.0'a sabitleniyor. TICKER değil ŞİRKET ADI
+    bazında eşleştirme yapıldı - böylece sadece tasfiye listesindeki
+    130 fon değil, bu 7 şirketin TÜM fonları (ki hepsi zaten alım-
+    satıma kapalı) yakalanıyor. CANLI TEST: evrende bu 7 şirkete ait
+    117 fon bulundu (TERA 9, PUSULA 6, HEDEF 31, ATLAS 18, A1 CAPİTAL
+    11, PARDUS 29, BULLS 13), hepsinin Optima_Skor'u 0.0'a sabitlendi
+    (CVL/BAG dahil - ikisi de bu 7 şirketten birine ait). Skor=0
+    olduğu için hem `get_signal()` otomatik "NET SAT" gösterecek hem
+    de Fırsat Radarı/Portföy Önerisi gibi MIN_SKOR eşiği kullanan
+    hiçbir mekanizma bu fonları önermeyecek.
+  - **Bilinen sınır:** "Beklenti Modu" haber-tabanlı kategori
+    ayarlaması (app.py ~satır 4102-4106) bu sıfırlanmış skorlara birkaç
+    puanlık bir ekleme yapabilir (TEFAS kategorisi etkilenen kategoriler
+    arasındaysa) - skor yine de çok düşük kalır ama KESIN 0 garantisi
+    değildir. Bahri katı bir 0 tabanı isterse bu ayarlama adımından
+    SONRA da ikinci bir sabitleme eklenebilir - şimdilik yapılmadı.
+  - **YAPILMADI (Bahri'nin ek talebi):** "Bu haberleri alır almaz
+    otomatik hale getirebilirsek" - yani SPK/KAP'ın bu tür toplu
+    fon/şirket tedbir kararlarını `kap_bildirim_izleme.py` veya
+    `haber_izleme.py` benzeri bir otomatik izleme ile yakalayıp
+    `spk_tedbir_fonlari.py` listesini KENDİLİĞİNDEN güncelleme fikri -
+    kapsamı ve tetikleme mantığı netleşmeden koda dökülmedi, Bahri'nin
+    onayı/yönlendirmesi bekleniyor.
+  - **PUSH BEKLİYOR:** Bu iki düzeltme (v2.0.7.321 + v2.0.7.322) henüz
+    push edilmedi - bkz. aşağıdaki "OTURUM DEVRİ" bölümü.
+
 ---
 
-## OTURUM DEVRİ (16 Eylül 2026, O&M4 sonu - görsel limiti nedeniyle yeni sohbete geçiliyor)
+## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
 
 **Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı** - yukarıdaki 7000+ satırlık geçmişte çok sayıda eski "PUSH BEKLİYOR" etiketi artık GEÇERSİZ (zaten push edilmiş) - asıl GÜNCEL durum burada.
 
-### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.297 - v2.0.7.319 arası, hepsi push edildi):
+### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.297 - v2.0.7.320 arası, hepsi push edildi):
 - TEFAS Akşam/Gündüz Güncelle: cron-job.org üzerinden otomatik, sorunsuz.
-- KAP Bildirim İzleme: otomatik çalışıyor, gerçek bildirimler (CATES VBTS, AKFGY hak kullanımı) yakalanıyor, okunabilir formatta gösteriliyor.
-- ENAG Enflasyon İzleme: TAM OTOMATİK (Halk TV üzerinden, elle giriş YOK), günlük cron-job.org tetiklemesi kuruldu.
-- Getiri Kıyaslaması: TÜİK KALDIRILDI (Bahri'nin talebiyle - doğrulanamamış EVDS seri kodu riski), ENAG kalın/düz kırmızı çizgiyle gösteriliyor, altın rengi düzeltildi, Pozisyon Bazlı grafiğe de ENAG eklendi.
-- Portföy Varlıkları Tablosu footer'ında artık Alış toplamı da var.
-- TEFAS grafik anomalisi (fonların aynı günde toplu "sıçraması") ÇÖZÜLDÜ - sentetik seri artık `optimized_universe.csv`'den doğru fiyat kullanıyor, rastgele "100" varsayımı kaldırıldı.
+- KAP Bildirim İzleme: otomatik çalışıyor, gerçek bildirimler yakalanıyor.
+- ENAG Enflasyon İzleme: TAM OTOMATİK (Halk TV üzerinden, elle giriş YOK).
+- Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
+- v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ⚠️ HEMEN YAPILMASI GEREKEN - PUSH BEKLEYEN TEK ŞEY:
-**v2.0.7.320 (db.py)** - "Beklenti Modu Haber Izleme" çalışmalarının hâlâ 13-22 dakika sürmesinin (ve "onbellekteki bağlantı canlı değil" hatasının Session pooler'a geçilmesine RAĞMEN ~100 kez tekrarlanmasının) olası kök nedenine yönelik bir düzeltme. Teori: db.py fonksiyonları (örn. `get_kaliplar()`) SELECT-only sorgular çalıştırıp `commit()` çağırmıyor; toplu modda `.close()` hiçbir şey yapmadığı için transaction açık kalıyor; RSS çekerken geçen sürede Supabase'in pooler'ı bunu "idle in transaction" ile sessizce öldürüyor. Çözüm: `.close()` artık commit() çağırıyor. **Bu, gerçek Supabase olmadan test edilebilen en iyi kanıt ama KESİN garanti YOK - aynı soruna 3. deneme.**
+### ⚠️ PUSH BEKLEYEN İKİ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri (`_synthetic_price_series`), ilk yükleme commit'inden beri `today`'yi `datetime.now().replace(day=1)` ile AYIN 1'İNE sabitliyordu - ILU/BAG/CVL gibi pytefas'ta eşleşmeyen fonların grafiği bugün ayın kaçı olursa olsun hep 1'inde donmuş görünüyordu (+ `_hist_canli_ile_tamamla`'nın buna eklediği izole "bugün" noktası, MA çizgilerinde sahte bir rampa yaratıyordu). Düzeltme: `today = datetime.now()`. CANLI TEST: ILU/BAG/CVL üçü de artık gerçek bugünün (17 Eylül) tarihi ve doğru fiyatıyla bitiyor.
+
+**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py `load_universe()` sonuna 1 blok)** - SPK'nın 17 Eylül 2026 tarihli 2026/60 sayılı Bülteni'yle Tera/Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portföy'ün TEFAS'ta işlem gören TÜM fonları alım-satıma kapatıldı (130'u da tasfiye edilecek, ama karar sadece bu fonları kapsıyor - hisse senedi kapsamıyor). Evrendeki bu 7 şirkete ait 117 fonun (CVL/BAG dahil) Optima_Skor'u artık 0.0'a sabitleniyor, ticker değil şirket-adı bazında eşleştirme yapıldı (gelecekte yeni fon eklenirse de yakalanır). Bilinen sınır: "Beklenti Modu" kategori ayarlaması bu sıfıra birkaç puan ekleyebilir (kesin 0 garantisi yok, ama pratikte hep düşük kalır).
 
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
-1. `db.py`'yi (bu sohbette zaten teslim edildi, indirme linki hâlâ erişilebilir olabilir - değilse yeni sohbette aynı düzeltme yeniden üretilebilir, açıklama yukarıda yeterli detayda) proje köküne kopyala.
-2. `git add db.py PROJE_NOTLARI.md && git commit -m "v2.0.7.320: ..." && git pull --no-rebase --no-edit && git push`
-3. Elle bir "Beklenti Modu Haber Izleme" tetikle, "Search logs" → "Toplu mod" ara - eşleşme sayısı 0'a yakınsa ÇÖZÜLMÜŞ demektir; hâlâ yüksekse (~100) teori YANLIŞ, dördüncü bir açıdan bakılması gerekecek.
+```
+git add tefas_client.py spk_tedbir_fonlari.py app.py PROJE_NOTLARI.md
+git commit -m "v2.0.7.321/322: TEFAS sentetik seri ayin 1i sabiti duzeltildi + SPK tedbirli 7 sirketin fonlari icin Optima Skor sifirlandi"
+git pull --no-rebase --no-edit
+git push
+```
+
+### AÇIK TAKİP (bu sohbette başlatıldı, sonuç henüz alınmadı):
+v2.0.7.320'nin (db.py, önceki oturumdan) "Beklenti Modu Haber Izleme"deki ~100 kez tekrarlanan "onbellekteki bağlantı canlı değil" hatasını çözüp çözmediği HENÜZ TEYİT EDİLEMEDİ - commit 16 Eylül 20:23 TRT'de push edildi ama GitHub Actions API'sine IP rate limit yüzünden (60/saat, paylaşımlı sandbox IP'si) o tarihten sonraki bir çalışmanın logu çekilemedi. Bahri kendi GitHub Actions/cron-job.org panelinden 16 Eylül 20:23 TRT'den SONRA başlayan bir "Haber Izleme" çalışmasının logunu paylaşırsa (ya da yeni sohbette API rate limiti temizlenmiş olabilir, tekrar denenebilir) teyit tamamlanabilir.
 
 ### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
-cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.320 doğrulandıktan (ya da başka bir çözüm bulunduktan) sonra, GERÇEK ölçülen çalışma süresine göre uygun bir sıklığa (muhtemelen 15-20 dakika, kesin süre netleşince) geri ayarlanmalı.
+cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.320 doğrulandıktan sonra gerçek ölçülen çalışma süresine göre uygun bir sıklığa geri ayarlanmalı.
 
-### AÇIK/ERTELENMİŞ FİKİR (henüz KOD YAZILMADI):
-Bahri, önemli bir KAP bildirimi (CATES'teki VBTS gibi) geldiğinde bunun Optima Skor'a yansıtılması ve `haber_izleme.py`'deki gibi kullanıcı onaylı bir mekanizma kurulması fikrini önerdi. Bu oturumda AKFGY özelinde bir DÜZELTME yapılmadı çünkü araştırma AKFGY'nin aslında bir KAP kısıtlaması OLMADIĞINI (sadece rutin temettü/hak kullanımı bildirimleri) gösterdi - CATES'in skoru zaten düşük (33,0/"TUT İZLE"). Genel fikir hâlâ geçerli, Bahri'nin onayı/önceliklendirmesi bekleniyor - inşa edilip edilmeyeceği netleşmedi.
+### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
+1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
+2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Muhtemelen `kap_bildirim_izleme.py`/`haber_izleme.py` altyapısına eklenecek yeni bir kalıp - tetikleme mantığı (SPK bülten sayfası mı izlenecek, yoksa haber kaynaklarındaki "tasfiye"/"işleme kapatıldı" gibi anahtar kelimeler mi) netleşmeden koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "HEMEN YAPILMASI GEREKEN" maddesiyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN İKİ DÜZELTME" maddesiyle devam et.

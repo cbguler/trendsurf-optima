@@ -356,7 +356,22 @@ def _synthetic_price_series(
     # kontrol ediyor, ama defansif olarak burada da tekrarlandi.
     if base_price <= 0:
         return pd.DataFrame()
-    today = datetime.now().replace(day=1)
+    # v2.0.7.321 (17 Eylul 2026, Bahri'nin bulgusu - "son veri 1 eylul
+    # tarihinden, grafiklerde anormallikler var"): KOK NEDEN BULUNDU VE
+    # CANLI DOGRULANDI - burada "today" ILK KURULUMDAN BERI (ilk yukleme
+    # commit'i) YANLISLIKLA ayin 1'ine SABITLENIYORDU (.replace(day=1)).
+    # Bu, sentetik seriyi kullanan HER fon icin (ILU/BAG/CVL/HTS/HOY gibi
+    # pytefas'ta eslesmeyenler) en son noktayi HER ZAMAN ayin 1'inde
+    # bitiriyordu - bugun ayin kaci olursa olsun. CANLI TEST (fix
+    # oncesi): ILU/BAG/CVL ucu de "son tarih: 2026-09-01" ile bitti (asil
+    # bugun 17 Eylul). Bu ayrica ikinci bir gorsel bozulmaya yol aciyordu:
+    # _hist_canli_ile_tamamla() (v2.0.7.289) son tarih bugunden ONCEYSE
+    # tek bir "bugun" barı ekliyor - ayin 1'i ile bugun arasinda haftalarca
+    # bosluk oldugunda bu, grafikte "duz cizgiyle bugune sicrama" ve
+    # buna bagli olarak MA20/MA50 hareketli ortalamalarinin o bosluk
+    # boyunca gercek disi bir egim cizmesine yol aciyordu. COZUM: "today"
+    # artik GERCEK bugun - .replace(day=1) kaldirildi.
+    today = datetime.now()
     base  = base_price
     raw_points: Dict[int, float] = {0: base}
     for ret, months in [(ret1m,1),(ret3m,3),(ret6m,6),

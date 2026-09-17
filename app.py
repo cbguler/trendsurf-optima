@@ -851,6 +851,28 @@ def load_universe():
               f"{_LD_TIMINGS['load_universe_TOPLAM']:.3f}s")
     except Exception:
         pass
+
+    # v2.0.7.322 (17 Eylul 2026, Bahri'nin bulgusu/talebi - SPK'nin 17
+    # Eylul 2026 tarihli 2026/60 sayili Bulteni): Tera/Pusula/Hedef/
+    # Atlas/A1 Capital/Pardus/Bulls Portfoy'un TEFAS'ta islem goren TUM
+    # fonlari SPK karariyla alim-satima kapatildi, bir kismi da tasfiye
+    # edilecek. Bu fonlar artik YATIRIMCI TARAFINDAN ALINIP SATILAMADIGI
+    # icin Optima Skoru ANLAMSIZ (ve yaniltici - "AL" onerisi asla
+    # gerceklestirilemeyecek bir islem icin verilir) hale geldi. Skor
+    # burada SIFIRLANIYOR ki Firsat Radari/Portfoy Onerisi gibi hicbir
+    # siralama-secim mekanizmasi bu fonlari onermesin. Bu kontrol
+    # load_universe()'in EN SONUNDA yapiliyor ki yukaridaki hicbir
+    # overlay (Firsat Radari dahil) bunu ezemesin.
+    try:
+        from spk_tedbir_fonlari import tasfiye_kapsaminda_mi
+        _tasfiye_maskesi = (df["Kategori"] == "TEFAS") & df["Ad"].apply(tasfiye_kapsaminda_mi)
+        if _tasfiye_maskesi.any():
+            df.loc[_tasfiye_maskesi, "Optima_Skor"] = 0.0
+            print(f"[spk-tedbir] {_tasfiye_maskesi.sum()} fon SPK tedbiri "
+                  f"kapsaminda - Optima Skor 0'a sabitlendi.")
+    except Exception as _spk_err:
+        print(f"[spk-tedbir] atlandi: {_spk_err}")
+
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)
