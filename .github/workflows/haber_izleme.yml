@@ -49,13 +49,28 @@ concurrency:
 jobs:
   izle:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     # v2.0.7.305 (15 Eylul 2026, O&M4, Bahri'nin bulgusu - canli
     # calismalar 8-11 dakika suruyor, 10 dakikalik sinira COK yakin/
     # bazen ustunde): TCMB eklenince (v2.0.7.302) kaynak sayisi 6'dan
     # 7'ye cikti, taranan haber sayisi artti - her haber icin ayri bir
     # Supabase baglantisi acildigi (havuzlama YOK, bkz. v2.0.7.142)
     # icin toplam sure de arttı. 10 -> 20 dakika guvenlik payi.
+    #
+    # v2.0.7.327 (17 Eylul 2026, Bahri'nin bulgusu - #3553 elle
+    # tetiklenen TEK, temiz bir calisma bile "The job has exceeded
+    # the maximum execution time of 20m0s" ile iptal edildi): 20
+    # dakika artik YETERSIZ - kesin kok neden bu oturumda TEYIT
+    # EDILEMEDI (log incelenemedi) ama en olasi aciklama: Groq/Gemini
+    # gunluk AI cagri butcesi (120/gun) gune ilerledikce tukendikce,
+    # "429 alindi - 65 sn bekleyip tekrar denenecek" tarzi yeniden
+    # deneme bekemeleri bir calismada BIRKAC KEZ ust uste tetiklenip
+    # (her biri 65 sn) toplam sureyi ITIYOR - bu, v2.0.7.320-326'daki
+    # veritabani baglantisi degisikliklerinden BAGIMSIZ bir sebep
+    # olabilir (baglanti tarafi artik daha HIZLI olmali, daha YAVAS
+    # degil). 20 -> 35 dakika guvenlik payi - KESIN teshis icin
+    # gelecek bir oturumda gercek calisma logu (ZAMANLAMA ve "429
+    # alindi" satirlari) incelenmeli.
 
     steps:
       - name: Kodu indir

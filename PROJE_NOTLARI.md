@@ -7726,6 +7726,40 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **PUSH BEKLİYOR:** Sadece `db.py` değişti - bkz. aşağıdaki
     "OTURUM DEVRİ" bölümü.
 
+- **v2.0.7.327 (17 Eylül 2026, Bahri'nin bulgusu - v2.0.7.325/326
+  push'undan SONRA bile, elle tetiklenen TEK, temiz bir çalışma
+  (#3553, hiçbir kuyruk/concurrency karışıklığı yok) "The job has
+  exceeded the maximum execution time of 20m0s" ile iptal edildi):
+  v2.0.7.326'nın "sessiz TCP takılması" teorisi YANLIŞTI/YETERSİZDİ -
+  gerçek darboğaz büyük ihtimalle DEĞİL.**
+  - **Durum:** Kesin kök neden bu oturumda TEYİT EDİLEMEDİ - gerçek
+    çalışma logu (GitHub API rate limit yüzünden) incelenemedi. En
+    olası açıklama: Groq/Gemini günlük AI çağrı bütçesi (120/gün) gün
+    ilerledikçe tükendikçe, "429 alındı - 65 sn bekleyip tekrar
+    denenecek" tarzı yeniden deneme beklemeleri bir çalışmada BİRKAÇ
+    KEZ üst üste tetiklenip (her biri 65 sn) toplam süreyi yukarı
+    itiyor olabilir - Bahri'nin "bu sabah 20 dakikanın altındaydı"
+    gözlemi bununla tutarlı (AI bütçesi güne yayılıp tükeniyor). Bu,
+    v2.0.7.320-326'daki veritabanı bağlantısı değişikliklerinden
+    BAĞIMSIZ bir sebep olabilir - bağlantı tarafı artık daha HIZLI
+    olmalı, daha YAVAŞ değil.
+  - **Acil/geçici önlem:** `haber_izleme.yml`'de `timeout-minutes: 20
+    → 35` yapıldı - kesin teşhis yapılana kadar çalışmaların erken
+    kesilmesini önlemek için güvenlik payı. Bu bir ÇÖZÜM değil,
+    sadece kanıt kaybını (ve iş kaybını) durduran bir yama.
+  - **YAPILMADI (bir sonraki oturuma):** Gerçek çalışma logu (özellikle
+    "429 alindi" satırları ve ZAMANLAMA satırları arasındaki boşluklar)
+    incelenip kesin kök neden bulunmalı. Eğer teori doğruysa, olası
+    kalıcı çözüm: 65 saniyelik bekleme süresini kısaltmak, tur başına
+    toplam yeniden deneme süresine bir üst sınır koymak, ya da AI
+    doğrulamasını bütçe tükendiğinde tamamen atlamak (zaten "GUNLUK AI
+    BUTCESI DOLDU" durumunda atlanıyor gibi görünüyor - o zaman neden
+    hâlâ 429 alınıyor, bu da ayrıca araştırılmalı, belki çeviri
+    adımındaki Groq/Gemini çağrıları AI doğrulama bütçesinden AYRI bir
+    kotaya tabi).
+  - **PUSH BEKLİYOR:** Sadece `.github/workflows/haber_izleme.yml`
+    değişti - bkz. aşağıdaki "OTURUM DEVRİ" bölümü.
+
 ---
 
 ## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
@@ -7739,10 +7773,10 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### 🚨 ACİL - HEMEN YAPILMASI GEREKEN (kod dışı, elle):
-GitHub Actions'ta şu an ASKIDA kalmış "Beklenti Modu Haber Izleme" çalışması varsa (v2.0.7.325 push'undan sonra başlayıp 20+ dakikadır "In progress" görünen, bkz. v2.0.7.326), Bahri'nin GitHub Actions arayüzünden bunu ELLE İPTAL ETMESİ gerekiyor - aksi halde `concurrency: cancel-in-progress: false` yüzünden yeni tetiklemeler kuyrukta birikmeye devam eder. v2.0.7.326 push'landıktan sonra bu bir daha olmamalı ama MEVCUT askıdaki çalışma(lar) kendiliğinden bitmeyecek.
+### 🚨 ACİL - AKTİF SORUN (HENÜZ ÇÖZÜLMEDİ):
+"Beklenti Modu Haber Izleme" çalışmaları 20 dakikalık zaman aşımını aşıp iptal ediliyor. v2.0.7.325 (autocommit kök nedeni) ve v2.0.7.326 (keepalive/timeout) push edildikten SONRA bile, elle tetiklenen TEK, temiz bir çalışma (#3553, kuyruk/concurrency karışıklığı YOK) "The job has exceeded the maximum execution time of 20m0s" ile iptal edildi. **v2.0.7.326'nın "sessiz TCP takılması" teorisi YANLIŞTI/YETERSİZDİ.** Kesin kök neden HENÜZ TEYİT EDİLEMEDİ (gerçek log incelenemedi - GitHub API rate limit). En olası açıklama (bkz. v2.0.7.327): Groq/Gemini günlük AI çağrı bütçesi tükendikçe "429 alındı - 65 sn bekle" yeniden denemeleri üst üste birikip toplam süreyi 20 dakikanın üzerine itiyor - veritabanı taraflı DEĞİL. Geçici önlem olarak `timeout-minutes: 20 → 35` yapıldı ama bu ÇÖZÜM değil, sadece iş kaybını durduran bir yama.
 
-### ⚠️ PUSH BEKLEYEN ALTI DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+### ⚠️ PUSH BEKLEYEN YEDİ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
 **v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu. Düzeltme: `today = datetime.now()`.
 
 **v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py)** - SPK'nın 17 Eylül kararıyla alım-satıma kapatılan 7 portföy şirketinin 117 fonunun Optima_Skor'u 0.0'a sabitleniyor.
@@ -7751,29 +7785,32 @@ GitHub Actions'ta şu an ASKIDA kalmış "Beklenti Modu Haber Izleme" çalışma
 
 **v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha `.close()`'suz kullanıyordu. Düzeltildi. GEREKLİYDİ ama YETERSİZDİ.
 
-**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması, pre-ping'in açtığı transaction içindeyken psycopg2 tarafından YASAKLANIYORDU (`ProgrammingError`) - reconnect'lerin GERÇEK, %100 tekrarlanan kök nedeni. Satır kaldırıldı, simülasyonla doğrulandı.
+**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması, pre-ping'in açtığı transaction içindeyken psycopg2 tarafından YASAKLANIYORDU - reconnect'lerin GERÇEK, %100 tekrarlanan kök nedeni. Satır kaldırıldı, simülasyonla doğrulandı. **Bu düzeltme muhtemelen DOĞRU** (reconnect sayısını azaltmalı) ama ayrı bir zaman aşımı sorununu ORTAYA ÇIKARDI/maskesi kalktı.
 
-**v2.0.7.326 (db.py) - v2.0.7.325'in YAN ETKİSİ:** Bağlantı artık gerçekten uzun süre yeniden kullanılabildiği için, Supabase'in bağlantıyı sessizce düşürmesi durumunda sorgular artık TCP'nin varsayılan (çok uzun) zaman aşımına kadar SONSUZA KADAR ASILI KALABİLİYORDU - GitHub Actions'ta 20-31+ dakikalık "takılma" olarak gözlendi. Çözüm: TCP keepalive (~30 sn'de ölü bağlantı tespiti) + `statement_timeout=30000` eklendi.
+**v2.0.7.326 (db.py)** - TCP keepalive + `statement_timeout=30000` eklendi (olası "sessiz ölü bağlantı" senaryosuna karşı savunma). **YETERSİZ KALDI** - #3553 hâlâ 20 dk zaman aşımına takıldı, yani asıl darboğaz bu değildi (ya da tek başına yeterli değil).
+
+**v2.0.7.327 (.github/workflows/haber_izleme.yml)** - `timeout-minutes: 20 → 35`. GEÇİCİ YAMA - kesin teşhis yapılana kadar çalışmaların erken kesilmesini önlemek için.
 
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
 ```
 git add tefas_client.py spk_tedbir_fonlari.py app.py db.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
-git commit -m "v2.0.7.321-326: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + close()/autocommit kok neden duzeltmeleri + baglanti keepalive/timeout"
+git commit -m "v2.0.7.321-327: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + close()/autocommit kok neden duzeltmeleri + baglanti keepalive/timeout + timeout-minutes gevsetme"
 git pull --no-rebase --no-edit
 git push
 ```
-Push'tan ÖNCE askıdaki çalışmaları elle iptal etmeyi unutma (yukarıdaki ACİL madde).
 
-### AÇIK TAKİP (bu sohbette başlatıldı, SONUÇ ALINABİLİR ARTIK):
-Push sonrası birkaç "Haber Izleme" çalışmasının logu/süresi paylaşılırsa: (1) reconnect sayısının sıfıra yakın olması (v2.0.7.325 doğrulaması), (2) HİÇBİR çalışmanın 20 dk workflow zaman aşımına yaklaşmaması (v2.0.7.326 doğrulaması) beklenmeli. İkisi de doğrulanırsa bu saga kapanabilir.
+### AÇIK TAKİP - EN ÖNCELİKLİ (bir sonraki oturumun İLK işi):
+Push sonrası bir "Haber Izleme" çalışmasının TAM logu (özellikle "429 alindi" satırları, her birinin zaman damgası, ve ZAMANLAMA satırları arasındaki boşluklar) incelenip v2.0.7.327'nin varsayımı (AI bütçe/429 gecikmeleri) doğrulanmalı ya da çürütülmeli. Eğer doğrulanırsa kalıcı çözüm adayları: 65 sn bekleme süresini kısaltmak, tur başına toplam yeniden deneme süresine üst sınır koymak, ya da "GUNLUK AI BUTCESI DOLDU" durumunda çeviri adımındaki Groq/Gemini çağrılarının neden hâlâ 429 aldığını araştırmak (ayrı bir kota olabilir). Yanlışsa dördüncü bir teoriye ihtiyaç var.
 
-### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
-cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.325/326 doğrulandıktan sonra gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
+### GEÇİCİ, UNUTULMAMASI GEREKEN AYARLAR:
+1. cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. Kesin çözüm bulunana kadar DOKUNULMAMALI (aksi halde kuyruk/concurrency karışıklığı geri gelir).
+2. `timeout-minutes: 35` (v2.0.7.327) - kesin çözüm sonrası gerçek ölçülen süreye göre daha sıkı bir değere çekilebilir.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
 2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
-3. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - o çalışma v2.0.7.325/326'dan önceydi, muhtemelen aynı ailede bir sorun ama teyit edilmedi (GitHub API rate limit yüzünden log çekilemedi).
+3. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - o çalışma v2.0.7.325/326/327'den önceydi, muhtemelen aynı ailede bir sorun ama teyit edilmedi (GitHub API rate limit yüzünden log çekilemedi).
+4. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek - SPK'nın 17 Eylül fon tasfiye kararı hakkında bundle.app'ta ek haberler görüldü (aynı olayın farklı kaynaklardan tekrarı, yeni bilgi değil). Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "ACİL" ve "PUSH BEKLEYEN ALTI DÜZELTME" maddeleriyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "AKTİF SORUN" ve "PUSH BEKLEYEN YEDİ DÜZELTME" maddeleriyle devam et - push'tan sonra "AÇIK TAKİP" maddesindeki log incelemesi bu oturumun EN ÖNCELİKLİ işi olmalı.
