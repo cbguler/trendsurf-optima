@@ -7592,6 +7592,57 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     "OTURUM DEVRİ" bölümü (bu sefer `.github/workflows/` altındaki 2
     dosya da commit'e dahil edilmeli).
 
+- **v2.0.7.324 (17 Eylül 2026, Bahri'nin push SONRASI paylaştığı,
+  v2.0.7.323 sayesinde artık zaman damgalı/güvenilir logun ANALİZİYLE
+  bulundu) - "onbellekteki bağlantı canlı değil" hatasının GERÇEK KÖK
+  NEDENİ bulundu ve düzeltildi. v2.0.7.320 YANLIŞ TEŞHİSTİ.**
+  - **Kanıt:** Zaman damgaları, reconnect'lerin ~1,0-1,2 saniyede bir,
+    ÇALIŞMANIN TAMAMI BOYUNCA (başlangıçtan bitişe, 928 saniye boyunca,
+    RSS taraması/AI doğrulama/çeviri FARK ETMEKSİZİN) KESİNTİSİZ ve
+    HER SEFERİNDE (pre-ping'in bir kez bile başarılı olmadığı) meydana
+    geldiğini gösterdi. Bu desen "uzun süre boşta kalan transaction
+    zaman aşımına uğruyor" teorisiyle (v2.0.7.310/320) UYUŞMUYORDU -
+    o teori doğru olsaydı, sık aralıklarla başarılı pre-ping'ler
+    görülmesi gerekirdi.
+  - **KESİN KÖK NEDEN:** `db.py`'de TARANAN HER TEK HABER için çağrılan
+    `haber_islendi_mi()` fonksiyonu, aldığı bağlantıyı `get_conn().execute(...).fetchone()`
+    şeklinde ZİNCİRLEME çağırıyordu - bağlantı nesnesi HİÇBİR DEĞİŞKENE
+    ATANMIYORDU, dolayısıyla `.close()` HİÇ ÇAĞRILAMIYORDU. Toplu modda
+    `close()` çağrılmayınca v2.0.7.320'nin oraya eklediği `commit()` de
+    HİÇ ÇALIŞMIYORDU - yani v2.0.7.320'nin düzeltmesi doğruydu ama bu
+    en sık çağrılan fonksiyon için hiç devreye giremiyordu. Sonuç:
+    paylaşılan bağlantı SÜREKLİ "commit edilmemiş" durumda kalıyordu,
+    döngü adımları arasında geçen ~1 saniye Supabase'in agresif "idle
+    in transaction" zaman aşımını (görünüşe göre çok kısa, ~1 saniye
+    civarı) aşıyordu, bir sonraki çağrı HER SEFERİNDE ProgrammingError
+    alıyordu.
+  - **Kapsamlı tarama:** `db.py`'deki TÜM fonksiyonlar programatik
+    olarak tarandı - `haber_islendi_mi()` YALNIZ DEĞİLDİ. Toplam 10
+    fonksiyon aynı hatayı taşıyordu (`get_intraday_overlay`,
+    `haber_islendi_mi`, `get_cevrilmemis_haberler`, `get_haber_akisi`,
+    `get_tum_portfoy_tickerlari`, `get_yeni_kap_bildirimleri`,
+    `enag_oranlari_getir`, `ai_cagri_sayisi_bugun`,
+    `get_bekleyen_tespitler`, `get_onaylanmis_tespitler`) - hepsi
+    "SELECT sonucu tek satırda döndür" tarzında yazılmış, bağlantıyı
+    değişkene atamayan fonksiyonlardı. Yazma yapan fonksiyonların
+    (`conn = get_conn(); ...; conn.commit(); conn.close()` şeklindeki)
+    HİÇBİRİNDE bu hata YOKTU - sadece "sadece oku" tarzındaki
+    fonksiyonlarda görülen sistematik bir yazım alışkanlığı hatasıydı.
+  - **Düzeltme:** Tüm 10 fonksiyonda bağlantı artık `conn = get_conn()`
+    ile değişkene atanıp kullanımdan hemen sonra `conn.close()` ile
+    kapatılıyor (toplu modda bu artık gerçek TCP bağlantıyı KAPATMAZ,
+    sadece commit() eder - bkz. v2.0.7.320/323). `get_bekleyen_tespitler`
+    içinde ayrıca gereksiz bir İKİNCİ `get_conn()` çağrısı da aynı
+    bağlantıyı yeniden kullanacak şekilde birleştirildi.
+  - **Beklenen etki:** `haber_islendi_mi()` bir turda ~300 kez
+    çağrıldığı için ~100+ reconnect'in BÜYÜK ÇOĞUNLUĞUNUN bu tek
+    fonksiyondan kaynaklandığı düşünülüyor - ama bu KESİN OLARAK
+    sadece bir sonraki çalışmanın (artık zaman damgalı) logundan
+    doğrulanabilir. Reconnect sayısının bu sefer gerçekten 0'a
+    yakın düşmesi bekleniyor.
+  - **PUSH BEKLİYOR:** Sadece `db.py` değişti (yeni dosya yok) - bkz.
+    aşağıdaki "OTURUM DEVRİ" bölümü.
+
 ---
 
 ## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
@@ -7605,30 +7656,32 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ⚠️ PUSH BEKLEYEN ÜÇ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
-**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri (`_synthetic_price_series`), ilk yükleme commit'inden beri `today`'yi `datetime.now().replace(day=1)` ile AYIN 1'İNE sabitliyordu - ILU/BAG/CVL gibi pytefas'ta eşleşmeyen fonların grafiği bugün ayın kaçı olursa olsun hep 1'inde donmuş görünüyordu (+ `_hist_canli_ile_tamamla`'nın buna eklediği izole "bugün" noktası, MA çizgilerinde sahte bir rampa yaratıyordu). Düzeltme: `today = datetime.now()`. CANLI TEST: ILU/BAG/CVL üçü de artık gerçek bugünün (17 Eylül) tarihi ve doğru fiyatıyla bitiyor.
+### ⚠️ PUSH BEKLEYEN DÖRT DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri (`_synthetic_price_series`), ilk yükleme commit'inden beri `today`'yi `datetime.now().replace(day=1)` ile AYIN 1'İNE sabitliyordu - ILU/BAG/CVL gibi pytefas'ta eşleşmeyen fonların grafiği bugün ayın kaçı olursa olsun hep 1'inde donmuş görünüyordu. Düzeltme: `today = datetime.now()`. CANLI TEST: ILU/BAG/CVL üçü de artık gerçek bugünün tarihi ve doğru fiyatıyla bitiyor.
 
-**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py `load_universe()` sonuna 1 blok)** - SPK'nın 17 Eylül 2026 tarihli 2026/60 sayılı Bülteni'yle Tera/Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portföy'ün TEFAS'ta işlem gören TÜM fonları alım-satıma kapatıldı (130'u da tasfiye edilecek, ama karar sadece bu fonları kapsıyor - hisse senedi kapsamıyor). Evrendeki bu 7 şirkete ait 117 fonun (CVL/BAG dahil) Optima_Skor'u artık 0.0'a sabitleniyor, ticker değil şirket-adı bazında eşleştirme yapıldı (gelecekte yeni fon eklenirse de yakalanır). Bilinen sınır: "Beklenti Modu" kategori ayarlaması bu sıfıra birkaç puan ekleyebilir (kesin 0 garantisi yok, ama pratikte hep düşük kalır).
+**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py `load_universe()` sonuna 1 blok)** - SPK'nın 17 Eylül 2026 tarihli 2026/60 sayılı Bülteni'yle Tera/Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portföy'ün TEFAS'ta işlem gören TÜM fonları alım-satıma kapatıldı. Evrendeki bu 7 şirkete ait 117 fonun (CVL/BAG dahil) Optima_Skor'u artık 0.0'a sabitleniyor.
 
-**v2.0.7.323 (db.py + .github/workflows/haber_izleme.yml + kap_bildirim_izleme.yml)** - v2.0.7.320'nin işe yarayıp yaramadığını Bahri'nin paylaştığı logdan DEĞERLENDİRMEK İSTERKEN, log SIRASININ güvenilmez olduğu bulundu: stdout (haber_izleme.py'nin print'leri) TTY olmayan ortamda blok-tamponlu, stderr (db.py'nin uyarıları) değil - birleşik logda sıralama gerçek zamanla eşleşmeyebiliyor. Çözüm: her iki workflow'a `PYTHONUNBUFFERED: "1"` eklendi + db.py'nin uyarı satırına zaman damgası kondu. **Sonuç olarak v2.0.7.320'nin etkisi bu oturumda KESİN TEYİT EDİLEMEDİ** (zayıf sinyal: toplam süre 796,9→654,3 sn düştü, ama kesin kanıt değil) - bir sonraki çalışmanın logu artık güvenilir olacak.
+**v2.0.7.323 (db.py + 2 workflow yml)** - Log analizini güvenilir hale getirmek için `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi (stdout/stderr tamponlama sıralamayı bozuyordu).
+
+**v2.0.7.324 (SADECE db.py, ASIL KÖK NEDEN DÜZELTMESİ)** - v2.0.7.323 sayesinde artık güvenilir olan zaman damgalı log incelendi: reconnect'ler ÇALIŞMANIN TAMAMI BOYUNCA ~1 saniyede bir, HİÇ ARA VERMEDEN oluyordu - bu "idle transaction timeout" teorisiyle (v2.0.7.310/320) UYUŞMUYORDU. GERÇEK KÖK NEDEN: `haber_islendi_mi()` (taranan HER HABER için çağrılıyor, turda ~300 kez) bağlantıyı `get_conn().execute(...).fetchone()` şeklinde zincirleme çağırıyordu - bağlantı hiçbir değişkene atanmadığı için `.close()` HİÇ ÇAĞRILAMIYORDU, dolayısıyla v2.0.7.320'nin `close()`'a eklediği `commit()` de hiç çalışmıyordu. Programatik taramada AYNI hatayı taşıyan 9 fonksiyon DAHA bulundu (hepsi "SELECT sonucu tek satırda döndür" tarzı yazılmış, bağlantıyı değişkene atamayan fonksiyonlar: `get_intraday_overlay`, `get_cevrilmemis_haberler`, `get_haber_akisi`, `get_tum_portfoy_tickerlari`, `get_yeni_kap_bildirimleri`, `enag_oranlari_getir`, `ai_cagri_sayisi_bugun`, `get_bekleyen_tespitler`, `get_onaylanmis_tespitler`). Tümü düzeltildi (bağlantı değişkene atanıp kullanımdan hemen sonra `.close()` çağrılıyor). **v2.0.7.320 YANLIŞ TEŞHİSTİ ama YANLIŞ DEĞİLDİ** - commit() fikri doğruydu, sadece en sık çağrılan fonksiyon için hiç devreye giremiyordu.
 
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
 ```
 git add tefas_client.py spk_tedbir_fonlari.py app.py db.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
-git commit -m "v2.0.7.321/322/323: TEFAS sentetik seri ayin 1i sabiti + SPK tedbirli fonlarda Optima Skor sifirlama + log tamponlama duzeltmesi"
+git commit -m "v2.0.7.321-324: TEFAS ayin-1i sabiti + SPK tedbirli fonlarda Optima Skor sifirlama + log tamponlama + haber_islendi_mi ve 9 fonksiyonda eksik close() kok neden duzeltmesi"
 git pull --no-rebase --no-edit
 git push
 ```
 
-### AÇIK TAKİP (bu sohbette başlatıldı, sonuç henüz alınmadı):
-v2.0.7.320'nin "Beklenti Modu Haber Izleme"deki ~100 kez tekrarlanan "onbellekteki bağlantı canlı değil" hatasını çözüp çözmediği HÂLÂ KESİN TEYİT EDİLEMEDİ (bkz. yukarıdaki v2.0.7.323) - ama artık push sonrası İLK çalışmanın logu güvenilir bir cevap verecek. Yeni sohbette (ya da Bahri'nin kendisi) push'tan sonraki bir "Haber Izleme" logunu paylaşıp/inceleyip kesin sonucu değerlendirebilir: zaman damgalı "[db] ... onbellekteki baglanti canli degil" satırlarının GERÇEKTE ne zaman (başlangıçta mı, RSS taraması sırasında mı) ve kaç kez oluştuğuna bakılmalı.
+### AÇIK TAKİP (bu sohbette başlatıldı, SONUÇ ALINABİLİR ARTIK):
+Push sonrası İLK "Haber Izleme" çalışmasının (artık zaman damgalı) logu paylaşılırsa, v2.0.7.324'ün gerçekten işe yarayıp yaramadığı KESİN olarak görülebilir: "onbellekteki bağlantı canlı değil" satırlarının sayısının 0'a yakın düşmesi bekleniyor. Hâlâ yüksekse, `haber_izleme.py`'nin ANA RSS-tarama döngüsünde `get_conn()`'ü DOĞRUDAN çağıran (db.py fonksiyonlarını atlayan) başka bir yer olup olmadığına bakılmalı.
 
 ### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
-cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.320 doğrulandıktan sonra gerçek ölçülen çalışma süresine göre uygun bir sıklığa geri ayarlanmalı.
+cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.324 doğrulandıktan sonra (reconnect'ler gerçekten azaldıysa çalışma süresi de düşecektir) gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Muhtemelen `kap_bildirim_izleme.py`/`haber_izleme.py` altyapısına eklenecek yeni bir kalıp - tetikleme mantığı (SPK bülten sayfası mı izlenecek, yoksa haber kaynaklarındaki "tasfiye"/"işleme kapatıldı" gibi anahtar kelimeler mi) netleşmeden koda dökülmedi.
+2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Tetikleme mantığı netleşmeden koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN ÜÇ DÜZELTME" maddesiyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN DÖRT DÜZELTME" maddesiyle devam et.

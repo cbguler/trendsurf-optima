@@ -933,10 +933,12 @@ def get_intraday_overlay(freshness_minutes: int = 45) -> dict:
     "rsi":, "ret1m":}} doner. Tablo yoksa/baglanti sorunu varsa sessizce
     bos dict doner (cagiran taraf CSV'yle devam eder, hata firlatmaz)."""
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT ticker, kategori, skor, fiyat, rsi, ret1m FROM intraday_scores "
             f"WHERE updated_at > now() - interval '{int(freshness_minutes)} minutes'"
         ).fetchall()
+        conn.close()
     except Exception:
         return {}
     if not rows:
@@ -961,11 +963,29 @@ def get_intraday_overlay(freshness_minutes: int = 45) -> dict:
 
 def haber_islendi_mi(url: str) -> bool:
     """haber_izleme.py'nin AYNI haberi tekrar tekrar islememesi icin -
-    her calismada once bu kontrol edilir."""
+    her calismada once bu kontrol edilir.
+
+    v2.0.7.324 (17 Eylul 2026, Bahri'nin paylastigi zaman damgali logun
+    ANALIZI sirasinda bulundu - KESIN KOK NEDEN): Bu fonksiyon `get_conn()`
+    ile aldigi baglantiyi HICBIR ZAMAN `.close()` ETMIYORDU (sonucu direkt
+    zincirleme cagriyla donduruyordu, baglanti nesnesi hic degiskene
+    atanmiyordu). Toplu modda `close()` cagrilmayinca v2.0.7.320'nin
+    oraya ekledigi commit() de HIC CALISMIYORDU - yani bu fonksiyonun
+    actigi SELECT islemi PAYLASILAN baglanti uzerinde surekli ACIK/
+    COMMIT EDILMEMIS kaliyordu. Bu fonksiyon TARANAN HER TEK HABER icin
+    ayri ayri cagriliyor (bir turda ~300 kez) - dongu adimlari arasinda
+    gecen sure (~1-1,2 sn, ZAMAN DAMGALI logda dogrulandi) Supabase'in
+    "idle in transaction" zaman asimini asiyor, bir sonraki cagrida
+    ProgrammingError ile baglanti yeniden aciliyordu - PRATIKTE HER
+    CAGRIDA. Duzeltme: baglanti artik degiskene atanip acikca
+    kapatiliyor (toplu modda bu artik commit() cagirir, gercek TCP
+    baglanti KAPANMAZ - bkz. _CompatConn.close())."""
     try:
-        row = get_conn().execute(
+        conn = get_conn()
+        row = conn.execute(
             "SELECT 1 FROM haber_islenmis WHERE haber_url=?", (url,)
         ).fetchone()
+        conn.close()
         return row is not None
     except Exception:
         return False
@@ -1000,12 +1020,14 @@ def get_cevrilmemis_haberler(kaynaklar: list, limit: int = 40) -> list:
         return []
     try:
         isaretler = ",".join(["?"] * len(kaynaklar))
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT haber_url, baslik, ozet FROM haber_akisi "
             "WHERE baslik_tr IS NULL "
             f"AND kaynak IN ({isaretler}) "
             "ORDER BY eklenme_zamani DESC LIMIT ?",
             (*kaynaklar, int(limit))).fetchall()
+        conn.close()
     except Exception as e:
         print(f"[db] get_cevrilmemis_haberler hata: {e}", file=sys.stderr)
         return []
@@ -1107,13 +1129,15 @@ def get_haber_akisi(saat: int = 48, limit: int = 300) -> list:
     v2.0.7.179: ozet/ozet_tr de donuyor - Haberler sayfasi artik basligin
     altinda kisa (cevrilmis) ozeti de gosterebiliyor."""
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT haber_url, kaynak, baslik, baslik_tr, eslesen_kalip, "
             "COALESCE(yayin_zamani, eklenme_zamani) AS zaman, ozet, ozet_tr "
             "FROM haber_akisi "
             f"WHERE COALESCE(yayin_zamani, eklenme_zamani) > now() - interval '{int(saat)} hours' "
             "ORDER BY zaman DESC LIMIT ?", (int(limit),)
         ).fetchall()
+        conn.close()
     except Exception as e:
         print(f"[db] get_haber_akisi hata: {e}", file=sys.stderr)
         return []
@@ -1160,10 +1184,12 @@ def get_tum_portfoy_tickerlari() -> list:
     get_yeni_kap_bildirimleri). KAP sadece BIST/TEFAS uyeleri icin
     anlamli oldugundan asset_type bu ikisiyle sinirlandirildi."""
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT DISTINCT ticker FROM portfolio "
             "WHERE UPPER(asset_type) IN ('BIST','TEFAS')"
         ).fetchall()
+        conn.close()
     except Exception as e:
         print(f"[db] get_tum_portfoy_tickerlari hata: {e}", file=sys.stderr)
         return []
@@ -1176,7 +1202,8 @@ def get_yeni_kap_bildirimleri(kullanici_id, saat: int = 72) -> list:
     doner. Onay/red YOK (bkz. tablo yorumu) - bu salt-okunur bir
     bilgilendirme listesidir."""
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT k.ticker, k.kap_baslik, k.gonderen, k.gonderim_tarihi, "
             "k.icerik_ozet, k.onemli_mi "
             "FROM kap_bildirim_takip k "
@@ -1185,6 +1212,7 @@ def get_yeni_kap_bildirimleri(kullanici_id, saat: int = 72) -> list:
             "ORDER BY k.gonderim_tarihi DESC" % int(saat),
             (kullanici_id,)
         ).fetchall()
+        conn.close()
     except Exception as e:
         print(f"[db] get_yeni_kap_bildirimleri hata: {e}", file=sys.stderr)
         return []
@@ -1240,9 +1268,11 @@ def enag_oranlari_getir() -> dict:
     olarak doner - app.py bunu kumulatif enflasyon serisi olusturmak icin
     kullanir (bkz. _enag_kumulatif_seri)."""
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT yil_ay, aylik_oran FROM enag_aylik_enflasyon"
         ).fetchall()
+        conn.close()
     except Exception as e:
         print(f"[db] enag_oranlari_getir hata: {e}", file=sys.stderr)
         return {}
@@ -1312,9 +1342,11 @@ def ai_cagri_sayisi_bugun() -> int:
     """v2.0.7.160: Bugun kac Gemini cagrisi yapildi? Butce kontrolu icin."""
     try:
         bugun = datetime.date.today().isoformat()
-        row = get_conn().execute(
+        conn = get_conn()
+        row = conn.execute(
             "SELECT cagri_sayisi FROM ai_cagri_butcesi WHERE tarih=?",
             (bugun,)).fetchone()
+        conn.close()
         if not row:
             return 0
         return int(row["cagri_sayisi"] if isinstance(row, dict) else row[0])
@@ -1620,7 +1652,8 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         # bakiyordu (farkli id = farkli haber makalesi oldugu icin bu
         # kontrolden GECIYORDU, red kalici olmuyordu). Artik AYRICA
         # "ayni kalip_key + reddedildi + son 24 saat" de eleniyor.
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT t1.id, t1.kalip_key, t1.siddet, t1.haber_basligi, "
             "t1.haber_url, t1.haber_kaynak, t1.ai_gerekce, t1.tespit_zamani "
             "FROM beklenti_otomatik_tespit t1 "
@@ -1640,6 +1673,7 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
             (kullanici_id, kullanici_id)
         ).fetchall()
         if not rows:
+            conn.close()
             return []
 
         def _v(r, k, i):
@@ -1651,11 +1685,14 @@ def get_bekleyen_tespitler(kullanici_id) -> list:
         # v2.0.7.215 (Bahri'nin talebi - Kaynak bolumunde teyit eden
         # ikinci kaynagin da tiklanabilir bir link olmasi): haber_url
         # da sorguya eklendi.
-        tum_yakin = get_conn().execute(
+        # v2.0.7.324: ayni baglanti (conn) yeniden kullaniliyor - ikinci
+        # bir get_conn() cagirip ayri bir baglanti acmaya gerek yok.
+        tum_yakin = conn.execute(
             "SELECT id, kalip_key, haber_basligi, haber_kaynak, haber_url "
             "FROM beklenti_otomatik_tespit "
             "WHERE tespit_zamani > now() - interval '24 hours'"
         ).fetchall()
+        conn.close()
 
         onaylanan_id_listesi = []
         # v2.0.7.209/215: teyit eden kaynagin bilgisini (kaynak, baslik,
@@ -1771,7 +1808,8 @@ def get_onaylanmis_tespitler(kullanici_id) -> list:
     if not kullanici_id:
         return []
     try:
-        rows = get_conn().execute(
+        conn = get_conn()
+        rows = conn.execute(
             "SELECT t.id, t.kalip_key, t.siddet, t.haber_basligi, t.haber_url, "
             "t.haber_kaynak, t.ai_gerekce, t.tespit_zamani "
             "FROM beklenti_otomatik_tespit t "
@@ -1781,6 +1819,7 @@ def get_onaylanmis_tespitler(kullanici_id) -> list:
             "ORDER BY t.tespit_zamani DESC",
             (kullanici_id,)
         ).fetchall()
+        conn.close()
     except Exception:
         return []
     return _tespit_satirlarini_donustur(rows)
