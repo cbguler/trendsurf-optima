@@ -198,8 +198,38 @@ class _CompatConn:
     baglanti" senaryosuna karsi saglam (pre-ping / retry-on-execute)
     bir tasarimla yeniden ele alinabilir."""
     def __init__(self, pg_conn):
+        # v2.0.7.325 (17 Eylul 2026, Bahri'nin push SONRASI ikinci logunun
+        # ANALIZI sirasinda bulundu - GERCEK, KESIN, %100 TEKRARLANAN KOK
+        # NEDEN): v2.0.7.324 (haber_islendi_mi ve 9 fonksiyona eksik
+        # close() eklenmesi) DOGRU bir duzeltmeydi ama YETERSIZDI - push
+        # sonrasi ikinci logda hata AYNI SIKLIKTA (~1-1,4 saniyede bir,
+        # calismanin TAMAMI boyunca, %100 basarisizlikla) devam etti.
+        # ASIL SORUN cok daha temeldeydi ve get_conn()'un PRE-PING
+        # mantiginin KENDISINDEYDI:
+        #   1) get_conn() onbellekteki baglantinin canli olup olmadigini
+        #      kontrol etmek icin bir "SELECT 1" calistiriyordu (bkz.
+        #      asagidaki pre-ping) - psycopg2'de autocommit=False
+        #      OLDUGU icin bu SELECT, KENDISI bir transaction BASLATIYORDU.
+        #   2) Pre-ping "basarili" olur olmaz, get_conn() hemen
+        #      `_CompatConn(_toplu_baglanti_onbellek)` cagiriyordu - yani
+        #      BU __init__ calisiyordu, ve BURASI HER ZAMAN
+        #      `self._conn.autocommit = False` diye bir atama YAPIYORDU.
+        #   3) psycopg2'de, AKTIF BIR TRANSACTION VARKEN `autocommit`
+        #      OZELLIGINE DEGER ATAMAK YASAKTIR - `ProgrammingError`
+        #      FIRLATIR (tam olarak logda gorulen istisna turu!). Pre-
+        #      ping'in kendi SELECT 1'i transaction'i HENUZ AC IK
+        #      BIRAKTIGI icin, bu __init__ HER SEFERINDE bu hatayi
+        #      TETIKLIYORDU - baglanti gercekten canli/olu olmasindan
+        #      BAGIMSIZ OLARAK, %100 tekrarlanabilir sekilde. Bu, get_conn()
+        #      icindeki AYNI try/except tarafindan yakalanip yanlislikla
+        #      "onbellekteki baglanti canli degil" olarak loglaniyordu -
+        #      gercekte baglanti CANLIYDI, sadece bu satir onu KENDI
+        #      KENDINE gecersiz kiliyordu.
+        # COZUM: psycopg2 baglantilari zaten VARSAYILAN OLARAK
+        # autocommit=False geliyor - bu satir hicbir zaman gerekli
+        # DEGILDI (yeni acilan baglantilarda no-op, yeniden kullanilan
+        # baglantilarda ZARARLI). Satir tamamen KALDIRILDI.
         self._conn = pg_conn
-        self._conn.autocommit = False
 
     def execute(self, sql: str, params=None) -> _CompatCursor:
         sql_pg = _translate_sql(sql)
@@ -339,6 +369,12 @@ def get_conn() -> _CompatConn:
             _pre_ping_cur = _toplu_baglanti_onbellek.cursor()
             _pre_ping_cur.execute("SELECT 1")
             _pre_ping_cur.close()
+            # v2.0.7.325: pre-ping'in kendi actigi transaction'i (autocommit
+            # False oldugundan SELECT 1 bile bir transaction baslatir)
+            # burada kapatiyoruz - _CompatConn.__init__ artik autocommit
+            # atamasi yapmasa da, baglantiyi "temiz" (transaction'siz)
+            # teslim etmek ileride benzer bir sorunu onceden onler.
+            _toplu_baglanti_onbellek.rollback()
             return _CompatConn(_toplu_baglanti_onbellek)
         except Exception as e:
             # v2.0.7.323 (17 Eylul 2026, Bahri'nin paylastigi loglarin

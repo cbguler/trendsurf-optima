@@ -7643,6 +7643,50 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **PUSH BEKLİYOR:** Sadece `db.py` değişti (yeni dosya yok) - bkz.
     aşağıdaki "OTURUM DEVRİ" bölümü.
 
+- **v2.0.7.325 (17 Eylül 2026, Bahri'nin push SONRASI paylaştığı
+  İKİNCİ zaman damgalı logun analiziyle bulundu) - "onbellekteki
+  bağlantı canlı değil" hatasının GERÇEK, KESİN, %100 TEKRARLANAN
+  KÖK NEDENİ bulundu. v2.0.7.324 GEREKLİYDİ ama YETERSİZDİ.**
+  - **Şaşırtıcı bulgu:** Push sonrası ikinci log, v2.0.7.324'ten SONRA
+    bile hatanın AYNI SIKLIKTA (~1-1,4 saniyede bir, çalışmanın
+    TAMAMI boyunca, pre-ping'in BİR KEZ BİLE başarılı olmadan) devam
+    ettiğini gösterdi - `haber_islendi_mi()` düzeltmesi ÖLÇÜLEBİLİR
+    HİÇBİR ETKİ YARATMAMIŞTI.
+  - **KESİN KÖK NEDEN:** Sorun hiçbir zaman "bağlantının ölü olması"
+    değildi - `get_conn()`'ün PRE-PING mantığının KENDİSİNDEYDİ.
+    Adım adım: (1) Pre-ping bir `SELECT 1` çalıştırıyor - psycopg2'de
+    `autocommit=False` olduğundan bu SELECT'in KENDİSİ bir transaction
+    BAŞLATIYOR. (2) Pre-ping "başarılı" olur olmaz `_CompatConn(...)`
+    çağrılıyor, ve bu sınıfın `__init__`'i HER ZAMAN
+    `self._conn.autocommit = False` ataması YAPIYORDU. (3) psycopg2'de
+    **aktif bir transaction varken `autocommit` özelliğine değer
+    atamak YASAKTIR** - tam olarak logda görülen istisna türü olan
+    `ProgrammingError` fırlatır. Pre-ping'in kendi SELECT'i transaction'ı
+    HENÜZ AÇIK bıraktığı için, bu satır HER SEFERİNDE, bağlantının
+    gerçekten canlı/ölü olmasından TAMAMEN BAĞIMSIZ olarak, %100
+    tekrarlanabilir şekilde patlıyordu. Bu, `get_conn()`'ün AYNI
+    try/except'i tarafından yakalanıp YANLIŞLIKLA "bağlantı canlı
+    değil" olarak loglanıyordu - bağlantı aslında HER ZAMAN canlıydı.
+  - **CANLI DOĞRULAMA (gerçek Supabase olmadan, psycopg2'nin
+    belgelenmiş davranışını taklit eden bir sahte bağlantı nesnesiyle):**
+    Eski kod 5 denemede 5/5 patladı (100% reconnect); satır kaldırıldıktan
+    sonra 5 denemede 0/5 patladı (0% reconnect) - teori ve düzeltme
+    kesin olarak doğrulandı.
+  - **Çözüm:** `_CompatConn.__init__`'teki `self._conn.autocommit = False`
+    satırı TAMAMEN KALDIRILDI - psycopg2 bağlantıları zaten VARSAYILAN
+    OLARAK `autocommit=False` geliyor, bu satır yeni açılan bağlantılarda
+    zaten no-op'tu, sadece YENİDEN KULLANILAN bağlantılarda zararlıydı.
+    Ek güvenlik: `get_conn()`'deki pre-ping artık kendi açtığı
+    transaction'ı `rollback()` ile kapatıp bağlantıyı "temiz" teslim
+    ediyor.
+  - **Önceki teoriler hakkında:** v2.0.7.310/320'nin "idle in
+    transaction zaman aşımı" teorisi ve v2.0.7.324'ün "eksik close()"
+    teorisi YANLIŞ DEĞİLDİ - ikisi de gerçek, düzeltilmeye değer
+    sorunlardı (v2.0.7.324'ün 9 fonksiyon düzeltmesi hâlâ doğru ve
+    kalıcı) - ama BU hatanın asıl, baskın kaynağı hiçbiri değildi.
+  - **PUSH BEKLİYOR:** Sadece `db.py` değişti - bkz. aşağıdaki
+    "OTURUM DEVRİ" bölümü.
+
 ---
 
 ## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
@@ -7656,32 +7700,34 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ⚠️ PUSH BEKLEYEN DÖRT DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
-**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri (`_synthetic_price_series`), ilk yükleme commit'inden beri `today`'yi `datetime.now().replace(day=1)` ile AYIN 1'İNE sabitliyordu - ILU/BAG/CVL gibi pytefas'ta eşleşmeyen fonların grafiği bugün ayın kaçı olursa olsun hep 1'inde donmuş görünüyordu. Düzeltme: `today = datetime.now()`. CANLI TEST: ILU/BAG/CVL üçü de artık gerçek bugünün tarihi ve doğru fiyatıyla bitiyor.
+### ⚠️ PUSH BEKLEYEN BEŞ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu (`.replace(day=1)`). Düzeltme: `today = datetime.now()`.
 
-**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py `load_universe()` sonuna 1 blok)** - SPK'nın 17 Eylül 2026 tarihli 2026/60 sayılı Bülteni'yle Tera/Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portföy'ün TEFAS'ta işlem gören TÜM fonları alım-satıma kapatıldı. Evrendeki bu 7 şirkete ait 117 fonun (CVL/BAG dahil) Optima_Skor'u artık 0.0'a sabitleniyor.
+**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py)** - SPK'nın 17 Eylül kararıyla alım-satıma kapatılan 7 portföy şirketinin 117 fonunun Optima_Skor'u 0.0'a sabitleniyor.
 
-**v2.0.7.323 (db.py + 2 workflow yml)** - Log analizini güvenilir hale getirmek için `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi (stdout/stderr tamponlama sıralamayı bozuyordu).
+**v2.0.7.323 (db.py + 2 workflow yml)** - `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi (log sıralaması güvenilir değildi).
 
-**v2.0.7.324 (SADECE db.py, ASIL KÖK NEDEN DÜZELTMESİ)** - v2.0.7.323 sayesinde artık güvenilir olan zaman damgalı log incelendi: reconnect'ler ÇALIŞMANIN TAMAMI BOYUNCA ~1 saniyede bir, HİÇ ARA VERMEDEN oluyordu - bu "idle transaction timeout" teorisiyle (v2.0.7.310/320) UYUŞMUYORDU. GERÇEK KÖK NEDEN: `haber_islendi_mi()` (taranan HER HABER için çağrılıyor, turda ~300 kez) bağlantıyı `get_conn().execute(...).fetchone()` şeklinde zincirleme çağırıyordu - bağlantı hiçbir değişkene atanmadığı için `.close()` HİÇ ÇAĞRILAMIYORDU, dolayısıyla v2.0.7.320'nin `close()`'a eklediği `commit()` de hiç çalışmıyordu. Programatik taramada AYNI hatayı taşıyan 9 fonksiyon DAHA bulundu (hepsi "SELECT sonucu tek satırda döndür" tarzı yazılmış, bağlantıyı değişkene atamayan fonksiyonlar: `get_intraday_overlay`, `get_cevrilmemis_haberler`, `get_haber_akisi`, `get_tum_portfoy_tickerlari`, `get_yeni_kap_bildirimleri`, `enag_oranlari_getir`, `ai_cagri_sayisi_bugun`, `get_bekleyen_tespitler`, `get_onaylanmis_tespitler`). Tümü düzeltildi (bağlantı değişkene atanıp kullanımdan hemen sonra `.close()` çağrılıyor). **v2.0.7.320 YANLIŞ TEŞHİSTİ ama YANLIŞ DEĞİLDİ** - commit() fikri doğruydu, sadece en sık çağrılan fonksiyon için hiç devreye giremiyordu.
+**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha, bağlantıyı hiç değişkene atamadan `.close()`'suz kullanıyordu. Hepsi düzeltildi. **GEREKLİYDİ ama YETERSİZDİ** - push sonrası ikinci logda hata AYNI SIKLIKTA devam etti.
+
+**v2.0.7.325 (SADECE db.py, ASIL/KESİN KÖK NEDEN)** - İkinci logun analiziyle bulundu: `get_conn()`'ün pre-ping'i (`SELECT 1`) kendi transaction'ını başlatıyor, hemen ardından `_CompatConn.__init__` HER ZAMAN `self._conn.autocommit = False` ataması yapıyordu - **psycopg2'de aktif transaction varken autocommit'e değer atamak YASAK**, tam olarak logdaki `ProgrammingError`'ı fırlatıyor. Bu, bağlantı gerçekten canlı olsa bile %100 tekrarlanan bir "sahte ölüm" yaratıyordu - v2.0.7.310/320/324'ün hiçbiri bunu hedeflemiyordu. Sahte bağlantı nesnesiyle simülasyon: eski kod 5/5 patladı, yeni kod 0/5 patladı. Çözüm: o satır tamamen kaldırıldı (psycopg2 zaten varsayılan autocommit=False geliyor) + pre-ping artık kendi transaction'ını `rollback()` ile temizliyor.
 
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
 ```
 git add tefas_client.py spk_tedbir_fonlari.py app.py db.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
-git commit -m "v2.0.7.321-324: TEFAS ayin-1i sabiti + SPK tedbirli fonlarda Optima Skor sifirlama + log tamponlama + haber_islendi_mi ve 9 fonksiyonda eksik close() kok neden duzeltmesi"
+git commit -m "v2.0.7.321-325: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + close() duzeltmeleri + autocommit/transaction kok neden duzeltmesi"
 git pull --no-rebase --no-edit
 git push
 ```
 
 ### AÇIK TAKİP (bu sohbette başlatıldı, SONUÇ ALINABİLİR ARTIK):
-Push sonrası İLK "Haber Izleme" çalışmasının (artık zaman damgalı) logu paylaşılırsa, v2.0.7.324'ün gerçekten işe yarayıp yaramadığı KESİN olarak görülebilir: "onbellekteki bağlantı canlı değil" satırlarının sayısının 0'a yakın düşmesi bekleniyor. Hâlâ yüksekse, `haber_izleme.py`'nin ANA RSS-tarama döngüsünde `get_conn()`'ü DOĞRUDAN çağıran (db.py fonksiyonlarını atlayan) başka bir yer olup olmadığına bakılmalı.
+Push sonrası İLK "Haber Izleme" çalışmasının logu paylaşılırsa, v2.0.7.325'in gerçekten işe yarayıp yaramadığı KESİN olarak görülebilir: "onbellekteki bağlantı canlı değil" satırlarının bu sefer GERÇEKTEN sıfıra (ya da neredeyse sıfıra) düşmesi bekleniyor - simülasyon bunu net gösterdi. Hâlâ yüksekse, teori tekrar gözden geçirilmeli (ör. `_CompatConn.execute()`'daki `rollback()` çağrısının kendisi de aynı sorunu farklı bir yerde yaratıyor olabilir mi diye bakılmalı).
 
 ### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
-cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.324 doğrulandıktan sonra (reconnect'ler gerçekten azaldıysa çalışma süresi de düşecektir) gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
+cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.325 doğrulandıktan sonra (reconnect'ler gerçekten kalktıysa çalışma süresi de belirgin şekilde düşecektir - şu ana kadarki 3 çalışma 928/1017/... saniye sürdü, reconnect'ler her biri ~150-300ms ekliyordu) gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
 2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Tetikleme mantığı netleşmeden koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN DÖRT DÜZELTME" maddesiyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN BEŞ DÜZELTME" maddesiyle devam et.
