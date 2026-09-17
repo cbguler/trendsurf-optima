@@ -906,7 +906,29 @@ def _calistir_asil():
     for kaynak_adi, rss_url in _RSS_KAYNAKLARI:
         _kaynak_baslangic = _time_mod.time()
         try:
-            feed = feedparser.parse(rss_url)
+            # v2.0.7.328 (17 Eylul 2026, Bahri'nin paylastigi #3557
+            # GERCEK GitHub Actions logunun ANALIZIYLE bulundu - ASIL
+            # KOK NEDEN, veritabani DEGIL): `feedparser.parse(rss_url)`
+            # bir URL verildiginde KENDI ICINDEKI urllib tabanli agdan
+            # okuma katmanini kullanir - bu katmanda HICBIR ZAMAN AŞIMI
+            # (timeout) TANIMLI DEGILDI. CBC Business kaynagi bazen
+            # yavas/yanitsiz kaldiginda, bu satir dakikalarca (bu logda
+            # TAM 262 SANIYE, calismanin %43'u) SESSIZCE ASILI KALIYOR,
+            # sonunda "Remote end closed connection without response"
+            # ile basarisiz oluyordu - bu satirdaki try/except bu hatayi
+            # YAKALIYORDU ama HANGI SIRADA/NE KADAR SUREDE olustugunu
+            # ENGELLEYEMIYORDU. v2.0.7.310-327'de arastirilan veritabani
+            # baglantisi sorunlarinin HICBIRI bu asil darbogazi
+            # ACIKLAMIYORDU - kaynak tamamen AG/HTTP katmanindaydi.
+            # COZUM: besleme once `requests.get(..., timeout=15)` ile
+            # (acik, uygulanan bir zaman asimiyla) cekiliyor, sonra ham
+            # icerik feedparser'a veriliyor - feedparser'in KENDI agdan
+            # okuma katmani hic devreye girmiyor.
+            import requests
+            _resp = requests.get(
+                rss_url, timeout=15,
+                headers={"User-Agent": "Mozilla/5.0 (TrendSurf-Optima haber izleme)"})
+            feed = feedparser.parse(_resp.content)
         except Exception as e:
             print(f"[haber_izleme] {kaynak_adi} RSS okunamadi: {e}")
             continue
