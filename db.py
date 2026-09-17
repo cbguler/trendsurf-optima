@@ -341,8 +341,26 @@ def get_conn() -> _CompatConn:
             _pre_ping_cur.close()
             return _CompatConn(_toplu_baglanti_onbellek)
         except Exception as e:
-            print(f"[db] Toplu mod: onbellekteki baglanti canli degil ({type(e).__name__}), "
-                  f"yenisi aciliyor.", file=sys.stderr)
+            # v2.0.7.323 (17 Eylul 2026, Bahri'nin paylastigi loglarin
+            # ANALIZI sirasinda bulundu): Bu satir zaman damgasi
+            # ICERMIYORDU ve sys.stderr'e yaziyordu, oysa
+            # haber_izleme.py'deki "Baslangic"/"ZAMANLAMA" satirlari
+            # duz print() ile stdout'a yaziyor - GitHub Actions gibi bir
+            # TTY olmayan ortamda Python stdout'u VARSAYILAN OLARAK
+            # BLOK-TAMPONLU (stderr ise tamponsuz/satir-tamponlu), yani
+            # bu iki akis BIRLESTIRILMIS logda GERCEK KRONOLOJIK sirayla
+            # GORUNMEYEBILIR - stderr mesajlari erken "gorunse" bile
+            # ASLINDA cok daha SONRA (orn. 295 haberin taranmasi sirasinda)
+            # olusmus olabilirler. Bu, v2.0.7.320'nin (toplu mod
+            # close()/commit() duzeltmesi) gercekten ise yarayip
+            # yaramadigini SADECE log SIRASINA bakarak guvenilir bicimde
+            # degerlendirmeyi IMKANSIZ kiliyordu. Zaman damgasi + flush=True
+            # eklenerek bir sonraki calismada KESIN, guvenilir bir zaman
+            # cizelgesi elde edilecek.
+            import datetime as _dt_reconnect
+            print(f"[db] {_dt_reconnect.datetime.now().isoformat()} Toplu mod: "
+                  f"onbellekteki baglanti canli degil ({type(e).__name__}), "
+                  f"yenisi aciliyor.", file=sys.stderr, flush=True)
             try:
                 _toplu_baglanti_onbellek.close()
             except Exception:

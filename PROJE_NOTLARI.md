@@ -7555,6 +7555,43 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **PUSH BEKLİYOR:** Bu iki düzeltme (v2.0.7.321 + v2.0.7.322) henüz
     push edilmedi - bkz. aşağıdaki "OTURUM DEVRİ" bölümü.
 
+- **v2.0.7.323 (17 Eylül 2026, Bahri'nin paylaştığı 16 Eylül 20:30 TRT
+  logunun ANALİZİ sırasında bulundu): v2.0.7.320'nin işe yarayıp
+  yaramadığını log SIRASINA bakarak değerlendirmenin GÜVENİLMEZ
+  olduğu tespit edildi - metodolojik bir sorun, davranış düzeltmesi
+  DEĞİL.**
+  - **Bulgu:** `haber_izleme.py`'nin "Baslangic"/"ZAMANLAMA" satırları
+    düz `print()` ile **stdout**'a, `db.py`'nin bağlantı-yeniden-kurma
+    uyarıları ise `file=sys.stderr` ile **stderr**'e yazılıyor. TTY
+    olmayan bir ortamda (GitHub Actions dahil) Python stdout'u
+    VARSAYILAN OLARAK blok-tamponludur, stderr ise değildir - bu
+    yüzden birleştirilmiş iş akışı logunda satırların GÖRÜNME SIRASI
+    GERÇEK OLUŞ SIRASIYLA eşleşmeyebilir. Somut sonuç: Bahri'nin
+    paylaştığı logdaki dev "onbellekteki bağlantı canlı değil" bloğu
+    "Baslangic" satırından ÖNCE görünüyordu, ama bu GERÇEKTE script
+    başlangıcında mı oluştu yoksa çok daha sonra (örn. 295 haberin
+    taranması sırasında, `haber_islendi_mi()` her haber için ayrı bir
+    `get_conn()` çağırırken) mi oluştu - stdout tamponlanması yüzünden
+    KESİN OLARAK BİLİNEMİYOR. Bu belirsizlik yüzünden v2.0.7.320'nin
+    (toplu mod close()/commit() düzeltmesi) gerçekten işe yarayıp
+    yaramadığı bu logdan GÜVENİLİR ŞEKİLDE ÇIKARILAMADI - sadece
+    "toplam süre 796,9 sn'den 654,3 sn'ye düştü" gibi zayıf, dolaylı
+    bir sinyal var, kesin kanıt yok.
+  - **Çözüm:** `db.py`'deki bağlantı-yeniden-kurma uyarısına zaman
+    damgası + `flush=True` eklendi (savunma amaçlı). Asıl kalıcı çözüm:
+    `haber_izleme.yml` ve `kap_bildirim_izleme.yml` workflow
+    dosyalarına `PYTHONUNBUFFERED: "1"` env değişkeni eklendi - bu,
+    TÜM stdout/stderr akışını tamponsuz hale getirir, kod içindeki
+    onlarca `print()` çağrısının her birine tek tek `flush=True`
+    eklemek yerine tek bir merkezi düzeltme. **Bir sonraki
+    "Beklenti Modu Haber Izleme" çalışmasının logu artık gerçek
+    kronolojik sırayla okunabilir olacak** - bu, hem v2.0.7.320'nin
+    etkisini KESİN olarak değerlendirmeyi hem de gelecekteki benzer
+    zamanlama sorunlarını teşhis etmeyi güvenilir hale getirecek.
+  - **PUSH BEKLİYOR:** v2.0.7.321/322 ile birlikte, bkz. aşağıdaki
+    "OTURUM DEVRİ" bölümü (bu sefer `.github/workflows/` altındaki 2
+    dosya da commit'e dahil edilmeli).
+
 ---
 
 ## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
@@ -7568,21 +7605,23 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ⚠️ PUSH BEKLEYEN İKİ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+### ⚠️ PUSH BEKLEYEN ÜÇ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
 **v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri (`_synthetic_price_series`), ilk yükleme commit'inden beri `today`'yi `datetime.now().replace(day=1)` ile AYIN 1'İNE sabitliyordu - ILU/BAG/CVL gibi pytefas'ta eşleşmeyen fonların grafiği bugün ayın kaçı olursa olsun hep 1'inde donmuş görünüyordu (+ `_hist_canli_ile_tamamla`'nın buna eklediği izole "bugün" noktası, MA çizgilerinde sahte bir rampa yaratıyordu). Düzeltme: `today = datetime.now()`. CANLI TEST: ILU/BAG/CVL üçü de artık gerçek bugünün (17 Eylül) tarihi ve doğru fiyatıyla bitiyor.
 
 **v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py `load_universe()` sonuna 1 blok)** - SPK'nın 17 Eylül 2026 tarihli 2026/60 sayılı Bülteni'yle Tera/Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portföy'ün TEFAS'ta işlem gören TÜM fonları alım-satıma kapatıldı (130'u da tasfiye edilecek, ama karar sadece bu fonları kapsıyor - hisse senedi kapsamıyor). Evrendeki bu 7 şirkete ait 117 fonun (CVL/BAG dahil) Optima_Skor'u artık 0.0'a sabitleniyor, ticker değil şirket-adı bazında eşleştirme yapıldı (gelecekte yeni fon eklenirse de yakalanır). Bilinen sınır: "Beklenti Modu" kategori ayarlaması bu sıfıra birkaç puan ekleyebilir (kesin 0 garantisi yok, ama pratikte hep düşük kalır).
 
+**v2.0.7.323 (db.py + .github/workflows/haber_izleme.yml + kap_bildirim_izleme.yml)** - v2.0.7.320'nin işe yarayıp yaramadığını Bahri'nin paylaştığı logdan DEĞERLENDİRMEK İSTERKEN, log SIRASININ güvenilmez olduğu bulundu: stdout (haber_izleme.py'nin print'leri) TTY olmayan ortamda blok-tamponlu, stderr (db.py'nin uyarıları) değil - birleşik logda sıralama gerçek zamanla eşleşmeyebiliyor. Çözüm: her iki workflow'a `PYTHONUNBUFFERED: "1"` eklendi + db.py'nin uyarı satırına zaman damgası kondu. **Sonuç olarak v2.0.7.320'nin etkisi bu oturumda KESİN TEYİT EDİLEMEDİ** (zayıf sinyal: toplam süre 796,9→654,3 sn düştü, ama kesin kanıt değil) - bir sonraki çalışmanın logu artık güvenilir olacak.
+
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
 ```
-git add tefas_client.py spk_tedbir_fonlari.py app.py PROJE_NOTLARI.md
-git commit -m "v2.0.7.321/322: TEFAS sentetik seri ayin 1i sabiti duzeltildi + SPK tedbirli 7 sirketin fonlari icin Optima Skor sifirlandi"
+git add tefas_client.py spk_tedbir_fonlari.py app.py db.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
+git commit -m "v2.0.7.321/322/323: TEFAS sentetik seri ayin 1i sabiti + SPK tedbirli fonlarda Optima Skor sifirlama + log tamponlama duzeltmesi"
 git pull --no-rebase --no-edit
 git push
 ```
 
 ### AÇIK TAKİP (bu sohbette başlatıldı, sonuç henüz alınmadı):
-v2.0.7.320'nin (db.py, önceki oturumdan) "Beklenti Modu Haber Izleme"deki ~100 kez tekrarlanan "onbellekteki bağlantı canlı değil" hatasını çözüp çözmediği HENÜZ TEYİT EDİLEMEDİ - commit 16 Eylül 20:23 TRT'de push edildi ama GitHub Actions API'sine IP rate limit yüzünden (60/saat, paylaşımlı sandbox IP'si) o tarihten sonraki bir çalışmanın logu çekilemedi. Bahri kendi GitHub Actions/cron-job.org panelinden 16 Eylül 20:23 TRT'den SONRA başlayan bir "Haber Izleme" çalışmasının logunu paylaşırsa (ya da yeni sohbette API rate limiti temizlenmiş olabilir, tekrar denenebilir) teyit tamamlanabilir.
+v2.0.7.320'nin "Beklenti Modu Haber Izleme"deki ~100 kez tekrarlanan "onbellekteki bağlantı canlı değil" hatasını çözüp çözmediği HÂLÂ KESİN TEYİT EDİLEMEDİ (bkz. yukarıdaki v2.0.7.323) - ama artık push sonrası İLK çalışmanın logu güvenilir bir cevap verecek. Yeni sohbette (ya da Bahri'nin kendisi) push'tan sonraki bir "Haber Izleme" logunu paylaşıp/inceleyip kesin sonucu değerlendirebilir: zaman damgalı "[db] ... onbellekteki baglanti canli degil" satırlarının GERÇEKTE ne zaman (başlangıçta mı, RSS taraması sırasında mı) ve kaç kez oluştuğuna bakılmalı.
 
 ### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
 cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.320 doğrulandıktan sonra gerçek ölçülen çalışma süresine göre uygun bir sıklığa geri ayarlanmalı.
@@ -7592,4 +7631,4 @@ cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığ�
 2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Muhtemelen `kap_bildirim_izleme.py`/`haber_izleme.py` altyapısına eklenecek yeni bir kalıp - tetikleme mantığı (SPK bülten sayfası mı izlenecek, yoksa haber kaynaklarındaki "tasfiye"/"işleme kapatıldı" gibi anahtar kelimeler mi) netleşmeden koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN İKİ DÜZELTME" maddesiyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN ÜÇ DÜZELTME" maddesiyle devam et.

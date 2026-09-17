@@ -63,3 +63,6 @@ jobs:
         env:
           # v2.0.7.312: haber_izleme.yml ile ayni sebep - Session pooler.
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          # v2.0.7.323: haber_izleme.yml ile ayni sebep - stdout/stderr
+          # tamponlanmasi yuzunden log sirasi guvenilir degildi.
+          PYTHONUNBUFFERED: "1"

@@ -89,6 +89,20 @@ jobs:
           # SUPABASE_DB_URL'i (Transaction pooler) DEGISMEDI, ona hic
           # dokunulmadi.
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          # v2.0.7.323 (17 Eylul 2026, Bahri'nin paylastigi loglarin
+          # analiziyle bulundu): Python, TTY olmayan bir ortamda (GitHub
+          # Actions dahil) stdout'u VARSAYILAN OLARAK blok-tamponlu acar,
+          # stderr'i ise tamponsuz - haber_izleme.py'nin "Baslangic"/
+          # "ZAMANLAMA" satirlari stdout'a, db.py'nin baglanti-yeniden-
+          # kurma uyarilari ise stderr'e yaziliyor. Sonuc: birlestirilmis
+          # is akisi logunda satirlarin GORUNME SIRASI GERCEK OLUS
+          # SIRASIYLA EŞLEŞMEYEBILIYORDU - bu da v2.0.7.320'nin gercekten
+          # ise yarayip yaramadigini log SIRASINA bakarak guvenilir
+          # sekilde degerlendirmeyi IMKANSIZ kiliyordu. PYTHONUNBUFFERED=1
+          # ile TUM stdout/stderr akisi tamponsuz hale geliyor - bir
+          # sonraki calismanin logu artik gercek kronolojik sirayla
+          # okunabilir.
+          PYTHONUNBUFFERED: "1"
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # v2.0.7.183 (25 Agustos 2026): Groq ucretsiz yedek AI dogrulama
           # icin - Bahri console.groq.com'da hesap acip bu secret'i
