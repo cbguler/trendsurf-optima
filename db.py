@@ -412,7 +412,36 @@ def get_conn() -> _CompatConn:
             "Veya GitHub Actions icin env: SUPABASE_DB_URL"
         )
     try:
-        pg_conn = psycopg2.connect(url, connect_timeout=10)
+        # v2.0.7.326 (17 Eylul 2026, Bahri'nin bulgusu - v2.0.7.325
+        # push'undan HEMEN SONRA GitHub Actions'ta "Beklenti Modu Haber
+        # Izleme" calismalari normalin (~12-20 dk) cok uzerine cikti -
+        # biri 20 dk'lik workflow zaman asimina tam denk gelip kesildi,
+        # digeri 31+ dk'dir "In progress" (asili) durumda): v2.0.7.325
+        # onbellekteki baglantinin YANLIŞLIKLA HER SEFERINDE yeniden
+        # acilmasina yol acan hatayi duzeltti - ama bu, ISTENMEYEN bir
+        # yan etkiyi de ORTAYA CIKARDI: baglanti artik GERCEKTEN uzun
+        # sure (dakikalarca) tek parca halinde yeniden kullanilabiliyor.
+        # Bu baglantida ne connect_timeout (sadece ILK baglanti kurma
+        # asamasini kapsar) ne de bir statement/soket zaman asimi
+        # TANIMLIYDI - Supabase'in pooler'i (ya da araya giren herhangi
+        # bir ag bileseni) bu uzun-omurlu baglantiyi SESSIZCE (TCP
+        # FIN/RST gondermeden) dusurursen, sonraki sorgu (pre-ping'in
+        # kendi SELECT 1'i dahil) TCP'nin isletim sistemi seviyesindeki
+        # varsayilan (COK UZUN, onlarca dakikaya varabilen) yeniden-
+        # deneme suresi dolana kadar SONSUZA KADAR ASILI KALIR - tam
+        # olarak gozlemlenen 20-31+ dakikalik "takilma" ile ortusuyor.
+        # COZUM: TCP keepalive (olu baglantiyi ~30 saniye icinde tespit
+        # eder) + PostgreSQL statement_timeout (herhangi bir sorgu 30
+        # saniyeden uzun surerse ACIK bir hata firlatir, sessizce asili
+        # KALMAZ) eklendi. Boylece "olu ama henuz fark edilmemis"
+        # baglantilar ARTIK saniyeler icinde (dakikalar/onlarca dakika
+        # yerine) tespit edilip mevcut reconnect mantigina duser.
+        pg_conn = psycopg2.connect(
+            url, connect_timeout=10,
+            keepalives=1, keepalives_idle=15,
+            keepalives_interval=5, keepalives_count=3,
+            options="-c statement_timeout=30000",
+        )
     except psycopg2.OperationalError as e:
         err_msg = str(e)[:300] if e else "bilinmeyen hata"
         print(f"[db] psycopg2 OperationalError: {err_msg}", file=sys.stderr)

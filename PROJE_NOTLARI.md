@@ -7687,6 +7687,45 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **PUSH BEKLİYOR:** Sadece `db.py` değişti - bkz. aşağıdaki
     "OTURUM DEVRİ" bölümü.
 
+- **v2.0.7.326 (17 Eylül 2026, Bahri'nin ekran görüntüsüyle bulundu -
+  v2.0.7.325 push'undan HEMEN SONRA yeni bir sorun): "Beklenti Modu
+  Haber Izleme" çalışmaları normalin (~12-20 dk) çok üzerine çıktı -
+  biri tam 20 dk'lık workflow zaman aşımına denk gelip kesildi,
+  diğeri 31+ dk'dir "In progress" (askıda) kaldı.**
+  - **Analiz:** v2.0.7.325, onbellekteki bağlantının YANLIŞLIKLA HER
+    SEFERİNDE yeniden açılmasına yol açan hatayı düzeltti - ama bu
+    istenmeyen bir yan etkiyi ORTAYA ÇIKARDI: bağlantı artık
+    GERÇEKTEN uzun süre (dakikalarca) tek parça halinde yeniden
+    kullanılabiliyor. Bu bağlantıda ne `connect_timeout` (sadece İLK
+    bağlantı kurma aşamasını kapsar) ne de bir statement/soket zaman
+    aşımı TANIMLIYDI. Eğer Supabase'in pooler'ı (ya da araya giren
+    herhangi bir ağ bileşeni) bu uzun ömürlü bağlantıyı SESSİZCE (TCP
+    FIN/RST göndermeden) düşürürse, sonraki sorgu (pre-ping'in kendi
+    `SELECT 1`'i dahil) TCP'nin işletim sistemi seviyesindeki
+    varsayılan (ÇOK UZUN, onlarca dakikaya varabilen) yeniden deneme
+    süresi dolana kadar SONSUZA KADAR ASILI KALIR - gözlemlenen 20-31+
+    dakikalık "takılma" ile birebir örtüşüyor. Önemli not: bu risk
+    aslında HER ZAMAN vardı, ama v2.0.7.325 öncesi hatası (her
+    çağrıda zorla yeniden bağlanma) bunu FARKINDA OLMADAN
+    MASKELİYORDU - bağlantı hiçbir zaman "eskimeye" fırsat bulamadan
+    zaten yeniden açılıyordu.
+  - **Çözüm:** `psycopg2.connect()`'e TCP keepalive (ölü bağlantıyı
+    ~30 saniye içinde tespit eder: `keepalives_idle=15,
+    keepalives_interval=5, keepalives_count=3`) + PostgreSQL
+    `statement_timeout=30000` (herhangi bir sorgu 30 saniyeden uzun
+    sürerse sessizce asılı kalmak yerine açık bir hata fırlatır)
+    eklendi. Bu, hem toplu mod hem de app.py'nin normal (havuzsuz,
+    her çağrıda taze) bağlantıları için geçerli - genel bir
+    dayanıklılık iyileştirmesi.
+  - **ACİL/HENÜZ YAPILMADI:** Şu an GitHub Actions'ta askıda kalmış
+    çalışma(lar) varsa (ör. ekran görüntüsündeki #3549), bunlar bu
+    düzeltme push'lanmadan kendiliğinden bitmeyecek - Bahri'nin
+    GitHub Actions arayüzünden bu çalışmaları ELLE İPTAL ETMESİ
+    gerekiyor (aksi halde `concurrency: cancel-in-progress: false`
+    ayarı yüzünden yeni tetiklemeler kuyrukta birikmeye devam eder).
+  - **PUSH BEKLİYOR:** Sadece `db.py` değişti - bkz. aşağıdaki
+    "OTURUM DEVRİ" bölümü.
+
 ---
 
 ## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
@@ -7700,34 +7739,41 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ⚠️ PUSH BEKLEYEN BEŞ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
-**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu (`.replace(day=1)`). Düzeltme: `today = datetime.now()`.
+### 🚨 ACİL - HEMEN YAPILMASI GEREKEN (kod dışı, elle):
+GitHub Actions'ta şu an ASKIDA kalmış "Beklenti Modu Haber Izleme" çalışması varsa (v2.0.7.325 push'undan sonra başlayıp 20+ dakikadır "In progress" görünen, bkz. v2.0.7.326), Bahri'nin GitHub Actions arayüzünden bunu ELLE İPTAL ETMESİ gerekiyor - aksi halde `concurrency: cancel-in-progress: false` yüzünden yeni tetiklemeler kuyrukta birikmeye devam eder. v2.0.7.326 push'landıktan sonra bu bir daha olmamalı ama MEVCUT askıdaki çalışma(lar) kendiliğinden bitmeyecek.
+
+### ⚠️ PUSH BEKLEYEN ALTI DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu. Düzeltme: `today = datetime.now()`.
 
 **v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py)** - SPK'nın 17 Eylül kararıyla alım-satıma kapatılan 7 portföy şirketinin 117 fonunun Optima_Skor'u 0.0'a sabitleniyor.
 
-**v2.0.7.323 (db.py + 2 workflow yml)** - `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi (log sıralaması güvenilir değildi).
+**v2.0.7.323 (db.py + 2 workflow yml)** - `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi.
 
-**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha, bağlantıyı hiç değişkene atamadan `.close()`'suz kullanıyordu. Hepsi düzeltildi. **GEREKLİYDİ ama YETERSİZDİ** - push sonrası ikinci logda hata AYNI SIKLIKTA devam etti.
+**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha `.close()`'suz kullanıyordu. Düzeltildi. GEREKLİYDİ ama YETERSİZDİ.
 
-**v2.0.7.325 (SADECE db.py, ASIL/KESİN KÖK NEDEN)** - İkinci logun analiziyle bulundu: `get_conn()`'ün pre-ping'i (`SELECT 1`) kendi transaction'ını başlatıyor, hemen ardından `_CompatConn.__init__` HER ZAMAN `self._conn.autocommit = False` ataması yapıyordu - **psycopg2'de aktif transaction varken autocommit'e değer atamak YASAK**, tam olarak logdaki `ProgrammingError`'ı fırlatıyor. Bu, bağlantı gerçekten canlı olsa bile %100 tekrarlanan bir "sahte ölüm" yaratıyordu - v2.0.7.310/320/324'ün hiçbiri bunu hedeflemiyordu. Sahte bağlantı nesnesiyle simülasyon: eski kod 5/5 patladı, yeni kod 0/5 patladı. Çözüm: o satır tamamen kaldırıldı (psycopg2 zaten varsayılan autocommit=False geliyor) + pre-ping artık kendi transaction'ını `rollback()` ile temizliyor.
+**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması, pre-ping'in açtığı transaction içindeyken psycopg2 tarafından YASAKLANIYORDU (`ProgrammingError`) - reconnect'lerin GERÇEK, %100 tekrarlanan kök nedeni. Satır kaldırıldı, simülasyonla doğrulandı.
+
+**v2.0.7.326 (db.py) - v2.0.7.325'in YAN ETKİSİ:** Bağlantı artık gerçekten uzun süre yeniden kullanılabildiği için, Supabase'in bağlantıyı sessizce düşürmesi durumunda sorgular artık TCP'nin varsayılan (çok uzun) zaman aşımına kadar SONSUZA KADAR ASILI KALABİLİYORDU - GitHub Actions'ta 20-31+ dakikalık "takılma" olarak gözlendi. Çözüm: TCP keepalive (~30 sn'de ölü bağlantı tespiti) + `statement_timeout=30000` eklendi.
 
 **Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
 ```
 git add tefas_client.py spk_tedbir_fonlari.py app.py db.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
-git commit -m "v2.0.7.321-325: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + close() duzeltmeleri + autocommit/transaction kok neden duzeltmesi"
+git commit -m "v2.0.7.321-326: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + close()/autocommit kok neden duzeltmeleri + baglanti keepalive/timeout"
 git pull --no-rebase --no-edit
 git push
 ```
+Push'tan ÖNCE askıdaki çalışmaları elle iptal etmeyi unutma (yukarıdaki ACİL madde).
 
 ### AÇIK TAKİP (bu sohbette başlatıldı, SONUÇ ALINABİLİR ARTIK):
-Push sonrası İLK "Haber Izleme" çalışmasının logu paylaşılırsa, v2.0.7.325'in gerçekten işe yarayıp yaramadığı KESİN olarak görülebilir: "onbellekteki bağlantı canlı değil" satırlarının bu sefer GERÇEKTEN sıfıra (ya da neredeyse sıfıra) düşmesi bekleniyor - simülasyon bunu net gösterdi. Hâlâ yüksekse, teori tekrar gözden geçirilmeli (ör. `_CompatConn.execute()`'daki `rollback()` çağrısının kendisi de aynı sorunu farklı bir yerde yaratıyor olabilir mi diye bakılmalı).
+Push sonrası birkaç "Haber Izleme" çalışmasının logu/süresi paylaşılırsa: (1) reconnect sayısının sıfıra yakın olması (v2.0.7.325 doğrulaması), (2) HİÇBİR çalışmanın 20 dk workflow zaman aşımına yaklaşmaması (v2.0.7.326 doğrulaması) beklenmeli. İkisi de doğrulanırsa bu saga kapanabilir.
 
 ### GEÇİCİ, UNUTULMAMASI GEREKEN AYAR:
-cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.325 doğrulandıktan sonra (reconnect'ler gerçekten kalktıysa çalışma süresi de belirgin şekilde düşecektir - şu ana kadarki 3 çalışma 928/1017/... saniye sürdü, reconnect'ler her biri ~150-300ms ekliyordu) gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
+cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı, kuyruk yığılmasını durdurmak için **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.325/326 doğrulandıktan sonra gerçek ölçülen süreye göre uygun bir sıklığa geri ayarlanmalı.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi ("bu haberleri alır almaz otomatik hale getirebilirsek çok daha iyi olur"). Tetikleme mantığı netleşmeden koda dökülmedi.
+2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
+3. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - o çalışma v2.0.7.325/326'dan önceydi, muhtemelen aynı ailede bir sorun ama teyit edilmedi (GitHub API rate limit yüzünden log çekilemedi).
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "PUSH BEKLEYEN BEŞ DÜZELTME" maddesiyle devam et.
+Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra yukarıdaki "ACİL" ve "PUSH BEKLEYEN ALTI DÜZELTME" maddeleriyle devam et.
