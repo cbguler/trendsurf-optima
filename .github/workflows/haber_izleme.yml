@@ -49,7 +49,7 @@ concurrency:
 jobs:
   izle:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 15
     # v2.0.7.305 (15 Eylul 2026, O&M4, Bahri'nin bulgusu - canli
     # calismalar 8-11 dakika suruyor, 10 dakikalik sinira COK yakin/
     # bazen ustunde): TCMB eklenince (v2.0.7.302) kaynak sayisi 6'dan
@@ -57,20 +57,21 @@ jobs:
     # Supabase baglantisi acildigi (havuzlama YOK, bkz. v2.0.7.142)
     # icin toplam sure de arttı. 10 -> 20 dakika guvenlik payi.
     #
-    # v2.0.7.327 (17 Eylul 2026, Bahri'nin bulgusu - #3553 elle
-    # tetiklenen TEK, temiz bir calisma bile "The job has exceeded
-    # the maximum execution time of 20m0s" ile iptal edildi): 20
-    # dakika artik YETERSIZ - kesin kok neden bu oturumda TEYIT
-    # EDILEMEDI (log incelenemedi) ama en olasi aciklama: Groq/Gemini
-    # gunluk AI cagri butcesi (120/gun) gune ilerledikce tukendikce,
-    # "429 alindi - 65 sn bekleyip tekrar denenecek" tarzi yeniden
-    # deneme bekemeleri bir calismada BIRKAC KEZ ust uste tetiklenip
-    # (her biri 65 sn) toplam sureyi ITIYOR - bu, v2.0.7.320-326'daki
-    # veritabani baglantisi degisikliklerinden BAGIMSIZ bir sebep
-    # olabilir (baglanti tarafi artik daha HIZLI olmali, daha YAVAS
-    # degil). 20 -> 35 dakika guvenlik payi - KESIN teshis icin
-    # gelecek bir oturumda gercek calisma logu (ZAMANLAMA ve "429
-    # alindi" satirlari) incelenmeli.
+    # v2.0.7.327 (17 Eylul 2026): #3553 elle tetiklenen TEK, temiz bir
+    # calisma bile 20 dk zaman asimina takildi - 20 -> 35 dakika GECICI
+    # guvenlik payi (kesin kok neden henuz bilinmiyordu).
+    #
+    # v2.0.7.328 (17 Eylul 2026, KESIN KOK NEDEN BULUNDU VE COZULDU):
+    # `feedparser.parse(rss_url)`'un kendi agdan-okuma katmaninda hic
+    # zaman asimi yoktu - CBC Business gibi bir kaynak yavas kaldiginda
+    # DAKIKALARCA (canli olcum: 262 sn, bir calismanin %43'u) sessizce
+    # asili kaliyordu. Besleme artik `requests.get(timeout=15)` ile
+    # cekiliyor. CANLI DOGRULAMA (push sonrasi ilk calisma, GERCEK
+    # GitHub Actions logu): 0 reconnect, 0 RSS hatasi/takilmasi,
+    # TOPLAM SURE sadece 324,3 sn (~5,4 dk). 35 dakikalik pay artik
+    # ASIRI cömert - 15 dakikaya cekildi (324 sn'nin ~2,8 kati,
+    # rahat pay birakiyor ama gercek bir sorun olursa yine hizli
+    # yakalar).
 
     steps:
       - name: Kodu indir

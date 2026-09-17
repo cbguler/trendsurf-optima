@@ -7809,27 +7809,31 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
 - v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
 
-### ✅ v2.0.7.328 İLE BÜYÜK İHTİMALLE ÇÖZÜLDÜ - ama tam doğrulama bekliyor:
-Bahri'nin paylaştığı #3557'nin GERÇEK GitHub Actions logu (`5_Haber izleme calistir.txt`, GitHub'ın kendi zaman damgalarıyla) incelendi: reconnect YOK (v2.0.7.325/326 çalışıyor), ama "Meduza bitti" ile "CBC Business RSS okunamadi" arasında TAM 262,3 saniye (çalışmanın %43'ü) hiçbir şey olmadan geçmiş. Kök neden: `feedparser.parse(rss_url)` bir URL verildiğinde KENDİ agdan-okuma katmanını kullanır ve bunda HİÇ zaman aşımı yoktu - CBC yavaş kaldığında dakikalarca sessizce asılı kalıyordu. **Bu satır bugün incelenen HER TEK logda vardı** - süregelen, muhtemelen günün asıl darboğazı. v2.0.7.320-327'nin (veritabanı tarafı) hiçbiri bunu hedeflemiyordu çünkü sorun oraya hiç uğramıyordu. Düzeltme: besleme artık `requests.get(rss_url, timeout=15)` ile çekiliyor, feedparser'a ham içerik veriliyor - TÜM kaynaklar için geçerli.
+### ✅ ÇÖZÜLDÜ VE CANLI DOĞRULANDI (17 Eylül 2026, push sonrası #3557'den SONRAKİ çalışmanın GERÇEK GitHub Actions logu):
+`onbellekteki baglanti canli degil` satırı: **0**. `RSS okunamadi` satırı: **0** (CBC Business dahil her kaynak 5-27 sn'de bitti). **TOPLAM SÜRE: 324,3 sn (~5,4 dk)** - bugünün en kısa, en temiz çalışması (önceki birkaçı 600-1000+ sn'ydi). v2.0.7.325/326 (veritabanı bağlantısı) VE v2.0.7.328 (RSS zaman aşımı) ikisi de tam olarak doğrulandı. **Bu saga KAPANDI.**
 
-### ⚠️ PUSH BEKLEYEN SEKİZ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi):
+**Ardından yapılması gerekenler (kod dışı, elle - henüz Bahri'ye söylendi, yapılıp yapılmadığı teyit edilmedi):**
+1. cron-job.org'da "TrendSurf Haber Izleme" tetikleme sıklığı 30 dakikadan **10 dakikaya** geri alınmalı (artık güvenle 10 dk'nın çok altında bitiyor).
+2. `timeout-minutes` 35'ten **15**'e düşürülebilir (324 sn'ye göre bolca pay bırakır, gerçek bir sorun olursa yine hızlı yakalar) - henüz KOD DEĞİŞİKLİĞİ YAPILMADI, bir sonraki oturumda yapılabilir.
+
+### ⚠️ PUSH BEKLEYEN SEKİZ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi - PUSH EDİLDİ Mİ TEYİT EDİLMELİ, #3557 sonrası log zaten v2.0.7.328'i içeriyordu, yani muhtemelen EVET):
 **v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu. Düzeltme: `today = datetime.now()`.
 
 **v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py)** - SPK'nın 17 Eylül kararıyla alım-satıma kapatılan 7 portföy şirketinin 117 fonunun Optima_Skor'u 0.0'a sabitleniyor.
 
 **v2.0.7.323 (db.py + 2 workflow yml)** - `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi.
 
-**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha `.close()`'suz kullanıyordu. Düzeltildi. GEREKLİYDİ ama YETERSİZDİ.
+**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha `.close()`'suz kullanıyordu. Düzeltildi.
 
-**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması, pre-ping'in açtığı transaction içindeyken psycopg2 tarafından YASAKLANIYORDU - reconnect'lerin GERÇEK, %100 tekrarlanan kök nedeni. Satır kaldırıldı, simülasyonla doğrulandı. **CANLI DOĞRULANDI (#3557 logu) - reconnect artık YOK.**
+**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması psycopg2 tarafından YASAKLANIYORDU - reconnect'lerin GERÇEK kök nedeni. **CANLI DOĞRULANDI - reconnect 0.**
 
-**v2.0.7.326 (db.py)** - TCP keepalive + `statement_timeout=30000` eklendi (genel dayanıklılık, zararsız ama #3553'ün asıl sorununu çözmedi).
+**v2.0.7.326 (db.py)** - TCP keepalive + `statement_timeout=30000` (genel dayanıklılık).
 
-**v2.0.7.327 (.github/workflows/haber_izleme.yml)** - `timeout-minutes: 20 → 35`. Geçici yama, v2.0.7.328 doğrulanınca sıkılaştırılabilir.
+**v2.0.7.327 (.github/workflows/haber_izleme.yml)** - `timeout-minutes: 20 → 35`. Artık 15'e düşürülebilir (yukarıya bkz.).
 
-**v2.0.7.328 (haber_izleme.py) - GÜNÜN ASIL BULGUSU:** RSS besleme çekme artık `requests.get(timeout=15)` ile yapılıyor, `feedparser.parse()`'a URL değil ham içerik veriliyor - CBC Business (ve herhangi bir başka kaynak) yavaş/yanıtsız kaldığında artık dakikalarca değil en fazla ~15 saniye bekleniyor.
+**v2.0.7.328 (haber_izleme.py)** - RSS besleme çekme `requests.get(timeout=15)` ile yapılıyor. **CANLI DOĞRULANDI - RSS hatası/takılması 0.**
 
-**Bahri'den (ya da yeni sohbette Claude'dan) beklenen:**
+**Eğer henüz push edilmediyse:**
 ```
 git add tefas_client.py spk_tedbir_fonlari.py app.py db.py haber_izleme.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
 git commit -m "v2.0.7.321-328: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + db baglanti kok neden duzeltmeleri + RSS fetch timeout kok neden duzeltmesi"
@@ -7837,18 +7841,12 @@ git pull --no-rebase --no-edit
 git push
 ```
 
-### AÇIK TAKİP - EN ÖNCELİKLİ (bir sonraki oturumun İLK işi):
-Push sonrası birkaç "Haber Izleme" çalışmasının GERÇEK GitHub Actions logu (Actions sayfasından "Download log archive" ile - #3557 için yapılan buydu, çok işe yaradı) incelenip: (1) reconnect'in hâlâ sıfır olduğu, (2) artık HİÇBİR kaynağın dakikalarca takılmadığı, (3) toplam sürenin tutarlı şekilde kısa (muhtemelen ~8-12 dk) olduğu doğrulanmalı. Üçü de doğrulanırsa bu saga KAPANABİLİR ve `timeout-minutes` ile cron-job.org sıklığı normale döndürülebilir.
-
-### GEÇİCİ, UNUTULMAMASI GEREKEN AYARLAR:
-1. cron-job.org'da "TrendSurf Haber Izleme"nin tetikleme sıklığı **geçici olarak 10 dakikadan 30 dakikaya çıkarıldı**. v2.0.7.328 doğrulandıktan sonra normale döndürülebilir.
-2. `timeout-minutes: 35` (v2.0.7.327) - v2.0.7.328 doğrulandıktan sonra daha sıkı bir değere (ör. 15) çekilebilir.
-
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
-1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-2. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
-3. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - `kap_bildirim_izleme.py`'nin kendi `requests.get()` çağrılarında ZATEN timeout var (15/25 sn), yani v2.0.7.328'in bulduğu türden bir hata DEĞİL - o çalışma muhtemelen v2.0.7.325 öncesi autocommit hatasından etkilenmişti, teyit edilmedi.
-4. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek - SPK'nın 17 Eylül fon tasfiye kararı hakkında bundle.app'ta ek haberler görüldü (aynı olayın farklı kaynaklardan tekrarı, yeni bilgi değil). Kapsam/öncelik netleşmedi, koda dökülmedi.
+1. `timeout-minutes: 35 → 15` ve cron-job.org sıklığı 30dk → 10dk - yukarıda "Ardından yapılması gerekenler" - kod tarafı henüz yapılmadı.
+2. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
+3. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
+4. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - `kap_bildirim_izleme.py`'nin kendi `requests.get()` çağrılarında ZATEN timeout var (15/25 sn), yani v2.0.7.328'in bulduğu türden bir hata DEĞİL - o çalışma muhtemelen v2.0.7.325 öncesi autocommit hatasından etkilenmişti, teyit edilmedi.
+5. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek - SPK'nın 17 Eylül fon tasfiye kararı hakkında bundle.app'ta ek haberler görüldü (aynı olayın farklı kaynaklardan tekrarı, yeni bilgi değil). Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı (özellikle bu "OTURUM DEVRİ" bölümünü) oku, sonra "PUSH BEKLEYEN SEKİZ DÜZELTME" maddesiyle devam et - push'tan sonra "AÇIK TAKİP" maddesindeki log incelemesi bu oturumun EN ÖNCELİKLİ işi olmalı.
+Depoyu klonla, bu dosyayı oku. Ana O&M saga (reconnect + RSS timeout) ÇÖZÜLDÜ - yeni bir konuyla ya da yukarıdaki "Ardından yapılması gerekenler" / "AÇIK/ERTELENMİŞ FİKİRLER" maddeleriyle devam edilebilir.
