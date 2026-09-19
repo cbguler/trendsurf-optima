@@ -56,7 +56,15 @@ KATEGORI_AYARLARI = {
     "DOVIZ":  {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
     "KRIPTO": {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
     "MADEN":  {"esik_saat": 1.0, "sadece_seans": False, "kaynak": "supabase"},
-    "TEFAS":  {"esik_saat": 30,  "sadece_seans": False, "kaynak": "csv"},
+    # v2.0.7.330 (19 Eylul 2026, Bahri'ye giden "TEFAS 30 saattir
+    # degismiyor" uyarisinin YANLIS ALARM oldugu bulundu): TEFAS fonlari
+    # sadece hafta ici NAV acikliyor - Cuma'nin son degerinden Pazartesi
+    # sabahina kadar dogal olarak 60+ saat gecebiliyor, bu da 30 saatlik
+    # esigi HER HAFTA SONU otomatik olarak asiyordu. "sadece_hafta_ici"
+    # bayragi eklendi - BIST'in "sadece_seans" bayragiyla ayni mantik,
+    # sadece haftalik degil gunluk seans yerine.
+    "TEFAS":  {"esik_saat": 30,  "sadece_seans": False, "kaynak": "csv",
+               "sadece_hafta_ici": True},
 }
 
 
@@ -185,6 +193,24 @@ def main():
     for kategori, ayar in KATEGORI_AYARLARI.items():
         if ayar["sadece_seans"] and not _bist_seans_acik(simdi):
             print(f"[health-check] {kategori}: seans disi, kontrol atlandi.")
+            continue
+
+        # v2.0.7.330 (19 Eylul 2026, Bahri'ye giden "TEFAS 30 saattir
+        # degismiyor" uyarisinin YANLIS ALARM oldugu bulundu): hafta
+        # sonu TEFAS'ta yeni NAV yayinlanmaz - Cuma'nin son degerinden
+        # Pazartesi sabahina kadar dogal olarak 60+ saat gecebiliyor,
+        # bu da 30 saatlik esigi HER HAFTA SONU otomatik asiyordu.
+        # Cumartesi/Pazar TAMAMEN atlaniyor; Pazartesi de ilk gunluk
+        # guncelleme genelde saat 04:00-08:00 TRT arasi geldigi icin
+        # (bkz. commit gecmisi), 09:00'a kadar da (BIST'in kendi seans
+        # acilis toleransiyla AYNI mantik) atlaniyor - aksi halde
+        # Pazartesi ilk guncelleme gelmeden hemen once de yanlis alarm
+        # üretilebilirdi.
+        if ayar.get("sadece_hafta_ici") and (
+            simdi.weekday() >= 5
+            or (simdi.weekday() == 0 and simdi.time() < datetime.strptime("09:00", "%H:%M").time())
+        ):
+            print(f"[health-check] {kategori}: hafta sonu/Pazartesi acilis toleransi, kontrol atlandi.")
             continue
 
         # ── v2.0.5.6: Supabase kaynakli kategoriler (radar tazeligi) ──

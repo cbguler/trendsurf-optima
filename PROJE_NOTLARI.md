@@ -7796,57 +7796,66 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **PUSH BEKLİYOR:** Sadece `haber_izleme.py` değişti - bkz.
     aşağıdaki "OTURUM DEVRİ" bölümü.
 
+- **v2.0.7.330 (19 Eylül 2026, Bahri'nin paylaştığı "TEFAS 30 saattir
+  hiç değişmiyor" veri akışı uyarı e-postasının analiziyle bulundu -
+  YANLIŞ ALARM.**
+  - **Kanıt:** Uyarı Cumartesi 19 Eylül 20:34 TRT'de geldi. Git
+    geçmişi, son GERÇEK TEFAS değer değişikliğinin Cuma 18 Eylül
+    ~14:30 TRT civarında olduğunu gösteriyor (18 Eylül 14:30'dan 19
+    Eylül 20:34'e tam ~30 saat - eşiğe birebir denk geliyor).
+  - **Kök neden:** `data_health_check.py`'deki `KATEGORI_AYARLARI`
+    sözlüğünde TEFAS için `sadece_seans: False` ayarlıydı - yani BIST'in
+    aksine (ki onda `_bist_seans_acik()` ile hafta sonu/mesai dışı
+    farkındalığı zaten VARDI), TEFAS kontrolü hafta sonunu HİÇ
+    bilmiyordu. TEFAS fonları sadece hafta içi NAV açıklıyor - Cuma'nın
+    son değerinden Pazartesi sabahına kadar doğal olarak 60+ saat
+    geçebiliyor, bu da 30 saatlik eşiği HER HAFTA SONU otomatik
+    aşıyordu. **Bu, sistem BOZUK olduğu için değil, TAM TERSİNE normal
+    çalıştığı için (piyasa kapalıyken veri değişmediği için) tetiklenen
+    bir yanlış alarmdı** - GitHub Actions loglarına bakmaya gerek yok,
+    veri akışında gerçek bir sorun YOK.
+  - **Çözüm:** TEFAS'a `sadece_hafta_ici: True` bayrağı eklendi -
+    Cumartesi/Pazar TAMAMEN atlanıyor, Pazartesi de saat 09:00'a kadar
+    (ilk günlük TEFAS güncellemesi genelde 04:00-08:00 TRT arası geldiği
+    için, BIST'in kendi seans-açılış toleransıyla AYNI mantık) atlanıyor
+    - aksi halde Pazartesi ilk güncelleme gelmeden hemen önce de yanlış
+    alarm üretilebilirdi. Mantık, üç farklı senaryoyla (Cumartesi,
+    Pazartesi erken saat, Pazartesi geç saat/hafta içi) test edildi,
+    doğru çalıştığı doğrulandı.
+  - **PUSH BEKLİYOR:** Sadece `data_health_check.py` değişti.
+
 ---
 
-## OTURUM DEVRİ (17 Eylül 2026, devam eden O&M4 sohbeti)
+## OTURUM DEVRİ (19 Eylül 2026, yeni sohbet)
 
-**Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı** - yukarıdaki 7000+ satırlık geçmişte çok sayıda eski "PUSH BEKLİYOR" etiketi artık GEÇERSİZ (zaten push edilmiş) - asıl GÜNCEL durum burada.
+**Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı.**
 
-### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.297 - v2.0.7.320 arası, hepsi push edildi):
-- TEFAS Akşam/Gündüz Güncelle: cron-job.org üzerinden otomatik, sorunsuz.
-- KAP Bildirim İzleme: otomatik çalışıyor, gerçek bildirimler yakalanıyor.
-- ENAG Enflasyon İzleme: TAM OTOMATİK (Halk TV üzerinden, elle giriş YOK).
-- Getiri Kıyaslaması: TÜİK KALDIRILDI, ENAG kalın/düz kırmızı çizgiyle gösteriliyor.
-- v2.0.7.320 (db.py, toplu mod close()/commit() düzeltmesi) push edildi - ETKİSİ HENÜZ TEYİT EDİLEMEDİ (bkz. aşağıdaki "AÇIK TAKİP" maddesi).
+### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.321-329, hepsi push edildi - 19 Eylül'deki fresh clone'da doğrulandı):
+- 17 Eylül'ün büyük "Haber Izleme" sagası (veritabanı bağlantı reconnect fırtınası + RSS zaman aşımı takılması) TAMAMEN ÇÖZÜLDÜ ve canlı doğrulandı - bkz. yukarıdaki v2.0.7.320-329 girdileri. Çalışma süresi ~5-6 dakikaya düştü, hiç reconnect/RSS hatası yok.
+- SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun Optima Skor'u 0'a sabit.
+- TEFAS ayın-1'i sabiti hatası (grafik anomalisi) düzeltildi.
 
-### ✅ ÇÖZÜLDÜ VE CANLI DOĞRULANDI (17 Eylül 2026, push sonrası #3557'den SONRAKİ çalışmanın GERÇEK GitHub Actions logu):
-`onbellekteki baglanti canli degil` satırı: **0**. `RSS okunamadi` satırı: **0** (CBC Business dahil her kaynak 5-27 sn'de bitti). **TOPLAM SÜRE: 324,3 sn (~5,4 dk)** - bugünün en kısa, en temiz çalışması (önceki birkaçı 600-1000+ sn'ydi). v2.0.7.325/326 (veritabanı bağlantısı) VE v2.0.7.328 (RSS zaman aşımı) ikisi de tam olarak doğrulandı. **Bu saga KAPANDI.**
-
-**Ardından yapılması gerekenler (kod dışı, elle - henüz Bahri'ye söylendi, yapılıp yapılmadığı teyit edilmedi):**
-1. cron-job.org'da "TrendSurf Haber Izleme" tetikleme sıklığı 30 dakikadan **10 dakikaya** geri alınmalı (artık güvenle 10 dk'nın çok altında bitiyor).
-2. `timeout-minutes` 35'ten **15**'e düşürülebilir (324 sn'ye göre bolca pay bırakır, gerçek bir sorun olursa yine hızlı yakalar) - henüz KOD DEĞİŞİKLİĞİ YAPILMADI, bir sonraki oturumda yapılabilir.
-
-### ⚠️ PUSH BEKLEYEN SEKİZ DÜZELTME (bu sohbette yapıldı, henüz push edilmedi - PUSH EDİLDİ Mİ TEYİT EDİLMELİ, #3557 sonrası log zaten v2.0.7.328'i içeriyordu, yani muhtemelen EVET):
-**v2.0.7.321 (tefas_client.py)** - TEFAS sentetik seri `today`'yi ayın 1'ine sabitliyordu. Düzeltme: `today = datetime.now()`.
-
-**v2.0.7.322 (yeni dosya: spk_tedbir_fonlari.py + app.py)** - SPK'nın 17 Eylül kararıyla alım-satıma kapatılan 7 portföy şirketinin 117 fonunun Optima_Skor'u 0.0'a sabitleniyor.
-
-**v2.0.7.323 (db.py + 2 workflow yml)** - `PYTHONUNBUFFERED: "1"` + zaman damgası eklendi.
-
-**v2.0.7.324 (db.py)** - `haber_islendi_mi()` ve 9 fonksiyon daha `.close()`'suz kullanıyordu. Düzeltildi.
-
-**v2.0.7.325 (db.py)** - `_CompatConn.__init__`'in her seferinde `autocommit=False` ataması psycopg2 tarafından YASAKLANIYORDU - reconnect'lerin GERÇEK kök nedeni. **CANLI DOĞRULANDI - reconnect 0.**
-
-**v2.0.7.326 (db.py)** - TCP keepalive + `statement_timeout=30000` (genel dayanıklılık).
-
-**v2.0.7.327 (.github/workflows/haber_izleme.yml)** - `timeout-minutes: 20 → 35`. Artık 15'e düşürülebilir (yukarıya bkz.).
-
-**v2.0.7.328 (haber_izleme.py)** - RSS besleme çekme `requests.get(timeout=15)` ile yapılıyor. **CANLI DOĞRULANDI - RSS hatası/takılması 0.**
-
-**Eğer henüz push edilmediyse:**
+### ⚠️ PUSH BEKLİYOR - v2.0.7.330 (data_health_check.py):
+TEFAS'ın hafta sonu yanlış alarmı düzeltildi (yukarıya bkz. tam açıklama).
 ```
-git add tefas_client.py spk_tedbir_fonlari.py app.py db.py haber_izleme.py PROJE_NOTLARI.md .github/workflows/haber_izleme.yml .github/workflows/kap_bildirim_izleme.yml
-git commit -m "v2.0.7.321-328: TEFAS ayin-1i + SPK tedbirli fonlarda skor sifirlama + log tamponlama + db baglanti kok neden duzeltmeleri + RSS fetch timeout kok neden duzeltmesi"
+git add data_health_check.py PROJE_NOTLARI.md
+git commit -m "v2.0.7.330: TEFAS veri akisi kontrolu hafta sonu/Pazartesi acilis toleransi - yanlis alarm duzeltmesi"
 git pull --no-rebase --no-edit
 git push
 ```
 
+### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme 3 gün üst üste başarısız
+17, 18 ve 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - ÜÇÜ DE "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre, 3 annotation). Bu son ikisi (18-19 Eylül) v2.0.7.325/326/328 push'undan SONRA - yani bu, o zaten çözülen veritabanı/RSS sorunlarından BAĞIMSIZ, HALA AÇIK bir hata.
+
+**Bu oturumda yapılan kod incelemesi (log görülemedi - GitHub API rate limit):**
+`kap_bildirim_izleme.py`'nin `_mkk_member_oid_bul()` ve `_yillik_bildirimleri_cek()` fonksiyonlarının İKİSİ DE kendi `requests.get()` çağrılarını try/except içinde tutuyor (timeout 15/25 sn) ve hata durumunda sessizce boş liste/string dönüyor - bunlar tek başına job'ı ÇÖKERTEMEZ. `db.kap_bildirim_ekle()`, `db.get_tum_portfoy_tickerlari()`, `db.kap_bildirim_temizle()` de hepsi try/except ile korunuyor. Tek GÜVENCESİZ (try/except'siz) çağrı `_calistir_asil()`'in en başındaki `db.init_db()` - bu fonksiyon çok sayıda `CREATE TABLE`/`ALTER TABLE` çalıştırıyor, çoğu kendi try/except'iyle korunuyor ama HEPSİ tek tek doğrulanmadı - eğer içlerinden biri korumasızsa ve bir SQL hatası verirse, tüm script çöker. **Bu sadece bir HİPOTEZ, teyit edilmedi.**
+
+**Sonraki adım:** Bahri'den (ya da Bahri kendisi) GitHub Actions'ta "KAP Bildirim Izleme" workflow'unun başarısız bir çalışmasını açıp "Download log archive" ile TAM logu indirip paylaşması istenmeli - bu yöntem, "Haber Izleme" sagasındaki gerçek kök nedeni (RSS zaman aşımı) bulmamızı sağlayan yöntemdi, burada da aynı şekilde kesin cevabı verecektir. Log gelince: gerçek hata mesajı/traceback'e bakılıp kesin kök neden bulunmalı.
+
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
-1. `timeout-minutes: 35 → 15` ve cron-job.org sıklığı 30dk → 10dk - yukarıda "Ardından yapılması gerekenler" - kod tarafı henüz yapılmadı.
-2. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-3. SPK/KAP'ın v2.0.7.322'ye konu olan türden toplu fon/şirket tedbir kararlarını (bugünkü gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin bugünkü talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
-4. 17 Eylül'deki KAP Bildirim Izleme başarısızlığının (email ile bildirildi, commit 72f584d) gerçek nedeni HENÜZ İNCELENMEDİ - `kap_bildirim_izleme.py`'nin kendi `requests.get()` çağrılarında ZATEN timeout var (15/25 sn), yani v2.0.7.328'in bulduğu türden bir hata DEĞİL - o çalışma muhtemelen v2.0.7.325 öncesi autocommit hatasından etkilenmişti, teyit edilmedi.
-5. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek - SPK'nın 17 Eylül fon tasfiye kararı hakkında bundle.app'ta ek haberler görüldü (aynı olayın farklı kaynaklardan tekrarı, yeni bilgi değil). Kapsam/öncelik netleşmedi, koda dökülmedi.
+1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
+2. SPK/KAP'ın toplu fon/şirket tedbir kararlarını otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
+3. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. Ana O&M saga (reconnect + RSS timeout) ÇÖZÜLDÜ - yeni bir konuyla ya da yukarıdaki "Ardından yapılması gerekenler" / "AÇIK/ERTELENMİŞ FİKİRLER" maddeleriyle devam edilebilir.
+Depoyu klonla, bu dosyayı oku, önce v2.0.7.330'un push edilip edilmediğini teyit et, sonra "KAP Bildirim Izleme" logunu iste/incele - bu oturumun en öncelikli işi bu olmalı.
