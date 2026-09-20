@@ -7860,6 +7860,39 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     sayısı 22'den 21'e düştü.
   - **PUSH BEKLİYOR:** `spk_tedbir_fonlari.py`, `app.py`, `haber_izleme.py`.
 
+- **v2.0.7.332 (20 Eylül 2026, Bahri'nin bulgusu - TrendSurf Optima
+  uygulaması uykuda kalmış, "Zzzz" ekranı görüldü): `wake_app.py`'deki
+  URL, İLK KURULUMDAN (v2.0.7.101, 22 Temmuz 2026) BERİ ESKİ/YANLIŞTI -
+  muhtemelen bu mekanizma HİÇ ÇALIŞMAMIŞTI.**
+  - **Kanıt:** `wake_app.py`'nin `APP_URL`'i
+    `trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app` (eski,
+    otomatik üretilmiş rastgele adres) idi. Bu URL'yi gerçek bir
+    Playwright tarayıcısıyla ziyaret edince Streamlit'in kendi "You do
+    not have access to this app or it does not exist" 404 hata
+    sayfası dönüyordu - uygulama Bahri'nin "Sharing" ayarları ekran
+    görüntüsüyle DOĞRULANDIĞI ÜZERE tamamen public olmasına rağmen
+    ("This app is public and searchable"), çünkü o adreste ARTIK
+    gerçekten hiçbir uygulama YOK - sonradan temiz bir özel alt alan
+    adı (`trendsurfoptima.streamlit.app`, tire yok) atanmış ama script
+    hiç güncellenmemiş. `wake_app.py`'nin kendi mantığı ("buton
+    bulunamadı = uygulama zaten uyanık, OK") bu durumu YANLIŞLIKLA
+    "başarılı" sayıyordu - yani bu adım `continue-on-error: true`
+    sayesinde muhtemelen KURULDUĞU GÜNDEN BERİ hiç fark edilmeden hep
+    yeşil görünmüş olabilir, ama gerçekte hiçbir zaman gerçek bir
+    uyandırma yapamamıştı.
+  - **CANLI DOĞRULAMA (bu sohbette, gerçek Playwright ile):** Doğru
+    URL'ye gidince gerçek "Zzzz... Yes, get this app back up!" ekranı
+    görüldü, butona tıklandı, "This will take just a sec! Your app is
+    waking up!" mesajı alındı, ~75 saniye sonra ekran görüntüsüyle
+    uygulamanın Streamlit'in normal yükleme iskeletini (skeleton
+    loading) gösterdiği, yani gerçekten soğuk başlangıç sürecinde
+    olduğu doğrulandı. Uygulama bu sohbet sırasında CANLI OLARAK
+    UYANDIRILDI.
+  - **Çözüm:** `APP_URL` doğru adrese (`https://trendsurfoptima.
+    streamlit.app/`) güncellendi. Kod tabanında bu eski URL'ye başka
+    hiçbir referans yoktu (tek dosya, izole düzeltme).
+  - **PUSH BEKLİYOR:** Sadece `wake_app.py` değişti.
+
 ---
 
 ## OTURUM DEVRİ (20 Eylül 2026, devam eden sohbet)
@@ -7871,11 +7904,11 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun Optima Skor'u 0'a sabit.
 - TEFAS'ın hafta sonu yanlış alarmı (v2.0.7.330) düzeltildi ve push edildi.
 
-### ⚠️ PUSH BEKLİYOR - v2.0.7.331 (spk_tedbir_fonlari.py + app.py + haber_izleme.py):
-Fon krizinin hisse tarafı (KTLEV/GUNDG/DSTKF skor sıfırlama) + Dünya Gazetesi'nin kaynak listesinden çıkarılması (yukarıya bkz. tam açıklama).
+### ⚠️ PUSH BEKLİYOR - v2.0.7.331 + v2.0.7.332 (spk_tedbir_fonlari.py + app.py + haber_izleme.py + wake_app.py):
+Fon krizinin hisse tarafı (KTLEV/GUNDG/DSTKF skor sıfırlama) + Dünya Gazetesi'nin kaynak listesinden çıkarılması + wake_app.py'deki eski/yanlış URL düzeltmesi (uygulama bu sohbette canlı olarak uyandırıldı - yukarıya bkz. tam açıklamalar).
 ```
-git add spk_tedbir_fonlari.py app.py haber_izleme.py PROJE_NOTLARI.md
-git commit -m "v2.0.7.331: fon krizinin BIST hisse tarafi (KTLEV/GUNDG/DSTKF skor sifirlama) + Dunya Gazetesi cikar catismasi nedeniyle kaynak listesinden cikarildi"
+git add spk_tedbir_fonlari.py app.py haber_izleme.py wake_app.py PROJE_NOTLARI.md
+git commit -m "v2.0.7.331/332: fon krizinin BIST hisse tarafi + Dunya Gazetesi cikarildi + wake_app.py eski URL kok neden duzeltmesi"
 git pull --no-rebase --no-edit
 git push
 ```

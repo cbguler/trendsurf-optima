@@ -29,7 +29,27 @@ error: true" ile birlikte kullanilmasi onerilir (Firsat Radari zaten
 import sys
 import time
 
-APP_URL = "https://trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app/"
+APP_URL = "https://trendsurfoptima.streamlit.app/"
+# v2.0.7.332 (20 Eylul 2026, Bahri'nin bulgusu - uygulama uykuya
+# dalmis ve "wake_app.py"nin (firsat_radari.yml icinde ~3 saatte bir
+# calisan adim) bunu hic engelleyememis olmasi): KESIN KOK NEDEN
+# BULUNDU - bu URL, ilk kurulumdan (v2.0.7.101, 22 Temmuz 2026) beri
+# ESKI, otomatik-uretilmis (rastgele karakter dizili) adresi
+# tasiyordu: trendsurf-optima-mxqgu6qvkmqbkmaorwmquj.streamlit.app.
+# Uygulamaya sonradan temiz bir ozel alt alan adi (trendsurfoptima.
+# streamlit.app) atanmis ama bu script hic guncellenmemis. CANLI
+# TEST: eski URL, Playwright/anonim bir tarayiciya Streamlit'in kendi
+# "You do not have access to this app or it does not exist" 404
+# hata sayfasini donduruyordu (uygulama PUBLIC olmasina RAGMEN -
+# Bahri'nin "Sharing" ayari ekran goruntusuyle dogrulandi, "This app
+# is public and searchable") - cunku o adreste ARTIK gercekten hicbir
+# uygulama YOK. Betigin kendi mantigi ("buton bulunamadi = uygulama
+# zaten uyanik, OK") bu durumu YANLISLIKLA "basarili" olarak
+# yorumluyordu - yani bu adim, KURULDUGU GUNDEN BERI muhtemelen HICBIR
+# ZAMAN gercekten calismamis, ama "continue-on-error: true" sayesinde
+# hic fark edilmeden hep yesil gorunmus olabilir. Dogru URL ile CANLI
+# DOGRULANDI: sayfa gercekten "Zzzz... Yes, get this app back up!"
+# ekranini gosteriyor.
 SAYFA_ZAMAN_ASIMI_MS = 45_000       # ilk sayfa yuklemesi icin
 UYANMA_BEKLEME_SN = 90               # "uyandir" butonuna tikladiktan sonra
 
