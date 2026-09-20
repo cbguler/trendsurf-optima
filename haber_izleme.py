@@ -87,7 +87,21 @@ _RSS_KAYNAKLARI = [
     # gazetelerinden biri, gerçek ekonomi haberleri içeriyor. Zaten
     # Türkçe - _INGILIZCE_KAYNAKLAR setine EKLENMEDİ (çeviri gerekmiyor,
     # AA Ekonomi/Investing.com TR/BloombergHT ile aynı kategori).
-    ("Dünya Gazetesi", "https://www.dunya.com/rss"),
+    #
+    # v2.0.7.331 (20 Eylul 2026, Bahri'nin bulgusu/talebi - "Dünya
+    # gazetesini haber kaynağı olarak kullanıyoruz ama sahipleri bu
+    # krizde şaibeli pozisyonda görünüyorlar"): ARAŞTIRILDI VE
+    # DOĞRULANDI - Dünya Gazetesi'nin uzun yıllardır köşe yazarı olan
+    # Emre Alkin, AYNI ZAMANDA Eylül 2026 fon/manipülasyon krizinin
+    # merkezindeki Tera Portföy'ün Yönetim Kurulu üyesi ve bu krizle
+    # ilgili soruşturma kapsamında GÖZALTINA ALINANLAR arasında (T24,
+    # 19 Eylül 2026). Not: Bahri "sahipleri" dedi ama tam olarak
+    # gazetenin İMTİYAZ SAHİBİ (Umut Güner) değil, uzun soluklu bir
+    # KÖŞE YAZARI - yine de tam olarak izlemeye çalıştığımız krizin bir
+    # zanlısı olması ciddi bir çıkar çatışması, aynı "devlet sesi olmama"
+    # ve "menşe ülke" tarafsızlık kriterleriyle aynı ruhta - kaynak
+    # KALDIRILDI.
+    # ("Dünya Gazetesi", "https://www.dunya.com/rss"),
     # v2.0.7.181 (Bahri'nin talebi, 22 Ağustos 2026 — "Anka Haber Ajansı,
     # T24, Euronews, Sözcü, Halk TV, Reuters, Xinhua, AFP - hangilerini
     # dahil edebiliriz"): 8 aday tek tek canlı test edildi. Kullanılamayan

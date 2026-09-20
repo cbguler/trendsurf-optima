@@ -873,6 +873,25 @@ def load_universe():
     except Exception as _spk_err:
         print(f"[spk-tedbir] atlandi: {_spk_err}")
 
+    # v2.0.7.331 (20 Eylul 2026, Bahri'nin talebi - fon krizinin BIST
+    # hisse tarafi): SPK'nin 16 Eylul 2026 tarihli 2026/59 sayili
+    # Bulteni'nde piyasa dolandiriciligi tespit edilen KTLEV/GUNDG/DSTKF
+    # hisseleri de, yukaridaki fonlarla AYNI mantikla, Optima Skoru
+    # sifirlaniyor - bu hisselerin fiyatlari Pusula/Tera fonlarinin
+    # yogunlasmis pozisyonlariyla suni sekilde sisirilmisti, artik bu
+    # destek ortadan kalktigindan cokme riski cok yuksek, ayrica
+    # haklarinda suc duyurusu/islem yasagi karari var. Yukaridaki fon
+    # kontroluyle AYNI yerde (load_universe()'in en sonunda) yapiliyor.
+    try:
+        from spk_tedbir_fonlari import hisse_manipulasyon_supheli_mi
+        _hisse_maskesi = (df["Kategori"] == "BIST") & df["Ticker"].apply(hisse_manipulasyon_supheli_mi)
+        if _hisse_maskesi.any():
+            df.loc[_hisse_maskesi, "Optima_Skor"] = 0.0
+            print(f"[spk-tedbir] {_hisse_maskesi.sum()} hisse manipulasyon "
+                  f"suphesi kapsaminda - Optima Skor 0'a sabitlendi.")
+    except Exception as _spk_hisse_err:
+        print(f"[spk-tedbir] hisse kontrolu atlandi: {_spk_hisse_err}")
+
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)

@@ -7824,38 +7824,74 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     doğru çalıştığı doğrulandı.
   - **PUSH BEKLİYOR:** Sadece `data_health_check.py` değişti.
 
+- **v2.0.7.331 (20 Eylül 2026, Bahri'nin talebi/bulgusu - fon krizinin BIST hisse tarafı + Dünya Gazetesi çıkar çatışması).**
+  - **Hisse tarafı:** Bahri "fon krizine baktığımızda bir çok hisse ve
+    fonun çöp olması gibi bir sorun ortaya çıkıyor, bunları ayıklamamız
+    gerekecek" dedi. Araştırıldı: SPK'nın 16 Eylül 2026 tarihli 2026/59
+    sayılı Bülteni'nde, **KTLEV (Katılımevim)**, **GUNDG (Gündoğdu
+    Gıda)** ve **DSTKF (Destek Finans Faktoring)** hisselerinde "ekonomik
+    gerçeklikle açıklanamayacak fiyat hareketleri" (piyasa dolandırıcılığı)
+    tespit edildi - 38-44 kişi hakkında Cumhuriyet Başsavcılığına suç
+    duyurusu yapıldı, bazılarına 2 yıl işlem yasağı ve lisans iptali
+    getirildi. Bu hisseler Pusula/Tera fonlarının yoğunlaşmış (Katılımevim/
+    Gündoğdu: Pusula ile aynı şirketler grubu; Destek Finans: Tera fonlarının
+    ağırlıklı pozisyonu) pozisyonlarıyla suni şekilde şişirilmiş, yıl
+    başından bu yana %140-300+ yükselmiş durumdaydı. Yeni dosya
+    `spk_tedbir_fonlari.py`'ye eklendi: `MANIPULASYON_SUPHESIYLE_ISLEM_YASAKLI_HISSELER`
+    listesi + `hisse_manipulasyon_supheli_mi(ticker)`. `app.py`'nin
+    `load_universe()`'inde (fon kontrolüyle AYNI yerde) bu 3 hissenin
+    Optima_Skor'u 0.0'a sabitleniyor - CANLI TEST: evrende üçü de
+    bulundu (KTLEV/GUNDG zaten ~0 civarındaydı, DSTKF 24.0'dan 0.0'a
+    çekildi).
+  - **Dünya Gazetesi çıkar çatışması:** Bahri "Dünya gazetesini haber
+    kaynağı olarak kullanıyoruz ama sahipleri bu krizde şaibeli
+    pozisyonda görünüyorlar" dedi. Araştırıldı ve DOĞRULANDI (kısmen
+    düzeltilerek): gazetenin imtiyaz sahibi Umut Güner'in krizle bir
+    ilgisi yok, ama gazetenin uzun yıllardır köşe yazarı olan **Emre
+    Alkin**, aynı zamanda **Tera Portföy Yönetim Kurulu üyesi** ve bu
+    fon/manipülasyon krizi soruşturması kapsamında **gözaltına
+    alınanlar arasında** (T24, 19 Eylül 2026 - kardeşi Kerem Alkin de
+    Tera'nın iki şirketinin yönetim kurulunda ve gözaltına alınanlar
+    arasında, ama o Sabah gazetesi yazarı, Dünya değil). Ciddi bir
+    çıkar çatışması olduğu için `haber_izleme.py`'deki `_RSS_KAYNAKLARI`
+    listesinden Dünya Gazetesi ÇIKARILDI (satır yorum satırı yapılıp
+    gerekçe not edildi, AA Ekonomi/Al Jazeera'nın devlet-mülkiyeti
+    gerekçesiyle çıkarılmasıyla AYNI ruhta bir karar). Aktif kaynak
+    sayısı 22'den 21'e düştü.
+  - **PUSH BEKLİYOR:** `spk_tedbir_fonlari.py`, `app.py`, `haber_izleme.py`.
+
 ---
 
-## OTURUM DEVRİ (19 Eylül 2026, yeni sohbet)
+## OTURUM DEVRİ (20 Eylül 2026, devam eden sohbet)
 
 **Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı.**
 
-### Şu an CANLIDA, DOĞRULANMIŞ, çalışan (v2.0.7.321-329, hepsi push edildi - 19 Eylül'deki fresh clone'da doğrulandı):
-- 17 Eylül'ün büyük "Haber Izleme" sagası (veritabanı bağlantı reconnect fırtınası + RSS zaman aşımı takılması) TAMAMEN ÇÖZÜLDÜ ve canlı doğrulandı - bkz. yukarıdaki v2.0.7.320-329 girdileri. Çalışma süresi ~5-6 dakikaya düştü, hiç reconnect/RSS hatası yok.
+### Şu an CANLIDA, DOĞRULANMIŞ (v2.0.7.321-330, hepsi push edilmiş - 20 Eylül'deki fresh clone'da doğrulandı):
+- 17 Eylül'ün "Haber Izleme" sagası (reconnect + RSS zaman aşımı) TAMAMEN ÇÖZÜLDÜ.
 - SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun Optima Skor'u 0'a sabit.
-- TEFAS ayın-1'i sabiti hatası (grafik anomalisi) düzeltildi.
+- TEFAS'ın hafta sonu yanlış alarmı (v2.0.7.330) düzeltildi ve push edildi.
 
-### ⚠️ PUSH BEKLİYOR - v2.0.7.330 (data_health_check.py):
-TEFAS'ın hafta sonu yanlış alarmı düzeltildi (yukarıya bkz. tam açıklama).
+### ⚠️ PUSH BEKLİYOR - v2.0.7.331 (spk_tedbir_fonlari.py + app.py + haber_izleme.py):
+Fon krizinin hisse tarafı (KTLEV/GUNDG/DSTKF skor sıfırlama) + Dünya Gazetesi'nin kaynak listesinden çıkarılması (yukarıya bkz. tam açıklama).
 ```
-git add data_health_check.py PROJE_NOTLARI.md
-git commit -m "v2.0.7.330: TEFAS veri akisi kontrolu hafta sonu/Pazartesi acilis toleransi - yanlis alarm duzeltmesi"
+git add spk_tedbir_fonlari.py app.py haber_izleme.py PROJE_NOTLARI.md
+git commit -m "v2.0.7.331: fon krizinin BIST hisse tarafi (KTLEV/GUNDG/DSTKF skor sifirlama) + Dunya Gazetesi cikar catismasi nedeniyle kaynak listesinden cikarildi"
 git pull --no-rebase --no-edit
 git push
 ```
 
-### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme 3 gün üst üste başarısız
-17, 18 ve 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - ÜÇÜ DE "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre, 3 annotation). Bu son ikisi (18-19 Eylül) v2.0.7.325/326/328 push'undan SONRA - yani bu, o zaten çözülen veritabanı/RSS sorunlarından BAĞIMSIZ, HALA AÇIK bir hata.
+### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme, ARTIK 3'TEN FAZLA GÜN üst üste başarısız
+17, 18, 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - HEPSİ "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre). Bu, zaten çözülen veritabanı/RSS sorunlarından (v2.0.7.325/326/328, hepsi bu tarihlerden önce push edilmişti) BAĞIMSIZ, HALA AÇIK bir hata - 20 Eylül'de de tekrarlanıp tekrarlanmadığı kontrol edilmedi.
 
-**Bu oturumda yapılan kod incelemesi (log görülemedi - GitHub API rate limit):**
-`kap_bildirim_izleme.py`'nin `_mkk_member_oid_bul()` ve `_yillik_bildirimleri_cek()` fonksiyonlarının İKİSİ DE kendi `requests.get()` çağrılarını try/except içinde tutuyor (timeout 15/25 sn) ve hata durumunda sessizce boş liste/string dönüyor - bunlar tek başına job'ı ÇÖKERTEMEZ. `db.kap_bildirim_ekle()`, `db.get_tum_portfoy_tickerlari()`, `db.kap_bildirim_temizle()` de hepsi try/except ile korunuyor. Tek GÜVENCESİZ (try/except'siz) çağrı `_calistir_asil()`'in en başındaki `db.init_db()` - bu fonksiyon çok sayıda `CREATE TABLE`/`ALTER TABLE` çalıştırıyor, çoğu kendi try/except'iyle korunuyor ama HEPSİ tek tek doğrulanmadı - eğer içlerinden biri korumasızsa ve bir SQL hatası verirse, tüm script çöker. **Bu sadece bir HİPOTEZ, teyit edilmedi.**
+**Önceki oturumda yapılan kod incelemesi (log hâlâ görülemedi - GitHub API rate limit sürüyor):**
+`kap_bildirim_izleme.py`'nin ağ çağrıları (`_mkk_member_oid_bul`, `_yillik_bildirimleri_cek`) ve veritabanı çağrılarının (`kap_bildirim_ekle`, `get_tum_portfoy_tickerlari`, `kap_bildirim_temizle`) HEPSİ try/except ile korunuyor - job'ı tek başlarına çökertemezler. Tek güvencesiz çağrı `_calistir_asil()`'in başındaki `db.init_db()` - içindeki onlarca CREATE/ALTER TABLE'dan biri korumasızsa şüpheli. **Sadece bir hipotez, teyit edilmedi.**
 
-**Sonraki adım:** Bahri'den (ya da Bahri kendisi) GitHub Actions'ta "KAP Bildirim Izleme" workflow'unun başarısız bir çalışmasını açıp "Download log archive" ile TAM logu indirip paylaşması istenmeli - bu yöntem, "Haber Izleme" sagasındaki gerçek kök nedeni (RSS zaman aşımı) bulmamızı sağlayan yöntemdi, burada da aynı şekilde kesin cevabı verecektir. Log gelince: gerçek hata mesajı/traceback'e bakılıp kesin kök neden bulunmalı.
+**Sonraki adım (değişmedi):** Bahri'den GitHub Actions'ta "KAP Bildirim Izleme"nin başarısız bir çalışmasını "Download log archive" ile indirip paylaşması istenmeli - "Haber Izleme" sagasındaki gerçek kök nedeni bulmamızı sağlayan yöntem buydu.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-2. SPK/KAP'ın toplu fon/şirket tedbir kararlarını otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin talebi. Tetikleme mantığı netleşmeden koda dökülmedi.
+2. SPK/KAP'ın toplu fon/şirket/hisse tedbir kararlarını (v2.0.7.322 ve v2.0.7.331'deki gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin tekrarlayan talebi, artık hem fon hem hisse tarafı manuel olarak var ama otomasyon hâlâ yok. Tetikleme mantığı netleşmeden koda dökülmedi.
 3. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku, önce v2.0.7.330'un push edilip edilmediğini teyit et, sonra "KAP Bildirim Izleme" logunu iste/incele - bu oturumun en öncelikli işi bu olmalı.
+Depoyu klonla, bu dosyayı oku, önce v2.0.7.331'in push edilip edilmediğini teyit et, sonra "KAP Bildirim Izleme" logunu iste/incele - bu oturumun en öncelikli işi bu olmalı.
