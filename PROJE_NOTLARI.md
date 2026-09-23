@@ -7922,35 +7922,32 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
   - **Çözüm (kod tarafı, kalıcı):** İki tablo, `db.py`'de yeni, ayrı bir
     üçüncü RLS döngüsüne eklendi (yorum satırıyla, bu ihlalin üçüncü
     tekrarı olduğu not edilerek).
-  - **PUSH BEKLİYOR:** Sadece `db.py` değişti.
+  - **✅ TAMAMEN ÇÖZÜLDÜ (22 Eylül 2026):** Bahri hem acil SQL'i
+    Supabase SQL Editor'de çalıştırdı ("Success. No rows returned" -
+    ALTER TABLE için doğru/beklenen sonuç) hem de kod düzeltmesini push
+    etti (commit `0015834`, origin/main'de doğrulandı). Açık kapandı.
 
 ---
 
-## OTURUM DEVRİ (20 Eylül 2026, devam eden sohbet)
+## OTURUM DEVRİ (23 Eylül 2026, devam eden sohbet)
 
 **Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı.**
 
-### Şu an CANLIDA, DOĞRULANMIŞ (v2.0.7.321-330, hepsi push edilmiş - 20 Eylül'deki fresh clone'da doğrulandı):
+### Şu an CANLIDA, DOĞRULANMIŞ (v2.0.7.321-333, hepsi push edilmiş VE bazıları elle teyit edilmiş):
 - 17 Eylül'ün "Haber Izleme" sagası (reconnect + RSS zaman aşımı) TAMAMEN ÇÖZÜLDÜ.
-- SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun Optima Skor'u 0'a sabit.
-- TEFAS'ın hafta sonu yanlış alarmı (v2.0.7.330) düzeltildi ve push edildi.
+- SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun + 16 Eylül kararındaki 3 manipülasyon şüpheli hissenin (KTLEV/GUNDG/DSTKF) Optima Skor'u 0'a sabit.
+- TEFAS'ın hafta sonu yanlış alarmı (v2.0.7.330) düzeltildi.
+- Dünya Gazetesi, bir yazarının fon krizi soruşturmasında gözaltına alınması nedeniyle kaynak listesinden çıkarıldı (v2.0.7.331).
+- `wake_app.py`'deki eski/yanlış URL düzeltildi, uygulama bu sohbette canlı olarak uyandırıldı (v2.0.7.332).
+- Supabase güvenlik uyarısı: `enag_aylik_enflasyon` ve `kap_bildirim_takip` tablolarında RLS açık değildi - hem acil SQL Bahri tarafından Supabase'de çalıştırıldı ("Success") hem kod düzeltmesi push edildi (v2.0.7.333). **TAMAMEN KAPANDI.**
 
-### ⚠️ PUSH BEKLİYOR - v2.0.7.331 + v2.0.7.332 (spk_tedbir_fonlari.py + app.py + haber_izleme.py + wake_app.py):
-Fon krizinin hisse tarafı (KTLEV/GUNDG/DSTKF skor sıfırlama) + Dünya Gazetesi'nin kaynak listesinden çıkarılması + wake_app.py'deki eski/yanlış URL düzeltmesi (uygulama bu sohbette canlı olarak uyandırıldı - yukarıya bkz. tam açıklamalar).
-```
-git add spk_tedbir_fonlari.py app.py haber_izleme.py wake_app.py PROJE_NOTLARI.md
-git commit -m "v2.0.7.331/332: fon krizinin BIST hisse tarafi + Dunya Gazetesi cikarildi + wake_app.py eski URL kok neden duzeltmesi"
-git pull --no-rebase --no-edit
-git push
-```
+### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme, 17-19 Eylül'de 3 gün üst üste başarısız oldu
+17, 18, 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - HEPSİ "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre). Bu, zaten çözülen veritabanı/RSS sorunlarından BAĞIMSIZ, HALA AÇIK bir hata. 20-23 Eylül arasında tekrarlanıp tekrarlanmadığı HENÜZ KONTROL EDİLMEDİ (yeni bir başarısızlık e-postası gelmediyse kendiliğinden düzelmiş olabilir - bu da kontrol edilmeli).
 
-### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme, ARTIK 3'TEN FAZLA GÜN üst üste başarısız
-17, 18, 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - HEPSİ "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre). Bu, zaten çözülen veritabanı/RSS sorunlarından (v2.0.7.325/326/328, hepsi bu tarihlerden önce push edilmişti) BAĞIMSIZ, HALA AÇIK bir hata - 20 Eylül'de de tekrarlanıp tekrarlanmadığı kontrol edilmedi.
-
-**Önceki oturumda yapılan kod incelemesi (log hâlâ görülemedi - GitHub API rate limit sürüyor):**
+**Önceki oturumlarda yapılan kod incelemesi (log hâlâ görülemedi - GitHub API rate limit sürüyor):**
 `kap_bildirim_izleme.py`'nin ağ çağrıları (`_mkk_member_oid_bul`, `_yillik_bildirimleri_cek`) ve veritabanı çağrılarının (`kap_bildirim_ekle`, `get_tum_portfoy_tickerlari`, `kap_bildirim_temizle`) HEPSİ try/except ile korunuyor - job'ı tek başlarına çökertemezler. Tek güvencesiz çağrı `_calistir_asil()`'in başındaki `db.init_db()` - içindeki onlarca CREATE/ALTER TABLE'dan biri korumasızsa şüpheli. **Sadece bir hipotez, teyit edilmedi.**
 
-**Sonraki adım (değişmedi):** Bahri'den GitHub Actions'ta "KAP Bildirim Izleme"nin başarısız bir çalışmasını "Download log archive" ile indirip paylaşması istenmeli - "Haber Izleme" sagasındaki gerçek kök nedeni bulmamızı sağlayan yöntem buydu.
+**Sonraki adım (değişmedi):** Önce GitHub Actions'ta "KAP Bildirim Izleme"nin son birkaç çalışmasının durumuna bakılmalı (hâlâ başarısız mı?). Öyleyse Bahri'den başarısız bir çalışmayı "Download log archive" ile indirip paylaşması istenmeli - "Haber Izleme" sagasındaki gerçek kök nedeni bulmamızı sağlayan yöntem buydu.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
@@ -7958,4 +7955,4 @@ git push
 3. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku, önce v2.0.7.331'in push edilip edilmediğini teyit et, sonra "KAP Bildirim Izleme" logunu iste/incele - bu oturumun en öncelikli işi bu olmalı.
+Depoyu klonla, bu dosyayı oku, "KAP Bildirim Izleme"nin GitHub Actions'taki son çalışmalarının durumuna bak - bu oturumun en öncelikli işi bu olmalı.
