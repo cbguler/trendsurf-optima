@@ -7941,13 +7941,10 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - `wake_app.py`'deki eski/yanlış URL düzeltildi, uygulama bu sohbette canlı olarak uyandırıldı (v2.0.7.332).
 - Supabase güvenlik uyarısı: `enag_aylik_enflasyon` ve `kap_bildirim_takip` tablolarında RLS açık değildi - hem acil SQL Bahri tarafından Supabase'de çalıştırıldı ("Success") hem kod düzeltmesi push edildi (v2.0.7.333). **TAMAMEN KAPANDI.**
 
-### 🔎 AÇIK - EN ÖNCELİKLİ (henüz ÇÖZÜLMEDİ): KAP Bildirim Izleme, 17-19 Eylül'de 3 gün üst üste başarısız oldu
-17, 18, 19 Eylül'de ayrı ayrı "All jobs have failed" e-postaları geldi - HEPSİ "Failed in 2 minutes and 23 seconds" (saniyesi saniyesine AYNI süre). Bu, zaten çözülen veritabanı/RSS sorunlarından BAĞIMSIZ, HALA AÇIK bir hata. 20-23 Eylül arasında tekrarlanıp tekrarlanmadığı HENÜZ KONTROL EDİLMEDİ (yeni bir başarısızlık e-postası gelmediyse kendiliğinden düzelmiş olabilir - bu da kontrol edilmeli).
+### ✅ KAPANDI (23 Eylül 2026): KAP Bildirim Izleme, 17-19 Eylül'deki 3 günlük başarısızlık artık tekrarlanmıyor
+17, 18, 19 Eylül'de "All jobs have failed" e-postaları gelmişti (hepsi "Failed in 2 minutes and 23 seconds"). Bahri'nin 23 Eylül'de paylaştığı çalışma listesi kontrol edildi: son 24+ çalışmanın (bugün 08:10'dan itibaren, ~10 dakikada bir) HEPSİ başarılı, 34-55 saniye arası - tamamen normal.
 
-**Önceki oturumlarda yapılan kod incelemesi (log hâlâ görülemedi - GitHub API rate limit sürüyor):**
-`kap_bildirim_izleme.py`'nin ağ çağrıları (`_mkk_member_oid_bul`, `_yillik_bildirimleri_cek`) ve veritabanı çağrılarının (`kap_bildirim_ekle`, `get_tum_portfoy_tickerlari`, `kap_bildirim_temizle`) HEPSİ try/except ile korunuyor - job'ı tek başlarına çökertemezler. Tek güvencesiz çağrı `_calistir_asil()`'in başındaki `db.init_db()` - içindeki onlarca CREATE/ALTER TABLE'dan biri korumasızsa şüpheli. **Sadece bir hipotez, teyit edilmedi.**
-
-**Sonraki adım (değişmedi):** Önce GitHub Actions'ta "KAP Bildirim Izleme"nin son birkaç çalışmasının durumuna bakılmalı (hâlâ başarısız mı?). Öyleyse Bahri'den başarısız bir çalışmayı "Download log archive" ile indirip paylaşması istenmeli - "Haber Izleme" sagasındaki gerçek kök nedeni bulmamızı sağlayan yöntem buydu.
+**Not: kesin kök neden hiçbir zaman doğrulanamadı** (log alınamadı - GitHub API rate limit). Önceki oturumlarda yapılan kod incelemesi bir hipotez öne sürmüştü (`db.init_db()`'nin korumasız bir CREATE/ALTER TABLE'ı çökertmiş olabileceği) ama teyit edilmedi. Sorunun neden düzeldiği de KESİN BİLİNMİYOR - en olası açıklamalar: (a) KAP'ın kendi sitesi o tarihlerdeki fon krizi kaosunda geçici sorunlar yaşamış olabilir, (b) bu script de aynı `db.py`/toplu-mod mekanizmasını kullandığı için v2.0.7.320-328 arasındaki veritabanı düzeltmelerinden dolaylı fayda görmüş olabilir. Şu an aktif bir sorun olmadığı için konu kapatıldı - eğer tekrar başarısız olursa, bu sefer log indirilip kesin teşhis konulmalı.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
@@ -7955,4 +7952,4 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 3. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi, koda dökülmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku, "KAP Bildirim Izleme"nin GitHub Actions'taki son çalışmalarının durumuna bak - bu oturumun en öncelikli işi bu olmalı.
+Depoyu klonla, bu dosyayı oku. Bilinen tüm açık sorunlar KAPANDI - yeni bir konuyla ya da yukarıdaki "AÇIK/ERTELENMİŞ FİKİRLER" maddeleriyle devam edilebilir.
