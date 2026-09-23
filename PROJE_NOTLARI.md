@@ -7893,6 +7893,37 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     hiçbir referans yoktu (tek dosya, izole düzeltme).
   - **PUSH BEKLİYOR:** Sadece `wake_app.py` değişti.
 
+- **v2.0.7.333 (22 Eylül 2026, Supabase güvenlik uyarısı e-postası -
+  "CRITICAL: Table publicly accessible - Row-Level Security is not
+  enabled"): 2 tablo, oluşturuldukları günden beri `init_db()`'nin RLS
+  listelerinin DIŞINDA kalmış.**
+  - **Bulgu:** Bu, v2.0.7.100 (22 Temmuz) ve v2.0.7.238 (1 Eylül)'de iki
+    KEZ yaşanmış aynı hatanın ÜÇÜNCÜ tekrarı - "her yeni tablo RLS
+    listesine eklenmeli" kalıcı kuralı yine ihlal edilmiş. Bu dosyadaki
+    TÜM `CREATE TABLE` ifadeleri (19 tablo) ile RLS listeleri (17 tablo)
+    tek tek karşılaştırıldı: **`enag_aylik_enflasyon`** (ENAG Enflasyon
+    İzleme) ve **`kap_bildirim_takip`** (KAP Bildirim İzleme) hiçbir
+    listede yoktu. Diğer dosyalardaki (firsat_radari.py,
+    emailer_standalone.py, worker.py) tüm tablolar kendi RLS satırlarını
+    zaten içeriyordu - sorun sadece `db.py`'nin kendi iç tutarlılığındaydı.
+    Uygulama Supabase'e doğrudan Postgres bağlantısıyla (RLS'i doğal
+    olarak atlayan bir rolle) bağlandığı için bu, uygulamanın kendi
+    erişimini ETKİLEMİYORDU - sadece Supabase'in herkese açık PostgREST
+    API'sinden bu 2 tabloya YETKİSİZ erişimi (okuma/yazma/silme) açık
+    bırakıyordu.
+  - **ACİL - HEMEN YAPILMASI GEREKEN (kod dışı, elle, Supabase SQL
+    Editor'de):** Kod düzeltmesi sadece `init_db()` bir dahaki sefere
+    çalıştığında etkili olur - açığı ŞİMDİ kapatmak için Bahri'nin
+    Supabase SQL Editor'de şunu HEMEN çalıştırması gerekiyor:
+    ```sql
+    ALTER TABLE enag_aylik_enflasyon ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE kap_bildirim_takip ENABLE ROW LEVEL SECURITY;
+    ```
+  - **Çözüm (kod tarafı, kalıcı):** İki tablo, `db.py`'de yeni, ayrı bir
+    üçüncü RLS döngüsüne eklendi (yorum satırıyla, bu ihlalin üçüncü
+    tekrarı olduğu not edilerek).
+  - **PUSH BEKLİYOR:** Sadece `db.py` değişti.
+
 ---
 
 ## OTURUM DEVRİ (20 Eylül 2026, devam eden sohbet)

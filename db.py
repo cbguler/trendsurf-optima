@@ -931,6 +931,25 @@ def init_db():
         except Exception as _e:
             print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
 
+    # v2.0.7.333 (22 Eylul 2026, Supabase güvenlik uyarısı e-postası -
+    # Bahri'nin bulgusu): "KALICI KURAL: kullanici finansal verisi tasiyan
+    # HER YENI tablo icin RLS listesine eklenmeli" kurali BIR KEZ DAHA
+    # ihlal edilmisti - bu dosyadaki TUM CREATE TABLE'lar (19 tablo) ile
+    # yukaridaki iki liste (17 tablo) karsilastirildi, TAM OLARAK 2 tablo
+    # HICBIR listede yoktu: `enag_aylik_enflasyon` (ENAG Enflasyon Izleme,
+    # v2.0.7.2xx civari eklendi) ve `kap_bildirim_takip` (KAP Bildirim
+    # Izleme, v2.0.6.x civari eklendi) - ikisi de olusturulduklari gunden
+    # beri bu sweep'in DISINDA kalmis, PostgREST uzerinden herkese acik
+    # kalmis olabilir. digger dosyalardaki (firsat_radari.py,
+    # emailer_standalone.py, worker.py) tablolarin HEPSI kendi RLS
+    # satirlarini zaten iceriyordu, TEK sorun bu dosyanin kendi ic
+    # tutarliligindaydi.
+    for _rls_tablo in ("enag_aylik_enflasyon", "kap_bildirim_takip"):
+        try:
+            c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
+        except Exception as _e:
+            print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
+
     conn.commit()
     conn.close()
 
