@@ -8216,5 +8216,32 @@ gerekecek.
 git add app.py tefas_client.py PROJE_NOTLARI.md && git commit -m "v2.0.7.340: TEFAS 5 yillik periyot sorgusu API'nin 5 yil sinirini hafifce asiyordu - 1800 güne cekildi" && git pull --no-rebase --no-edit && git push
 ```
 
+### Görsel teyit geldi - KISMİ: CVL mükemmel, BAG hâlâ kısmen yanlış
+Bahri ekran görüntüsü paylaştı: **CVL artık gerçek, kırmızı/yeşil karışık mumlarla doğru görünüyor.** Ama **BAG'ın Temmuz-Eylül başı kısmı hâlâ ~0,96'da düz** görünüyordu.
+
+- **v2.0.7.341 (2 Ekim 2026) - KESİN KÖK NEDEN BULUNDU:** BAG için
+  pytefas'tan DOĞRUDAN çekilen gerçek veri, Temmuz-Ağustos'ta **0,98-1,04**
+  aralığında çıktı - grafikteki ~0,96 düz çizgiyle HİÇ UYUŞMUYOR. Bu,
+  24 saate kadar "taze" sayılan YEREL DİSK ÖNBELLEĞİNİN, bugünkü ard arda
+  düzeltmeler (v2.0.7.335-340) SIRASINDA, kod henüz TAM düzeltilmemişken
+  başarılı sayılan bir ARA DURUM pytefas sonucunu yazıp sonraki TÜM
+  düzeltmelere rağmen sessizce sunmaya devam etmesinden kaynaklanıyordu -
+  önbellek İÇERİĞİN DOĞRULUĞUNU hiç kontrol etmiyordu, sadece YAŞINA
+  bakıyordu.
+  - **Kalıcı çözüm:** Hem yerel disk önbelleğinin dosya adına (`_v2`
+    eki) hem `_fetch_tefas_hist_cached()`'in `@st.cache_data`
+    anahtarına (`_surum=2` parametresi) bir SÜRÜM ETİKETİ eklendi. Bu
+    sayede ESKİ sürümün yazdığı önbellek dosyaları/girdileri YENİ kod
+    tarafından hiç GÖRÜLMEZ (otomatik "yok" sayılır) - 24 saat beklemek
+    ya da elle silmek gerekmez. **Bundan sonra böyle bir önbellek
+    bayatlığı sorunu çıkarsa, tek yapılması gereken bu sürüm
+    etiketini (`_TEFAS_CACHE_SURUM`, `_surum`) bir arttırmak.**
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.341: TEFAS Detay grafigi onbellegine surum etiketi eklendi - bugunku duzeltmeler sirasinda yazilmis bayat/hatali onbellek artik otomatik gecersiz" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den CVL/BAG'ın Detay grafiğinin artık gerçek veri gösterip göstermediğini (taze bakışla) teyit etmesini iste - kanıtlar olumlu ama görsel teyit henüz alınmadı. Onaylanırsa teşhis print'lerini (v2.0.7.337) temizle ve sagayı kapat.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den BAG dahil birkaç TEFAS fonunun Detay grafiğini TAZE bakışla teyit etmesini iste - v2.0.7.341'in bayat önbelleği temizlemesi gerekiyor, artık GERÇEKTEN tutarlı olup olmadığı görülmeli. Onaylanırsa: (1) v2.0.7.337'deki teşhis print'lerini temizle, (2) bu haftalardır süren sagayı TAMAMEN kapat.

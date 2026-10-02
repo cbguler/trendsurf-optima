@@ -747,10 +747,25 @@ if st.query_params.get("go") == "admin" and _cur_user.get("is_admin"):
 import json as _json
 
 _TEFAS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tefas_cache")
+# v2.0.7.341 (2 Ekim 2026, Bahri'nin bulgusu - BAG'in Detay grafiginde
+# Temmuz-Agustos donemi ~0,96 duz gosteriliyordu ama pytefas'tan DOGRUDAN
+# cekilen GERCEK veri o tarihlerde 0,98-1,04 araliginda cikti): KOK NEDEN -
+# bu dosya tabanli onbellek 24 saate kadar "taze" sayiliyordu, ICERIGI
+# DOGRU MU diye hic kontrol edilmiyordu. Bugunku ard arda duzeltmeler
+# (v2.0.7.335-340) SIRASINDA, kod HENUZ TAM DUZELTILMEMISKEN basarili
+# sayilan bir pytefas cagrisi (ornegin "5y" sinir hatasindan ONCEKI bir
+# ara durum) bu dosyaya YAZILMIS ve sonraki TUM duzeltmelere ragmen 24
+# saat boyunca SESSIZCE sunulmaya devam etmis olabilir. KALICI COZUM:
+# onbellek dosya adina bir SURUM etiketi eklendi - kod her onemli sekilde
+# degistiginde bu etiket de degistirilmeli, boylece ESKI surumun yazdigi
+# dosyalar YENI kod tarafindan GORULMEZ (yeniden adlandirilmis gibi,
+# otomatik olarak "yok" sayilir) ve HER ZAMAN taze bir pytefas cagrisi
+# tetiklenir - 24 saat beklemeye ya da elle silmeye gerek kalmaz.
+_TEFAS_CACHE_SURUM = "v2"
 
 def _load_tefas_cache(ticker: str, period: str) -> pd.DataFrame:
     """Yerel JSON cache'ten fon geçmişi oku."""
-    fpath = os.path.join(_TEFAS_CACHE_DIR, f"{ticker}_{period}.json")
+    fpath = os.path.join(_TEFAS_CACHE_DIR, f"{ticker}_{period}_{_TEFAS_CACHE_SURUM}.json")
     if not os.path.exists(fpath):
         return pd.DataFrame()
     try:
@@ -769,7 +784,7 @@ def _save_tefas_cache(ticker: str, period: str, hist: pd.DataFrame):
     """Fon geçmişini yerel JSON cache'e yaz."""
     try:
         os.makedirs(_TEFAS_CACHE_DIR, exist_ok=True)
-        fpath = os.path.join(_TEFAS_CACHE_DIR, f"{ticker}_{period}.json")
+        fpath = os.path.join(_TEFAS_CACHE_DIR, f"{ticker}_{period}_{_TEFAS_CACHE_SURUM}.json")
         data = hist[["Open","High","Low","Close"]].copy()
         data.index = data.index.strftime("%Y-%m-%d")
         data.to_json(fpath, orient="index")
@@ -948,8 +963,17 @@ def _guess_tefas_kind(ticker: str, df_uni=None) -> str:
 
 
 @st.cache_data(ttl=86400, show_spinner="Fon verisi yukleniyor...")
-def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFrame:
-    """pytefas ile geçmiş veri — 1 saat cache."""
+def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 2) -> pd.DataFrame:
+    """pytefas ile geçmiş veri — 1 saat cache.
+
+    v2.0.7.341: `_surum` parametresi, bu fonksiyonun mantığı ONEMLI
+    sekilde degistiginde (ornegin v2.0.7.340'in 5y sinir duzeltmesi gibi)
+    Streamlit'in @st.cache_data onbellegini de GECERSIZ KILMAK icindir -
+    sadece bu sayiyi arttirmak, cagiran koddaki degisiklik olmasa bile,
+    o anahtarla daha once onbelleklenmis (olasi hatali) bir sonucun BIR
+    DAHA ASLA kullanilmayacagini garantiler (ttl=86400 beklemeye veya
+    reboot'a gerek kalmaz).
+    """
     # v2.0.7.337 (2 Ekim 2026, Bahri'nin bulgusu - v2.0.7.335 push'u +
     # reboot + TEFAS Aksam Guncelle'yi elle 2 kez calistirmaya RAGMEN
     # CVL/BAG/FIL gibi fonlarin Detay grafigi HALA pruzsuz/sentetik
@@ -1061,7 +1085,7 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         try:
             df_u = load_universe()
             kind = _guess_tefas_kind(ticker, df_u)
-            hist = _fetch_tefas_hist_cached(ticker, kind, period)
+            hist = _fetch_tefas_hist_cached(ticker, kind, period, _surum=2)
             if hist is not None and not hist.empty and len(hist) >= 5:
                 # Başarılı veriyi cache'e yaz (sonraki açılışta hızlı)
                 _save_tefas_cache(ticker, period, hist)
