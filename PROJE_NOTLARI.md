@@ -8014,6 +8014,48 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     zamandır TEFAS verilerinin sağlıklı olup olmadığı yönünde şüphelerim
     vardı" sözü tam olarak doğrulanmış oldu.
   - **PUSH BEKLİYOR:** Sadece `tefas_client.py`.
+  - **✅ PUSH EDİLDİ VE DOĞRULANDI (2 Ekim 2026):** Bahri v2.0.7.334/335'i
+    push etti (commit `90a513f`, origin/main'de teyit edildi).
+
+- **v2.0.7.336 (2 Ekim 2026, Bahri'nin bulgusu - CVL/BAG için PORTFÖY
+  TABLOSU "TUT İZLE" derken hemen altındaki DETAY PANELİ aynı varlık
+  için "NET SAT" gösteriyordu, Optima Skor ikisinde de 0,0 olduğu
+  halde): KÖK NEDEN - tablo ile Detay paneli FARKLI trend hesaplama
+  yöntemleri kullanıyordu.**
+  - **Kanıt:** `get_signal()`'da skor<40 iken sinyal SADECE `trend`
+    parametresine bağlı (YUKSELIS→TUT İZLE, DUSUS→NET SAT). Portföy
+    tablosu satırı, koddaki kendi yorumunun da itiraf ettiği gibi
+    "hızlı yöntem" kullanıyordu: `trend = "YUKSELIS" if Ret1M >= 0`
+    (CVL'de Ret1M=+%5,19 olduğu için YUKSELIS). Detay paneli ise
+    `enrich()` içinde MA20 bazlı daha hassas bir yöntem kullanıyordu:
+    `trend = "YUKSELIS" if son_fiyat >= MA20`. Sınırda kalan varlıklarda
+    (CVL/BAG gibi) bu iki yöntem ÇELİŞEBİLİYORDU - CVL'de tam olarak bu
+    oldu.
+  - **Çözüm:** Portföy Varlıkları Tablosu'ndaki (Portföyüm sayfası)
+    sinyal hesaplaması artık Detay paneliyle AYNI kaynağı
+    (`enrich()`'in hassas MA20-bazlı trend'i) kullanıyor - "hızlı
+    yöntem" SADECE kullanıcının sahip OLMADIĞI, binlerce satırlık büyük
+    evren tablolarında (Ana Sayfa/Kategori) performans nedeniyle
+    kalmaya devam ediyor (orada hâlâ aynı tutarsızlık teorik olarak
+    mümkün, ama Portföyüm - kullanıcının gerçek parası olan yer - artık
+    tutarlı). Portföyüm tablosu her zaman küçük olduğu
+    (kullanıcının sahip olduğu varlık sayısı kadar) için performans
+    endişesi yok. `enrich()` başarısız olursa eski hızlı yönteme
+    güvenli şekilde düşülüyor - tablo hiç bozulmaz.
+  - **Çözülmemiş/açık soru - grafik hâlâ eski görünüyor olabilir:**
+    Bahri'nin ekran görüntülerinde grafik hâlâ pürüzsüz/sentetik
+    görünüyordu - ama bu v2.0.7.335'in push'undan HEMEN SONRA alınmış
+    olabilir. İki olası sebep: (1) Streamlit Cloud'un yeniden dağıtımı
+    henüz tamamlanmamış olabilir (genelde 1-2 dakika sürer), (2)
+    `app.py`'de TEFAS geçmişi için 24 SAATE KADAR taze sayılan bir
+    YEREL DİSK önbelleği var (`tefas_cache/<ticker>_<periyot>.json`) -
+    eğer bu dosya push'tan ÖNCE (bugün içinde) yazıldıysa, düzeltme
+    canlı olsa bile bu önbellek hâlâ sunulabilir. **Önerilen hızlı
+    çözüm:** Streamlit Cloud'un "Manage app" panelinden uygulamayı
+    "Reboot" etmek - bu hem bellek içi hem (büyük ihtimalle) disk
+    önbelleğini temizler. Bu, YENİ bir kod düzeltmesi gerektirmiyor,
+    sadece doğrulama için bir sonraki adım.
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
 
 ---
 

@@ -6682,13 +6682,33 @@ elif page=="Portföyüm":
         _toplam = _adet * _guncel
         _kz_pct = round(((_guncel/_alis-1)*100) if _alis>0 else 0.0, 2)
 
-        # v2.0.3: Sinyal etiketi (hizli yontem - CSV verisi, yfinance cagrisi yok)
-        # Trend tahmini: Ret1M >= 0 ise YUKSELIS, degilse DUSUS
-        # (Detay panelinde MA20'ye gore daha hassas hesaplaniyor)
+        # v2.0.7.336 (2 Ekim 2026, Bahri'nin bulgusu - CVL/BAG icin tablo
+        # "TUT İZLE" derken hemen altindaki Detay paneli AYNI varlik icin
+        # "NET SAT" gosteriyordu, skor ikisinde de 0.0 oldugu halde):
+        # KOK NEDEN - bu satir "hizli yontem" (Ret1M isaretine bakan kaba
+        # bir tahmin) kullaniyordu, Detay paneli ise enrich()'in MA20
+        # bazli DAHA HASSAS trend hesabini kullaniyordu - ikisi FARKLI
+        # mantik oldugundan sinirda kalan varliklarda CELISEBILIYORLARDI
+        # (CVL'de tam olarak bu oldu: Ret1M pozitifti ama MA20-bazli
+        # yontem DUSUS diyordu). Portföyüm tablosu, buyuk evren
+        # tablolarinin (Ana Sayfa/Kategori, 1000+ satir) aksine HER ZAMAN
+        # kucuktur (kullanicinin sahip oldugu varlik sayisi kadar) - bu
+        # yuzden performans endisesi olmadan, Detay paneliyle TUTARLI
+        # tek bir kaynak (enrich()) kullanilabilir. Artik tablo da
+        # enrich()'in hesapladigi AYNI hassas trend'i kullaniyor - bu
+        # ikisi arasinda celiski bir daha OLMAYACAK.
         if not _match.empty:
-            _rsi_v = _sf(_row.get("RSI"), 50.0)
-            _ret1m_v = _sf(_row.get("Ret1M"), 0.0)
-            _trend_v = "YUKSELIS" if _ret1m_v >= 0 else "DUSUS"
+            try:
+                _d_pf_sinyal = enrich(_row, "3mo")
+                _trend_v = _d_pf_sinyal["trend"]
+                _rsi_v = _d_pf_sinyal["rsi"]
+            except Exception:
+                # enrich() basarisiz olursa (orn. gecici veri kaynagi
+                # sorunu), eski hizli yonteme duser - tablo hic bos
+                # kalmaz.
+                _rsi_v = _sf(_row.get("RSI"), 50.0)
+                _ret1m_v = _sf(_row.get("Ret1M"), 0.0)
+                _trend_v = "YUKSELIS" if _ret1m_v >= 0 else "DUSUS"
             _sig_lbl, _ = get_signal(_skor, _rsi_v, _trend_v)
         else:
             _sig_lbl = "—"
