@@ -950,6 +950,19 @@ def _guess_tefas_kind(ticker: str, df_uni=None) -> str:
 @st.cache_data(ttl=86400, show_spinner="Fon verisi yukleniyor...")
 def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFrame:
     """pytefas ile geçmiş veri — 1 saat cache."""
+    # v2.0.7.337 (2 Ekim 2026, Bahri'nin bulgusu - v2.0.7.335 push'u +
+    # reboot + TEFAS Aksam Guncelle'yi elle 2 kez calistirmaya RAGMEN
+    # CVL/BAG/FIL gibi fonlarin Detay grafigi HALA pruzsuz/sentetik
+    # gorunuyordu): v2.0.7.335, tefas_client.py'deki _fetch_via_pytefas()
+    # fonksiyonunu duzeltmisti - ama bu sayfanin ASIL cagirdigi fonksiyon
+    # BU (app.py icindeki AYRI, bagimsiz bir kopya) ve bunun sutun
+    # eslestirmesi zaten TAM esitlik kullaniyordu (o hata burada YOKTU).
+    # Yani gercek sorun BASKA bir yerde - ama HER hata sessizce
+    # yutuluyordu (asagidaki except), bu yuzden GERCEK sebep hic
+    # gorunmuyordu. Gecici TESHIS GUNLUGU eklendi - Streamlit Cloud'un
+    # "Manage app" panelindeki loglardan gercek hata artik GORULEBILIR.
+    # Bu print'ler kok neden bulunup kalici duzeltme yapildiktan SONRA
+    # kaldirilmali.
     try:
         from pytefas import Crawler
         from datetime import datetime, timedelta
@@ -960,8 +973,14 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
         end   = datetime.now().strftime("%Y-%m-%d")
         c = Crawler()
         for try_kind in [kind] + [k for k in ["YAT","EMK","BYF"] if k != kind]:
-            df = c.fetch(start=start, end=end, kind=try_kind, fund_code=ticker)
+            try:
+                df = c.fetch(start=start, end=end, kind=try_kind, fund_code=ticker)
+            except Exception as _e_fetch:
+                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: c.fetch() HATASI - "
+                      f"{type(_e_fetch).__name__}: {_e_fetch}", flush=True)
+                continue
             if df.empty:
+                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: c.fetch() BOS DataFrame dondu.", flush=True)
                 continue
             # Sütun normalize
             col_price = next((c2 for c2 in df.columns
@@ -969,6 +988,8 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
             col_date  = next((c2 for c2 in df.columns
                               if c2.lower() in ("date","tarih")), None)
             if not col_price or not col_date:
+                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: price/date sutunu "
+                      f"bulunamadi. Gelen sutunlar: {df.columns.tolist()}", flush=True)
                 continue
             df = df.rename(columns={col_price: "Close", col_date: "date"})
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -976,13 +997,17 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
             df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
             df = df.dropna(subset=["Close"])
             if len(df) < 5:
+                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: temizlik sonrasi "
+                      f"sadece {len(df)} satir kaldi (<5, yetersiz).", flush=True)
                 continue
+            print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: BASARILI, {len(df)} satir.", flush=True)
             df["Open"]  = df["Close"].shift(1).fillna(df["Close"])
             df["High"]  = df[["Open","Close"]].max(axis=1)
             df["Low"]   = df[["Open","Close"]].min(axis=1)
             return df[["Open","High","Low","Close"]]
-    except Exception:
-        pass
+    except Exception as _e_disi:
+        print(f"[tefas-hist-TESHIS] {ticker}: DIS try/except HATASI - "
+              f"{type(_e_disi).__name__}: {_e_disi}", flush=True)
     return pd.DataFrame()
 
 
@@ -1017,6 +1042,8 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         try:
             cache_hist = _load_tefas_cache(ticker, period)
             if cache_hist is not None and not cache_hist.empty and len(cache_hist) >= 5:
+                print(f"[tefas-hist-TESHIS] {ticker}: YEREL DISK ONBELLEGINDEN "
+                      f"donduruldu ({len(cache_hist)} satir) - pytefas HIC denenmedi.", flush=True)
                 return cache_hist
         except Exception:
             pass
@@ -5675,7 +5702,23 @@ if page=="Ana Sayfa":
         # Filtre 1: Negatif getirili varlıklar elenir
         df_c = df_c[df_c["Ret1M"] > 0].copy()
         # Filtre 2: Skor eşiği — 60 altı = "TUT İZLE" veya daha kötü
-        df_c = df_c[df_c["Optima_Skor"] >= MIN_SKOR].sort_values("Optima_Skor", ascending=False)
+        # v2.0.7.338 (2 Ekim 2026, Bahri'nin bulgusu - "Bütçe Sepetinin
+        # Optima Skor Bileşimi" hiçbir haber onaylamadığı halde neredeyse
+        # her açılışta FARKLI görünüyordu): Optima_Skor'da (özellikle
+        # Fırsat Radarı'nın aynı puanı verdiği KRIPTO varlıklarında, çoğu
+        # zaman TAM 80,0) ÇOK SAYIDA EŞİT DEĞER var - pandas'ın
+        # VARSAYILAN sort_values() sıralaması KARARSIZDIR (quicksort),
+        # yani eşit skorlu varlıklar arasındaki SIRA her çağrıda farklı
+        # çıkabilir, bu da "ilk N tanesi secilir" mantığında FARKLI
+        # varlıkların (ve dolayısıyla farklı pasta grafiği oranlarının)
+        # seçilmesine yol açıyordu. Artik ikincil, DETERMINISTIK bir
+        # sıralama anahtarı (Ticker, alfabetik) eklendi - aynı skor
+        # kümesi için SONUÇ HER ZAMAN AYNI olacak. (Bu, DEĞİŞİKLİĞİN TEK
+        # kaynağı olmayabilir - RSI/1A Getiri gibi teknik göstergeler
+        # gün içinde GERÇEKTEN hareket eder, bu da haber onayından
+        # BAĞIMSIZ, beklenen bir değişim kaynağıdır; bkz. PROJE_NOTLARI.)
+        df_c = (df_c[df_c["Optima_Skor"] >= MIN_SKOR]
+                .sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort"))
         if not df_c.empty:
             cat_pools[cat] = df_c
     print(f"[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler): "
@@ -5700,10 +5743,12 @@ if page=="Ana Sayfa":
     # ve oncesi) TAMAMEN KALDIRILDI - artik gereksiz, cunku secim zaten
     # gercek havuzdan yapildigindan bir kategorinin kapasitesini asma
     # riski hic olusmaz.
+    # v2.0.7.338: ayni nedenle (yukariya bkz.) burada da deterministik
+    # ikincil siralama anahtari (Ticker) eklendi.
     _tum_havuz = pd.concat(
         [df.assign(_Kategori=c) for c, df in cat_pools.items()],
         ignore_index=True
-    ).sort_values("Optima_Skor", ascending=False)
+    ).sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort")
     _secilenler = _tum_havuz.head(max_assets)
     slots = {c: 0 for c in cat_pools}
     for _cat, _grp in _secilenler.groupby("_Kategori"):

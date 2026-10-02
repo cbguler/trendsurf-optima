@@ -8077,17 +8077,85 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 
 **v2.0.7.335 - ÇOK DAHA BÜYÜK BULGU:** `tefas_client.py`'deki `_fetch_via_pytefas()`'ta bir sütun adı çakışması ("price" alt-dizesi "exchange_bulletin_price"yi de yakalıyordu), pytefas'tan GERÇEK veri çekmeyi YAT/EMK/BYF ÜÇÜNDE DE, HER ZAMAN başarısız kılıyordu - sadece CVL/BAG değil, TÜM TEFAS fonlarının Detay grafiği etkileniyordu. Düzeltildi ve canlı doğrulandı (CVL/BAG artık gerçek, dalgalı veri gösteriyor).
 
-**Push komutu:**
-```
-git add live_data.py app.py worker.py tefas_client.py PROJE_NOTLARI.md && git commit -m "v2.0.7.334/335: TEFAS-KRIPTO ticker cakismasi (8 ticker) + pytefas sutun adi cakismasi (TUM TEFAS fonlarini etkiliyordu) duzeltmeleri" && git pull --no-rebase --no-edit && git push
-```
+**✅ PUSH EDİLDİ VE DOĞRULANDI:** v2.0.7.334, 335, 336 - üçü de origin/main'de (son commit `014cd99`).
 
 ### 🔎 AÇIK - YANIT BEKLİYOR: Otomatik kriz izleme mimarisi önerisi
-Bahri, KAP/TEFAS/BIST/TCMB/Cumhurbaşkanlığı/Resmi Gazete'nin fon krizi ile ilgili tüm duyurularının otomatik izlenip ilgili varlıkların skoruna yansıtılmasını istedi. Araştırma yapıldı (Resmi Gazete'nin RSS'i var, KAP'ın belgesiz ama çalışan genel API'si var, SPK'nın RSS'i yok ama yıllık bülten listesi sayfası var) ve bir mimari önerildi: mevcut "Beklenti Modu" onay mekanizmasına (AI tespit eder, Bahri onaylar, sonra skora yansır) bağlamak + `spk_tedbir_fonlari.py`'yi statik dosyadan veritabanı tabanlı bir listeye taşımak. **Bahri'den henüz yanıt/onay gelmedi** - bu konuya dönülecekse önce bu mimari kararının onaylanması gerekiyor.
+Bahri, KAP/TEFAS/BIST/TCMB/Cumhurbaşkanlığı/Resmi Gazete'nin fon krizi ile ilgili tüm duyurularının otomatik izlenip ilgili varlıkların skoruna yansıtılmasını istedi. Araştırma yapıldı (Resmi Gazete'nin RSS'i var, KAP'ın belgesiz ama çalışan genel API'si var, SPK'nın RSS'i yok ama yıllık bülten listesi sayfası var) ve bir mimari önerildi: mevcut "Beklenti Modu" onay mekanizmasına (AI tespit eder, Bahri onaylar, sonra skora yansır) bağlamak + `spk_tedbir_fonlari.py`'yi statik dosyadan veritabanı tabanlı bir listeye taşımak. **Bahri'den henüz yanıt/onay gelmedi.**
+
+- **v2.0.7.337 (2 Ekim 2026, Bahri'nin bulgusu - v2.0.7.335 push +
+  reboot + TEFAS Aksam Guncelle'yi elle 2 kez çalıştırmaya RAĞMEN
+  CVL/BAG/FIL gibi fonların Detay grafiği HÂLÂ pürüzsüz/sentetik
+  görünüyordu): v2.0.7.335'in düzelttiği yer YANLIŞ ÇIKTI - KISMEN.**
+  - **Kritik bulgu:** `app.py` içinde, `tefas_client.py`'den TAMAMEN
+    BAĞIMSIZ, İKİNCİ bir pytefas-çekme fonksiyonu var:
+    `_fetch_tefas_hist_cached()` - Detay grafiğinin GERÇEKTE çağırdığı
+    fonksiyon BU, v2.0.7.335'te düzeltilen `tefas_client.
+    _fetch_via_pytefas()` DEĞİL! Bu ikinci kopyanın sütun eşleştirmesi
+    incelendi: zaten TAM eşitlik kullanıyor (`"price","fiyat"` tam
+    listesi) - yani "exchange_bulletin_price" çakışması BURADA YOK.
+    Demek ki v2.0.7.335 doğru ve gerekli bir düzeltmeydi ama BU sayfa
+    için KULLANILMAYAN bir koda uygulanmıştı - asıl kullanılan yerde
+    pytefas'ın neden başarısız olduğu HÂLÂ BİLİNMİYOR.
+  - **Ayrıca:** Bu fonksiyon 24 SAAT önbellekleniyor
+    (`@st.cache_data(ttl=86400)`) ve TÜM hatalar sessizce yutuluyordu
+    (`except Exception: pass` - hiç print yok) - bu yüzden GERÇEK hata
+    hiçbir zaman görünmüyordu. Ayrıca `_get_hist_cached()`'in bundan
+    ÖNCE kontrol ettiği 24 saate kadar taze bir YEREL DİSK önbelleği de
+    var - reboot'un bunu temizleyip temizlemediği belirsiz (Streamlit
+    Cloud'un "Reboot" düğmesi container'ı TAMAMEN mi yeniden kuruyor
+    yoksa sadece process'i mi yeniden başlatıyor, net değil).
+  - **Çözüm (ŞİMDİLİK TEŞHİS AMAÇLI):** Her başarısızlık noktasına
+    (`c.fetch()` hatası, boş DataFrame, sütun bulunamaması, <5 satır,
+    dış try/except, yerel disk önbelleğinden dönüş) `print(...,
+    flush=True)` eklendi - bu satırlar Streamlit Cloud'un "Manage app"
+    panelindeki LOGLARDA görünür. **Bahri'den beklenen:** Push sonrası
+    CVL/BAG/FIL gibi bir fonun Detay sayfasını açıp "Manage app" →
+    loglardan "[tefas-hist-TESHIS]" ile başlayan satırları kopyalayıp
+    paylaşması - bu, gerçek kök nedeni kesin olarak ortaya çıkaracak.
+    Kök neden bulunup kalıcı düzeltme yapıldıktan SONRA bu teşhis
+    print'leri kaldırılmalı.
+  - **PUSH BEKLİYOR:** Sadece `app.py` (teşhis amaçlı, geçici).
+
+- **v2.0.7.338 (2 Ekim 2026, Bahri'nin bulgusu - "Bütçe Sepetinin
+  Optima Skor Bileşimi" pasta grafiği hiçbir haber onaylamadığı halde
+  neredeyse her açılışta FARKLI görünüyordu, hatta Kategori Dağılımı
+  bile bazen TEFAS+BIST+KRIPTO, bazen sadece BIST+KRIPTO, bazen sadece
+  TEFAS+KRIPTO gösteriyordu): İKİ AYRI KATKIDA BULUNAN NEDEN bulundu.**
+  - **Neden 1 (gerçek/beklenen davranış, HATA DEĞİL):** Bütçe sepeti
+    CANLI piyasa verisine göre çalışıyor - BIST hisseleri seans
+    saatlerinde HER SAYFA AÇILIŞINDA canlı yenileniyor, KRIPTO skorları
+    Fırsat Radarı tarafından 15-20 dakikada bir güncelleniyor. Bu
+    GERÇEK teknik göstergeler (RSI, 1 Aylık Getiri) gün içinde doğal
+    olarak hareket eder - bu, "Beklenti Modu" haber onay sisteminden
+    TAMAMEN BAĞIMSIZ bir değişim kaynağıdır. Örneğin BIST seans dışıyken
+    bazı hisseler eşiği (Optima Skor ≥60, Ret1M >0) karşılayamayıp
+    sepetten düşebilir, bu da kategori dağılımını büyük ölçüde
+    değiştirebilir.
+  - **Neden 2 (gerçek bir hata, DÜZELTİLDİ):** Optima Skor'da (özellikle
+    Fırsat Radarı'nın birçok KRIPTO varlığına verdiği TAM 80,0 gibi)
+    ÇOK SAYIDA EŞİT DEĞER var. pandas'ın varsayılan `sort_values()`
+    sıralaması KARARSIZDIR (quicksort) - eşit skorlu varlıklar arasındaki
+    sıra, girdi dizisinin iç durumuna bağlı olarak değişebilir, bu da
+    "ilk N tanesi seçilir" mantığında FARKLI varlıkların seçilmesine
+    yol açabiliyordu. Bütçe sepetinin kategori-başına slot sayısını
+    belirleyen küresel sıralama (`_tum_havuz`) ve her kategorinin kendi
+    havuzunu sıralayan adım, ikisi de artık Ticker'ı (alfabetik)
+    ikincil, deterministik bir sıralama anahtarı olarak kullanıyor
+    (`kind="mergesort"` ile) - aynı skor kümesi için sonuç artık HER
+    ZAMAN AYNI olacak.
+  - **Önem:** Neden 2 düzeltildi ama Neden 1 KALICI VE BEKLENEN bir
+    davranış - Bahri'ye bu ayrım net anlatılmalı (sepet "dondurulmuş"
+    bir öneri değil, canlı piyasa durumunun bir anlık görüntüsü).
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Toplu push komutu (v2.0.7.337 + v2.0.7.338, ikisi de app.py):**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.337/338: TEFAS Detay grafigi icin gecici teshis loglari + Butce Sepeti secimindeki kararsiz siralama (esit skorlu varliklar) duzeltmesi" && git pull --no-rebase --no-edit && git push
+```
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
 1. Yukarıdaki otomatik kriz izleme mimarisi (en büyük, en öncelikli açık fikir).
 2. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku, v2.0.7.334/335'in push edilip edilmediğini teyit et. Sonra ya otomatik kriz izleme mimarisi konusuna dönülebilir ya da yeni bir konuyla devam edilebilir.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.337'nin push'u sonrası Bahri'den "Manage app" loglarındaki "[tefas-hist-TESHIS]" satırlarını isteyip TEFAS Detay grafiği sorununun kesin kök nedenini bulmak - bu, haftalardır süren bir sorunun son perdesi olabilir.
