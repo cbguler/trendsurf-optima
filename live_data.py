@@ -822,7 +822,18 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
                 live.update(_fetch_live_kripto(tuple(sorted(kripto_list))))
 
         if live:
-            mask = df["Ticker"].isin(live.keys())
+            # v2.0.7.334 (2 Ekim 2026, Bahri'nin bulgusu - Butce Optimizasyonu
+            # tablosunda TEFAS/FIL (Fiba Portfoy Para Piyasasi Fonu) ile
+            # KRIPTO/FIL (Filecoin) AYNI "Emir Fiyati"ni gosteriyordu):
+            # KOK NEDEN - bu maske sadece Ticker string'ine bakiyordu,
+            # Kategori'yi HIC kontrol etmiyordu. Ayni ticker sembolu farkli
+            # kategorilerde CAKISTIGINDA (FIL: hem Filecoin hem bir TEFAS
+            # fonu), KRIPTO icin cekilen canli fiyat, ayni tickera sahip
+            # TEFAS/DOVIZ/MADEN/BIST satirina da SIZIYORDU - cunku bu
+            # fonksiyonun KENDI DOCSTRING'I "sadece DOVIZ+MADEN+KRIPTO"
+            # diyordu ama maske bunu hic UYGULAMIYORDU. Duzeltme: Kategori
+            # kontrolu eklendi.
+            mask = df["Ticker"].isin(live.keys()) & df["Kategori"].isin(["DOVIZ", "MADEN", "KRIPTO"])
             if mask.any():
                 df.loc[mask, "Son_Fiyat"] = df.loc[mask, "Ticker"].map(live).astype(float)
 

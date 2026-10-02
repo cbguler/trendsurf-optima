@@ -7927,9 +7927,97 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
     ALTER TABLE için doğru/beklenen sonuç) hem de kod düzeltmesini push
     etti (commit `0015834`, origin/main'de doğrulandı). Açık kapandı.
 
+- **v2.0.7.334 (2 Ekim 2026, Bahri'nin bulgusu - Bütçe Optimizasyonu
+  tablosunda "FIL" hem TEFAS hem KRIPTO satırında AYNI Emir Fiyatı/
+  Optima Skoru gösteriyordu): TEFAS ile KRIPTO arasında TİCKER
+  ÇAKIŞMASI - sadece FIL değil, TOPLAM 8 TİCKER etkileniyordu.**
+  - **Kanıt:** `optimized_universe.csv`'de ayni ticker'in BİRDEN FAZLA
+    kategoride (aynı anda) göründüğü TÜM satırlar tarandı: **APT, BIO,
+    ENJ, FIL, GRT, JUP, MET, OMG** - hepsi hem bir TEFAS fonu hem bir
+    KRIPTO varlığıyla (Aptos, BIO Protocol, Enjin Coin, Filecoin, The
+    Graph, Jupiter, ?, OMG Network) aynı 3 harfli kodu paylaşıyordu.
+  - **Kök neden (3 ayrı yer, hepsi AYNI desen - Kategori kontrolü
+    olmadan salt Ticker string'ine göre eşleştirme):**
+    1. `live_data.py`'deki `refresh_fx_maden_kripto()` - DOVIZ/MADEN/
+       KRIPTO için çekilen canlı fiyatı uygularken sadece
+       `df["Ticker"].isin(live.keys())` kontrolü vardı, Kategori HİÇ
+       sorgulanmıyordu - KRIPTO'nun canlı fiyatı aynı ticker'a sahip
+       TEFAS satırına da yazılıyordu.
+    2. `app.py`'deki `load_universe()` içindeki Fırsat Radarı
+       (`intraday_scores`) overlay'i - aynı sorun, Optima_Skor için.
+    3. `app.py`'deki e-posta tetikleyici uç noktasının (ayrı bir kod
+       kopyası) AYNI overlay mantığı.
+    Üçü de artık satırın KENDİ Kategori'si eşleşmediği sürece
+    uygulanmıyor.
+  - **Kaynağındaki asıl eksik:** `worker.py`'deki kripto evren
+    oluşturucu (`_kripto_evrenini_olustur`) SADECE BIST ile çakışmayı
+    kontrol edip "C" önekiyle yeniden adlandırıyordu (LINK→CLINK gibi)
+    - bir yorum satırı "TEFAS-farkındalıklı yeniden adlandırma da
+    eklendi" diyordu ama kod bunu HİÇ YAPMIYORDU (muhtemelen GRT
+    olayında - v2.0.7.265 - sadece app.py'de birleştirme anahtarı
+    düzeltilmiş, kaynaktaki yeniden adlandırma hiç eklenmemişti). TEFAS'ın
+    ~1300+ fon kodu BIST'in 770 hissesinden çok daha fazla kısa kod
+    içerdiği için çakışma ihtimali de çok daha yüksek. Artık TEFAS fon
+    kodları da (tefas_client.load_excel_all() üzerinden) aynı "C"
+    önekiyle yeniden adlandırma kontrolüne dahil edildi.
+  - **CANLI TEST:** Sahte bir BtcTurk parite listesiyle (APT/BIO/ENJ/
+    FIL/GRT/JUP/MET/OMG/LINK dahil) uçtan uca doğrulandı - 9'u da
+    (8 TEFAS + 1 BIST çakışması) doğru şekilde "C" önekiyle yeniden
+    adlandırıldı (CAPT, CBIO, ..., CLINK).
+  - **Beklenen etki:** Bir sonraki worker.py tam çalışmasından sonra
+    uygulamada "FIL" artık "CFIL" olarak görünecek (Filecoin için) -
+    bu LINK→CLINK ile AYNI, bilinen/amaçlanan bir değişiklik, yeni bir
+    hata değil.
+  - **PUSH BEKLİYOR:** `live_data.py`, `app.py`, `worker.py`.
+
+- **v2.0.7.335 (2 Ekim 2026, Bahri'nin bulgusu - CVL/BAG'ın Detay
+  grafiğinin "imkansız derecede pürüzsüz" göründüğü, günlük gerçek
+  dalgalanmanın hiç yansımadığı, UZUN ZAMANDIR şüphelenilen bir sorun):
+  KESİN KÖK NEDEN BULUNDU - bu sadece CVL/BAG'a özgü DEĞİL, pytefas
+  üzerinden çekilen TÜM TEFAS FONLARININ Detay grafiğini etkiliyordu.**
+  - **Kanıt:** pytefas'ı DOĞRUDAN çağırınca CVL/BAG için GERÇEK, güncel,
+    gün gün dalgalanan veri geldiğini doğruladım (örn. CVL: 1,5698 →
+    1,5517 → 1,5484 → 1,5428 → 1,5568 - gerçek piyasa hareketi). Ama
+    `tefas_client.fetch_fund_history()` (uygulamanın kendi fonksiyonu)
+    ÇAĞRILDIĞINDA aynı veri alınamıyor, 30+ saniye sürüp boş dönüyor ve
+    sentetik (tahmini, düz-çizgiye-yakın) seriye düşülüyordu.
+  - **KESİN KÖK NEDEN:** `_fetch_via_pytefas()`'taki sütun eşleştirme
+    mantığı `"price" in sütun_adı.lower()` şeklinde bir ALT-DİZE
+    araması yapıyordu. pytefas'ın YAT/EMK/BYF ÜÇÜNDE DE döndürdüğü
+    yanıtta, gerçek fiyat sütunu ("price") yanında HER ZAMAN `None`
+    değerli bir `exchange_bulletin_price` sütunu da var - ve bu alt-dize
+    araması bunu da yakalayıp İKİSİNİ BİRDEN "Close" olarak
+    yeniden adlandırıyordu. Sonuç: `df["Close"]` bir Series değil bir
+    DataFrame oluyor, `pd.to_numeric(df["Close"])` de
+    "TypeError: arg must be a list, tuple, 1-d array, or Series" ile
+    patlıyordu - bu hata sessizce yutulup bir sonraki fon türüne
+    geçiliyordu, ÜÇÜ DE (YAT/EMK/BYF) AYNI şekilde başarısız olunca
+    fonksiyon boş dönüp sentetik fallback'e düşülüyordu. CANLI TEST:
+    bu sütun çakışması YAT/EMK/BYF'nin ÜÇÜNDE DE (farklı gerçek fon
+    kodlarıyla) doğrulandı - yani bu, `_check_pytefas()`'ın kendi
+    basit kontrolünün (sadece `df.empty` bakıyor, hiç sütun
+    yeniden adlandırmıyor) hiç yakalayamadığı, ama GERÇEK veri çekme
+    yolunun HER ÇAĞRISINDA tetiklenen evrensel bir hataydı.
+  - **Çözüm:** Sütun eşleştirmesi artık önce TAM eşitlik (`==`) arıyor
+    (gerçek sütun adları zaten tam olarak "price"/"date") - sadece tam
+    eşleşme bulunamazsa, "bulletin" içeren sütunları HARİÇ TUTARAK
+    alt-dize aramasına düşülüyor (gelecekteki olası varyasyonlara karşı
+    güvenlik ağı).
+  - **CANLI DOĞRULAMA (düzeltme sonrası):** CVL için 1,29 saniyede 69
+    satır GERÇEK veri (ortalama günlük mutlak değişim: 0,00976 - gerçek
+    piyasa oynaklığı), BAG için de aynı şekilde (0,00844 ortalama günlük
+    değişim) - ikisi de artık "imkansız derecede pürüzsüz" değil, gerçek
+    gün gün dalgalanma gösteriyor.
+  - **Önem:** Bu, CVL/BAG'a özel bir yama DEĞİL - `fetch_fund_history()`
+    ile çağrılan HERHANGİ bir TEFAS fonunun Detay grafiği artık (pytefas
+    gerçekten erişilebilirse) gerçek veri gösterecek. Bahri'nin "uzun
+    zamandır TEFAS verilerinin sağlıklı olup olmadığı yönünde şüphelerim
+    vardı" sözü tam olarak doğrulanmış oldu.
+  - **PUSH BEKLİYOR:** Sadece `tefas_client.py`.
+
 ---
 
-## OTURUM DEVRİ (23 Eylül 2026, devam eden sohbet)
+## OTURUM DEVRİ (2 Ekim 2026, devam eden sohbet)
 
 **Bu bölüm, yeni sohbetin İLK OKUYACAĞI şey olmalı.**
 
@@ -7938,18 +8026,26 @@ dosyayı ve `git log --oneline` çıktısını kontrol et.**
 - SPK'nın 17 Eylül fon tasfiye kararı kapsamındaki 117 fonun + 16 Eylül kararındaki 3 manipülasyon şüpheli hissenin (KTLEV/GUNDG/DSTKF) Optima Skor'u 0'a sabit.
 - TEFAS'ın hafta sonu yanlış alarmı (v2.0.7.330) düzeltildi.
 - Dünya Gazetesi, bir yazarının fon krizi soruşturmasında gözaltına alınması nedeniyle kaynak listesinden çıkarıldı (v2.0.7.331).
-- `wake_app.py`'deki eski/yanlış URL düzeltildi, uygulama bu sohbette canlı olarak uyandırıldı (v2.0.7.332).
-- Supabase güvenlik uyarısı: `enag_aylik_enflasyon` ve `kap_bildirim_takip` tablolarında RLS açık değildi - hem acil SQL Bahri tarafından Supabase'de çalıştırıldı ("Success") hem kod düzeltmesi push edildi (v2.0.7.333). **TAMAMEN KAPANDI.**
+- `wake_app.py`'deki eski/yanlış URL düzeltildi (v2.0.7.332).
+- Supabase güvenlik açığı (RLS) tamamen kapandı (v2.0.7.333).
+- KAP Bildirim Izleme'nin 17-19 Eylül'deki 3 günlük başarısızlığı kendiliğinden düzeldi, kesin kök neden hiç bulunamadı ama aktif sorun yok.
 
-### ✅ KAPANDI (23 Eylül 2026): KAP Bildirim Izleme, 17-19 Eylül'deki 3 günlük başarısızlık artık tekrarlanmıyor
-17, 18, 19 Eylül'de "All jobs have failed" e-postaları gelmişti (hepsi "Failed in 2 minutes and 23 seconds"). Bahri'nin 23 Eylül'de paylaştığı çalışma listesi kontrol edildi: son 24+ çalışmanın (bugün 08:10'dan itibaren, ~10 dakikada bir) HEPSİ başarılı, 34-55 saniye arası - tamamen normal.
+### ⚠️ PUSH BEKLİYOR - v2.0.7.334 + v2.0.7.335 (bu sohbette yapıldı, BÜYÜK bulgular):
+**v2.0.7.334** - TEFAS/KRIPTO arasında 8 ticker çakışması (APT/BIO/ENJ/FIL/GRT/JUP/MET/OMG) - `live_data.py`, `app.py` (2 yer) ve `worker.py`'de düzeltildi, uçtan uca test edildi.
 
-**Not: kesin kök neden hiçbir zaman doğrulanamadı** (log alınamadı - GitHub API rate limit). Önceki oturumlarda yapılan kod incelemesi bir hipotez öne sürmüştü (`db.init_db()`'nin korumasız bir CREATE/ALTER TABLE'ı çökertmiş olabileceği) ama teyit edilmedi. Sorunun neden düzeldiği de KESİN BİLİNMİYOR - en olası açıklamalar: (a) KAP'ın kendi sitesi o tarihlerdeki fon krizi kaosunda geçici sorunlar yaşamış olabilir, (b) bu script de aynı `db.py`/toplu-mod mekanizmasını kullandığı için v2.0.7.320-328 arasındaki veritabanı düzeltmelerinden dolaylı fayda görmüş olabilir. Şu an aktif bir sorun olmadığı için konu kapatıldı - eğer tekrar başarısız olursa, bu sefer log indirilip kesin teşhis konulmalı.
+**v2.0.7.335 - ÇOK DAHA BÜYÜK BULGU:** `tefas_client.py`'deki `_fetch_via_pytefas()`'ta bir sütun adı çakışması ("price" alt-dizesi "exchange_bulletin_price"yi de yakalıyordu), pytefas'tan GERÇEK veri çekmeyi YAT/EMK/BYF ÜÇÜNDE DE, HER ZAMAN başarısız kılıyordu - sadece CVL/BAG değil, TÜM TEFAS fonlarının Detay grafiği etkileniyordu. Düzeltildi ve canlı doğrulandı (CVL/BAG artık gerçek, dalgalı veri gösteriyor).
+
+**Push komutu:**
+```
+git add live_data.py app.py worker.py tefas_client.py PROJE_NOTLARI.md && git commit -m "v2.0.7.334/335: TEFAS-KRIPTO ticker cakismasi (8 ticker) + pytefas sutun adi cakismasi (TUM TEFAS fonlarini etkiliyordu) duzeltmeleri" && git pull --no-rebase --no-edit && git push
+```
+
+### 🔎 AÇIK - YANIT BEKLİYOR: Otomatik kriz izleme mimarisi önerisi
+Bahri, KAP/TEFAS/BIST/TCMB/Cumhurbaşkanlığı/Resmi Gazete'nin fon krizi ile ilgili tüm duyurularının otomatik izlenip ilgili varlıkların skoruna yansıtılmasını istedi. Araştırma yapıldı (Resmi Gazete'nin RSS'i var, KAP'ın belgesiz ama çalışan genel API'si var, SPK'nın RSS'i yok ama yıllık bülten listesi sayfası var) ve bir mimari önerildi: mevcut "Beklenti Modu" onay mekanizmasına (AI tespit eder, Bahri onaylar, sonra skora yansır) bağlamak + `spk_tedbir_fonlari.py`'yi statik dosyadan veritabanı tabanlı bir listeye taşımak. **Bahri'den henüz yanıt/onay gelmedi** - bu konuya dönülecekse önce bu mimari kararının onaylanması gerekiyor.
 
 ### AÇIK/ERTELENMİŞ FİKİRLER (henüz KOD YAZILMADI):
-1. KAP bildirimi (VBTS vb.) geldiğinde bunun Optima Skor'a otomatik yansıtılması - Bahri'nin önceki talebi, öncelik/kapsam netleşmedi.
-2. SPK/KAP'ın toplu fon/şirket/hisse tedbir kararlarını (v2.0.7.322 ve v2.0.7.331'deki gibi) otomatik izleyip `spk_tedbir_fonlari.py` listesini kendiliğinden güncelleme - Bahri'nin tekrarlayan talebi, artık hem fon hem hisse tarafı manuel olarak var ama otomasyon hâlâ yok. Tetikleme mantığı netleşmeden koda dökülmedi.
-3. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi, koda dökülmedi.
+1. Yukarıdaki otomatik kriz izleme mimarisi (en büyük, en öncelikli açık fikir).
+2. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi.
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. Bilinen tüm açık sorunlar KAPANDI - yeni bir konuyla ya da yukarıdaki "AÇIK/ERTELENMİŞ FİKİRLER" maddeleriyle devam edilebilir.
+Depoyu klonla, bu dosyayı oku, v2.0.7.334/335'in push edilip edilmediğini teyit et. Sonra ya otomatik kriz izleme mimarisi konusuna dönülebilir ya da yeni bir konuyla devam edilebilir.

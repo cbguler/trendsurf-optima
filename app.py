@@ -294,7 +294,13 @@ if _qp.get("trigger") == "email":
             from db import get_intraday_overlay
             _rd_map = get_intraday_overlay(45)
             if _rd_map:
-                _mask_rd = _df_uni["Ticker"].astype(str).isin(_rd_map.keys())
+                # v2.0.7.334: load_universe()'deki AYNI duzeltme burada da -
+                # Kategori eslesmeden Ticker-only eslestirme, cakisan
+                # tickerlarda (orn. FIL: Filecoin/KRIPTO vs. bir TEFAS fonu)
+                # yanlis kategoriye skor sizdiriyordu.
+                _rd_kategori_map_trig = {t: v["kategori"] for t, v in _rd_map.items()}
+                _df_uni_rd_kat = _df_uni["Ticker"].astype(str).map(_rd_kategori_map_trig)
+                _mask_rd = _df_uni["Ticker"].astype(str).isin(_rd_map.keys()) & (_df_uni_rd_kat == _df_uni["Kategori"])
                 if _mask_rd.any():
                     if "Optima_Skor" not in _df_uni.columns:
                         _df_uni["Optima_Skor"] = pd.NA
@@ -815,7 +821,18 @@ def load_universe():
                     "kategori": _rv(_r, "kategori", 1),
                     "skor":  _rv(_r, "skor", 2),  "fiyat": _rv(_r, "fiyat", 3),
                     "rsi":   _rv(_r, "rsi", 4),   "ret1m": _rv(_r, "ret1m", 5)}
-            _mask_rd = df["Ticker"].astype(str).isin(_rd_map.keys())
+            # v2.0.7.334 (2 Ekim 2026, Bahri'nin bulgusu - TEFAS/FIL ile
+            # KRIPTO/FIL'in Optima Skoru'nun da AYNI gostermesi): bu maske
+            # de sadece Ticker string'ine bakiyordu, Kategori'yi kontrol
+            # etmiyordu - ayni ticker FARKLI kategorilerde cakistiginda
+            # (FIL: Filecoin/KRIPTO vs. Fiba Portfoy Fonu/TEFAS), radar'in
+            # bir kategori icin hesapladigi skor, digerine de siziyordu.
+            # _rd_map zaten her kayit icin KENDI "kategori"sini tutuyor -
+            # artik satirin KENDI Kategori'si de eslesmedigi surece
+            # uygulanmiyor.
+            _rd_kategori_map = {t: v["kategori"] for t, v in _rd_map.items()}
+            _df_rd_kat = df["Ticker"].astype(str).map(_rd_kategori_map)
+            _mask_rd = df["Ticker"].astype(str).isin(_rd_map.keys()) & (_df_rd_kat == df["Kategori"])
             if _mask_rd.any():
                 if "Optima_Skor" not in df.columns:
                     df["Optima_Skor"] = pd.NA

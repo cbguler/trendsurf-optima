@@ -256,13 +256,45 @@ def _fetch_via_pytefas(ticker: str, kind: str,
             if df.empty:
                 continue
             # Sütun isimlerini normalize et
+            # v2.0.7.335 (2 Ekim 2026, Bahri'nin bulgusu - CVL/BAG gibi
+            # fonların Detay grafiginin "imkansız derecede pürüzsüz"
+            # göründüğü, gerçek günlük dalgalanma hiç yansımadığı):
+            # KESİN KÖK NEDEN BULUNDU - pytefas'ın döndürdüğü yanıtta
+            # (YAT/EMK/BYF üçünde de AYNI) "price" sütununun yanı sıra
+            # HER ZAMAN None degerli bir "exchange_bulletin_price" sütunu
+            # da var. Alt-dize eslestirmesi ("price" in cl) bu ikincisini
+            # de yakalayip İKİSİNİ BİRDEN "Close"a esliyordu - rename
+            # sonrası df["Close"] bir Series degil bir DataFrame oluyor,
+            # pd.to_numeric(df["Close"]) de "TypeError: arg must be a
+            # list, tuple, 1-d array, or Series" ile patlıyordu. Bu hata
+            # asagidaki except'e dusup SESSIZCE yutuluyordu, ÜÇ fon
+            # turunde de (YAT/EMK/BYF) AYNI sekilde tekrarlandigi icin
+            # TÜM denemeler basarisiz oluyor, fonksiyon bos DataFrame
+            # donup sentetik fallback'e dusuluyordu - CANLI DOGRULANDI.
+            # SONUÇ: bu, SADECE CVL/BAG'a ozgu degil, `fetch_fund_history`
+            # ile cagrilan TÜM TEFAS fonlarinin Detay grafigini (pytefas
+            # gercekten erisilebilir olsa BILE) baştan beri sentetige
+            # ZORLUYORDU. ÇÖZÜM: önce TAM esitlik (==) denenir (gercek
+            # sütun adlari zaten tam olarak "price"/"date") - sadece hic
+            # tam eslesme yoksa, "bulletin" iceren sutunlari HARIC
+            # TUTARAK alt-dize aramasina dusulur (gelecekteki olasi
+            # varyasyonlara karsi guvenlik agi).
             col_map = {}
-            for c_name in df.columns:
-                cl = c_name.lower()
-                if "price" in cl or "fiyat" in cl:
-                    col_map[c_name] = "Close"
-                elif "date" in cl or "tarih" in cl:
-                    col_map[c_name] = "date"
+            _tam_price = [c for c in df.columns if c.lower() in ("price", "fiyat")]
+            _tam_date  = [c for c in df.columns if c.lower() in ("date", "tarih")]
+            if _tam_price:
+                col_map[_tam_price[0]] = "Close"
+            if _tam_date:
+                col_map[_tam_date[0]] = "date"
+            if not _tam_price or not _tam_date:
+                for c_name in df.columns:
+                    if c_name in col_map:
+                        continue
+                    cl = c_name.lower()
+                    if not _tam_price and ("price" in cl or "fiyat" in cl) and "bulletin" not in cl:
+                        col_map[c_name] = "Close"
+                    elif not _tam_date and ("date" in cl or "tarih" in cl):
+                        col_map[c_name] = "date"
             df = df.rename(columns=col_map)
             if "date" in df.columns:
                 df["date"] = pd.to_datetime(df["date"], errors="coerce")

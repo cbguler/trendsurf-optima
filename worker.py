@@ -265,6 +265,30 @@ def _kripto_evrenini_olustur():
         if not pairs:
             raise ValueError("bos parite listesi dondu")
         bist_set = {t.upper() for t in BIST_TICKERS}
+        # v2.0.7.334 (2 Ekim 2026, Bahri'nin bulgusu - FIL: hem Filecoin
+        # hem "FİBA PORTFÖY PARA PİYASASI (TL) FONU" ayni ticker kodunu
+        # tasiyordu, Butce Optimizasyonu'nda ikisinin fiyati/skoru
+        # birbirine karisiyordu): Bu fonksiyon SADECE BIST ile cakismayi
+        # kontrol ediyordu - koddaki bir yorumun ("worker.py'de de TEFAS-
+        # farkindalikli yeniden adlandirma eklendi") iddia ettigi TEFAS
+        # kontrolu ASLINDA HIC YAPILMIYORDU (GRT/v2.0.7.265'te sadece
+        # app.py'deki birlestirme anahtari duzeltilmisti, kaynaktaki
+        # yeniden adlandirma hic eklenmemis). TEFAS'in ~1300+ fon kodu,
+        # BIST'in 770 hissesinden cok daha fazla kisa/3-5 harfli kod
+        # icerdigi icin kripto sembolleriyle cakisma ihtimali de cok daha
+        # yuksek - simdi TEFAS fon kodlari da ayni "C" onekiyle yeniden
+        # adlandirma kontrolune dahil edildi.
+        try:
+            from tefas_client import load_excel_all
+            _df_tefas_kod = load_excel_all(os.getcwd())
+            tefas_set = ({t.upper() for t in _df_tefas_kod["Ticker"].dropna().astype(str)}
+                         if not _df_tefas_kod.empty and "Ticker" in _df_tefas_kod.columns
+                         else set())
+        except Exception as _tefas_kod_err:
+            print(f"[kripto-evren] TEFAS kod listesi alinamadi, cakisma kontrolu "
+                  f"sadece BIST ile yapilacak: {_tefas_kod_err}")
+            tefas_set = set()
+        carpisan_set = bist_set | tefas_set
         sonuc = []
         yeniden_adlandirilan = []
         for pair in pairs:
@@ -273,17 +297,20 @@ def _kripto_evrenini_olustur():
             if not base:
                 continue
             ticker = base
-            if base in bist_set:
+            if base in carpisan_set:
                 # v2.0.4.6'daki LINK->CLINK cozumuyle AYNI yontem
                 ticker = f"C{base}"
-                yeniden_adlandirilan.append(f"{base}->{ticker}")
+                _kaynak = ("BIST" if base in bist_set else "") + \
+                          ("+TEFAS" if base in bist_set and base in tefas_set else
+                           "TEFAS" if base in tefas_set else "")
+                yeniden_adlandirilan.append(f"{base}->{ticker} ({_kaynak})")
             _KRIPTO_BP_PARITE_MAP[ticker] = f"{base}TRY"
             yf_sym = f"{base}-USD"  # yfinance icin tahmini sembol (detay
                                      # sayfasi opsiyonel grafik icin - bulunamazsa
                                      # zaten zarifce es geciliyor)
             sonuc.append((ticker, yf_sym))
         if yeniden_adlandirilan:
-            print(f"[kripto-evren] BIST ile cakisan {len(yeniden_adlandirilan)} "
+            print(f"[kripto-evren] Baska kategorilerle cakisan {len(yeniden_adlandirilan)} "
                   f"kripto yeniden adlandirildi: {yeniden_adlandirilan}")
         print(f"[kripto-evren] BtcTurk'ten {len(sonuc)} TRY paritesi canli cekildi.")
         return sonuc
