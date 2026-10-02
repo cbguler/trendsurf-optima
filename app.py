@@ -967,7 +967,17 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str) -> pd.DataFram
         from pytefas import Crawler
         from datetime import datetime, timedelta
         period_days = {"1mo": 35, "3mo": 95, "6mo": 190,
-                       "1y": 370, "3y": 1100, "5y": 1830}
+                       "1y": 370, "3y": 1100, "5y": 1800}
+        # v2.0.7.340 (2 Ekim 2026, Bahri'nin paylaştığı teşhis logundan
+        # bulundu - "TefasAPIError: Baslangic Tarihi 5 yildan eski
+        # olamaz"): "5y" icin 1830 gun = 1830/365.25 ≈ 5,01 yıl - TEFAS
+        # API'sinin TAM 5 yillik sinirini birkac gun asiyordu. 1800 güne
+        # (≈4,93 yıl) çekildi, güvenli pay bırakıyor. ÖNEMLİ: loglarda
+        # AYNI zamanda CVL/BAG/HOY icin "YAT: BASARILI, 69 satir" de
+        # görüldü - yani varsayılan "3 Ay" periyodu ile gerçek pytefas
+        # verisi ZATEN BAŞARIYLA ÇEKİLİYORDU, bu "5y" hatası AYRI,
+        # muhtemelen periyot radyo düğmesinden "5 Yıl" denenince ortaya
+        # çıkan bir yan sorundu.
         days = period_days.get(period, 370)
         start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         end   = datetime.now().strftime("%Y-%m-%d")

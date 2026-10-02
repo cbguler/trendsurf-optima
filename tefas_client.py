@@ -241,7 +241,10 @@ def _fetch_via_pytefas(ticker: str, kind: str,
     """pytefas ile gerçek günlük NAV verisi."""
     from pytefas import Crawler
     period_days = {"1mo": 35, "3mo": 95, "6mo": 190,
-                   "1y": 370, "3y": 1100, "5y": 1830}
+                   "1y": 370, "3y": 1100, "5y": 1800}
+    # v2.0.7.340 (2 Ekim 2026): app.py'deki _fetch_tefas_hist_cached()'te
+    # bulunan AYNI "5y" sinir-asimi hatasi (bkz. o dosyadaki yorum) -
+    # tutarlilik icin burada da ayni degere cekildi.
     days = period_days.get(period, 370)
     today = datetime.now()
     start = (today - timedelta(days=days)).strftime("%Y-%m-%d")

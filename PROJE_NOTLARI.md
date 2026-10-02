@@ -8191,5 +8191,30 @@ Bahri reboot sonrası CVL/BAG'ın grafiğinin değişmediğini bildirdi - ama he
 git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.339: Kategori sayfalarinin (BIST/TEFAS/Doviz/Maden/Kripto) Top5 ve Tum Varliklar tablolarina eksik olan Sinyal sutunu eklendi" && git pull --no-rebase --no-edit && git push
 ```
 
+### ✅ ÇOK BÜYÜK OLASILIKLA ÇÖZÜLDÜ (2 Ekim 2026) - TEFAS Detay grafiği
+Bahri "Manage app" logunu paylaştı. Teşhis satırları ("[tefas-hist-TESHIS]") şunu gösterdi:
+- **CVL/YAT, BAG/YAT, HOY/YAT - ÜÇÜ DE "BASARILI, 69 satır"** - yani varsayılan "3 Ay" periyodunda pytefas'tan GERÇEK veri başarıyla çekiliyor. v2.0.7.335-339 arasındaki düzeltmeler işe yaramış görünüyor.
+- AYRICA, aynı ticker'lar için "TefasAPIError: Baslangic Tarihi 5 yildan eski olamaz" hataları da vardı - ama bunlar YAT/EMK/BYF'nin ÜÇÜNDE BİRDEN oluşuyordu, bu da FARKLI bir periyot isteğinden (muhtemelen sayfadaki "5 Yıl" radyo seçeneği) geldiğini gösteriyor - "3 Ay" başarısından AYRI bir sorun.
+
+- **v2.0.7.340 (2 Ekim 2026):** "5y" periyodunun gün karşılığı 1830'du
+  (1830/365,25 ≈ 5,01 yıl) - TEFAS API'sinin TAM 5 yıllık sınırını
+  birkaç gün aşıyordu. **1800 güne** (≈4,93 yıl, güvenli pay) çekildi -
+  hem `app.py`'de hem `tefas_client.py`'de (ikisi de aynı period_days
+  sözlüğünü kullanıyor).
+  - **PUSH BEKLİYOR:** `app.py`, `tefas_client.py`.
+
+**Sonraki adım - Bahri'den beklenen:** CVL ya da BAG'ın Detay sayfasını
+TAZE bir gözle (sayfayı yenileyip) tekrar kontrol etmesi - loglardaki
+"BASARILI, 69 satır" kanıtına göre grafiğin artık GERÇEK, dalgalı veri
+göstermesi gerekiyor. Eğer öyleyse: (1) v2.0.7.337'deki geçici teşhis
+print'leri (`[tefas-hist-TESHIS]`) temizlenmeli, (2) bu saga TAMAMEN
+kapanabilir. Eğer HÂLÂ pürüzsüz görünüyorsa, yeni bir log turu
+gerekecek.
+
+**Push komutu:**
+```
+git add app.py tefas_client.py PROJE_NOTLARI.md && git commit -m "v2.0.7.340: TEFAS 5 yillik periyot sorgusu API'nin 5 yil sinirini hafifce asiyordu - 1800 güne cekildi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den "Manage app" loglarındaki "[tefas-hist-TESHIS]" satırlarını iste - TEFAS Detay grafiği sorununun kesin kök nedenini bulmak için gereken tek şey bu, henüz elde edilmedi.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den CVL/BAG'ın Detay grafiğinin artık gerçek veri gösterip göstermediğini (taze bakışla) teyit etmesini iste - kanıtlar olumlu ama görsel teyit henüz alınmadı. Onaylanırsa teşhis print'lerini (v2.0.7.337) temizle ve sagayı kapat.
