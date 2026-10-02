@@ -8157,5 +8157,39 @@ git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.337/338: TEFAS Detay gr
 1. Yukarıdaki otomatik kriz izleme mimarisi (en büyük, en öncelikli açık fikir).
 2. Bahri'nin önerisi: bundle.app'ı haber_izleme.py'nin taradığı kaynaklara eklemek. Kapsam/öncelik netleşmedi.
 
+### 🔎 AÇIK - TEFAS Detay grafiği (v2.0.7.337 push edildi, reboot yapıldı, HÂLÂ pürüzsüz görünüyor)
+Bahri reboot sonrası CVL/BAG'ın grafiğinin değişmediğini bildirdi - ama henüz "Manage app" loglarındaki "[tefas-hist-TESHIS]" satırlarını PAYLAŞMADI (sadece grafiğin görsel olarak değişmediğini söyledi). **Bu, kesin kök nedeni bulmak için hâlâ atılması gereken adım** - teşhis logları olmadan daha fazla spekülasyon yapmanın anlamı yok.
+
+- **v2.0.7.339 (2 Ekim 2026, Bahri'nin sorusu - "Ana Sayfa'daki Bütçe
+  Optimizasyonu ve Portföyüm'ün dışında hiçbir varlık sayfasında AL/SAT
+  sinyali yok, performans için mi kaldırdık?"): KALDIRILMAMIŞTI - baştan
+  hiç EKLENMEMİŞ, muhtemelen bir ihmal.**
+  - **Bulgu:** "En Yüksek Optima Skoru — Top 5" ve "Tüm Varlıklar"
+    tabloları (BIST/TEFAS/Döviz/Maden/Kripto kategori sayfalarının
+    HEPSİNİN kullandığı TEK, paylaşılan bir kod bloğu - `page`
+    parametresiyle çalışıyor) sadece `["Ticker","Ad","Son_Fiyat","RSI",
+    "Ret1M","Optima_Skor"]` sütunlarını gösteriyordu, "Sinyal" hiç
+    yoktu. Daha da çarpıcısı: bu tabloların ikisi de `clickable_table()`
+    kullanıyor, ve O FONKSİYONUN KENDİ BELGELEMESİ "Sinyal sütunu varsa
+    otomatik renklendirilir... Ana Sayfa, BIST, TEFAS - hepsi bu
+    fonksiyonu kullandığı için tek yerden tüm tablolara yayılır" diyor -
+    yani renklendirme ALTYAPISI zaten HAZIRDI, sadece sütunun kendisi
+    hiç eklenmemişti.
+  - **Çözüm:** Her iki tabloya da Bütçe Optimizasyonu'ndaki AYNI "hızlı
+    yöntem" (Ret1M işaretine bakan, ağ çağrısı gerektirmeyen sade bir
+    tahmin) ile hesaplanan "Sinyal" sütunu eklendi - 1300+ satırlık
+    TEFAS tablosunda bile performans maliyeti yok (tamamen mevcut CSV
+    sütunlarından, vektörel/satır-bazlı basit işlem). `clickable_table()`
+    sayesinde renklendirme otomatik olarak geldi, ek bir kod gerekmedi.
+  - **Kapsam:** Bu TEK değişiklik, paylaşılan kod bloğu sayesinde BIST,
+    TEFAS, Döviz, Maden, Kripto kategori sayfalarının HEPSİNİ aynı anda
+    kapsıyor.
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.339: Kategori sayfalarinin (BIST/TEFAS/Doviz/Maden/Kripto) Top5 ve Tum Varliklar tablolarina eksik olan Sinyal sutunu eklendi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.337'nin push'u sonrası Bahri'den "Manage app" loglarındaki "[tefas-hist-TESHIS]" satırlarını isteyip TEFAS Detay grafiği sorununun kesin kök nedenini bulmak - bu, haftalardır süren bir sorunun son perdesi olabilir.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den "Manage app" loglarındaki "[tefas-hist-TESHIS]" satırlarını iste - TEFAS Detay grafiği sorununun kesin kök nedenini bulmak için gereken tek şey bu, henüz elde edilmedi.

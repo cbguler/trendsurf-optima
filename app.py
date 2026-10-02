@@ -7411,8 +7411,23 @@ elif page in CAT:
     # garanti eder.
     top5 = degerli.nlargest(5, "Optima_Skor")
     # Top5 dataframe olarak göster — tıklanabilir
+    # v2.0.7.339 (2 Ekim 2026, Bahri'nin bulgusu - "Ana Sayfa'daki Bütçe
+    # Optimizasyonu ve Portföyüm'ün dışında hiçbir varlık sayfasında AL/
+    # SAT sinyali yok, performans için mi kaldırdık?"): KALDIRILMAMIŞ -
+    # bu tablolar baştan "Sinyal" sütunu hiç EKLENMEDEN yazılmış, bilinçli
+    # bir performans kararı değildi (aksi halde bunu açıklayan bir yorum
+    # olurdu). Bütçe Optimizasyonu'ndaki AYNI "hızlı yöntem"i (Ret1M
+    # işaretine bakan, ağ çağrısı GEREKTİRMEYEN sade bir tahmin) kullanıyor
+    # - 1300+ satırlık tablolarda bile performans maliyeti YOK (tamamen
+    # mevcut CSV sütunlarından, vektörel işlem).
+    _sinyal_hizli = top5.apply(
+        lambda r: get_signal(
+            float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
+            "YUKSELIS" if float(r.get("Ret1M", 0) or 0) >= 0 else "DUSUS")[0],
+        axis=1)
     top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
+    top5_show.insert(5, "Sinyal", _sinyal_hizli.values)
+    top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Sinyal","Optima Skor"]
     top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
     new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
                                    sel_ticker=st.session_state.get(f"sel_{page}",""))
@@ -7443,8 +7458,17 @@ elif page in CAT:
     # azalirken sonraki sayfada artiyordu). Tek kaynak = tutarli siralama.
     sel_now = st.session_state.get(f"sel_{page}", "")
 
+    # v2.0.7.339: ayni nedenle (yukarida Top5'teki not) "Tüm Varlıklar"
+    # tablosuna da Sinyal eklendi - hizli yontem, 1300+ satirda bile
+    # ag cagrisi olmadigi icin performans maliyeti yok.
+    _sinyal_hizli_tum = df_cat.apply(
+        lambda r: get_signal(
+            float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
+            "YUKSELIS" if float(r.get("Ret1M", 0) or 0) >= 0 else "DUSUS")[0],
+        axis=1)
     df_page_show = df_cat[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Optima Skor"]
+    df_page_show.insert(5, "Sinyal", _sinyal_hizli_tum.values)
+    df_page_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Sinyal","Optima Skor"]
     df_page_show["Ad"] = df_page_show["Ad"].astype(str).str[:50]
     st.caption(f"{len(df_cat)} varlik - Optima Skoruna gore sirali")
     new_sel = clickable_table(df_page_show, key=f"cat_{page}_full", sel_ticker=sel_now)
