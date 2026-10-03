@@ -8390,5 +8390,31 @@ v2.0.7.346 push edildi ama Bahri BAG'ın HALA değişmediğini, "ölümcül bekl
 git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.347: Detay panellerinde ayni ticker icin cift pytefas cagrisi (enrich icin 'secili periyot' + grafik icin ayri '5y') birlestirildi - bekleme suresi yariya indi, banner/grafik tutarsizligi giderildi, 52H/DD hesaplari duzeldi" && git pull --no-rebase --no-edit && git push
 ```
 
+### ✅ v2.0.7.347'nin "her zaman 5y çek" kararı GERİ ALINDI - güvenilirlik sorunu çıkardı (3 Ekim 2026)
+v2.0.7.347 push edildi: hız düzeldi, banner/grafik tutarlılığı düzeldi (Trend artık grafikle uyumlu - "YUKSELIS" doğru gösterildi) - AMA Bahri BAG'ın verisinin HALA "cetvelle çizilmiş" (sentetik) göründüğünü bildirdi.
+
+- **v2.0.7.348 - KESİN KÖK NEDEN (CANLI ÖLÇÜLDÜ):** v2.0.7.347'nin "her
+  zaman 5y çek" kararını doğrudan test ettim - **TEFAS API'si istenen
+  tarih aralığı büyüdükçe ÇOK AĞIRLAŞIYOR:** "3 Ay" 1,78 saniyede
+  başarıyla döndü, ama **"5 Yıl" 38+ saniyede HİÇ TAMAMLANMADI**
+  (zaman aşımı), "6 Ay" bile 33 saniye sürdü. Yani v2.0.7.347,
+  TUTARLILIĞI düzeltirken GÜVENİLİRLİĞİ ciddi şekilde BOZMUŞ - her
+  sayfa açılışında ARTIK HER ZAMAN bu en-ağır, en-kırılgan isteği
+  (5 yıl) yapıyordu.
+  - **Çözüm:** "Her zaman 5y" kararı GERİ ALINDI - artık hem `enrich()`
+    hem grafik, **kullanıcının SEÇTİĞİ periyodu** (varsayılan "3 Ay",
+    hafif/hızlı/güvenilir) TEK fetch'te paylaşıyor. v2.0.7.347'nin
+    asıl kazanımları (tek fetch, tutarlılık, 52H/DD düzeltmesi) AYNEN
+    KORUNDU - sadece HANGİ periyodun fetch edileceği değişti. Kullanıcı
+    "5 Yıl" radyo düğmesini BİLEREK seçerse, o zaman (yavaş olsa da,
+    kullanıcının kendi isteği olduğu için kabul edilebilir) o periyot
+    çekilir - ama bu artık HER sayfa açılışında OTOMATİK olmuyor.
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.348: v2.0.7.347'nin 'her zaman 5y cek' karari GERI ALINDI (TEFAS API'si buyuk tarih araliklarinda cok yavas/guvenilmez cikti) - artik kullanicinin sectigi (hafif) periyot paylasiliyor" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.347 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu TAZE bakışla tekrar denemesini iste - bu sefer (1) bekleme süresi gözle görülür şekilde kısalmalı (tek fetch), (2) banner ile grafik HER ZAMAN tutarlı olmalı, (3) gerçek veri geldiğinde gerçek dalgalı görünmeli. Onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle, bu haftalardır süren TEFAS sagasını TAMAMEN kapat. Sonra: Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam - en değerlisi `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.348 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu TAZE bakışla (varsayılan "3 Ay" periyotunda) tekrar denemesini iste - bu sefer hızlı VE gerçek/dalgalı görünmeli. Onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle, bu haftalardır süren TEFAS sagasını TAMAMEN kapat. Sonra: Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam - en değerlisi `spk_bulten_izleme.py` script'i.

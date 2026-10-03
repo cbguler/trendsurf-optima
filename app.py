@@ -6221,13 +6221,23 @@ if page=="Ana Sayfa":
                 period_val = period_map[p_lbl]
 
                 with st.spinner("Analiz yukleniyor..."):
-                    # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() hem
-                    # grafik tarafindan paylasiliyor (bkz. enrich()'in
-                    # kendi notu) - ikinci, bagimsiz pytefas cagrisi
-                    # ONLENIYOR.
-                    _hist_5y_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
-                                             str(sel_row_ana.get("Kategori","")), "5y")
-                    d = enrich(sel_row_ana, period_val, pre_fetched_hist=_hist_5y_ana)
+                    # v2.0.7.348 (3 Ekim 2026, Bahri'nin bulgusu - v2.0.7.347
+                    # sonrasi BAG HALA eski/sentetik gorunuyordu): v2.0.7.347
+                    # "5y"yi HER ZAMAN cekerek tek-fetch'e indirmisti, ama
+                    # CANLI OLCUM bunun TUZAK oldugunu gosterdi - TEFAS API'si
+                    # istenen tarih araligi BUYUDUKCE cok agirlasiyor: "3 Ay"
+                    # 1,78 saniyede basariyla donerken, "5 Yil" 38+ saniyede
+                    # HIC TAMAMLANMADI (zaman asimi), "6 Ay" bile 33 saniye
+                    # surdu. Yani "5y"yi HER ZAMAN cekmek, TUTARLILIGI
+                    # duzeltirken GUVENILIRLIGI ciddi sekilde BOZMUSTU. Artik
+                    # KULLANICININ SECTIGI (varsayilan "3 Ay", hafif/hizli)
+                    # periyot hem enrich() hem grafik icin TEK fetch'te
+                    # paylasiliyor - "5 Yil" radyo secilirse O ZAMAN (yavas
+                    # olsa da, kullanicinin BILEREK istedigi an) cekilir,
+                    # HER sayfa acilisinda degil.
+                    _hist_sel_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
+                                              str(sel_row_ana.get("Kategori","")), period_val)
+                    d = enrich(sel_row_ana, period_val, pre_fetched_hist=_hist_sel_ana)
                     # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
                     # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
                     # Canli hacim okumasi asagida sadece bilgi notu olarak kalir.
@@ -6317,23 +6327,17 @@ if page=="Ana Sayfa":
                 render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
-                    # v2.0.7.275 (8 Eylul 2026, Bahri'nin talebi):
-                    # grafigin YAKINLASTIRMA SINIRI Periyot secimine
-                    # BAGLI OLMASIN diye, grafik icin AYRICA (metrikler
-                    # icin kullanilan 'd["hist"]'ten BAGIMSIZ) her zaman
-                    # 5 yillik veri cekiliyor - mevcut veri 5 yildan
-                    # kisaysa (yeni varlik) dogal olarak elde ne varsa o
-                    # kadar geriye gidilebiliyor.
-                    # v2.0.7.347: ikinci fetch KALDIRILDI - yukarida
-                    # enrich()'e gecirilen _hist_5y_ana zaten bu amacla
-                    # da paylasiliyor.
-                    if _hist_5y_ana is None or _hist_5y_ana.empty:
-                        _hist_5y_ana = d["hist"]
+                    # v2.0.7.275/347/348: grafik artik "5y" degil, YUKARIDA
+                    # enrich() icin cekilen _hist_sel_ana'yi (kullanicinin
+                    # SECTIGI periyot) paylasiyor - bkz. yukaridaki v2.0.7.348
+                    # notu (guvenilirlik nedeniyle "her zaman 5y" GERI ALINDI).
+                    if _hist_sel_ana is None or _hist_sel_ana.empty:
+                        _hist_sel_ana = d["hist"]
                     # v2.0.7.289: grafik, "Son_Fiyat" (zaten canli
                     # tutulan) ile tamamlanip en guncel gunu/ani yansitir.
-                    _hist_5y_ana = _hist_canli_ile_tamamla(_hist_5y_ana, sel_row_ana.get("Son_Fiyat"), cat_ana)
+                    _hist_sel_ana = _hist_canli_ile_tamamla(_hist_sel_ana, sel_row_ana.get("Son_Fiyat"), cat_ana)
                     _fig_ana, _zoom_ana = render_candle_interactive(
-                        _hist_5y_ana, sel_ana, key=f"ana_{sel_ana}",
+                        _hist_sel_ana, sel_ana, key=f"ana_{sel_ana}",
                         varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
                     # v2.0.7.274 (8 Eylul 2026, Bahri'nin talebi):
@@ -6348,7 +6352,7 @@ if page=="Ana Sayfa":
                             # v2.0.7.301: zumlanmis araligi varsa ONU
                             # analiz et, yoksa eskisi gibi nominal Periyot.
                             _yorum_hist_ana, _yorum_gun_ana = _grafik_yorum_hist_sec(
-                                _hist_5y_ana, _zoom_ana, _PERIYOT_GUN_MAP.get(period_val, 90))
+                                _hist_sel_ana, _zoom_ana, _PERIYOT_GUN_MAP.get(period_val, 90))
                             _yorum_metni_ana = _grafik_yorumu_uret(
                                 _yorum_hist_ana, sel_ana, str(sel_row_ana.get("Kategori", "")),
                                 nominal_gun=_yorum_gun_ana)
@@ -7244,12 +7248,14 @@ elif page=="Portföyüm":
             _pm2 = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
             _pl  = st.radio("Periyot", list(_pm2.keys()), index=1, horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
-                # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() (banner/
-                # skor) hem asagidaki grafik tarafindan PAYLASILIYOR - iki
-                # ayrı pytefas cagrisi (ve olasi tutarsizlik) ortadan kalkti.
-                _hist_5y_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
-                                        str(_sr.get("Kategori","")), "5y")
-                _d = enrich(_sr, _pm2[_pl], pre_fetched_hist=_hist_5y_pf)
+                # v2.0.7.348 (bkz. Ana Sayfa'daki ayni not - "5y" guvenilirlik
+                # sorunu nedeniyle GERI ALINDI): kullanicinin SECTIGI
+                # (varsayilan "3 Ay", hafif/hizli) periyot hem enrich()
+                # (banner/skor) hem asagidaki grafik tarafindan TEK fetch'te
+                # PAYLASILIYOR.
+                _hist_sel_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
+                                         str(_sr.get("Kategori","")), _pm2[_pl])
+                _d = enrich(_sr, _pm2[_pl], pre_fetched_hist=_hist_sel_pf)
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
                 # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
                 _rd_pf = _sr.get("Optima_Skor")
@@ -7314,14 +7320,13 @@ elif page=="Portföyüm":
             render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
 
             if not _d["hist"].empty:
-                # v2.0.7.347: ikinci "5y" fetch'i KALDIRILDI - yukarida
-                # enrich()'e gecirilen _hist_5y_pf zaten burasi icin de
-                # kullaniliyor (ayni degisken, YENIDEN CEKILMIYOR).
-                if _hist_5y_pf is None or _hist_5y_pf.empty:
-                    _hist_5y_pf = _d["hist"]
-                _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"), str(_sr.get("Kategori","")))
+                # v2.0.7.348: yukarida enrich() icin cekilen _hist_sel_pf
+                # (kullanicinin SECTIGI periyot) burasi icin de paylasiliyor.
+                if _hist_sel_pf is None or _hist_sel_pf.empty:
+                    _hist_sel_pf = _d["hist"]
+                _hist_sel_pf = _hist_canli_ile_tamamla(_hist_sel_pf, _sr.get("Son_Fiyat"), str(_sr.get("Kategori","")))
                 _fig_pf, _zoom_pf = render_candle_interactive(
-                    _hist_5y_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
+                    _hist_sel_pf, _sel_tkr, key=f"pf_{_sel_tkr}",
                     varsayilan_gun=_PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
 
                 # v2.0.7.269 (8 Eylul 2026, Bahri'nin talebi - "grafigi
@@ -7337,7 +7342,7 @@ elif page=="Portföyüm":
                         # v2.0.7.301: zumlanmis araligi varsa ONU analiz
                         # et, yoksa eskisi gibi nominal Periyot.
                         _yorum_hist_pf, _yorum_gun_pf = _grafik_yorum_hist_sec(
-                            _hist_5y_pf, _zoom_pf, _PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
+                            _hist_sel_pf, _zoom_pf, _PERIYOT_GUN_MAP.get(_pm2[_pl], 90))
                         _yorum_metni_pf = _grafik_yorumu_uret(
                             _yorum_hist_pf, _sel_tkr, str(_sr.get("Kategori", "")),
                             nominal_gun=_yorum_gun_pf)
@@ -7643,11 +7648,12 @@ elif page in CAT:
     period_val=period_map[p_lbl]
 
     with st.spinner("Analiz yükleniyor..."):
-        # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() hem grafik
-        # tarafindan paylasiliyor (bkz. enrich()'in kendi notu).
-        _hist_5y_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
-                                 str(sel_row.get("Kategori","")), "5y")
-        d=enrich(sel_row,period_val, pre_fetched_hist=_hist_5y_cat)
+        # v2.0.7.348 (bkz. Ana Sayfa'daki ayni not - "5y" guvenilirlik
+        # sorunu nedeniyle GERI ALINDI): kullanicinin SECTIGI periyot hem
+        # enrich() hem grafik tarafindan TEK fetch'te paylasiliyor.
+        _hist_sel_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
+                                 str(sel_row.get("Kategori","")), period_val)
+        d=enrich(sel_row,period_val, pre_fetched_hist=_hist_sel_cat)
         # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
         # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
         _rd_cat = sel_row.get("Optima_Skor")
@@ -7735,12 +7741,12 @@ elif page in CAT:
     # Mum grafiği
     if not d["hist"].empty:
         # v2.0.7.347: ikinci fetch KALDIRILDI - yukarida enrich()'e
-        # gecirilen _hist_5y_cat zaten bu amacla da paylasiliyor.
-        if _hist_5y_cat is None or _hist_5y_cat.empty:
-            _hist_5y_cat = d["hist"]
-        _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"), str(sel_row.get("Kategori","")))
+        # gecirilen _hist_sel_cat zaten bu amacla da paylasiliyor.
+        if _hist_sel_cat is None or _hist_sel_cat.empty:
+            _hist_sel_cat = d["hist"]
+        _hist_sel_cat = _hist_canli_ile_tamamla(_hist_sel_cat, sel_row.get("Son_Fiyat"), str(sel_row.get("Kategori","")))
         _fig_cat, _zoom_cat = render_candle_interactive(
-            _hist_5y_cat, sel, key=f"cat_{sel}",
+            _hist_sel_cat, sel, key=f"cat_{sel}",
             varsayilan_gun=_PERIYOT_GUN_MAP.get(period_val, 90))
 
         # v2.0.7.266 (5 Eylul 2026, Bahri'nin talebi): grafigin ALTINDA,
@@ -7755,7 +7761,7 @@ elif page in CAT:
                 # v2.0.7.301: zumlanmis araligi varsa ONU analiz et,
                 # yoksa eskisi gibi nominal Periyot.
                 _yorum_hist, _yorum_gun = _grafik_yorum_hist_sec(
-                    _hist_5y_cat, _zoom_cat, _PERIYOT_GUN_MAP.get(period_val, 90))
+                    _hist_sel_cat, _zoom_cat, _PERIYOT_GUN_MAP.get(period_val, 90))
                 _yorum_metni = _grafik_yorumu_uret(_yorum_hist, sel, cat_code,
                                                     nominal_gun=_yorum_gun)
             st.markdown(_yorum_metni)
