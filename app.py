@@ -121,7 +121,10 @@ section.main [data-testid="stRadio"] label span,
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] span,
 [data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] small,
 [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{color:#10203f!important;opacity:1!important;font-size:14px!important;line-height:1.5!important;font-weight:500!important;}
-[data-testid="stSidebar"] .strateji-not{color:#10203f!important;font-size:13.5px!important;line-height:1.5!important;background:#eaf2ff;border:1px solid #9fbbe6;border-radius:8px;padding:10px 12px;margin:4px 0 8px 0;}
+[data-testid="stSidebar"] .strateji-not{color:#10203f!important;font-size:13.5px!important;line-height:1.5!important;margin:4px 0 8px 0;}
+/* Strateji secenekleri (radyo) kalin */
+[data-testid="stSidebar"] .st-key-strateji_radio label p,
+[data-testid="stSidebar"] [role="radiogroup"][aria-label="Bütçe Dağılım Stratejisi"] label p{font-weight:700!important;}
 [data-testid="stSidebar"] .strateji-not b,[data-testid="stSidebar"] .strateji-not i{color:#0b1830!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
@@ -3321,6 +3324,8 @@ with st.sidebar:
     # solunda secim kutucugu"): st.radio + sabit key. Baslangic degeri kayitli
     # tercihten SADECE ILK acilista verilir (index parametresi her calismada
     # degisirse widget kimligi degisip secim sifirlanabiliyordu).
+    if st.session_state.get("strateji_radio") not in _secenek_listesi:
+        st.session_state.pop("strateji_radio", None)   # eski etiketli oturum degeri
     if "strateji_radio" not in st.session_state:
         st.session_state["strateji_radio"] = _secenek_listesi[
             1 if _kayitli_ayarlar["strateji"] == "kategori_guvenceli" else 0]
@@ -3328,8 +3333,8 @@ with st.sidebar:
                                         key="strateji_radio")
     st.markdown(
         "<div class='strateji-not'>"
-        f"<b>a- En yüksek skorlar:</b> {STRATEJI_ACIKLAMA['kuresel']}<br><br>"
-        f"<b>b- Her kategoriden yüksekler:</b> {STRATEJI_ACIKLAMA['kategori_guvenceli']}<br><br>"
+        f"<b>{STRATEJI_SECENEK['kuresel']}:</b> {STRATEJI_ACIKLAMA['kuresel']}<br><br>"
+        f"<b>{STRATEJI_SECENEK['kategori_guvenceli']}:</b> {STRATEJI_ACIKLAMA['kategori_guvenceli']}<br><br>"
         "<i>Seçiminiz kaydedilir; Ana Sayfa tablosu ve e-postalar aynı stratejiyle üretilir.</i>"
         "</div>", unsafe_allow_html=True)
     _secilen_strateji = _kod_by_secenek[_secilen_strateji_etiket]

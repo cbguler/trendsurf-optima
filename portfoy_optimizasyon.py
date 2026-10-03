@@ -34,8 +34,8 @@ STRATEJI_ETIKET = {
     "kategori_guvenceli": "Her kategoriden yüksekler",
 }
 STRATEJI_SECENEK = {
-    "kuresel": "a- En yüksek skorlar",
-    "kategori_guvenceli": "b- Her kategoriden yüksekler",
+    "kuresel": "En yüksek skorlar",
+    "kategori_guvenceli": "Her kategoriden yüksekler",
 }
 STRATEJI_ACIKLAMA = {
     "kuresel": ("Tüm kategoriler birlikte yarışır ve en yüksek Optima skorlu "
