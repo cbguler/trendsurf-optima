@@ -8238,10 +8238,55 @@ Bahri ekran görüntüsü paylaştı: **CVL artık gerçek, kırmızı/yeşil ka
     etiketini (`_TEFAS_CACHE_SURUM`, `_surum`) bir arttırmak.**
   - **PUSH BEKLİYOR:** Sadece `app.py`.
 
-**Push komutu:**
+### Görsel teyit (ikinci tur) - 4/5 fon düzeldi, BAG hâlâ hatalıydı
+Bahri 5 fonun ekran görüntüsünü paylaştı: **ILU, HOY, HTS, CVL artık gerçek, dalgalı veri gösteriyor.** BAG ise hâlâ Temmuz-Eylül başı tamamen düz, sadece yeşil mumlarla (gerçek piyasada olmayacak bir örüntü) görünüyordu.
+
+- **v2.0.7.343 (3 Ekim 2026) - KESİN KÖK NEDEN BULUNDU (ikinci ve son
+  katman):** BAG'ı DOĞRUDAN pytefas ile test ettim - O ANDA 3,15
+  saniyede 68 satır GERÇEK veri başarıyla geldi. Yani sorun pytefas'ta
+  DEĞİL, `_fetch_tefas_hist_cached()`'in KENDİSİNDEYDİ: fonksiyon
+  başarısız olunca `pd.DataFrame()` (boş ama HATASIZ) döndürüyordu, ve
+  `@st.cache_data` bu BOŞ sonucu da "başarılı" sayıp **24 SAAT**
+  önbelleğe alıyordu. Bahri'nin art arda birkaç fonu hızlıca gezmesi
+  sırasında BAG'ın isteği muhtemelen geçici bir sebeple (kısa süreli
+  hız sınırı) başarısız oldu, bu TEK başarısızlık 24 saat "dondu".
+  v2.0.7.341'in sürüm etiketi bunu ÇÖZEMEDİ çünkü sorun ESKİ sürümden
+  kalma değildi - YENİ sürümün kendi akışında OLUŞAN taze bir
+  başarısız önbellekti. Dikkat çekici: `_get_hist_cached()` (dış
+  fonksiyon) zaten TAM OLARAK bu ilkeyi uyguluyordu (kendi yorumunda
+  "başarısız sonuçlar _HistEmptyError fırlatır, Streamlit exception'ı
+  cache'lemez" diye yazılıydı) - ama bir kat İÇERDEKİ fonksiyon bu
+  ilkeyi takip etmiyordu.
+  - **Çözüm:** `_fetch_tefas_hist_cached()` artık başarısızlıkta boş
+    DataFrame yerine `_HistEmptyError` fırlatıyor (zaten var olan,
+    `_get_hist_cached`'in kullandığı AYNI istisna sınıfı) - çağıran taraf
+    zaten bunu yakalayıp senteze düşüyordu, değişiklik gerekmedi.
+    st.cache_data istisna fırlatan çağrıları HİÇ önbelleklemediği için,
+    bir sonraki görüntüleme HER ZAMAN taze bir pytefas denemesi
+    yapacak - 24 saat beklemeye gerek kalmayacak.
+  - **PUSH BEKLİYOR:** Sadece `app.py` (yukarıdaki v2.0.7.341 ile
+    aynı dosya, henüz push edilmemişti).
+
+### 🔎 YENİ, BÜYÜK İŞ BAŞLADI (3 Ekim 2026): Otomatik Piyasa Tedbiri İzleme
+Bahri'nin onayladığı mimari üzerinde çalışmaya başlandı - KAP/TEFAS/BIST/TCMB/Cumhurbaşkanlığı/Resmi Gazete'nin fon krizi duyurularını otomatik izleyip ilgili varlıkların skoruna yansıtma. **HENÜZ TAMAMLANMADI - sadece temel atıldı:**
+
+**Tamamlanan (test edildi, bu oturumda push edilecek dosyalarda):**
+- `db.py`: üç yeni tablo (`piyasa_tedbir_tespit` - onay bekleyen AI tespitleri; `piyasa_tedbir_listesi` - onaylanmış aktif kurallar, hem TAM TICKER hem ŞİRKET-ADI alt-dize eşleşmesi destekliyor; `spk_bulten_islenmis` - taranan bültenler). Üçü de İLK ANDAN İTİBAREN RLS + Supabase grant'e eklendi (bu oturumdaki 3 kez tekrarlanan güvenlik hatasını BİR DAHA yapmamak için). Yardımcı fonksiyonlar (ekle/onayla/reddet/aktif-listeyi-oku) eklendi.
+- `_piyasa_tedbir_tohumla()`: mevcut 7 şirket + 3 hisse (spk_tedbir_fonlari.py'den) yeni tabloya tohumlanıyor - GERÇEK evren verisiyle test edildi, eski statik kodla BİREBİR AYNI sonucu veriyor (117 fon, 3 hisse).
+- `app.py`'nin `load_universe()`'i artık statik dosya yerine `piyasa_tedbir_listesi`'nden okuyor.
+- **Önemli düzeltme/itiraf:** Önerdiğim Resmi Gazete RSS adresi GERÇEKTE ÇALIŞMIYORDU (test edince normal HTML sayfası döndüğü görüldü - önceki araştırmam hatalıydı). Bu geri çekildi - Resmi Gazete/KAP genel akışı, SPK gibi sayfa-tarama+AI gerektirdiği için ayrı bir aşamaya ertelendi.
+- SPK'nın bülten listesi sayfasının yapısı tam çözüldü (`https://spk.gov.tr/spk-bultenleri/{yil}-yili-spk-bultenleri`, her bülten linki "Bülten No : X Yayımlanma : Y" formatında). Gerçek bir bülten (2026/60) indirilip `pdfplumber` ile metni başarıyla çıkarıldı (13.000 karakter, düz metin, taranmış görüntü DEĞİL).
+
+**HENÜZ YAPILMADI (bir sonraki oturumun/turun işi):**
+1. `spk_bulten_izleme.py` script'i - listeyi tarama → yeni bülten tespiti → PDF indirme/metin çıkarma → anahtar kelime ön-filtresi → AI ile yorumlama (Gemini/Groq, haber_izleme.py'deki AYNI model/fallback deseni) → `piyasa_tedbir_tespit_ekle()` ile kaydetme.
+2. Admin Panel'e onay arayüzü (bekleyen tespitleri listele, onayla/reddet butonları).
+3. Yeni GitHub Actions workflow'u (`spk_bulten_izleme.yml`) - muhtemelen günde birkaç kez (SPK bültenleri haftada birkaç kez yayınlanıyor).
+4. (Daha sonraki bir aşama) KAP genel akışı + Resmi Gazete izleme.
+
+**Toplu push komutu (TEFAS onbellek duzeltmesi + kriz izleme temel altyapisi):**
 ```
-git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.341: TEFAS Detay grafigi onbellegine surum etiketi eklendi - bugunku duzeltmeler sirasinda yazilmis bayat/hatali onbellek artik otomatik gecersiz" && git pull --no-rebase --no-edit && git push
+git add app.py db.py PROJE_NOTLARI.md && git commit -m "v2.0.7.343: TEFAS onbellek istisna duzeltmesi (basarisiz sonuc artik 24 saat kilitlenmez) + otomatik piyasa tedbiri izleme temel altyapisi (veritabani semasi + spk_tedbir_fonlari.py gocu)" && git pull --no-rebase --no-edit && git push
 ```
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Bahri'den BAG dahil birkaç TEFAS fonunun Detay grafiğini TAZE bakışla teyit etmesini iste - v2.0.7.341'in bayat önbelleği temizlemesi gerekiyor, artık GERÇEKTEN tutarlı olup olmadığı görülmeli. Onaylanırsa: (1) v2.0.7.337'deki teşhis print'lerini temizle, (2) bu haftalardır süren sagayı TAMAMEN kapat.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ İKİ ŞEY:** (1) Bahri'den BAG dahil birkaç TEFAS fonunun Detay grafiğini TAZE bakışla teyit etmesini iste - bu sefer gerçekten kalıcı olması gerekiyor, onaylanırsa v2.0.7.337'deki teşhis print'lerini temizle ve bu haftalardır süren sagayı KAPAT. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesindeki 4 maddeye devam et - en değerlisi ve en öncelikli olanı `spk_bulten_izleme.py` script'i.

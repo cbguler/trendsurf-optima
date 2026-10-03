@@ -895,34 +895,36 @@ def load_universe():
     # siralama-secim mekanizmasi bu fonlari onermesin. Bu kontrol
     # load_universe()'in EN SONUNDA yapiliyor ki yukaridaki hicbir
     # overlay (Firsat Radari dahil) bunu ezemesin.
+    # v2.0.7.342 (3 Ekim 2026, Bahri'nin talebi - otomatik piyasa tedbiri
+    # izleme mimarisi): YUKARIDAKI iki statik, spk_tedbir_fonlari.py'den
+    # okuyan blok KALDIRILDI - artik veritabani tabanli `piyasa_tedbir_
+    # listesi` tablosundan okunuyor (spk_bulten_izleme.py + Admin Panel
+    # onayi ile beslenir). spk_tedbir_fonlari.py dosyasi SADECE bu
+    # tablonun ILK TOHUMLANMASI icin (bkz. PROJE_NOTLARI) kullanildi,
+    # artik kod tarafindan OKUNMUYOR - yeni bir tedbir icin artik kod
+    # degisikligi/push GEREKMIYOR, sadece Admin Panel'den onay yeterli.
+    # Ayni iki eslesme turu (TICKER tam esitlik, SIRKET_ADI fon adinda
+    # alt-dize arama - YENI eklenen fonlari da otomatik yakalar) korundu.
     try:
-        from spk_tedbir_fonlari import tasfiye_kapsaminda_mi
-        _tasfiye_maskesi = (df["Kategori"] == "TEFAS") & df["Ad"].apply(tasfiye_kapsaminda_mi)
-        if _tasfiye_maskesi.any():
-            df.loc[_tasfiye_maskesi, "Optima_Skor"] = 0.0
-            print(f"[spk-tedbir] {_tasfiye_maskesi.sum()} fon SPK tedbiri "
-                  f"kapsaminda - Optima Skor 0'a sabitlendi.")
-    except Exception as _spk_err:
-        print(f"[spk-tedbir] atlandi: {_spk_err}")
-
-    # v2.0.7.331 (20 Eylul 2026, Bahri'nin talebi - fon krizinin BIST
-    # hisse tarafi): SPK'nin 16 Eylul 2026 tarihli 2026/59 sayili
-    # Bulteni'nde piyasa dolandiriciligi tespit edilen KTLEV/GUNDG/DSTKF
-    # hisseleri de, yukaridaki fonlarla AYNI mantikla, Optima Skoru
-    # sifirlaniyor - bu hisselerin fiyatlari Pusula/Tera fonlarinin
-    # yogunlasmis pozisyonlariyla suni sekilde sisirilmisti, artik bu
-    # destek ortadan kalktigindan cokme riski cok yuksek, ayrica
-    # haklarinda suc duyurusu/islem yasagi karari var. Yukaridaki fon
-    # kontroluyle AYNI yerde (load_universe()'in en sonunda) yapiliyor.
-    try:
-        from spk_tedbir_fonlari import hisse_manipulasyon_supheli_mi
-        _hisse_maskesi = (df["Kategori"] == "BIST") & df["Ticker"].apply(hisse_manipulasyon_supheli_mi)
-        if _hisse_maskesi.any():
-            df.loc[_hisse_maskesi, "Optima_Skor"] = 0.0
-            print(f"[spk-tedbir] {_hisse_maskesi.sum()} hisse manipulasyon "
-                  f"suphesi kapsaminda - Optima Skor 0'a sabitlendi.")
-    except Exception as _spk_hisse_err:
-        print(f"[spk-tedbir] hisse kontrolu atlandi: {_spk_hisse_err}")
+        from db import get_aktif_piyasa_tedbirleri
+        _aktif_tedbirler = get_aktif_piyasa_tedbirleri()
+        _sirket_adlari = [t["deger"] for t in _aktif_tedbirler if t["eslesme_turu"] == "SIRKET_ADI"]
+        _tickerlar = {t["deger"] for t in _aktif_tedbirler if t["eslesme_turu"] == "TICKER"}
+        if _sirket_adlari:
+            _sirket_maskesi = (df["Kategori"] == "TEFAS") & df["Ad"].apply(
+                lambda ad, _sl=_sirket_adlari: any(s in str(ad).upper() for s in _sl))
+            if _sirket_maskesi.any():
+                df.loc[_sirket_maskesi, "Optima_Skor"] = 0.0
+                print(f"[piyasa-tedbir] {_sirket_maskesi.sum()} fon sirket-adi "
+                      f"tedbiri kapsaminda - Optima Skor 0'a sabitlendi.")
+        if _tickerlar:
+            _ticker_maskesi = df["Ticker"].astype(str).str.upper().isin(_tickerlar)
+            if _ticker_maskesi.any():
+                df.loc[_ticker_maskesi, "Optima_Skor"] = 0.0
+                print(f"[piyasa-tedbir] {_ticker_maskesi.sum()} varlik ticker "
+                      f"tedbiri kapsaminda - Optima Skor 0'a sabitlendi.")
+    except Exception as _pt_err:
+        print(f"[piyasa-tedbir] atlandi: {_pt_err}")
 
     return df.reset_index(drop=True)
 
@@ -1042,7 +1044,26 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 
     except Exception as _e_disi:
         print(f"[tefas-hist-TESHIS] {ticker}: DIS try/except HATASI - "
               f"{type(_e_disi).__name__}: {_e_disi}", flush=True)
-    return pd.DataFrame()
+    # v2.0.7.343 (3 Ekim 2026, Bahri'nin bulgusu - v2.0.7.341'in surum
+    # etiketi sayesinde ILU/HOY/HTS/CVL duzeldi ama BAG HALA eski
+    # puruzsuz/sentetik gorunuyordu, DOGRUDAN pytefas testi ise BAG icin
+    # O ANDA basariyla CALISIYORDU - yani sorun pytefas'ta DEGIL, bu
+    # fonksiyonun KENDISINDE): KESIN KOK NEDEN - bu fonksiyon basarisiz
+    # olunca `pd.DataFrame()` (BOS ama HATASIZ bir sonuc) DONUYORDU, ve
+    # @st.cache_data VARSAYILAN OLARAK "basarili" sayip BU BOS SONUCU DA
+    # 24 SAAT (ttl=86400) ONBELLEKLIYORDU - Bahri'nin art arda birkac
+    # fonu hizlica gezmesi sirasinda BAG'in istegi TESADUFEN/GECICI bir
+    # sebeple (muhtemelen kisa sureli hiz siniri) basarisiz oldu, bu TEK
+    # basarisizlik 24 saat boyunca "dondu". v2.0.7.341'in surum etiketi
+    # bu spesifik olayi COZMEDI cunku SORUN ESKI surumden kalma bir
+    # onbellek DEGILDI - YENI surumun kendi ic akisinda OLUSAN taze bir
+    # basarisiz onbellek kaydiydi. COZUM: artik basarisizlikta BOS
+    # DataFrame yerine _HistEmptyError firlatiliyor - st.cache_data
+    # İSTİSNA FIRLATAN cagrilari HIC ONBELLEKLEMEZ (sadece basarili
+    # donuşler cache'lenir), bu yuzden bir sonraki goruntuleme HER ZAMAN
+    # taze bir pytefas denemesi yapacak, 24 saat beklemeye gerek
+    # kalmayacak.
+    raise _HistEmptyError()
 
 
 class _HistEmptyError(Exception):

@@ -638,6 +638,70 @@ def init_db():
         UNIQUE(ticker, gonderim_tarihi, kap_baslik)
     )""")
 
+    # v2.0.7.342 (3 Ekim 2026, Bahri'nin talebi - "KAP, TEFAS, BIST, TCMB,
+    # Cumhurbaskanligi/Bakanlar Kurulu, Resmi Gazete'nin fon krizi ile
+    # ilgili bildirimlerinin otomatik izlenip ilgili varliklarin skoruna
+    # yansitilmasi"): OTOMATIK PIYASA TEDBIRI IZLEME - spk_tedbir_fonlari.py
+    # STATIK dosyasinin yerini alacak, veritabani tabanli, ONAY KAPILI
+    # sistem. YUKARIDAKI kap_bildirim_takip'ten BILEREK AYRI: o SADECE
+    # OKUNUR bilgi, bu AKTIF OLARAK Optima_Skor'u SIFIRLAR (load_universe()
+    # icinde) - bu yuzden onay/red is akisi GEREKLI (beklenti_otomatik_
+    # tespit'teki PRENSIP ayni, ama o KATEGORI-GENELI puan etkisi icin,
+    # bu TEK TEK TICKER/SIRKET icin). Tek, PAYLASIMLI onay (per-kullanici
+    # DEGIL) - cunku bu bir SPK/Resmi Gazete kararinin GERCEKTEN olup
+    # olmadigi objektif bir OLGU, kisiye gore degisen bir yorum degil.
+    #
+    # piyasa_tedbir_tespit: AI'nin tespit ettigi, HENUZ onaylanmamis
+    # adaylar (SPK bulteni/Resmi Gazete/KAP taramasindan).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS piyasa_tedbir_tespit (
+        id                  SERIAL PRIMARY KEY,
+        kaynak_turu         TEXT NOT NULL,
+        kaynak_referans     TEXT,
+        kaynak_url          TEXT,
+        kaynak_tarihi       DATE,
+        tespit_zamani       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        eslesme_turu        TEXT NOT NULL,
+        deger               TEXT NOT NULL,
+        kategori            TEXT,
+        tedbir_turu         TEXT NOT NULL,
+        ai_gerekce          TEXT,
+        ai_ozet             TEXT,
+        onay_durumu         TEXT NOT NULL DEFAULT 'bekliyor',
+        onay_zamani         TIMESTAMP,
+        onaylayan_kullanici_id INTEGER REFERENCES users(id)
+    )""")
+    # piyasa_tedbir_listesi: ONAYLANMIS, AKTIF kurallar - load_universe()
+    # HER YUKLEMEDE bunu okur. eslesme_turu='TICKER' -> deger TAM ticker
+    # (orn. KTLEV), kategori ZORUNLU. eslesme_turu='SIRKET_ADI' -> deger
+    # fon adinda aranacak alt-dize (orn. "PUSULA PORTFÖY") - bu, spk_
+    # tedbir_fonlari.py'nin orijinal sirket-adi eslestirmesiyle AYNI
+    # mantik: sirketin YENI eklenen fonlarini da otomatik yakalar, tek
+    # tek ticker eklemeyi gerektirmez.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS piyasa_tedbir_listesi (
+        id                SERIAL PRIMARY KEY,
+        eslesme_turu      TEXT NOT NULL,
+        deger             TEXT NOT NULL,
+        kategori          TEXT,
+        tedbir_turu       TEXT NOT NULL,
+        kaynak_aciklama   TEXT,
+        tespit_id         INTEGER REFERENCES piyasa_tedbir_tespit(id),
+        eklenme_tarihi    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        aktif             BOOLEAN NOT NULL DEFAULT TRUE,
+        kaldirilma_tarihi TIMESTAMP,
+        UNIQUE(eslesme_turu, deger)
+    )""")
+    # spk_bulten_islenmis: hangi SPK bulten numaralarinin ZATEN tarandigi
+    # (tekrar indirip AI'ye tekrar sormamak icin) - haber_islenmis ile
+    # AYNI desen.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS spk_bulten_islenmis (
+        bulten_no      TEXT PRIMARY KEY,
+        islenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    _piyasa_tedbir_tohumla(conn)
+
     # v2.0.7.160: Gemini ücretsiz katman günlük istek limiti BELİRSİZ
     # (üçüncü taraf kaynaklar 20/50/250/500/1500 gibi çelişkili rakamlar
     # veriyor, Aralık 2025'te bir kez düşürüldüğü bildirildi). Bu yüzden
@@ -950,6 +1014,29 @@ def init_db():
         except Exception as _e:
             print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
 
+    # v2.0.7.342: yeni tablolar olusturulurken AYNI ANDA RLS'e eklendi -
+    # v2.0.7.333'teki guvenlik acigi (yeni tablo olusturulup bu listeye
+    # eklenmeyi UNUTMA) burada TEKRARLANMAMASI icin.
+    for _rls_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
+                       "spk_bulten_islenmis"):
+        try:
+            c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
+        except Exception as _e:
+            print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
+
+    # v2.0.7.342: Supabase'in 30 Ekim 2026'dan itibaren YENI tablolara
+    # artik otomatik Data API (PostgREST) izni vermeyecegi bildirilmisti
+    # (public.trendsurf-optima / Menu Muhendisi ile AYNI Supabase hesabi) -
+    # bu uc YENI tabloya ACIKCA grant veriliyor, ileride PostgREST
+    # uzerinden "erisilemiyor" sorunu yasanmasin diye.
+    for _grant_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
+                         "spk_bulten_islenmis"):
+        try:
+            c.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON public.{_grant_tablo} "
+                      f"TO anon, authenticated, service_role")
+        except Exception as _e:
+            print(f"[db] grant atlandi ({_grant_tablo}): {_e}")
+
     conn.commit()
     conn.close()
 
@@ -1167,6 +1254,51 @@ def _kaliplar_tohumla(conn):
 
 
 
+def _piyasa_tedbir_tohumla(conn):
+    """init_db() cagirir - piyasa_tedbir_listesi BOSSA, bu sohbette
+    (2-20 Eylul 2026 arasi, v2.0.7.322/331) ELLE arastirilip dogrulanmis
+    SPK fon krizi kararlarini tohumlar - bunlar zaten bir kez Bahri'ye
+    sunulup onaylanmis OLGULARDI (spk_tedbir_fonlari.py statik dosyasinda
+    yasiyordu), bu yuzden tekrar Admin Panel onayindan GECMEDEN dogrudan
+    AKTIF olarak eklenir. Zaten doluysa HICBIR SEY yapmaz."""
+    try:
+        mevcut = conn.execute("SELECT COUNT(*) AS n FROM piyasa_tedbir_listesi").fetchone()
+        if mevcut and int(mevcut["n"] if isinstance(mevcut, dict) else mevcut[0]) > 0:
+            return
+        # v2.0.7.322 (17 Eylul 2026, SPK 2026/60 sayili Bulten): Tera/
+        # Pusula/Hedef/Atlas/A1 Capital/Pardus/Bulls Portfoy'un TUM
+        # TEFAS fonlari alim-satima kapatildi.
+        _sirketler = [
+            "TERA PORTFÖY", "PUSULA PORTFÖY", "HEDEF PORTFÖY", "ATLAS PORTFÖY",
+            "A1 CAPİTAL PORTFÖY", "A1 PORTFÖY", "PARDUS PORTFÖY", "BULLS PORTFÖY",
+        ]
+        for sirket in _sirketler:
+            conn.execute(
+                "INSERT INTO piyasa_tedbir_listesi "
+                "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama) "
+                "VALUES ('SIRKET_ADI', ?, 'TEFAS', 'ISLEM_DURDURMA_TASFIYE', "
+                "'SPK 17.09.2026 - 2026/60 sayili Bulten') "
+                "ON CONFLICT (eslesme_turu, deger) DO NOTHING", (sirket,))
+        # v2.0.7.331 (16 Eylul 2026, SPK 2026/59 sayili Bulten): piyasa
+        # dolandiriciligi tespit edilen 3 hisse.
+        for ticker in ("KTLEV", "GUNDG", "DSTKF"):
+            conn.execute(
+                "INSERT INTO piyasa_tedbir_listesi "
+                "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama) "
+                "VALUES ('TICKER', ?, 'BIST', 'MANIPULASYON_SUPHESI', "
+                "'SPK 16.09.2026 - 2026/59 sayili Bulten') "
+                "ON CONFLICT (eslesme_turu, deger) DO NOTHING", (ticker,))
+        conn.commit()
+        print("[db] piyasa_tedbir_listesi tohumlandi (7 sirket + 3 hisse, "
+              "spk_tedbir_fonlari.py'den tasindi).", file=sys.stderr)
+    except Exception as e:
+        print(f"[db] _piyasa_tedbir_tohumla hata: {e}", file=sys.stderr)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
 def haber_akisi_ekle(haber_url: str, kaynak: str, baslik: str,
                      baslik_tr: str = None, eslesen_kalip: str = None,
                      yayin_zamani=None, ozet: str = None):
@@ -1324,6 +1456,153 @@ def kap_bildirim_temizle(gun: int = 14):
         conn.close()
     except Exception as e:
         print(f"[db] kap_bildirim_temizle hata: {e}", file=sys.stderr)
+
+
+def spk_bulten_islendi_mi(bulten_no: str) -> bool:
+    """spk_bulten_izleme.py'nin AYNI bulteni tekrar indirip AI'ye tekrar
+    sormamasi icin - haber_islendi_mi ile AYNI desen."""
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM spk_bulten_islenmis WHERE bulten_no=?", (bulten_no,)
+        ).fetchone()
+        conn.close()
+        return row is not None
+    except Exception:
+        return False
+
+
+def spk_bulten_islendi_isaretle(bulten_no: str):
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO spk_bulten_islenmis (bulten_no) VALUES (?) "
+            "ON CONFLICT (bulten_no) DO NOTHING", (bulten_no,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] spk_bulten_islendi_isaretle hata: {e}", file=sys.stderr)
+
+
+def piyasa_tedbir_tespit_ekle(kaynak_turu: str, kaynak_referans: str, kaynak_url: str,
+                              kaynak_tarihi, eslesme_turu: str, deger: str,
+                              kategori: str, tedbir_turu: str,
+                              ai_gerekce: str, ai_ozet: str) -> bool:
+    """v2.0.7.342: spk_bulten_izleme.py (ve gelecekte Resmi Gazete/KAP
+    taramaları) AI tespiti basarili olunca bunu cagirir - 'bekliyor'
+    durumunda eklenir, HENUZ piyasa_tedbir_listesi'ne YANSIMAZ, Admin
+    Panel'de onay bekler."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO piyasa_tedbir_tespit "
+            "(kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+            "eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi,
+             eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] piyasa_tedbir_tespit_ekle hata: {e}", file=sys.stderr)
+        return False
+
+
+def get_bekleyen_piyasa_tedbirleri() -> list:
+    """Admin Panel'in onay kuyrugunda gosterecegi, henuz karar verilmemis
+    tespitler. Tek, PAYLASIMLI liste (kullaniciya ozel DEGIL - bkz.
+    piyasa_tedbir_tespit tablosunun yorumu: bu objektif bir SPK/Resmi
+    Gazete olgusu, kisiye gore degisen bir yorum degil)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT id, kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+            "tespit_zamani, eslesme_turu, deger, kategori, tedbir_turu, "
+            "ai_gerekce, ai_ozet "
+            "FROM piyasa_tedbir_tespit WHERE onay_durumu='bekliyor' "
+            "ORDER BY tespit_zamani DESC"
+        ).fetchall()
+        conn.close()
+        cols = ["id", "kaynak_turu", "kaynak_referans", "kaynak_url", "kaynak_tarihi",
+                "tespit_zamani", "eslesme_turu", "deger", "kategori", "tedbir_turu",
+                "ai_gerekce", "ai_ozet"]
+        return [dict(zip(cols, r)) for r in rows]
+    except Exception as e:
+        print(f"[db] get_bekleyen_piyasa_tedbirleri hata: {e}", file=sys.stderr)
+        return []
+
+
+def piyasa_tedbir_onayla(tespit_id: int, kullanici_id: int) -> bool:
+    """Admin bir tespiti onaylar: piyasa_tedbir_listesi'ne AKTIF bir
+    kural olarak eklenir (load_universe() bir sonraki yuklemede okur) VE
+    tespit 'onaylandi' olarak isaretlenir. Tek sorguda, ayni baglanti
+    uzerinde yapilir ki biri basarili biri basarisiz olup tutarsiz kalma
+    riski olmasin."""
+    try:
+        conn = get_conn()
+        tespit = conn.execute(
+            "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, "
+            "kaynak_referans FROM piyasa_tedbir_tespit WHERE id=? AND onay_durumu='bekliyor'",
+            (tespit_id,)
+        ).fetchone()
+        if not tespit:
+            conn.close()
+            return False
+        eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, kaynak_referans = tespit
+        kaynak_aciklama = f"{kaynak_turu} {kaynak_referans or ''}".strip()
+        conn.execute(
+            "INSERT INTO piyasa_tedbir_listesi "
+            "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT (eslesme_turu, deger) DO UPDATE SET "
+            "aktif=TRUE, kaldirilma_tarihi=NULL, tedbir_turu=EXCLUDED.tedbir_turu, "
+            "kaynak_aciklama=EXCLUDED.kaynak_aciklama, tespit_id=EXCLUDED.tespit_id",
+            (eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id))
+        conn.execute(
+            "UPDATE piyasa_tedbir_tespit SET onay_durumu='onaylandi', "
+            "onay_zamani=now(), onaylayan_kullanici_id=? WHERE id=?",
+            (kullanici_id, tespit_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] piyasa_tedbir_onayla hata: {e}", file=sys.stderr)
+        return False
+
+
+def piyasa_tedbir_reddet(tespit_id: int, kullanici_id: int) -> bool:
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE piyasa_tedbir_tespit SET onay_durumu='reddedildi', "
+            "onay_zamani=now(), onaylayan_kullanici_id=? "
+            "WHERE id=? AND onay_durumu='bekliyor'",
+            (kullanici_id, tespit_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] piyasa_tedbir_reddet hata: {e}", file=sys.stderr)
+        return False
+
+
+def get_aktif_piyasa_tedbirleri() -> list:
+    """app.py'nin load_universe()'i HER YUKLEMEDE bunu okur - onaylanmis
+    ve hala aktif olan tum kurallar. Kucuk bir liste (onlarca satir)
+    oldugu icin 5 dk'lik Streamlit cache'i (load_universe'in kendi
+    cache'i) yeterli, ayrica bir cache katmani eklenmedi."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT eslesme_turu, deger, kategori FROM piyasa_tedbir_listesi "
+            "WHERE aktif=TRUE"
+        ).fetchall()
+        conn.close()
+        return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2]} for r in rows]
+    except Exception as e:
+        print(f"[db] get_aktif_piyasa_tedbirleri hata: {e}", file=sys.stderr)
+        return []
 
 
 def enag_oran_kaydet(yil_ay: str, aylik_oran: float) -> bool:
