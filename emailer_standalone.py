@@ -375,28 +375,52 @@ else:
             print(f"        {cat:6}: {n} satir")
 
 # ----------------------------------------------------------------------------
-# 4. Rapor parametrelerini env'den al (default: 20000 TL, Orta risk, 10 varlik)
+# 4. Rapor parametrelerini KAYITLI KULLANICI TERCİHİNDEN al
+#
+# v2.0.7.355 (3 Ekim 2026, Bahri'nin bulgusu - e-posta ENV DEĞİŞKENLERİ
+# (REPORT_BUDGET=20000 varsayılanı) kullanırken, uygulama KENDİ 25.000
+# varsayılanını kullanıyordu - ikisi de "varsayılan" olduğu için bu sapma
+# UZUN SÜRE fark edilmemişti): Artık emailer_standalone.py de app.py'nin
+# Ana Sayfa'sının YAZDIĞI AYNI kayıtlı tercihi (get_portfoy_ayarlari)
+# okuyor - ENV değişkenleri SADECE admin_email'in users tablosunda
+# bulunamadığı (örn. ilk kurulum) nadir durumda yedek olarak kullanılıyor.
 # ----------------------------------------------------------------------------
+_strateji = "kuresel"
 try:
-    budget = float(os.environ.get("REPORT_BUDGET", "20000"))
-    if budget <= 0:
+    from db import get_conn, get_portfoy_ayarlari
+    _conn_ayar = get_conn()
+    _row_uid = _conn_ayar.execute(
+        "SELECT id FROM users WHERE LOWER(email)=LOWER(?)", (admin_email,)
+    ).fetchone() if admin_email else None
+    _conn_ayar.close()
+    if _row_uid:
+        _ayarlar = get_portfoy_ayarlari(_row_uid[0])
+        budget, risk, max_assets, _strateji = (
+            _ayarlar["butce"], _ayarlar["risk"], _ayarlar["max_varlik"], _ayarlar["strateji"])
+        print(f"[4/5] Rapor parametreleri KAYITLI TERCİHTEN alındı: "
+              f"butce={budget:.0f} TL, risk={risk}, max_varlik={max_assets}, "
+              f"strateji={_strateji}")
+    else:
+        raise ValueError("kullanici bulunamadi, env degiskenlerine dusuluyor")
+except Exception as _ayar_err:
+    print(f"[4/5] Kayıtlı tercih okunamadı ({_ayar_err}) - ENV değişkenlerine düşülüyor.")
+    try:
+        budget = float(os.environ.get("REPORT_BUDGET", "20000"))
+        if budget <= 0:
+            budget = 20000.0
+    except (TypeError, ValueError):
         budget = 20000.0
-except (TypeError, ValueError):
-    budget = 20000.0
-
-risk = os.environ.get("REPORT_RISK", "Orta")
-if risk not in ("Çok Düşük", "Düşük", "Orta", "Yüksek", "Çok Yüksek"):
-    risk = "Orta"
-
-try:
-    max_assets = int(os.environ.get("REPORT_MAX_ASSETS", "10"))
-    if max_assets <= 0:
+    risk = os.environ.get("REPORT_RISK", "Orta")
+    if risk not in ("Çok Düşük", "Düşük", "Orta", "Yüksek", "Çok Yüksek"):
+        risk = "Orta"
+    try:
+        max_assets = int(os.environ.get("REPORT_MAX_ASSETS", "10"))
+        if max_assets <= 0:
+            max_assets = 10
+    except (TypeError, ValueError):
         max_assets = 10
-except (TypeError, ValueError):
-    max_assets = 10
-
-print(f"[4/5] Rapor parametreleri: butce={budget:.0f} TL, risk={risk}, "
-      f"max_varlik={max_assets}, admin_email={admin_email or '<bos>'}")
+    print(f"[4/5] Rapor parametreleri (ENV/varsayılan): butce={budget:.0f} TL, "
+          f"risk={risk}, max_varlik={max_assets}, admin_email={admin_email or '<bos>'}")
 
 # ----------------------------------------------------------------------------
 # 5. E-posta gonder (mevcut emailer.send_report kullanir)
@@ -416,6 +440,7 @@ try:
         budget=budget,
         risk=risk,
         max_assets=max_assets,
+        strateji=_strateji,
         cfg=cfg,
         user_email=admin_email,   # None/bos ise portfoy bos kalir
     )

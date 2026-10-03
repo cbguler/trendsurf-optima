@@ -84,7 +84,17 @@ def main():
 
         c = Crawler(timeout=60, max_retry=2)
         bugun = datetime.now()
-        start = (bugun - timedelta(days=95)).strftime("%Y-%m-%d")
+        # v2.0.7.354 (3 Ekim 2026, Bahri'nin talebi - "en az 365 gün
+        # görebilmem lazım, 95 günü hâlâ aşamıyorum"): varsayılan 95 gün
+        # (HIZLI, ~13sn - her 30 dk'lık sık çalışmada kalıyor) - ama
+        # TEFAS_GECMIS_DERINLIK ortam değişkeniyle İSTEĞE BAĞLI olarak
+        # daha derin (CANLI TEST: 370 gün = 1 yıl GÜVENİLİR çalışıyor,
+        # ~77sn; 1800 gün/5 yıl ise toplu modda bile hız sınırına takılıp
+        # BAŞARISIZ oluyor) bir "derin doldurma" çalıştırılabilir - bkz.
+        # yeni "TEFAS Gecmis Derin Doldur" workflow'u (elle tetiklenir,
+        # günlük sık çalışmayı YAVAŞLATMAZ).
+        _derinlik_gun = int(os.environ.get("TEFAS_GECMIS_DERINLIK", "95"))
+        start = (bugun - timedelta(days=_derinlik_gun)).strftime("%Y-%m-%d")
         end   = bugun.strftime("%Y-%m-%d")
         toplam_fon = 0
         toplam_arsiv_satir = 0

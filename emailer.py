@@ -173,7 +173,7 @@ def _col_group():
 # ── Optimizasyon bölümü ───────────────────────────────────────────────────────
 
 def _build_opt_section(df_uni: pd.DataFrame, budget: float,
-                       risk: str, max_assets: int) -> str:
+                       risk: str, max_assets: int, strateji: str = "kuresel") -> str:
     """Optimizasyon / Izleme Listesi tablosu.
 
     v1.9.7.3: budget=0 senaryosu desteklenir -> "Izleme Listesi" modu
@@ -187,119 +187,27 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     watchlist_mode = (budget <= 0)
 
     w = RISK_W.get(risk, RISK_W["Orta"])
-    MIN_SKOR = 60.0
 
-    # v2.0.7.349 (3 Ekim 2026, Bahri'nin bulgusu - e-postadaki Portföy
-    # Optimizasyonu tablosu, ÇOK YAKIN bir zamanda alınan Ana Sayfa ekran
-    # görüntüsünden TAMAMEN FARKLI çıkıyordu - önceki "farklı saat dilimi"
-    # açıklaması bu sefer GEÇERSİZDİ): KESİN KÖK NEDEN - bu fonksiyon
-    # app.py'nin KENDİ, BAĞIMSIZ bir KOPYASIYDI ve app.py'nin ESKİ "eşit
-    # bölüşüm" (her kategoriye garantili slot) algoritmasını kullanıyordu
-    # - app.py bunu "Bahri'nin açık kararı: kategori çeşitlendirme garantisi
-    # TAMAMEN kalksin" diyerek SAF KÜRESEL EN-İYİ-N seçimine geçeli uzun
-    # süre olmuştu, ama bu KOPYA hiç güncellenmemişti. Yani e-posta ile
-    # Ana Sayfa iki FARKLI ALGORİTMA kullanıyordu - zamanlamadan tamamen
-    # BAĞIMSIZ bir tutarsızlıktı. Artık app.py'nin GÜNCEL, onaylanmış
-    # algoritmasıyla (saf küresel en-iyi-N, deterministik Ticker ikincil
-    # sıralaması dahil) BİREBİR AYNI mantık kullanılıyor.
-    cat_pools = {}
-    for cat, weight in w.items():
-        if weight <= 0:
-            continue
-        if cat == "TEFAS":
-            df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Ret1M"] != 0)].copy()
-        else:
-            df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
-        if df_c.empty:
-            continue
-        df_c["_skor"] = df_c.apply(_optima_score, axis=1)
-        df_c = (df_c[(df_c["Ret1M"] > 0) & (df_c["_skor"] >= MIN_SKOR)]
-                .sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort"))
-        if not df_c.empty:
-            cat_pools[cat] = df_c
-
-    if not cat_pools:
+    # v2.0.7.353 (3 Ekim 2026, Bahri'nin talebi - "kullanıcı hangi portföy
+    # tarzını tercih ederse emaillerde ve Ana Sayfa portföy bütçesinde AYNI
+    # FORMÜL kullanılmalı"): bu fonksiyon artık portfoy_optimizasyon.py'deki
+    # TEK, PAYLAŞILAN seçim mantığını çağırıyor - app.py'nin Ana Sayfa'sı da
+    # AYNI fonksiyonu kullanıyor, bir daha asla birbirinden SAPMAYACAKLAR
+    # (v2.0.7.349'da bulunup düzeltilen sapmanın TEKRARLANMAMASI için).
+    # Strateji ('kuresel' | 'kategori_guvenceli') send_report()'tan
+    # parametre olarak gelir - emailer_standalone.py DB'den okuyup iletir.
+    from portfoy_optimizasyon import optimize_portfolio
+    _sonuc = optimize_portfolio(df_uni, budget, w, max_assets,
+                                 strateji=strateji, watchlist_mode=watchlist_mode)
+    if not _sonuc["secilenler"]:
         return ""
 
-    # v1.9.7.3 - Watchlist modu: butce yok, kategori agirlik yok.
-    # Tum havuzlarini birlestir, en yuksek skorlu Top N varlık secilir.
-    if watchlist_mode:
-        _tum_havuz_wl = pd.concat(
-            [df.assign(_Kategori=c) for c, df in cat_pools.items()], ignore_index=True
-        ).sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort")
-        selected = []
-        for _, row in _tum_havuz_wl.head(max_assets).iterrows():
-            price = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
-            selected.append({
-                "cat": row["_Kategori"], "row": row, "price": price,
-                "lot": 0, "gercek": 0.0, "skor": float(row["_skor"])
-            })
-        skipped_cats = [c for c in w if w.get(c, 0) > 0 and c not in cat_pools]
-    else:
-        # v2.0.7.349: saf küresel en-iyi-N secimi (app.py ile BİREBİR AYNI)
-        # - kategori cesitlendirme garantisi YOK, en yuksek skorlu
-        # max_assets varlik dogrudan secilir.
-        _tum_havuz = pd.concat(
-            [df.assign(_Kategori=c) for c, df in cat_pools.items()], ignore_index=True
-        ).sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort")
-        _secilenler = _tum_havuz.head(max_assets)
-        slots = {c: 0 for c in cat_pools}
-        for _cat, _grp in _secilenler.groupby("_Kategori"):
-            slots[_cat] = len(_grp)
-
-        # Kalite bazlı ağırlık — kategori ortalama skoruna göre düzelt
-        adj_weights = {}
-        total_adj = 0.0
-        for cat, weight in w.items():
-            if cat not in cat_pools:
-                continue
-            mpc = slots.get(cat, 0)
-            if mpc <= 0:
-                continue
-            quality = float(cat_pools[cat]["_skor"].head(mpc).mean()) / 100.0
-            adj = weight * quality
-            adj_weights[cat] = adj
-            total_adj += adj
-        if total_adj > 0:
-            adj_weights = {c: a / total_adj for c, a in adj_weights.items()}
-
-        # Seçilen varlıkları topla (kategori içi su-doldurma/feasibility
-        # app.py ile ayni: payini karsilayamayan varlik elenir, kalan
-        # butce kalanlara yeniden dagitilir)
-        selected = []
-        for cat, weight in adj_weights.items():
-            df_c   = cat_pools[cat]
-            mpc    = slots.get(cat, 0)
-            sample = df_c.head(min(mpc, len(df_c)))
-            cat_bud = budget * weight
-            aktif = list(sample.iterrows())
-            per = 0.0
-            while aktif:
-                pay = cat_bud / len(aktif)
-                karsilayamayan = [
-                    i for i, (_, row) in enumerate(aktif)
-                    if (float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0) > pay
-                ]
-                if not karsilayamayan:
-                    per = pay
-                    break
-                aktif = [item for i, item in enumerate(aktif) if i not in karsilayamayan]
-            else:
-                per = 0.0
-            if not aktif:
-                continue
-            for _, row in aktif:
-                price  = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
-                lot    = int(per / price) if price > 0 else 0
-                gercek = round(lot * price, 2)
-                skor   = float(row["_skor"])
-                selected.append({"cat": cat, "row": row, "price": price,
-                                  "lot": lot, "gercek": gercek, "skor": skor})
-
-        # Elenen kategoriler - app.py'nin v2.0.7.345'teki DOĞRU metniyle
-        # AYNI (kategorinin KENDİ havuzunda aday olsa bile küresel yarışı
-        # kaybetmiş olabilir - "hiç AL sinyali yok" demek YANLIŞ olurdu).
-        skipped_cats = [c for c in w if w.get(c, 0) > 0 and c not in adj_weights]
+    selected = [
+        {"cat": s["cat"], "row": {"Ticker": s["ticker"], "Ad": s["ad"]},
+         "price": s["fiyat"], "lot": s["lot"], "gercek": s["gercek"], "skor": s["skor"]}
+        for s in _sonuc["secilenler"]
+    ]
+    skipped_cats = _sonuc["elenen"]
 
     # Skora göre azalan sırala — en iyi varlık her zaman en üstte
     selected.sort(key=lambda x: x["skor"], reverse=True)
@@ -540,7 +448,7 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
 
 def build_html(df_uni: pd.DataFrame, portfolio: list,
                budget: float = 0, risk: str = "Orta",
-               max_assets: int = 10) -> str:
+               max_assets: int = 10, strateji: str = "kuresel") -> str:
 
     now      = _tr_now().strftime("%d.%m.%Y  %H:%M")
     logo_b64 = _logo_b64()
@@ -558,7 +466,7 @@ def build_html(df_uni: pd.DataFrame, portfolio: list,
             '<span style="font-size:22px;font-weight:900;color:#2ecc71;">SURF</span>'
         )
 
-    opt_section = _build_opt_section(df_uni, budget, risk, max_assets)
+    opt_section = _build_opt_section(df_uni, budget, risk, max_assets, strateji)
     pf_section  = _build_portfolio_section(portfolio, df_uni)
 
     return f"""<!DOCTYPE html>
@@ -630,7 +538,7 @@ def _email_sig(sig: str) -> str:
 
 def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
                 budget: float = 0, risk: str = "Orta", max_assets: int = 10,
-                cfg: dict = None, user_email: str = None):
+                cfg: dict = None, user_email: str = None, strateji: str = "kuresel"):
     """E-posta raporu gonder.
 
     Args:
@@ -719,7 +627,7 @@ def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,
     # except Exception:
     #     pass
 
-    html = build_html(df_uni, portfolio, budget, risk, max_assets)
+    html = build_html(df_uni, portfolio, budget, risk, max_assets, strateji)
     now  = _tr_now().strftime("%d.%m.%Y %H:%M")
 
     msg            = MIMEMultipart("alternative")

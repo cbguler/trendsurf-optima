@@ -8541,5 +8541,81 @@ Bahri ILU'nun "+%12,80 1 Aylık Getiri" iddiasını, GERÇEK 31 günlük grafiğ
 git add update_tefas_evening.py PROJE_NOTLARI.md && git commit -m "v2.0.7.352: TEFAS Ret1M/Ret3M/RSI 5 aydir bayat Excel yerine pytefas toplu-gecmis sorgusundan GERCEK/GUNCEL hesaplaniyor - 1348 fonun TAMAMINI etkileyen kritik duzeltme" && git pull --no-rebase --no-edit && git push
 ```
 
+### 3 Ekim 2026 (devam) - v2.0.7.352 DOĞRULANDI + 4 yeni istek tamamlandı
+Bahri v2.0.7.352'yi manuel "Run workflow" ile tetikleyip ILU'nun Ret1M=-%21,60 (doğru!) gösterdiğini CANLI doğruladı. Ardından 4 yeni madde + yarım kalan strateji işini tamamlama istedi.
+
+- **v2.0.7.353/355 - TAMAMLANDI: Bütçe/Risk/Max Varlık/Strateji artık
+  TEK, PAYLAŞILAN, kalıcı kullanıcı tercihi.** Yeni `portfoy_optimizasyon.py`
+  modülü (Streamlit'e bağımlı değil, scoring.py ile aynı prensip) HEM
+  "kuresel" (küresel en-iyi-N) HEM "kategori_guvenceli" (eski emailer.py
+  mantığı - her kategoriye garantili pay) stratejisini destekliyor, GERÇEK
+  veriyle test edildi (ikisi de farklı, doğru sonuç veriyor). `users`
+  tablosuna `portfoy_butce/portfoy_risk/portfoy_max_varlik/portfoy_
+  dagilim_stratejisi` eklendi. **KÖK NEDEN (Bahri'nin bulgusu):** e-posta
+  ENV değişkenlerinden (20.000 TL varsayılan) okurken, uygulama KENDİ
+  25.000 varsayılanını kullanıyordu - ikisi de "varsayılan" olduğu için
+  sapma hiç fark edilmemişti. Artık app.py'nin Ana Sayfa'sı BÜYÜK, tekrar
+  eden optimizasyon bloğunu kaldırıp `optimize_portfolio()`'yu çağırıyor,
+  sidebar'a iki stratejiyi açıklayan bir not + seçim eklendi (DB'ye
+  kaydediliyor), `emailer.py`/`emailer_standalone.py` de AYNI DB kaydını
+  okuyor (ENV değişkenleri sadece kullanıcı bulunamazsa yedek).
+  - **PUSH BEKLİYOR:** `app.py`, `db.py`, `emailer.py`,
+    `emailer_standalone.py`, `portfoy_optimizasyon.py` (yeni dosya).
+
+- **v2.0.7.356 - TAMAMLANDI: "En Yüksek Optima Skoru — Top 5" kaldırıldı**
+  (Bahri'nin bulgusu - altındaki "Tüm Varlıklar" tablosu ZATEN Optima_Skor'a
+  göre sıralı, Top 5 o tablonun birebir ilk 5 satırıydı, gereksizdi).
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+- **v2.0.7.357 - KENDİ HATAM BULUNUP DÜZELTİLDİ: diğer kategorilerde de
+  95 gün civarı limit oluşmuştu.** Bahri "KRIPTO 93, BIST 129, DOVIZ 89,
+  MADEN 89 gün - önce 5 yıllık görüyordum" dedi. KÖK NEDEN: v2.0.7.348'de
+  "her zaman 5y çek" kararını TEFAS'ın API sorunu yüzünden geri almıştım,
+  ama bu değişikliği YANLIŞLIKLA TÜM KATEGORİLERE uyguladım - oysa büyük-
+  aralık sorunu SADECE TEFAS/pytefas'a özgüydü (yfinance, BIST/DÖVİZ/
+  MADEN/KRIPTO için büyük aralıklarda SORUN YAŞAMIYOR). Artık 3 çağrı
+  yerinde de (Ana Sayfa/Portföyüm/Kategori sayfası) SADECE TEFAS
+  kullanıcının seçtiği periyodu kullanıyor - diğer TÜM kategoriler eski,
+  güvenilir "her zaman 5y" davranışına döndü.
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+- **v2.0.7.358 - "5 yıl başarısız oldu" özrü GERİ ALINDI, ÇÖZÜM BULUNDU.**
+  Bahri bunu kabul etmedi, haklı çıktı: 5 yıllık (1800 gün) TEK istek
+  toplu modda bile hız sınırına takılıyordu (CANLI doğrulandı), AMA aynı
+  5 yıl 1'ER YILLIK (370 gün) PARÇALARA bölünüp ardışık çekilince HER
+  PARÇA güvenilir oluyor - 3 AYRI yıl parçası CANLI test edildi, üçü de
+  başarılı (62-77 saniye arası). Yeni `tefas_gecmis_derin_doldur.py`
+  script'i + `tefas_gecmis_derin_doldur.yml` workflow'u (elle tetiklenir,
+  ~15-20 dakika sürer - günlük "TEFAS Aksam Guncelle"yi YAVAŞLATMAMAK için
+  AYRI tutuldu) - 5 yılı (varsayılan, `yil_sayisi` girdisiyle
+  değiştirilebilir) 1'er yıllık parçalar halinde `tefas_fiyat_gecmisi`
+  arşivine dolduruyor. İdempotent, tekrar tekrar çalıştırılabilir.
+  - **PUSH BEKLİYOR:** `tefas_gecmis_derin_doldur.py` (yeni),
+    `.github/workflows/tefas_gecmis_derin_doldur.yml` (yeni).
+  - **Ayrıca:** `update_tefas_evening.py`'deki günlük 95 günlük çekim artık
+    `TEFAS_GECMIS_DERINLIK` ortam değişkeniyle kontrol edilebiliyor
+    (varsayılan 95 - günlük sık çalışma için hafif kalıyor).
+
+**Bu turda ek küçük düzeltmeler (yukarıdaki işin devamı/pekiştirmesi):**
+- **Bütçe varsayılanı 25.000→20.000 TL:** `portfoy_butce` sütununun SQL
+  varsayılanı, `get_portfoy_ayarlari()`'nin fallback'i, app.py'nin
+  `_cur_user` yokken kullandığı fallback, VE emailer_standalone.py'nin
+  son çare ENV fallback'i - hepsi 20.000'e çekildi (Bahri'nin e-postaların
+  HER ZAMAN 20.000 gösterdiğini, bunun "doğru" değer olduğunu belirtmesi
+  üzerine). Bu, henüz push edilmemiş yeni bir sütun olduğu için geriye
+  dönük bir veri düzeltmesi GEREKMEDİ.
+- **`tefas_gecmis_derin_doldur.py` güçlendirildi:** CANLI TEST, ayrıca
+  önemli bir şey ortaya çıkardı - Crawler'in KENDİ `max_retry`'i TEK
+  BAŞINA yeterli değil; parçalar arasında AÇIKÇA bir bekleme OLMADAN,
+  kanıtlanmış 370 günlük bir parça bile 3/3 başarısız olabiliyordu, ama
+  25-50-75sn ARTAN bekleme + 4 deneme ile güvenilir hale geldi. Script
+  artık bu dış retry/bekleme mantığını içeriyor, workflow'un
+  `timeout-minutes`'ı da (en kötü senaryoya karşı) 45'ten 90'a çıkarıldı.
+
+**Toplu push komutu:**
+```
+git add app.py db.py emailer.py emailer_standalone.py portfoy_optimizasyon.py update_tefas_evening.py tefas_gecmis_derin_doldur.py .github/workflows/tefas_gecmis_derin_doldur.yml PROJE_NOTLARI.md && git commit -m "v2.0.7.353-358: Butce/Risk/Max Varlik/Strateji tek kalici kullanici tercihi oldu, gereksiz Top5 listesi kaldirildi, diger kategorilerin 5 yillik gecmisi geri geldi, 5 yillik TEFAS gecmis doldurma scripti+workflow eklendi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.352 push edildikten sonra Bahri'den (1) ILU'nun artık doğru/düşük skorla göründüğünü, (2) birkaç başka TEFAS fonunun da makul görünüp görünmediğini teyit etmesini iste. Sonra: `worker.py`'nin ANA akışına da AYNI gerçek-Ret1M/RSI düzeltmesini uygula (günlük ~30 dk'lık bayat pencereyi kapatmak için). Ayrıca açık: e-posta/Ana Sayfa davranış seçimi (kullanıcı tercihi) fikri için onay bekleniyor, Otomatik Piyasa Tedbiri İzleme'nin SPK Bülten İzleme script'i henüz yazılmadı.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Push sonrası Bahri'den (1) Ana Sayfa'da Bütçe Dağılım Stratejisi seçimini görüp bir sonraki e-postanın BİREBİR aynı tabloyu verdiğini teyit etmesini, (2) BIST/DOVIZ/MADEN/KRIPTO'da 5 yıllık grafiklerin geri geldiğini teyit etmesini, (3) "TEFAS Gecmis Derin Doldur" workflow'unu GitHub Actions'tan elle bir kez çalıştırıp TEFAS fonlarında da artık 1+ yıl geçmiş görülüp görülmediğini kontrol etmesini iste. Hâlâ açık: `worker.py`'nin ANA akışına gerçek-Ret1M/RSI düzeltmesi (günlük ~30 dk'lık bayat pencere), Otomatik Piyasa Tedbiri İzleme'nin SPK Bülten İzleme script'i.

@@ -3255,16 +3255,19 @@ with st.sidebar:
         except Exception:
             pass
 
+    # v2.0.7.355 (3 Ekim 2026, Bahri'nin bulgusu - e-posta 20.000 TL/Orta/10
+    # (ortam değişkeni varsayılanı) kullanırken, uygulama 25.000 TL/Orta/10
+    # (app.py'nin KENDİ varsayılanı, _DEFAULT_BUTCE) kullanıyordu - İKİSİ
+    # DE "varsayılan" olduğu için sapma hiç fark edilmemişti): Bütçe/Risk/
+    # Max Varlık/Strateji artık DÖRDÜ BİRDEN kalıcı, kullanıcı bazlı bir
+    # tercih - hem bu sayfa hem zamanlanmış e-posta (emailer_standalone.py)
+    # AYNI KAYDI okuyor, bir daha asla sapmayacaklar.
+    from db import get_portfoy_ayarlari, set_portfoy_ayarlari
+    _kayitli_ayarlar = (get_portfoy_ayarlari(_cur_user["id"]) if _cur_user
+                        else {"butce": 20000.0, "risk": "Orta", "max_varlik": 10, "strateji": "kuresel"})
+    _DEFAULT_BUTCE = int(_kayitli_ayarlar["butce"])
+
     st.markdown("**Bütçe (TL)**")
-    # v2.0.7.197 (Bahri'nin talebi, 25 Ağustos 2026 — "uygulama ilk
-    # açıldığında 25.000 TL bütçe default olarak girilmiş olsun"):
-    # eskiden varsayılan 0'dı (kutucuk boş açılıyordu) - bu da hem
-    # kullanıcı için "önce bir şey yazmam lazım" sürtünmesi yaratıyordu
-    # hem de v2.0.7.196'da düzelttiğimiz "bütçe boşsa sayfa
-    # st.stop() ile duruyor" sorununu YENİDEN tetikleyebiliyordu. Artık
-    # ilk açılışta 25.000 TL varsayılan - _DEFAULT_BUTCE sabitinden
-    # okunuyor, tek yerden değiştirilebilir.
-    _DEFAULT_BUTCE = 25000
     butce_str = st.text_input(
         "Butce",
         value=str(int(st.session_state.get("butce_val", _DEFAULT_BUTCE))),
@@ -3281,17 +3284,47 @@ with st.sidebar:
         budget = int(st.session_state.get("butce_val", _DEFAULT_BUTCE))
     if budget > 0:
         st.caption(f"Seçilen: {budget:,} TL".replace(",", "."))
-        # Deger hala varsayilanla AYNIYSA (kullanici degistirmemis
-        # olabilir) hatirlatma notu goster - "ilk acilis" takibi yerine
-        # bu daha saglam: herhangi bir yeniden calisma (rerun) notu
-        # erken kaybetmez, kullanici GERCEKTEN farkli bir deger
-        # yazana kadar goruntude kalir.
         if budget == _DEFAULT_BUTCE:
-            st.caption("Bu bir varsayılan değerdir, dilediğiniz gibi değiştirebilirsiniz.")
+            st.caption("Bu, kayıtlı tercihiniz (ya da varsayılan) - dilediğiniz gibi değiştirebilirsiniz.")
     risk=st.select_slider("Risk Toleransı",
-                           options=["Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"],value="Orta")
-    max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,value=10,step=1,
+                           options=["Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"],
+                           value=_kayitli_ayarlar["risk"])
+    max_assets=st.slider("Max Varlık Sayısı",min_value=2,max_value=30,
+                          value=_kayitli_ayarlar["max_varlik"],step=1,
                           help="Portföyde kaç farklı varlık olacağını belirler")
+
+    # v2.0.7.353 (3 Ekim 2026, Bahri'nin talebi - "kullanıcı hangi portföy
+    # tarzını tercih ederse emaillerde ve Ana Sayfa portföy bütçesinde AYNI
+    # FORMÜL kullanılmalı, kullanıcıya açıklayıcı bir not ile sunulmalı"):
+    _strateji_etiketleri = {
+        "kuresel": "En iyi skor önce (kategori garantisi yok)",
+        "kategori_guvenceli": "Çeşitlendirilmiş (her kategoriye garantili pay)",
+    }
+    _secilen_strateji_etiket = st.selectbox(
+        "Bütçe Dağılım Stratejisi", list(_strateji_etiketleri.values()),
+        index=list(_strateji_etiketleri.keys()).index(_kayitli_ayarlar["strateji"]))
+    st.caption(
+        "**En iyi skor önce:** Tüm kategorilerden (TEFAS/BIST/DÖVİZ/MADEN/KRIPTO) "
+        "en yüksek skorlu varlıklar seçilir - bir kategori, o an başka kategoriler "
+        "daha yüksek skorluysa sepete HİÇ girmeyebilir (daha yoğunlaşmış, potansiyel "
+        "olarak daha yüksek skorlu bir sepet).  \n"
+        "**Çeşitlendirilmiş:** En az bir uygun adayı olan HER kategoriye garantili "
+        "bir pay ayrılır, bütçe kategori kalitesine göre ağırlıklandırılır (daha "
+        "dengeli dağılmış, tek bir kategoriye bağımlı olmayan bir sepet)."
+    )
+    _secilen_strateji = next(k for k, v in _strateji_etiketleri.items()
+                             if v == _secilen_strateji_etiket)
+
+    if _cur_user:
+        _degisti = (budget != _kayitli_ayarlar["butce"] or risk != _kayitli_ayarlar["risk"]
+                   or max_assets != _kayitli_ayarlar["max_varlik"]
+                   or _secilen_strateji != _kayitli_ayarlar["strateji"])
+        if _degisti:
+            set_portfoy_ayarlari(_cur_user["id"], butce=budget, risk=risk, max_varlik=max_assets)
+            if _secilen_strateji != _kayitli_ayarlar["strateji"]:
+                from db import set_portfoy_stratejisi
+                set_portfoy_stratejisi(_cur_user["id"], _secilen_strateji)
+    st.session_state["_portfoy_stratejisi"] = _secilen_strateji
 
     # v2.0.7.158 (Bahri'nin talebi, 19 Ağustos 2026 — "artık bunlara gerek
     # kalmadı ki"): Sidebar'daki "Beklenti Modu" bölümü (ana anahtar + 6
@@ -5802,192 +5835,37 @@ if page=="Ana Sayfa":
             print(f"[timing][AnaSayfa] BIST canli yenileme (40 ticker): "
                   f"{_t_ana.perf_counter() - _t_bist0:.3f}s")
 
-    cat_pools = {}
-    _t_pool0 = _t_ana.perf_counter()
-    for cat, weight in w.items():
-        if weight <= 0:
-            continue
-        if cat == "TEFAS":
-            df_c = df_uni[df_uni["Kategori"] == cat].copy()
-            if "Ret1M" in df_c.columns:
-                df_c = df_c[df_c["Ret1M"] != 0].copy()
-        else:
-            df_c = df_uni[(df_uni["Kategori"]==cat)&(df_uni["Son_Fiyat"]>0)].copy()
-        if df_c.empty:
-            continue
-        # v2.0.4.57: BIST icin worker.py'nin ONCEDEN hesapladigi TAM skoru
-        # (temel analiz + hacim/dususu cezasi dahil) kullan - boylece bu
-        # sayfa, Portfoyum ve Detay sayfasiyla AYNI sayiyi gosterir. Diger
-        # kategoriler icin (henuz precompute edilmedi) eski basit hesaba
-        # devam edilir.
-        if "Optima_Skor" in df_c.columns and df_c["Optima_Skor"].notna().any():
-            df_c["Optima_Skor"] = pd.to_numeric(df_c["Optima_Skor"], errors="coerce")
-            _eksik = df_c["Optima_Skor"].isna()
-            if _eksik.any():
-                df_c.loc[_eksik, "Optima_Skor"] = df_c.loc[_eksik].apply(
-                    lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
-                                           vol=float(r.get("Vol",30) or 30)), axis=1)
-        else:
-            df_c["Optima_Skor"] = df_c.apply(
-                lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
-                                       vol=float(r.get("Vol",30) or 30)), axis=1)
-        # Filtre 1: Negatif getirili varlıklar elenir
-        df_c = df_c[df_c["Ret1M"] > 0].copy()
-        # Filtre 2: Skor eşiği — 60 altı = "TUT İZLE" veya daha kötü
-        # v2.0.7.338 (2 Ekim 2026, Bahri'nin bulgusu - "Bütçe Sepetinin
-        # Optima Skor Bileşimi" hiçbir haber onaylamadığı halde neredeyse
-        # her açılışta FARKLI görünüyordu): Optima_Skor'da (özellikle
-        # Fırsat Radarı'nın aynı puanı verdiği KRIPTO varlıklarında, çoğu
-        # zaman TAM 80,0) ÇOK SAYIDA EŞİT DEĞER var - pandas'ın
-        # VARSAYILAN sort_values() sıralaması KARARSIZDIR (quicksort),
-        # yani eşit skorlu varlıklar arasındaki SIRA her çağrıda farklı
-        # çıkabilir, bu da "ilk N tanesi secilir" mantığında FARKLI
-        # varlıkların (ve dolayısıyla farklı pasta grafiği oranlarının)
-        # seçilmesine yol açıyordu. Artik ikincil, DETERMINISTIK bir
-        # sıralama anahtarı (Ticker, alfabetik) eklendi - aynı skor
-        # kümesi için SONUÇ HER ZAMAN AYNI olacak. (Bu, DEĞİŞİKLİĞİN TEK
-        # kaynağı değil - RSI/1A Getiri gibi teknik göstergeler gün
-        # içinde GERÇEKTEN hareket eder, bu da haber onayından BAĞIMSIZ,
-        # beklenen bir değişim kaynağıdır.
-        #
-        # v2.0.7.344/345 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS'ta 658
-        # uygun aday olmasına rağmen Ana Sayfa'da "%100 KRIPTO" çıktı,
-        # CANLI teşhis loguyla DOĞRULANDI): Bu, GERÇEK ASIL kaynak -
-        # seçim aşağıda kategoriler arası pay GÖZETMEKSİZİN tüm havuzdan
-        # küresel olarak en yüksek skorlu max_assets varlığı alıyor
-        # (KASITLI tasarım, bkz. aşağıdaki "Eşit bölüşüm... TAMAMEN
-        # KALDIRILDI" notu). Fırsat Radarı sık sık ÇOK SAYIDA KRIPTO
-        # varlığına AYNI ANDA tam 80,0 verdiğinde, TEFAS/BIST/DOVIZ'in
-        # en iyi adayları bile (genelde 60-79 arası) bu küresel yarışı
-        # kaybedip sepetten TAMAMEN DIŞARIDA kalabiliyor - kategorilerin
-        # KENDİ havuzunda yüzlerce uygun aday olsa bile. Bu YÜZDEN "Bütçe
-        # Sepetinin Optima Skor Bileşimi" pastası da değişiyor: o pasta,
-        # SEÇİLEN sepetin ₺ ağırlıklı skor bileşenlerinin ortalamasıdır -
-        # sepetin ÜYELERİ değiştikçe (ör. çeşitliden %100 KRIPTO'ya),
-        # bileşim de doğal olarak değişir (kripto varlıkların temel
-        # analiz verisi -F/K, PD/DD, Temettü- OLMADIĞI için o dilimler
-        # küçülüp/kaybolup RSI+Momentum ağırlığı artar). KASITLI, bkz.
-        # PROJE_NOTLARI - Bahri davranışın böyle kalmasını onayladı,
-        # sadece banner metni daha doğru olacak şekilde güncellendi.)
-        df_c = (df_c[df_c["Optima_Skor"] >= MIN_SKOR]
-                .sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort"))
-        if not df_c.empty:
-            cat_pools[cat] = df_c
-    print(f"[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler): "
-          f"{_t_ana.perf_counter() - _t_pool0:.3f}s")
+    # v2.0.7.353 (3 Ekim 2026, Bahri'nin talebi - "kullanıcı hangi
+    # portföy tarzını tercih ederse emaillerde ve Ana Sayfa portföy
+    # bütçesinde AYNI FORMÜL kullanılmalı"): bu BÜYÜK blok, artık
+    # portfoy_optimizasyon.py'deki TEK, PAYLAŞILAN fonksiyona taşındı -
+    # app.py/emailer.py/emailer_standalone.py'nin ÜÇÜ de BUNU çağırıyor.
+    # Kullanıcının "Admin El Kitabı" yakınındaki ayardan seçtiği strateji
+    # ('kuresel' | 'kategori_guvenceli') burada kullanılıyor.
+    from portfoy_optimizasyon import optimize_portfolio
+    _strateji = st.session_state.get("_portfoy_stratejisi", "kuresel")
+    _sonuc = optimize_portfolio(df_uni, budget, w, max_assets, strateji=_strateji)
 
-    # 2. Adım: Slot dağıtımı — TÜM havuzdan en yüksek skorlu max_assets varlık
-    #
-    # v2.0.7.95 - KRITIK DUZELTME (Bahri'nin talebi, 19 Temmuz 2026, PEPE/
-    # ETHFI/ALLO/ILU ornegi): v2.0.7.94'te bu mantik SADECE max_assets <
-    # kategori_sayisi (5) iken uygulanmisti - max_assets=4 iken 3 tane
-    # Kripto (80,0) + ILU (78,7) dogru seciliyordu, ama max_assets=5 olunca
-    # (5 < 5 YANLIS oldugu icin) ESKI "her kategoriye en az 1 slot" mantigina
-    # GERI DONULUYORDU - Kripto'nun 2 tane 80,0 puanli varligi (ETHFI, ALLO)
-    # sirf "her kategoriye pay" kurali yuzunden elenip, yerlerine DAHA DUSUK
-    # puanli BIST/Doviz varliklari (ISGYO 70,0, ZARTRY 66,7) zorla ekleniyordu.
-    # Bahri'nin acik karari: "her zaman en iyi skor kazansin, kategori
-    # cesitlendirme garantisi TAMAMEN kalksin" - artik max_assets'in
-    # kategori sayisiyla karsilastirilmasi YOK, HER DURUMDA (Max Varlik
-    # Sayisi ne olursa olsun) tum havuzlardan objektif olarak en yuksek
-    # Optima_Skor'lu max_assets varlik dogrudan secilir. Eski "esit
-    # bolusum + kalite bazli acik/dolu slot transferi" mantigi (v2.0.7.65
-    # ve oncesi) TAMAMEN KALDIRILDI - artik gereksiz, cunku secim zaten
-    # gercek havuzdan yapildigindan bir kategorinin kapasitesini asma
-    # riski hic olusmaz.
-    # v2.0.7.338: ayni nedenle (yukariya bkz.) burada da deterministik
-    # ikincil siralama anahtari (Ticker) eklendi.
-    _tum_havuz = pd.concat(
-        [df.assign(_Kategori=c) for c, df in cat_pools.items()],
-        ignore_index=True
-    ).sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort")
-    _secilenler = _tum_havuz.head(max_assets)
-    slots = {c: 0 for c in cat_pools}
-    for _cat, _grp in _secilenler.groupby("_Kategori"):
-        slots[_cat] = len(_grp)
+    opt_rows = []
+    karsilanamayan_kategoriler = _sonuc["karsilanamayan"]
+    for _s in _sonuc["secilenler"]:
+        rsi_v = _s["rsi"]
+        trend_v = "YUKSELIS" if _s["ret1m"] >= 0 else "DUSUS"
+        sig_lbl, _ = get_signal(_s["skor"], rsi_v, trend_v)
+        opt_rows.append({
+            "Kategori": _s["cat"],
+            "Ticker": _s["ticker"],
+            "Ad": _s["ad"][:50],
+            "Optima Skoru": _s["skor"],
+            "Sinyal": sig_lbl,
+            "RSI": rsi_v,
+            "1A Getiri %": _s["ret1m"],
+            "Emir Fiyatı": _s["fiyat"],
+            "Birim": _s["lot"],
+            "Tutar (₺)": _s["gercek"],
+            "_gercek_fiyat": _s["gercek_fiyat_var"],
+        })
 
-    max_per_cat_map = slots
-
-    # Kalite bazlı ağırlık — kategori ortalama skoruna göre düzelt
-    adj_weights = {}
-    total_adj = 0.0
-    for cat, weight in w.items():
-        if cat not in cat_pools:
-            continue
-        mpc = max_per_cat_map.get(cat, 1)
-        # v2.0.7.94 - GUVENLIK (global-secim mantigindan sonra bazi
-        # kategoriler mpc=0 alabilir - bos bir Optima_Skor serisinin
-        # .mean()'i NaN doner, bu NaN total_adj'a sizip TUM agirliklari
-        # bozardi. mpc<=0 olan kategoriyi tamamen atla.
-        if mpc <= 0:
-            continue
-        top_scores = cat_pools[cat]["Optima_Skor"].head(mpc)
-        quality = float(top_scores.mean()) / 100.0
-        adj = weight * quality
-        adj_weights[cat] = adj
-        total_adj += adj
-    if total_adj > 0:
-        adj_weights = {c: a/total_adj for c, a in adj_weights.items()}
-
-    opt_rows=[]
-    karsilanamayan_kategoriler = []
-    for cat, weight in adj_weights.items():
-        df_c = cat_pools[cat]
-        mpc  = max_per_cat_map.get(cat, 1)
-        sample = df_c.head(min(mpc, len(df_c)))
-        cat_bud = budget * weight
-
-        # v2.0.4.34: Esit bolusumde bir varligin payi kendi birim fiyatindan
-        # dusuk cikarsa (lot=0), o varlik oncesinde hala "onerilen" listede
-        # 0 birim/0 TL ile goruniyordu - bu hem yaniltici hem de kategoriye
-        # ayrilan butcenin bir kismini fiilen harcanmadan birakiyordu.
-        # Simdi asama asama: payini karsilayamayan varliklar kategori
-        # havuzundan cikarilip kalan butce, kalan varliklara yeniden esit
-        # dagitiliyor (feasibility/water-filling) - stabil hale gelene
-        # kadar (herkes kendi payini karsilayana kadar) tekrarlaniyor.
-        aktif = list(sample.iterrows())
-        per = 0.0
-        while aktif:
-            pay = cat_bud / len(aktif)
-            karsilayamayan = [
-                i for i, (_, row) in enumerate(aktif)
-                if (float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0) > pay
-            ]
-            if not karsilayamayan:
-                per = pay
-                break
-            aktif = [item for i, item in enumerate(aktif) if i not in karsilayamayan]
-        else:
-            per = 0.0
-
-        if not aktif:
-            karsilanamayan_kategoriler.append(cat)
-            continue
-
-        for _, row in aktif:
-            # v2.0.5.1: Skorun tek kaynagi Firsat Radari destekli Optima_Skor
-            # (load_universe overlay) - tablo/Top5/Detay ile birebir ayni.
-            _rs = row.get("Optima_Skor")
-            skor = float(_rs) if (_rs is not None and _rs == _rs) else live_optima_score(row)
-            rsi_v = float(row.get("RSI",50))
-            trend_v = "YUKSELIS" if float(row.get("Ret1M",0)) >= 0 else "DUSUS"
-            sig_lbl, _ = get_signal(skor, rsi_v, trend_v)
-            price = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat",0)) > 0 else 1.0
-            lot = int(per/price) if price > 0 else int(per)
-            gercek = round(lot*price,2) if float(row.get("Son_Fiyat",0)) > 0 else per
-            opt_rows.append({
-                "Kategori":cat,
-                "Ticker":row["Ticker"],
-                "Ad":str(row["Ad"])[:50],
-                "Optima Skoru":skor,
-                "Sinyal":sig_lbl,
-                "RSI":rsi_v,
-                "1A Getiri %":float(row.get("Ret1M",0)),
-                "Emir Fiyatı":price,
-                "Birim":lot,
-                "Tutar (₺)":gercek,
-                "_gercek_fiyat": float(row.get("Son_Fiyat",0)) > 0,
-            })
 
     # Elenen kategorileri bildir
     # v2.0.7.345 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS'ta GERÇEKTE 658
@@ -6000,7 +5878,7 @@ if page=="Ana Sayfa":
     # hic AL sinyali OLMAMASI degil, o kategorinin EN IYI adaylarinin bile
     # o an BASKA kategorilerin adaylarindan DAHA DUSUK skorlu olmasi -
     # metin artik bunu doğru yansıtıyor.
-    elenen = [c for c in w if w.get(c,0) > 0 and c not in adj_weights]
+    elenen = _sonuc["elenen"]
     if elenen:
         st.info(f"Şu kategorilerde bu sepete girecek kadar yüksek skorlu "
                 f"varlık bulunamadı (diğer kategorilerin adayları şu an "
@@ -6259,14 +6137,20 @@ if page=="Ana Sayfa":
                     # 1,78 saniyede basariyla donerken, "5 Yil" 38+ saniyede
                     # HIC TAMAMLANMADI (zaman asimi), "6 Ay" bile 33 saniye
                     # surdu. Yani "5y"yi HER ZAMAN cekmek, TUTARLILIGI
-                    # duzeltirken GUVENILIRLIGI ciddi sekilde BOZMUSTU. Artik
-                    # KULLANICININ SECTIGI (varsayilan "3 Ay", hafif/hizli)
-                    # periyot hem enrich() hem grafik icin TEK fetch'te
-                    # paylasiliyor - "5 Yil" radyo secilirse O ZAMAN (yavas
-                    # olsa da, kullanicinin BILEREK istedigi an) cekilir,
-                    # HER sayfa acilisinda degil.
+                    # duzeltirken TEFAS icin GUVENILIRLIGI ciddi sekilde
+                    # BOZMUSTU. v2.0.7.357 (3 Ekim 2026, Bahri'nin bulgusu -
+                    # "KRIPTO'da 93, BIST'te 129, DOVIZ'de 89, MADEN'de 89
+                    # gunluk limit olustu, once 5 yillik goruyordum"): bu
+                    # "kullanicinin sectigi periyodu kullan" kararı YANLIŞLIKLA
+                    # TÜM KATEGORİLERE uygulanmıştı - oysa büyük-aralık
+                    # sorunu SADECE TEFAS/pytefas'a özgüydü (yfinance,
+                    # BIST/DÖVİZ/MADEN/KRIPTO için büyük aralıklarda SORUN
+                    # YAŞAMIYOR). Artık SADECE TEFAS kullanıcının seçtiği
+                    # (hafif) periyodu kullanıyor - diğer TÜM kategoriler
+                    # ESKİ, güvenilir "her zaman 5y" davranışına döndü.
+                    _ana_periyot = period_val if cat_ana == "TEFAS" else "5y"
                     _hist_sel_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
-                                              str(sel_row_ana.get("Kategori","")), period_val)
+                                              str(sel_row_ana.get("Kategori","")), _ana_periyot)
                     d = enrich(sel_row_ana, period_val, pre_fetched_hist=_hist_sel_ana)
                     # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
                     # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
@@ -7282,9 +7166,12 @@ elif page=="Portföyüm":
                 # sorunu nedeniyle GERI ALINDI): kullanicinin SECTIGI
                 # (varsayilan "3 Ay", hafif/hizli) periyot hem enrich()
                 # (banner/skor) hem asagidaki grafik tarafindan TEK fetch'te
-                # PAYLASILIYOR.
+                # PAYLASILIYOR. v2.0.7.357: SADECE TEFAS icin - diger
+                # kategoriler (yfinance, buyuk araliklarda sorunsuz) "5y"ye
+                # geri dondu (bkz. Ana Sayfa'daki ayni not).
+                _pf_periyot = _pm2[_pl] if str(_sr.get("Kategori","")) == "TEFAS" else "5y"
                 _hist_sel_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
-                                         str(_sr.get("Kategori","")), _pm2[_pl])
+                                         str(_sr.get("Kategori","")), _pf_periyot)
                 _d = enrich(_sr, _pm2[_pl], pre_fetched_hist=_hist_sel_pf)
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
                 # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
@@ -7583,39 +7470,12 @@ elif page in CAT:
     m3.metric("Ort. 1A Getiri %",f"{fmt_tr(ret_mean,2)}%")
     m4.metric("Ort. Optima Skor",fmt_tr(degerli['Optima_Skor'].mean(),1) if not degerli.empty else "N/A")
 
-    # ── TOP 5 ────────────────────────────────────────────────
-    st.divider()
-    st.subheader("En Yüksek Optima Skoru — Top 5")
-    # v2.0.5.1: Top 5 dogrudan radar destekli Optima_Skor'dan (load_universe
-    # overlay). Onceki "ilk 15 adayi canli hesapla" yontemi kaldirildi -
-    # Firsat Radari zaten TUM evreni ayni formulle taradigindan gereksiz,
-    # ayrica buyuk tabloyla ayni kaynagi kullanmak siralama tutarliligini
-    # garanti eder.
-    top5 = degerli.nlargest(5, "Optima_Skor")
-    # Top5 dataframe olarak göster — tıklanabilir
-    # v2.0.7.339 (2 Ekim 2026, Bahri'nin bulgusu - "Ana Sayfa'daki Bütçe
-    # Optimizasyonu ve Portföyüm'ün dışında hiçbir varlık sayfasında AL/
-    # SAT sinyali yok, performans için mi kaldırdık?"): KALDIRILMAMIŞ -
-    # bu tablolar baştan "Sinyal" sütunu hiç EKLENMEDEN yazılmış, bilinçli
-    # bir performans kararı değildi (aksi halde bunu açıklayan bir yorum
-    # olurdu). Bütçe Optimizasyonu'ndaki AYNI "hızlı yöntem"i (Ret1M
-    # işaretine bakan, ağ çağrısı GEREKTİRMEYEN sade bir tahmin) kullanıyor
-    # - 1300+ satırlık tablolarda bile performans maliyeti YOK (tamamen
-    # mevcut CSV sütunlarından, vektörel işlem).
-    _sinyal_hizli = top5.apply(
-        lambda r: get_signal(
-            float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
-            "YUKSELIS" if float(r.get("Ret1M", 0) or 0) >= 0 else "DUSUS")[0],
-        axis=1)
-    top5_show = top5[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
-    top5_show.insert(5, "Sinyal", _sinyal_hizli.values)
-    top5_show.columns = ["Ticker","Ad","Son Fiyat","RSI","1A Getiri%","Sinyal","Optima Skor"]
-    top5_show["Ad"] = top5_show["Ad"].astype(str).str[:40]
-    new_sel_top5 = clickable_table(top5_show, key=f"top5_{page}",
-                                   sel_ticker=st.session_state.get(f"sel_{page}",""))
-    if new_sel_top5 and new_sel_top5 != st.session_state.get(f"sel_{page}"):
-        st.session_state[f"sel_{page}"] = new_sel_top5
-        st.rerun()
+    # v2.0.7.356 (3 Ekim 2026, Bahri'nin talebi - "Top 5 listesine gerek
+    # yok, altındaki Tüm Varlıklar listesi ZATEN Top5 sıralanmış
+    # durumda"): KALDIRILDI - "Tüm Varlıklar" tablosu ZATEN Optima_Skor'a
+    # göre azalan sıralı (bkz. yukarıdaki df_cat.sort_values), yani Top 5
+    # gerçekten o tablonun İLK 5 SATIRIYLA birebir aynıydı - ayrı bir
+    # bölüm olarak göstermenin hiçbir katma değeri yoktu.
 
     # ── Tüm Varlıklar Tablosu (tıklanabilir) ─────────────────
     st.divider()
@@ -7681,8 +7541,11 @@ elif page in CAT:
         # v2.0.7.348 (bkz. Ana Sayfa'daki ayni not - "5y" guvenilirlik
         # sorunu nedeniyle GERI ALINDI): kullanicinin SECTIGI periyot hem
         # enrich() hem grafik tarafindan TEK fetch'te paylasiliyor.
+        # v2.0.7.357: SADECE TEFAS icin - diger kategoriler (yfinance,
+        # buyuk araliklarda sorunsuz) "5y"ye geri dondu.
+        _cat_periyot = period_val if cat_code == "TEFAS" else "5y"
         _hist_sel_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
-                                 str(sel_row.get("Kategori","")), period_val)
+                                 str(sel_row.get("Kategori","")), _cat_periyot)
         d=enrich(sel_row,period_val, pre_fetched_hist=_hist_sel_cat)
         # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
         # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).

@@ -1,0 +1,54 @@
+name: TEFAS Gecmis Derin Doldur
+
+# v2.0.7.358 (3 Ekim 2026, Bahri'nin talebi - "'5 yıl başarısız oldu'
+# özrünü kabul etmiyorum, yeniden dene"): pytefas'ın BÜYÜK, TEK SEFERLİK
+# bir aralığı (1800 gün/5 yıl) toplu modda bile hız sınırına takıldığı
+# CANLI doğrulandı - ama AYNI 5 yıl, 1'ER YILLIK PARÇALARA bölünüp
+# ARDIŞIK çekildiğinde HER PARÇA güvenilir oluyor (3 ayrı yıl parçası
+# CANLI test edildi, üçü de başarılı).
+#
+# Bu is toplamda ~15-20 DAKIKA surebilir (5 yil x 3 fon turu = ~15 istek,
+# ortalama ~70sn/istek) - bu yuzden GUNLUK "TEFAS Aksam Guncelle"nin
+# İÇİNE DEĞİL, AYRI, ELLE TETİKLENEN bir workflow'a konuldu - gunluk
+# otomasyonu YAVAŞLATMAZ. Bahri istediğinde (ya da örn. ayda/haftada bir)
+# "Run workflow" ile tetikleyebilir - idempotent (ON CONFLICT DO UPDATE),
+# tekrar tekrar calistirmak zarar vermez.
+
+on:
+  workflow_dispatch:
+    inputs:
+      yil_sayisi:
+        description: "Kaç yıl geriye doldurulsun (varsayılan 5)"
+        required: false
+        default: "5"
+
+jobs:
+  derin_doldur:
+    runs-on: ubuntu-latest
+    # v2.0.7.358 (guncelleme): script'e parcalar arasi bekleme + artan
+    # geri-cekilmeli yeniden deneme eklendi (hiz sinirina karsi daha
+    # sabirli) - en kotu senaryoda sure uzayabilir, 45 -> 90 dakika.
+    timeout-minutes: 90
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas pytefas psycopg2-binary --quiet
+
+      - name: tefas_gecmis_derin_doldur.py calistir
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TEFAS_DERIN_YIL_SAYISI: ${{ github.event.inputs.yil_sayisi }}
+        run: |
+          echo "TEFAS derin gecmis doldurma baslatiliyor - $(date) - ${TEFAS_DERIN_YIL_SAYISI} yil"
+          python tefas_gecmis_derin_doldur.py
+          echo "Tamamlandi - $(date)"

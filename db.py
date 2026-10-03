@@ -499,6 +499,38 @@ def init_db():
     except Exception as e:
         print(f"[db] users phone_number migration hatasi: {e}", file=sys.stderr)
 
+    # v2.0.7.353 (3 Ekim 2026, Bahri'nin talebi - "kullanıcı hangi
+    # portföy tarzını tercih ederse emaillerde ve Ana Sayfa portföy
+    # bütçesinde AYNI FORMÜL kullanılmalı"): portfoy_optimizasyon.py'nin
+    # desteklediği iki stratejiden ('kuresel' | 'kategori_guvenceli')
+    # hangisinin kullanılacağı - hem canlı uygulama hem zamanlanmış
+    # e-posta BU SÜTUNU okuyacak, tek kaynak.
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                  "portfoy_dagilim_stratejisi TEXT NOT NULL DEFAULT 'kuresel'")
+    except Exception as e:
+        print(f"[db] users portfoy_dagilim_stratejisi migration hatasi: {e}", file=sys.stderr)
+
+    # v2.0.7.355 (3 Ekim 2026, Bahri'nin bulgusu - e-posta 20.000 TL/Orta/10
+    # (ortam değişkeni varsayılanları) kullanırken, uygulama 25.000 TL/Orta/10
+    # (app.py'nin KENDİ varsayılanı) kullanıyordu - İKİSİ DE "varsayılan"
+    # olduğu için hiç fark edilmeden sapmışlardı): Bütçe/Risk/Max Varlık da
+    # artık stratejiyle AYNI şekilde kalıcı, kullanıcı bazlı bir tercih -
+    # hem Ana Sayfa hem e-posta BURADAN okuyacak.
+    try:
+        # v2.0.7.356 (3 Ekim 2026, Bahri'nin bulgusu - "e-postalar hep
+        # 20.000 TL gösteriyor, uygulama 25.000 TL varsayılan kullanıyor,
+        # bunlar AYNI olmalı"): varsayılan 25000'den 20000'e düzeltildi -
+        # e-postanın GERÇEK, tutarlı tarihçesi 20.000 TL idi.
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                  "portfoy_butce NUMERIC NOT NULL DEFAULT 20000")
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                  "portfoy_risk TEXT NOT NULL DEFAULT 'Orta'")
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                  "portfoy_max_varlik INTEGER NOT NULL DEFAULT 10")
+    except Exception as e:
+        print(f"[db] users portfoy_butce/risk/max_varlik migration hatasi: {e}", file=sys.stderr)
+
     # portfolio tablosu (ek sutunlar dahil)
     c.execute("""
     CREATE TABLE IF NOT EXISTS portfolio (
@@ -1702,6 +1734,89 @@ def tefas_fiyat_gecmisi_oku(ticker: str, gun: int = 1825) -> list:
     except Exception as e:
         print(f"[db] tefas_fiyat_gecmisi_oku hata: {e}", file=sys.stderr)
         return []
+
+
+def get_portfoy_stratejisi(user_id: int) -> str:
+    """v2.0.7.353: kullanıcının Bütçe Optimizasyonu için seçtiği
+    dağılım stratejisi ('kuresel' | 'kategori_guvenceli') - hem
+    app.py'nin Ana Sayfa'sı hem zamanlanmış e-posta scripti BUNU okur,
+    böylece ikisi HER ZAMAN aynı sonucu üretir."""
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT portfoy_dagilim_stratejisi FROM users WHERE id=?", (user_id,)
+        ).fetchone()
+        conn.close()
+        if row and row[0] in ("kuresel", "kategori_guvenceli"):
+            return row[0]
+        return "kuresel"
+    except Exception as e:
+        print(f"[db] get_portfoy_stratejisi hata: {e}", file=sys.stderr)
+        return "kuresel"
+
+
+def set_portfoy_stratejisi(user_id: int, strateji: str) -> bool:
+    if strateji not in ("kuresel", "kategori_guvenceli"):
+        return False
+    try:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE users SET portfoy_dagilim_stratejisi=? WHERE id=?",
+            (strateji, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] set_portfoy_stratejisi hata: {e}", file=sys.stderr)
+        return False
+
+
+def get_portfoy_ayarlari(user_id: int) -> dict:
+    """v2.0.7.355: kullanıcının kaydettiği bütçe/risk/max varlık/strateji -
+    Ana Sayfa VE zamanlanmış e-posta scripti AYNI DEĞERLERİ okur."""
+    _varsayilan = {"butce": 20000.0, "risk": "Orta", "max_varlik": 10,
+                   "strateji": "kuresel"}
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT portfoy_butce, portfoy_risk, portfoy_max_varlik, "
+            "portfoy_dagilim_stratejisi FROM users WHERE id=?", (user_id,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return _varsayilan
+        return {
+            "butce": float(row[0]) if row[0] else _varsayilan["butce"],
+            "risk": row[1] if row[1] in ("Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek") else _varsayilan["risk"],
+            "max_varlik": int(row[2]) if row[2] else _varsayilan["max_varlik"],
+            "strateji": row[3] if row[3] in ("kuresel", "kategori_guvenceli") else _varsayilan["strateji"],
+        }
+    except Exception as e:
+        print(f"[db] get_portfoy_ayarlari hata: {e}", file=sys.stderr)
+        return _varsayilan
+
+
+def set_portfoy_ayarlari(user_id: int, butce: float = None, risk: str = None,
+                         max_varlik: int = None) -> bool:
+    _alanlar, _degerler = [], []
+    if butce is not None and butce > 0:
+        _alanlar.append("portfoy_butce=?"); _degerler.append(float(butce))
+    if risk is not None and risk in ("Çok Düşük","Düşük","Orta","Yüksek","Çok Yüksek"):
+        _alanlar.append("portfoy_risk=?"); _degerler.append(risk)
+    if max_varlik is not None and max_varlik > 0:
+        _alanlar.append("portfoy_max_varlik=?"); _degerler.append(int(max_varlik))
+    if not _alanlar:
+        return False
+    try:
+        conn = get_conn()
+        _degerler.append(user_id)
+        conn.execute(f"UPDATE users SET {', '.join(_alanlar)} WHERE id=?", tuple(_degerler))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] set_portfoy_ayarlari hata: {e}", file=sys.stderr)
+        return False
 
 
 def enag_oran_kaydet(yil_ay: str, aylik_oran: float) -> bool:
