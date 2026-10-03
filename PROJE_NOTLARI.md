@@ -8332,5 +8332,30 @@ Bahri'nin paylaştığı canlı log KESİN cevabı verdi: `TEFAS: Skor>=60.0 fil
 git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.345: Butce optimizasyonunda kategorilerin kuresel en-iyi-N secimini kaybetmesi aciklandi (hata degil) - banner metni duzeltildi, teshis loglari temizlendi" && git pull --no-rebase --no-edit && git push
 ```
 
+### 🔎 TEFAS Detay grafiğinin "sonsuza kadar dönmesi" - KESİN KÖK NEDEN BULUNDU (3 Ekim 2026)
+Bahri "BAG dahil TEFAS fonlarının grafiği bir türlü açılmıyor, uygulama arka planda dönüp duruyor" dedi, yeni bir log paylaştı. Log KESİN cevabı verdi: `CVL/YAT` ve `ILU/YAT` BAŞARILI oldu (68 satır), ama `BAG/YAT`: **`TefasRateLimitError: 5 denemeden sonra başarısız`** - pytefas kütüphanesinin KENDİ ADLI, gerçek bir hız sınırı istisnası.
+
+- **v2.0.7.346 - KÖK NEDEN:** `TefasRateLimitError` zaten doğru yakalanıp
+  senteze düşülüyordu (v2.0.7.343'ün `_HistEmptyError` düzeltmesi
+  sayesinde kalıcı olarak önbelleğe de takılmıyordu) - AMA eski kod bu
+  hatada bile EMK ve BYF türlerini de DENEMEYE DEVAM EDİYORDU. Aynı hız
+  sınırı HER ÜÇ türde de tetikleneceği için bu, 3 KAT (pytefas'ın kendi
+  `max_retry=5` varsayılanıyla toplam 15 deneme + bekleme) gereksiz
+  süre harcıyordu - "sonsuza kadar dönme" hissinin asıl sebebi muhtemelen
+  buydu.
+  - **Çözüm:** `TefasRateLimitError` artık ayrıca yakalanıp diğer türler
+    HİÇ denenmeden hemen vazgeçiliyor (`break`). Ayrıca `Crawler`'ın
+    varsayılanları (`timeout=60, max_retry=5` - arka plan/toplu işler
+    için makul) bu ETKİLEŞİMLİ sayfada `timeout=15, max_retry=2`'ye
+    çekildi - kullanıcı ekranda beklerken çok daha hızlı pes edilip
+    sentetik yedeğe düşülüyor. CANLI TEST: normal/başarılı durum HİÇ
+    ETKİLENMEDİ (BAG için hâlâ 2,74 saniyede 68 satır).
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.346: TefasRateLimitError'da diger fon turleri denenmeden vazgecilsin + Crawler interaktif sayfa icin daha sabirsiz (timeout/retry) ayarlandi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. Bugünkü büyük TEFAS/bütçe sagası TAMAMEN KAPANDI. **EN ÖNCELİKLİ açık işler:** (1) BAG'ın Detay grafiğinin taze bakışla hâlâ doğru olup olmadığını teyit et (v2.0.7.343 sonrası), onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ açık işler:** (1) v2.0.7.346 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu tekrar denemesini iste - artık ya hızlı gerçek veri ya da (hız sınırına denk gelirse) çok daha hızlı sentetik yedek görmeli, "sonsuza kadar dönme" olmamalı. Eğer hâlâ donma varsa (TefasRateLimitError DIŞINDA bir sebep), yeni log istenmeli. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.

@@ -1007,10 +1007,36 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 
         days = period_days.get(period, 370)
         start = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         end   = datetime.now().strftime("%Y-%m-%d")
-        c = Crawler()
+        # v2.0.7.346: Crawler'in varsayilani (max_retry=5, timeout=60) bir
+        # ARKA PLAN/toplu is icin makul ama bu ETKILESIMLI Detay sayfasinda
+        # kullanici ekranda beklerken HER fetch() cagrisinin kendi icinde
+        # 5 deneme yapmasi (üstüne 3 fon turu icin TEKRARLANINCA) "sonsuza
+        # kadar donme" hissini guclendiriyordu. Burada daha sabirsiz bir
+        # Crawler kullanmak, basarisiz/hiz-sinirli durumlarda senteze cok
+        # daha hizli dusulmesini saglar - normal/hizli (1-3 sn) basarili
+        # cagrilari ETKILEMEZ.
+        c = Crawler(timeout=15, max_retry=2)
+        # v2.0.7.346 (3 Ekim 2026, Bahri'nin bulgusu - BAG dahil TEFAS
+        # fonlarinin Detay grafigi "surekli donuyor", bir turlu
+        # acilmiyordu): Bahri'nin paylastigi loglarda GERCEK sebep
+        # gorunur oldu - "TefasRateLimitError: 5 denemeden sonra
+        # basarisiz" (pytefas'in KENDI ic retry mekanizmasi, HER
+        # fetch() cagrisinda 5 deneme + bekleme yapiyor). Eski kod bu
+        # hatada da EMK/BYF'yi DE denemeye devam ediyordu - ayni hiz
+        # siniri HER UCUNDE de tetiklenecegi icin bu, 3 KAT (15 toplam
+        # deneme + bekleme) gereksiz sureyi UZATIYOR, sayfanin
+        # "sonsuza kadar donmesi" hissini yaratan asil sey bu olabilir.
+        # Artik hiz siniri hatasinda diger turler HIC denenmeden hemen
+        # pes ediliyor (break) - sentetik yedege cok daha hizli
+        # dusuluyor.
+        from pytefas import TefasRateLimitError
         for try_kind in [kind] + [k for k in ["YAT","EMK","BYF"] if k != kind]:
             try:
                 df = c.fetch(start=start, end=end, kind=try_kind, fund_code=ticker)
+            except TefasRateLimitError as _e_rate:
+                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: HIZ SINIRI - "
+                      f"{_e_rate} - diger turler denenmeden vazgeciliyor.", flush=True)
+                break
             except Exception as _e_fetch:
                 print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: c.fetch() HATASI - "
                       f"{type(_e_fetch).__name__}: {_e_fetch}", flush=True)
