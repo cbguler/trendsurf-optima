@@ -8288,5 +8288,19 @@ Bahri'nin onayladığı mimari üzerinde çalışmaya başlandı - KAP/TEFAS/BIS
 git add app.py db.py PROJE_NOTLARI.md && git commit -m "v2.0.7.343: TEFAS onbellek istisna duzeltmesi (basarisiz sonuc artik 24 saat kilitlenmez) + otomatik piyasa tedbiri izleme temel altyapisi (veritabani semasi + spk_tedbir_fonlari.py gocu)" && git pull --no-rebase --no-edit && git push
 ```
 
+### 🔎 AÇIK - Ana Sayfa Bütçe Optimizasyonu'nda TEFAS'ın tamamen kaybolması (3 Ekim 2026, Bahri'nin bulgusu)
+Bahri Ana Sayfa'da "Kategori Dağılımı: %100 KRIPTO" gördü, banner da "TEFAS, DOVIZ, MADEN, BIST için yeterli AL sinyalli varlık bulunamadı" diyordu - ama aynı sabah 09:04'teki otomatik e-posta raporunda TEFAS'tan 5 fon (ILU/CVL/MTG/HOY/HTS) dahil 10 varlıklık ÇEŞİTLİ bir dağılım vardı.
+
+**Araştırma (bu oturumda, derinlemesine):**
+- **BIST:** `[radar]` logu "BIST seansi kapali - BIST taramasi atlandi" diyor - 3 Ekim Cumartesi, BEKLENEN/bilinen davranış.
+- **DOVIZ/MADEN:** `[radar]` logu MADEN 3/3, DOVIZ 12/12 ile TAM BAŞARILI gösteriyor - radar çalışıyor. Ama bu canlı skorlar SADECE Streamlit'in bellek-içi `load_universe()` işleminde uygulanıyor, CSV dosyasına hiç yazılmıyor - yani CSV'den yaptığım "DOVIZ'de 9 aday var" kontrolü YANILTICI, gerçek (radar sonrası) skorları yansıtmıyor. DOVIZ/MADEN'in şu an gerçekten eşiği geçemiyor olması PİYASA KAYNAKLI (meşru) olabilir - kesin değil ama BUG olduğuna dair kanıt YOK.
+- **TEFAS - GERÇEK BİR BİLMECE:** `piyasa_tedbir_tespit`/`piyasa_tedbir_listesi` mekanizmasının (yeni kriz izleme kodu) DOĞRU çalıştığı log ile doğrulandı ("117 fon + 3 varlık tedbir kapsamında" - beklenen sayılar). Ama TEFAS'ın "eksik skor doldurma" mantığını (cat_pools döngüsü, hem kriz-izleme kodu UYGULANMIŞ hem UYGULANMAMIŞ senaryolarda) OFFLINE olarak gerçek veriyle simüle ettim - İKİSİNDE DE ILU gibi fonlar doğru şekilde 78,7 gibi skorlar alıyor ve yüzlerce TEFAS adayı eşiği geçiyor. Yani kodun mantığı KAĞIT ÜZERİNDE doğru, ama CANLI uygulamada TEFAS sıfır aday veriyor - NEDENİ HALA BULUNAMADI.
+- **v2.0.7.344:** `cat_pools` döngüsünün TEFAS dalına 4 hedefli teşhis `print()` satırı eklendi (`[butce-teshis]` ön ekiyle) - Ret1M!=0 filtresi sonrası satır sayısı, notna().any() sonucu, skor doldurma sonrası ILU'nun gerçek değeri, Ret1M>0 filtresi sonrası, ve son MIN_SKOR filtresi sonrası satır sayısı. **PUSH BEKLİYOR: Sadece `app.py`.**
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.344: Ana Sayfa butce optimizasyonunda TEFAS'in tamamen kaybolmasi icin hedefli teshis loglari eklendi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ İKİ ŞEY:** (1) Bahri'den BAG dahil birkaç TEFAS fonunun Detay grafiğini TAZE bakışla teyit etmesini iste - bu sefer gerçekten kalıcı olması gerekiyor, onaylanırsa v2.0.7.337'deki teşhis print'lerini temizle ve bu haftalardır süren sagayı KAPAT. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesindeki 4 maddeye devam et - en değerlisi ve en öncelikli olanı `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.344 push edildikten sonra Bahri'den Ana Sayfa'yı açıp "Manage app" loglarından `[butce-teshis]` ile başlayan 4-5 satırı istemek - bu, TEFAS'ın neden sıfır aday verdiğinin KESİN cevabını verecek (offline simülasyon mantığın doğru olduğunu gösterdi, demek ki canlı ortamda veri/zamanlama farklı bir şey oluyor). Ayrıca: (1) BAG'ın Detay grafiğinin taze bakışla hâlâ doğru olup olmadığını teyit et (v2.0.7.343 sonrası), onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.

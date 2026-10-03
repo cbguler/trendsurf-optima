@@ -5743,6 +5743,18 @@ if page=="Ana Sayfa":
         # sayfa, Portfoyum ve Detay sayfasiyla AYNI sayiyi gosterir. Diger
         # kategoriler icin (henuz precompute edilmedi) eski basit hesaba
         # devam edilir.
+        # v2.0.7.344 (3 Ekim 2026, Bahri'nin bulgusu - Ana Sayfa'da
+        # "Kategori Dağılımı" %100 KRIPTO çıktı, "TEFAS/DOVIZ/MADEN/BIST
+        # icin yeterli AL sinyalli varlik yok" banner'i gorundu, ama
+        # ayni verilerle YAPILAN OFFLINE SIMULASYON TEFAS icin yuzlerce
+        # uygun aday buluyordu): HEDEFLI TESHIS - cat_pools dongusunun bu
+        # TAM noktasinda TEFAS icin neler oldugunu Streamlit Cloud
+        # loglarinda gorunur kil. Kok neden hala bulunamadi (bu print'ler
+        # BULUNDUKTAN SONRA kaldirilmali).
+        if cat == "TEFAS":
+            print(f"[butce-teshis] TEFAS: Ret1M!=0 sonrasi satir={len(df_c)}, "
+                  f"notna().any()={df_c['Optima_Skor'].notna().any() if 'Optima_Skor' in df_c.columns else '(sutun yok)'}, "
+                  f"notna sayisi={df_c['Optima_Skor'].notna().sum() if 'Optima_Skor' in df_c.columns else '-'}", flush=True)
         if "Optima_Skor" in df_c.columns and df_c["Optima_Skor"].notna().any():
             df_c["Optima_Skor"] = pd.to_numeric(df_c["Optima_Skor"], errors="coerce")
             _eksik = df_c["Optima_Skor"].isna()
@@ -5754,8 +5766,14 @@ if page=="Ana Sayfa":
             df_c["Optima_Skor"] = df_c.apply(
                 lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
                                        vol=float(r.get("Vol",30) or 30)), axis=1)
+        if cat == "TEFAS":
+            print(f"[butce-teshis] TEFAS: skor doldurma sonrasi notna sayisi="
+                  f"{df_c['Optima_Skor'].notna().sum()}, ornek ILU skoru="
+                  f"{df_c.loc[df_c['Ticker']=='ILU','Optima_Skor'].values if 'ILU' in df_c['Ticker'].values else '(ILU bu df_c icinde yok)'}", flush=True)
         # Filtre 1: Negatif getirili varlıklar elenir
         df_c = df_c[df_c["Ret1M"] > 0].copy()
+        if cat == "TEFAS":
+            print(f"[butce-teshis] TEFAS: Ret1M>0 filtresi sonrasi satir={len(df_c)}", flush=True)
         # Filtre 2: Skor eşiği — 60 altı = "TUT İZLE" veya daha kötü
         # v2.0.7.338 (2 Ekim 2026, Bahri'nin bulgusu - "Bütçe Sepetinin
         # Optima Skor Bileşimi" hiçbir haber onaylamadığı halde neredeyse
@@ -5774,6 +5792,9 @@ if page=="Ana Sayfa":
         # BAĞIMSIZ, beklenen bir değişim kaynağıdır; bkz. PROJE_NOTLARI.)
         df_c = (df_c[df_c["Optima_Skor"] >= MIN_SKOR]
                 .sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort"))
+        if cat == "TEFAS":
+            print(f"[butce-teshis] TEFAS: Skor>={MIN_SKOR} filtresi sonrasi satir={len(df_c)} "
+                  f"(cat_pools'a girecek mi: {not df_c.empty})", flush=True)
         if not df_c.empty:
             cat_pools[cat] = df_c
     print(f"[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler): "
