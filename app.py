@@ -5743,18 +5743,6 @@ if page=="Ana Sayfa":
         # sayfa, Portfoyum ve Detay sayfasiyla AYNI sayiyi gosterir. Diger
         # kategoriler icin (henuz precompute edilmedi) eski basit hesaba
         # devam edilir.
-        # v2.0.7.344 (3 Ekim 2026, Bahri'nin bulgusu - Ana Sayfa'da
-        # "Kategori Dağılımı" %100 KRIPTO çıktı, "TEFAS/DOVIZ/MADEN/BIST
-        # icin yeterli AL sinyalli varlik yok" banner'i gorundu, ama
-        # ayni verilerle YAPILAN OFFLINE SIMULASYON TEFAS icin yuzlerce
-        # uygun aday buluyordu): HEDEFLI TESHIS - cat_pools dongusunun bu
-        # TAM noktasinda TEFAS icin neler oldugunu Streamlit Cloud
-        # loglarinda gorunur kil. Kok neden hala bulunamadi (bu print'ler
-        # BULUNDUKTAN SONRA kaldirilmali).
-        if cat == "TEFAS":
-            print(f"[butce-teshis] TEFAS: Ret1M!=0 sonrasi satir={len(df_c)}, "
-                  f"notna().any()={df_c['Optima_Skor'].notna().any() if 'Optima_Skor' in df_c.columns else '(sutun yok)'}, "
-                  f"notna sayisi={df_c['Optima_Skor'].notna().sum() if 'Optima_Skor' in df_c.columns else '-'}", flush=True)
         if "Optima_Skor" in df_c.columns and df_c["Optima_Skor"].notna().any():
             df_c["Optima_Skor"] = pd.to_numeric(df_c["Optima_Skor"], errors="coerce")
             _eksik = df_c["Optima_Skor"].isna()
@@ -5766,14 +5754,8 @@ if page=="Ana Sayfa":
             df_c["Optima_Skor"] = df_c.apply(
                 lambda r: optima_score(float(r.get("RSI",50)),float(r.get("Ret1M",0)),
                                        vol=float(r.get("Vol",30) or 30)), axis=1)
-        if cat == "TEFAS":
-            print(f"[butce-teshis] TEFAS: skor doldurma sonrasi notna sayisi="
-                  f"{df_c['Optima_Skor'].notna().sum()}, ornek ILU skoru="
-                  f"{df_c.loc[df_c['Ticker']=='ILU','Optima_Skor'].values if 'ILU' in df_c['Ticker'].values else '(ILU bu df_c icinde yok)'}", flush=True)
         # Filtre 1: Negatif getirili varlıklar elenir
         df_c = df_c[df_c["Ret1M"] > 0].copy()
-        if cat == "TEFAS":
-            print(f"[butce-teshis] TEFAS: Ret1M>0 filtresi sonrasi satir={len(df_c)}", flush=True)
         # Filtre 2: Skor eşiği — 60 altı = "TUT İZLE" veya daha kötü
         # v2.0.7.338 (2 Ekim 2026, Bahri'nin bulgusu - "Bütçe Sepetinin
         # Optima Skor Bileşimi" hiçbir haber onaylamadığı halde neredeyse
@@ -5787,14 +5769,31 @@ if page=="Ana Sayfa":
         # seçilmesine yol açıyordu. Artik ikincil, DETERMINISTIK bir
         # sıralama anahtarı (Ticker, alfabetik) eklendi - aynı skor
         # kümesi için SONUÇ HER ZAMAN AYNI olacak. (Bu, DEĞİŞİKLİĞİN TEK
-        # kaynağı olmayabilir - RSI/1A Getiri gibi teknik göstergeler
-        # gün içinde GERÇEKTEN hareket eder, bu da haber onayından
-        # BAĞIMSIZ, beklenen bir değişim kaynağıdır; bkz. PROJE_NOTLARI.)
+        # kaynağı değil - RSI/1A Getiri gibi teknik göstergeler gün
+        # içinde GERÇEKTEN hareket eder, bu da haber onayından BAĞIMSIZ,
+        # beklenen bir değişim kaynağıdır.
+        #
+        # v2.0.7.344/345 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS'ta 658
+        # uygun aday olmasına rağmen Ana Sayfa'da "%100 KRIPTO" çıktı,
+        # CANLI teşhis loguyla DOĞRULANDI): Bu, GERÇEK ASIL kaynak -
+        # seçim aşağıda kategoriler arası pay GÖZETMEKSİZİN tüm havuzdan
+        # küresel olarak en yüksek skorlu max_assets varlığı alıyor
+        # (KASITLI tasarım, bkz. aşağıdaki "Eşit bölüşüm... TAMAMEN
+        # KALDIRILDI" notu). Fırsat Radarı sık sık ÇOK SAYIDA KRIPTO
+        # varlığına AYNI ANDA tam 80,0 verdiğinde, TEFAS/BIST/DOVIZ'in
+        # en iyi adayları bile (genelde 60-79 arası) bu küresel yarışı
+        # kaybedip sepetten TAMAMEN DIŞARIDA kalabiliyor - kategorilerin
+        # KENDİ havuzunda yüzlerce uygun aday olsa bile. Bu YÜZDEN "Bütçe
+        # Sepetinin Optima Skor Bileşimi" pastası da değişiyor: o pasta,
+        # SEÇİLEN sepetin ₺ ağırlıklı skor bileşenlerinin ortalamasıdır -
+        # sepetin ÜYELERİ değiştikçe (ör. çeşitliden %100 KRIPTO'ya),
+        # bileşim de doğal olarak değişir (kripto varlıkların temel
+        # analiz verisi -F/K, PD/DD, Temettü- OLMADIĞI için o dilimler
+        # küçülüp/kaybolup RSI+Momentum ağırlığı artar). KASITLI, bkz.
+        # PROJE_NOTLARI - Bahri davranışın böyle kalmasını onayladı,
+        # sadece banner metni daha doğru olacak şekilde güncellendi.)
         df_c = (df_c[df_c["Optima_Skor"] >= MIN_SKOR]
                 .sort_values(["Optima_Skor", "Ticker"], ascending=[False, True], kind="mergesort"))
-        if cat == "TEFAS":
-            print(f"[butce-teshis] TEFAS: Skor>={MIN_SKOR} filtresi sonrasi satir={len(df_c)} "
-                  f"(cat_pools'a girecek mi: {not df_c.empty})", flush=True)
         if not df_c.empty:
             cat_pools[cat] = df_c
     print(f"[timing][AnaSayfa] Kategori havuzu skorlama (tum kategoriler): "
@@ -5914,10 +5913,22 @@ if page=="Ana Sayfa":
             })
 
     # Elenen kategorileri bildir
+    # v2.0.7.345 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS'ta GERÇEKTE 658
+    # uygun aday olmasina ragmen bu banner "yeterli AL sinyalli varlik
+    # bulunamadi" diyordu): KOK NEDEN - secim artik kategoriler arasi
+    # payda GOZETMEKSIZIN, TUM havuzdan kuresel olarak en yuksek skorlu
+    # max_assets varligi aliyor (bkz. yukaridaki "Esit bolusum...
+    # TAMAMEN KALDIRILDI" notu - KASITLI tasarim, DEGISTIRILMEDI). Yani
+    # bir kategori "elenmis" gorunuyorsa bunun GERCEK sebebi o kategoride
+    # hic AL sinyali OLMAMASI degil, o kategorinin EN IYI adaylarinin bile
+    # o an BASKA kategorilerin adaylarindan DAHA DUSUK skorlu olmasi -
+    # metin artik bunu doğru yansıtıyor.
     elenen = [c for c in w if w.get(c,0) > 0 and c not in adj_weights]
     if elenen:
-        st.info(f"Şu kategorilerde yeterli AL sinyalli varlik bulunamadigi icin "
-                f"bütçe diğer kategorilere dağıtıldı: {', '.join(elenen)}")
+        st.info(f"Şu kategorilerde bu sepete girecek kadar yüksek skorlu "
+                f"varlık bulunamadı (diğer kategorilerin adayları şu an "
+                f"daha yüksek skorlu) - bütçe diğer kategorilere "
+                f"dağıtıldı: {', '.join(elenen)}")
     if karsilanamayan_kategoriler:
         st.info(f"Şu kategorilerde ayrılan bütçe, havuzdaki hiçbir varlığın "
                 f"birim fiyatını karşılamadığı için o kategoriye hiç alım "

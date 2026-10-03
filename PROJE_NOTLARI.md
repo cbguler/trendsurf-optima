@@ -8295,12 +8295,42 @@ Bahri Ana Sayfa'da "Kategori Dağılımı: %100 KRIPTO" gördü, banner da "TEFA
 - **BIST:** `[radar]` logu "BIST seansi kapali - BIST taramasi atlandi" diyor - 3 Ekim Cumartesi, BEKLENEN/bilinen davranış.
 - **DOVIZ/MADEN:** `[radar]` logu MADEN 3/3, DOVIZ 12/12 ile TAM BAŞARILI gösteriyor - radar çalışıyor. Ama bu canlı skorlar SADECE Streamlit'in bellek-içi `load_universe()` işleminde uygulanıyor, CSV dosyasına hiç yazılmıyor - yani CSV'den yaptığım "DOVIZ'de 9 aday var" kontrolü YANILTICI, gerçek (radar sonrası) skorları yansıtmıyor. DOVIZ/MADEN'in şu an gerçekten eşiği geçemiyor olması PİYASA KAYNAKLI (meşru) olabilir - kesin değil ama BUG olduğuna dair kanıt YOK.
 - **TEFAS - GERÇEK BİR BİLMECE:** `piyasa_tedbir_tespit`/`piyasa_tedbir_listesi` mekanizmasının (yeni kriz izleme kodu) DOĞRU çalıştığı log ile doğrulandı ("117 fon + 3 varlık tedbir kapsamında" - beklenen sayılar). Ama TEFAS'ın "eksik skor doldurma" mantığını (cat_pools döngüsü, hem kriz-izleme kodu UYGULANMIŞ hem UYGULANMAMIŞ senaryolarda) OFFLINE olarak gerçek veriyle simüle ettim - İKİSİNDE DE ILU gibi fonlar doğru şekilde 78,7 gibi skorlar alıyor ve yüzlerce TEFAS adayı eşiği geçiyor. Yani kodun mantığı KAĞIT ÜZERİNDE doğru, ama CANLI uygulamada TEFAS sıfır aday veriyor - NEDENİ HALA BULUNAMADI.
-- **v2.0.7.344:** `cat_pools` döngüsünün TEFAS dalına 4 hedefli teşhis `print()` satırı eklendi (`[butce-teshis]` ön ekiyle) - Ret1M!=0 filtresi sonrası satır sayısı, notna().any() sonucu, skor doldurma sonrası ILU'nun gerçek değeri, Ret1M>0 filtresi sonrası, ve son MIN_SKOR filtresi sonrası satır sayısı. **PUSH BEKLİYOR: Sadece `app.py`.**
+- **v2.0.7.344:** `cat_pools` döngüsünün TEFAS dalına 4 hedefli teşhis `print()` satırı eklendi (`[butce-teshis]` ön ekiyle). **Bahri'nin paylaştığı canlı log ile ÇÖZÜLDÜ (bkz. aşağıda v2.0.7.345) - teşhis print'leri kaldırıldı.**
+
+### ✅ ÇÖZÜLDÜ (3 Ekim 2026) - TEFAS'ın "kaybolması" bir hata DEĞİLMİŞ, kasıtlı tasarımın bir sonucuymuş
+Bahri'nin paylaştığı canlı log KESİN cevabı verdi: `TEFAS: Skor>=60.0 filtresi sonrasi satir=658 (cat_pools'a girecek mi: True)` - yani **TEFAS'ın gerçekten 658 uygun adayı vardı ve `cat_pools`'a GİRİYORDU.** Sorun orada değildi - sonraki adımda, KÜRESEL SEÇİM mantığında.
+
+- **v2.0.7.345 - KESİN KÖK NEDEN:** Kodun kendi yorumu bunu doğruluyor -
+  eski "eşit bölüşüm" (her kategoriye garantili pay) mantığı BİLİNÇLİ
+  olarak kaldırılmış, yerine kategoriler arası ayrım GÖZETMEKSİZİN TÜM
+  havuzdan küresel olarak en yüksek skorlu `max_assets` (ör. 10) varlığı
+  seçen saf bir mantık konmuş. TEFAS'ın en iyi adayı (ILU) 78,7 puan
+  alırken, KRIPTO'da Fırsat Radarı'nın AYNI ANDA ÇOK SAYIDA varlığa tam
+  80,0 verdiği 72 aday vardı - küresel sıralamada KRIPTO'nun 80,0'lık
+  adayları TEFAS'ın 78,7'sini geride bırakıp ilk 10 slotun TAMAMINI
+  dolduruyordu. TEFAS'ın 658 adayının HİÇBİRİ elenmedi - sadece hiçbiri
+  ilk 10'a giremedi. Sabah 09:04'teki çeşitli dağılımın sebebi muhtemelen
+  o anki KRIPTO skorlarının şu anki kadar yoğun/yüksek olmamasıydı - gün
+  içinde radar skorları değiştikçe bu küresel yarış da değişiyor.
+  **Bu aynı zamanda "Bütçe Sepetinin Optima Skor Bileşimi" pastasının
+  neden değiştiği sorusunun da cevabı:** o pasta, SEÇİLEN sepetin ₺
+  ağırlıklı skor bileşenlerinin ortalaması - sepetin üyeleri (çeşitliden
+  %100 KRIPTO'ya) değiştikçe bileşim de değişir, ayrıca kripto
+  varlıkların temel analiz verisi (F/K, PD/DD, Temettü) OLMADIĞI için
+  o dilimler küçülüp RSI+Momentum ağırlığı artar.
+  - **Bahri'nin kararı:** Davranış (küresel en-iyi-N seçimi) AYNEN
+    KALACAK - sadece banner metni, "yeterli AL sinyalli varlık
+    bulunamadı" (yanlış izlenim: "hiç iyi varlık yok") yerine "bu
+    sepete girecek kadar yüksek skorlu varlık bulunamadı (diğer
+    kategoriler şu an daha yüksek skorlu)" olarak düzeltildi - gerçek
+    durumu (658 aday vardı, sadece yarışı kaybettiler) doğru yansıtıyor.
+  - v2.0.7.344'teki 4 teşhis `print()` satırı kaldırıldı (amacına ulaştı).
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
 
 **Push komutu:**
 ```
-git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.344: Ana Sayfa butce optimizasyonunda TEFAS'in tamamen kaybolmasi icin hedefli teshis loglari eklendi" && git pull --no-rebase --no-edit && git push
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.345: Butce optimizasyonunda kategorilerin kuresel en-iyi-N secimini kaybetmesi aciklandi (hata degil) - banner metni duzeltildi, teshis loglari temizlendi" && git pull --no-rebase --no-edit && git push
 ```
 
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.344 push edildikten sonra Bahri'den Ana Sayfa'yı açıp "Manage app" loglarından `[butce-teshis]` ile başlayan 4-5 satırı istemek - bu, TEFAS'ın neden sıfır aday verdiğinin KESİN cevabını verecek (offline simülasyon mantığın doğru olduğunu gösterdi, demek ki canlı ortamda veri/zamanlama farklı bir şey oluyor). Ayrıca: (1) BAG'ın Detay grafiğinin taze bakışla hâlâ doğru olup olmadığını teyit et (v2.0.7.343 sonrası), onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. Bugünkü büyük TEFAS/bütçe sagası TAMAMEN KAPANDI. **EN ÖNCELİKLİ açık işler:** (1) BAG'ın Detay grafiğinin taze bakışla hâlâ doğru olup olmadığını teyit et (v2.0.7.343 sonrası), onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.
