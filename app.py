@@ -1347,7 +1347,7 @@ def _csv_alan(row, kolon):
     except Exception:
         return None
 
-def enrich(row,period="1y"):
+def enrich(row, period="1y", pre_fetched_hist=None):
     """
     Varlık analizi.
     TUTARLILIK KURALI: Optima Skoru ve sinyal HER ZAMAN CSV'deki
@@ -1358,6 +1358,27 @@ def enrich(row,period="1y"):
     v2.0.3: Hacim trendi analizi (BIST/KRIPTO icin).
     Hacim azalirken fiyat yukseliyorsa zayif onay -> skor cezasi.
     Hacim artiyor + fiyat yukseliyorsa saglikli yukselis -> skor primi.
+
+    v2.0.7.347 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS Detay sayfasinda
+    "olumcul bekleme suresi", banner (Trend/MACD) ile grafigin birbiriyle
+    TUTARSIZ gorundugu, BAG gibi fonlarin HALA eski/yanlis gorunmesi):
+    KESIN KOK NEDEN - cagiran kod (Portfoyum/Ana Sayfa/Kategori detay
+    panelleri) bu fonksiyonu KULLANICININ SECTIGI periyotla (orn. "3mo")
+    cagiriyordu, SONRA grafigi cizmek icin AYRICA, BAGIMSIZ bir "5y"
+    get_hist() cagrisi daha yapiyordu - yani AYNI ticker icin SAYFA
+    BASINA IKI AYRI pytefas cagrisi oluyordu: biri bu fonksiyonun
+    icinde (banner/skor icin), biri disarida (grafik icin). Bu hem
+    bekleme suresini/hiz siniri riskini IKIYE KATLIYOR hem de banner ile
+    grafigin FARKLI fetch'lerden (biri basarili biri sentetik fallback'e
+    dusmus olabilir) gelmesine, yani TUTARSIZ gorunmesine yol aciyordu.
+    `pre_fetched_hist` parametresi, cagiran taraf ZATEN "5y" veriyi
+    cekmisse bunu BURAYA da gecirip IKINCI fetch'i tamamen ONLEMEK icin
+    eklendi - None ise (butun eski cagri yerleri) davranis AYNEN eskisi
+    gibi devam eder. Ayrica BONUS duzeltme: "52 Hafta Yuksek/Dusuk" ve
+    "Max Drawdown" hesaplari asagida 252 gunluk pencere BEKLIYOR - eskiden
+    "3mo" (~68 gun) hist ile bu HICBIR ZAMAN dolmuyordu (sessizce TUM
+    mevcut 68 gune geriliyordu, gercek bir "52 hafta" DEGILDI) - 5y
+    hist ile artik GERCEKTEN dogru hesaplaniyor.
     """
     t=str(row["Ticker"]); cat=str(row["Kategori"]); yfs=str(row.get("YF_Symbol",""))
     # CSV verileri — skorun TEK kaynağı (ham)
@@ -1366,7 +1387,7 @@ def enrich(row,period="1y"):
     csv_vol   = float(row.get("Vol",30) or 30)
     base_score = optima_score(csv_rsi, csv_ret1m, csv_vol)
 
-    hist=get_hist(t,yfs,cat,period)
+    hist = pre_fetched_hist if pre_fetched_hist is not None else get_hist(t,yfs,cat,period)
     trend,ret3m,macd_v,macd_s="YUKSELIS" if csv_ret1m>=0 else "DUSUS",0.0,0.0,0.0
     live_rsi, live_vol = csv_rsi, csv_vol
 
@@ -6200,7 +6221,13 @@ if page=="Ana Sayfa":
                 period_val = period_map[p_lbl]
 
                 with st.spinner("Analiz yukleniyor..."):
-                    d = enrich(sel_row_ana, period_val)
+                    # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() hem
+                    # grafik tarafindan paylasiliyor (bkz. enrich()'in
+                    # kendi notu) - ikinci, bagimsiz pytefas cagrisi
+                    # ONLENIYOR.
+                    _hist_5y_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
+                                             str(sel_row_ana.get("Kategori","")), "5y")
+                    d = enrich(sel_row_ana, period_val, pre_fetched_hist=_hist_5y_ana)
                     # v2.0.4.x: Tabloyla AYNI sayiyi goster - worker.py'nin
                     # onceden hesapladigi (hacim/DD dahil) skor varsa onu kullan.
                     # Canli hacim okumasi asagida sadece bilgi notu olarak kalir.
@@ -6297,8 +6324,9 @@ if page=="Ana Sayfa":
                     # 5 yillik veri cekiliyor - mevcut veri 5 yildan
                     # kisaysa (yeni varlik) dogal olarak elde ne varsa o
                     # kadar geriye gidilebiliyor.
-                    _hist_5y_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
-                                             cat_ana, "5y")
+                    # v2.0.7.347: ikinci fetch KALDIRILDI - yukarida
+                    # enrich()'e gecirilen _hist_5y_ana zaten bu amacla
+                    # da paylasiliyor.
                     if _hist_5y_ana is None or _hist_5y_ana.empty:
                         _hist_5y_ana = d["hist"]
                     # v2.0.7.289: grafik, "Son_Fiyat" (zaten canli
@@ -7216,7 +7244,12 @@ elif page=="Portföyüm":
             _pm2 = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
             _pl  = st.radio("Periyot", list(_pm2.keys()), index=1, horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
-                _d = enrich(_sr, _pm2[_pl])
+                # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() (banner/
+                # skor) hem asagidaki grafik tarafindan PAYLASILIYOR - iki
+                # ayrı pytefas cagrisi (ve olasi tutarsizlik) ortadan kalkti.
+                _hist_5y_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
+                                        str(_sr.get("Kategori","")), "5y")
+                _d = enrich(_sr, _pm2[_pl], pre_fetched_hist=_hist_5y_pf)
                 # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
                 # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
                 _rd_pf = _sr.get("Optima_Skor")
@@ -7281,8 +7314,9 @@ elif page=="Portföyüm":
             render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
 
             if not _d["hist"].empty:
-                _hist_5y_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
-                                        str(_sr.get("Kategori","")), "5y")
+                # v2.0.7.347: ikinci "5y" fetch'i KALDIRILDI - yukarida
+                # enrich()'e gecirilen _hist_5y_pf zaten burasi icin de
+                # kullaniliyor (ayni degisken, YENIDEN CEKILMIYOR).
                 if _hist_5y_pf is None or _hist_5y_pf.empty:
                     _hist_5y_pf = _d["hist"]
                 _hist_5y_pf = _hist_canli_ile_tamamla(_hist_5y_pf, _sr.get("Son_Fiyat"), str(_sr.get("Kategori","")))
@@ -7609,7 +7643,11 @@ elif page in CAT:
     period_val=period_map[p_lbl]
 
     with st.spinner("Analiz yükleniyor..."):
-        d=enrich(sel_row,period_val)
+        # v2.0.7.347: "5y" TEK SEFER cekilip hem enrich() hem grafik
+        # tarafindan paylasiliyor (bkz. enrich()'in kendi notu).
+        _hist_5y_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
+                                 str(sel_row.get("Kategori","")), "5y")
+        d=enrich(sel_row,period_val, pre_fetched_hist=_hist_5y_cat)
         # v2.0.4.x: Tabloyla AYNI sayiyi goster (bkz. Ana Sayfa Detay notu)
         # v2.0.5.1: Skorun TEK kaynagi Firsat Radari (bkz. Ana Sayfa notu).
         _rd_cat = sel_row.get("Optima_Skor")
@@ -7696,8 +7734,8 @@ elif page in CAT:
 
     # Mum grafiği
     if not d["hist"].empty:
-        _hist_5y_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
-                                 str(sel_row.get("Kategori","")), "5y")
+        # v2.0.7.347: ikinci fetch KALDIRILDI - yukarida enrich()'e
+        # gecirilen _hist_5y_cat zaten bu amacla da paylasiliyor.
         if _hist_5y_cat is None or _hist_5y_cat.empty:
             _hist_5y_cat = d["hist"]
         _hist_5y_cat = _hist_canli_ile_tamamla(_hist_5y_cat, sel_row.get("Son_Fiyat"), str(sel_row.get("Kategori","")))

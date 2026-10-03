@@ -8357,5 +8357,38 @@ Bahri "BAG dahil TEFAS fonlarının grafiği bir türlü açılmıyor, uygulama 
 git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.346: TefasRateLimitError'da diger fon turleri denenmeden vazgecilsin + Crawler interaktif sayfa icin daha sabirsiz (timeout/retry) ayarlandi" && git pull --no-rebase --no-edit && git push
 ```
 
+### ✅ TEFAS Detay sayfası - ASIL KÖK NEDEN BULUNDU (3 Ekim 2026)
+v2.0.7.346 push edildi ama Bahri BAG'ın HALA değişmediğini, "ölümcül bekleme süresi" yaşadığını bildirdi, yeni log paylaştı. Log `BAG/YAT: BASARILI, 68 satir` VE az sonra `ILU/YAT: BASARILI` + `ILU/YAT: HIZ SINIRI` İKİSİNİ BİRDEN gösterdi - AYNI ticker için art arda biri başarılı biri hız-sınırlı! Bu, sayfanın AYNI ticker için İKİ AYRI pytefas çağrısı yaptığını düşündürdü - ve kod incelemesi bunu doğruladı.
+
+- **v2.0.7.347 - KESİN KÖK NEDEN:** Detay panelini çizen HER YERDE (Ana
+  Sayfa, Portföyüm, Kategori sayfası) AYNI ticker için İKİ BAĞIMSIZ
+  `get_hist()` çağrısı vardı: biri `enrich()` içinde (banner'ın
+  Trend/MACD/Optima Skor hesapları için, KULLANICININ SEÇTİĞİ periyotla,
+  örn. "3mo"), biri de GRAFİĞİ ÇİZMEK İÇİN AYRICA (her zaman sabit "5y"
+  ile, v2.0.7.275'te "yakınlaştırma periyot seçimine bağlı olmasın" diye
+  bilinçli eklenmiş). Yani her sayfa açılışında AYNI fon için 2 KAT
+  pytefas çağrısı oluyordu - bu hem bekleme süresini/hız sınırı riskini
+  İKİYE KATLIYOR hem de banner ile grafiğin FARKLI (biri başarılı biri
+  sentetik yedeğe düşmüş olabilecek) kaynaklardan gelip TUTARSIZ
+  görünmesine yol açıyordu.
+  - **Çözüm:** `enrich()`'e opsiyonel bir `pre_fetched_hist` parametresi
+    eklendi - verilirse KENDİ fetch'ini YAPMIYOR, verileni kullanıyor.
+    Üç çağrı yeri de (Ana Sayfa/Portföyüm/Kategori) artık "5y" veriyi
+    TEK SEFER çekip hem `enrich()`'e hem grafiğe aynı değişkeni
+    geçiriyor - fetch sayısı yarıya indi, banner ve grafik HER ZAMAN
+    aynı veriden geliyor.
+  - **BONUS düzeltme:** `enrich()`'in "52 Hafta Yüksek/Düşük" ve "Max
+    Drawdown" hesapları 252 günlük bir pencere BEKLİYORDU - eskiden
+    kullanıcının seçtiği kısa periyotla (örn. "3mo" ≈ 68 gün) bu HİÇBİR
+    ZAMAN dolmuyordu, sessizce mevcut 68 güne geriliyordu (gerçek bir
+    "52 hafta" DEĞİLDİ). Artık her zaman 5 yıllık veriyle besleniyor,
+    bu istatistikler GERÇEKTEN doğru hesaplanıyor.
+  - **PUSH BEKLİYOR:** Sadece `app.py`.
+
+**Push komutu:**
+```
+git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.347: Detay panellerinde ayni ticker icin cift pytefas cagrisi (enrich icin 'secili periyot' + grafik icin ayri '5y') birlestirildi - bekleme suresi yariya indi, banner/grafik tutarsizligi giderildi, 52H/DD hesaplari duzeldi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ açık işler:** (1) v2.0.7.346 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu tekrar denemesini iste - artık ya hızlı gerçek veri ya da (hız sınırına denk gelirse) çok daha hızlı sentetik yedek görmeli, "sonsuza kadar dönme" olmamalı. Eğer hâlâ donma varsa (TefasRateLimitError DIŞINDA bir sebep), yeni log istenmeli. (2) Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam et - en değerlisi `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.347 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu TAZE bakışla tekrar denemesini iste - bu sefer (1) bekleme süresi gözle görülür şekilde kısalmalı (tek fetch), (2) banner ile grafik HER ZAMAN tutarlı olmalı, (3) gerçek veri geldiğinde gerçek dalgalı görünmeli. Onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle, bu haftalardır süren TEFAS sagasını TAMAMEN kapat. Sonra: Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam - en değerlisi `spk_bulten_izleme.py` script'i.
