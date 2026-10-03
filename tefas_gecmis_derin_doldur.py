@@ -1,31 +1,30 @@
 # -*- coding: utf-8 -*-
 """
 tefas_gecmis_derin_doldur.py - TEFAS fiyat arşivini (tefas_fiyat_gecmisi) geriye
-doğru doldurur. GitHub Actions'ta elle tetiklenen "TEFAS Gecmis Derin Doldur"
-workflow'u çalıştırır.
+doğru doldurur. GitHub Actions'taki "TEFAS Gecmis Derin Doldur" workflow'u çalıştırır.
 
-v2.0.7.359 (3 Ekim 2026, Bahri'nin bulgusu - "1 saati geçti, bir türlü
-durmadı, 1,5 saat sonra hata verdi"): Logdan KESİN kök neden bulundu:
-  1) Veritabanına yazma SATIR SATIR INSERT ile yapılıyordu (her gidiş-geliş
-     ~130 ms) - tek bir günün ~2000 satırı ~4,5 DAKİKA sürüyordu, bir yıllık
-     parçada 250+ gün olduğundan sadece YAZMA işi saatler sürerdi. Artık
-     db.tefas_fiyat_gecmisi_df_ekle() ile binlerce satır TEK sorguda yazılıyor.
-  2) Çıktı tamponlandığı için ilerleme satırları logda HİÇ görünmüyordu
-     (workflow'da `python -u` + her print'te flush ile giderildi).
-  3) Sadece evrendeki TEFAS fonları (optimized_universe.csv) yazılıyor - TEFAS'ın
-     toplu sorgusu evrenimizde olmayan ~700 fon daha döndürüyordu (gereksiz
-     veritabanı alanı).
-  4) Süre sınırı: script kendi bütçesini (varsayılan 105 dk) izler, yeni bir
-     parçaya başlamadan önce yeterli süre kalmadıysa TEMİZ şekilde durur ve
-     hangi parçaların eksik kaldığını yazar (yarım kalan iş boşa gitmez,
-     her parça yazıldıkça kalıcıdır).
-Sıralama: ÖNCE en yeni yıl (tüm türler için), sonra bir önceki yıl... böylece
-süre bitse bile en değerli (en yeni) veri tüm türlerde hazır olur.
+v2.0.7.362 (3 Ekim 2026 gece, Bahri'nin canlı logu - YAT 1 yıllık parçada 16/16
+deneme "hız sınırı" ile başarısız): KESİN KÖK NEDEN pytefas kaynağından ve canlı
+ölçümden bulundu:
+  * Crawler.fetch() uzun aralığı 28 günlük parçalara bölüp ART ARDA (aralarında
+    bekleme olmadan) HTTP isteği yapıyor; 1 yıl ≈ 13 istek.
+  * Sunucu RASTGELE aralıklarla HTTP 429 döndürüyor (ratelimit başlığı YOK; canlı
+    ölçüm: 6 istekten sonra bile, 429 anlık - 0,1 sn).
+  * Ben Crawler(max_retry=1) kullanıyordum: kütüphane 429'da 30 sn bekleyip
+    PES EDİYOR ve o ana kadar çekilen TÜM sayfaları çöpe atıyordu. 13 sayfanın
+    hepsinin hiç 429 yemeden geçmesi ihtimali düşük -> YAT 16/16 başarısız.
+YENİ TASARIM: her istek TAM OLARAK 28 günlük bir pencere (tek HTTP isteği), her
+pencere AYRI yeniden denenir (429 -> kütüphanenin kendi 30 sn beklemesi), başarılı
+pencere HEMEN veritabanına yazılır. Tek bir 429 sadece o pencerenin ~4 sn'lik işini
+etkiler, hiçbir şey kaybolmaz. İstekler arasında kısa bekleme (429 görülürse artan).
+Sıralama: ÖNCE en yeni pencere (tüm türler), sonra bir öncekiler.
 
-Ortam değişkenleri: TEFAS_DERIN_YIL_SAYISI (5), TEFAS_DERIN_BASLANGIC_YIL (0,
-kaldığın yerden devam için), TEFAS_DERIN_SURE_DAKIKA (105).
+Ortam değişkenleri: TEFAS_DERIN_YIL_SAYISI (5), TEFAS_DERIN_BASLANGIC_YIL (0),
+TEFAS_DERIN_SURE_DAKIKA (105). Test: TEFAS_DERIN_KURU=1 (veritabanına yazmaz),
+TEFAS_DERIN_MAKS_PENCERE=N (sadece ilk N pencere).
 İdempotent: tekrar çalıştırmak zararsız (ON CONFLICT DO UPDATE).
 """
+import math
 import os
 import sys
 import time
@@ -38,11 +37,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 YIL_SAYISI = int(os.environ.get("TEFAS_DERIN_YIL_SAYISI", "5") or 5)
 BASLANGIC_YIL = int(os.environ.get("TEFAS_DERIN_BASLANGIC_YIL", "0") or 0)
 SURE_DAKIKA = float(os.environ.get("TEFAS_DERIN_SURE_DAKIKA", "105") or 105)
-PARCA_GUN = 365
-ORTUSME_GUN = 5          # parçalar arası boşluk kalmasın
+KURU = os.environ.get("TEFAS_DERIN_KURU", "") == "1"
+MAKS_PENCERE = int(os.environ.get("TEFAS_DERIN_MAKS_PENCERE", "0") or 0)
+PENCERE_GUN = 28          # pytefas MAX_DAYS_PER_REQUEST: tam 1 HTTP istegi
 TURLER = ["YAT", "EMK", "BYF"]
-DENEME = 4
-PARCA_ARASI_BEKLEME = 15
+MAKS_DENEME = 8           # pencere basina (429'da kutuphane zaten ~30 sn bekliyor)
+TEMEL_BEKLEME = 1.5       # basarili istekler arasi (sn)
 
 
 def log(msg):
@@ -60,33 +60,6 @@ def evren_tickerlari():
         return None
 
 
-def parca_cek(crawler, kind, bas_gun, bit_gun):
-    from pytefas import TefasRateLimitError
-    bugun = datetime.now()
-    s = (bugun - timedelta(days=bas_gun)).strftime("%Y-%m-%d")
-    e = (bugun - timedelta(days=bit_gun)).strftime("%Y-%m-%d")
-    for n in range(1, DENEME + 1):
-        t0 = time.time()
-        try:
-            df = crawler.fetch(start=s, end=e, kind=kind)
-            log(f"  [{kind}] {s}..{e}: {len(df)} satir, "
-                f"{df['fund_code'].nunique() if not df.empty else 0} fon "
-                f"({time.time()-t0:.0f}sn, deneme {n}/{DENEME})")
-            return df
-        except TefasRateLimitError:
-            bekle = 25 * n
-            log(f"  [{kind}] {s}..{e}: hiz siniri (deneme {n}/{DENEME}, {time.time()-t0:.0f}sn) "
-                f"- {bekle}sn bekleniyor")
-            if n < DENEME:
-                time.sleep(bekle)
-        except Exception as ex:
-            log(f"  [{kind}] {s}..{e}: HATA {type(ex).__name__}: {ex} (deneme {n}/{DENEME})")
-            if n < DENEME:
-                time.sleep(20)
-    log(f"  [{kind}] {s}..{e}: {DENEME} denemeden sonra VAZGECILDI")
-    return None
-
-
 def arsiv_sayisi():
     try:
         from db import get_conn
@@ -98,71 +71,120 @@ def arsiv_sayisi():
         return None
 
 
+def pencere_cek(crawler, kind, bas, bit):
+    """Tek 28 gunluk pencere = tek HTTP istegi. (df, deneme_sayisi, 429_sayisi)"""
+    from pytefas import TefasRateLimitError
+    s, e = bas.strftime("%Y-%m-%d"), bit.strftime("%Y-%m-%d")
+    r429 = 0
+    for n in range(1, MAKS_DENEME + 1):
+        try:
+            return crawler.fetch(start=s, end=e, kind=kind), n, r429
+        except TefasRateLimitError:
+            r429 += 1                 # kutuphane 30 sn bekleyip pes etti, tekrar deneriz
+        except Exception as ex:
+            log(f"    [{kind}] {s}..{e}: {type(ex).__name__}: {str(ex)[:80]} (deneme {n}/{MAKS_DENEME})")
+            time.sleep(5)
+    return None, MAKS_DENEME, r429
+
+
 def main():
     from pytefas import Crawler
     import db
 
-    baslangic = time.time()
-    son_an = baslangic + SURE_DAKIKA * 60
-    log(f"Basladi: {YIL_SAYISI} yil, baslangic yili={BASLANGIC_YIL}, sure butcesi={SURE_DAKIKA:.0f} dk.")
+    t_basla = time.time()
+    son_an = t_basla + SURE_DAKIKA * 60
+    toplam_pencere = math.ceil(YIL_SAYISI * 365 / PENCERE_GUN)
+    ilk_pencere = int(BASLANGIC_YIL * 365 / PENCERE_GUN)
+    son_pencere = min(toplam_pencere, ilk_pencere + MAKS_PENCERE) if MAKS_PENCERE else toplam_pencere
+    log(f"Basladi: {YIL_SAYISI} yil = {toplam_pencere} pencere x {len(TURLER)} tur "
+        f"(baslangic pencere {ilk_pencere}, sure butcesi {SURE_DAKIKA:.0f} dk{', KURU CALISMA' if KURU else ''}).")
 
-    n0 = arsiv_sayisi()
-    if n0 is None:
-        log("Arsiv tablosu okunamadi - init_db() ile olusturuluyor...")
-        try:
-            db.init_db()
-            n0 = arsiv_sayisi()
-        except Exception as e:
-            log(f"HATA: veritabani hazirlanamadi: {e}")
-            sys.exit(1)
-    log(f"Arsivde baslangicta {n0} satir var.")
+    n0 = None
+    if not KURU:
+        n0 = arsiv_sayisi()
+        if n0 is None:
+            log("Arsiv tablosu okunamadi - init_db() ile olusturuluyor...")
+            try:
+                db.init_db()
+                n0 = arsiv_sayisi()
+            except Exception as e:
+                log(f"HATA: veritabani hazirlanamadi: {e}")
+                sys.exit(1)
+        log(f"Arsivde baslangicta {n0} satir var.")
 
     izinli = evren_tickerlari()
-    crawler = Crawler(timeout=120, max_retry=1)   # tekrar denemeyi kendimiz yonetiyoruz
-    yazilan_toplam, eksik, yazma_hatasi = 0, [], 0
+    crawler = Crawler(timeout=60, max_retry=1)   # pencere basina tekrar denemeyi biz yonetiyoruz
+    bugun = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
+    yazilan_toplam = istek_sayisi = toplam_429 = yazma_hatasi = 0
+    eksik, bekleme, sakin_kalan = [], TEMEL_BEKLEME, 0
     durdu = False
-    for yil_idx in range(BASLANGIC_YIL, YIL_SAYISI):
+
+    for w in range(ilk_pencere, son_pencere):
+        bit = bugun - timedelta(days=w * PENCERE_GUN)
+        bas = bit - timedelta(days=PENCERE_GUN - 1)
         for kind in TURLER:
             kalan_dk = (son_an - time.time()) / 60
-            if kalan_dk < 8:
-                log(f"SURE BITIYOR (kalan {kalan_dk:.1f} dk) - yeni parcaya baslanmiyor.")
+            if kalan_dk < 3:
+                if not durdu:
+                    log(f"SURE BITIYOR (kalan {kalan_dk:.1f} dk) - yeni istek yapilmiyor.")
                 durdu = True
-                eksik.append((yil_idx, kind))
+                eksik.append((w, kind))
                 continue
-            bas_gun = (yil_idx + 1) * PARCA_GUN + ORTUSME_GUN
-            bit_gun = yil_idx * PARCA_GUN
-            log(f"--- Yil {yil_idx+1}/{YIL_SAYISI} | {kind} (kalan sure {kalan_dk:.0f} dk) ---")
-            df = parca_cek(crawler, kind, bas_gun, bit_gun)
-            if df is None or df.empty:
-                eksik.append((yil_idx, kind))
-                continue
-            kol = {c.lower(): c for c in df.columns}
-            try:
-                d = df[[kol["fund_code"], kol["date"], kol["price"]]].copy()
-            except KeyError:
-                log(f"  [{kind}] beklenen sutunlar yok: {df.columns.tolist()}")
-                eksik.append((yil_idx, kind))
-                continue
-            d.columns = ["ticker", "tarih", "fiyat"]
             t0 = time.time()
-            n = db.tefas_fiyat_gecmisi_df_ekle(d, izinli_tickerlar=izinli)
-            log(f"  [{kind}] arsive yazildi: {n} satir ({time.time()-t0:.0f}sn)")
-            if n == 0:
-                yazma_hatasi += 1
-                eksik.append((yil_idx, kind))
-            yazilan_toplam += n
-            time.sleep(PARCA_ARASI_BEKLEME)
+            df, deneme, r429 = pencere_cek(crawler, kind, bas, bit)
+            istek_sayisi += 1
+            toplam_429 += r429
+            if r429:
+                bekleme, sakin_kalan = 5.0, 6        # 429 goruldu: bir sure daha yavas git
+            elif sakin_kalan > 0:
+                sakin_kalan -= 1
+                if sakin_kalan == 0:
+                    bekleme = TEMEL_BEKLEME
+            if df is None:
+                eksik.append((w, kind))
+                log(f"[{w+1}/{toplam_pencere}] {kind} {bas.date()}..{bit.date()}: VAZGECILDI "
+                    f"({MAKS_DENEME} deneme, {r429} adet 429)")
+                continue
+            satir = 0
+            if not df.empty:
+                kol = {c.lower(): c for c in df.columns}
+                try:
+                    d = df[[kol["fund_code"], kol["date"], kol["price"]]].copy()
+                    d.columns = ["ticker", "tarih", "fiyat"]
+                    if KURU:
+                        satir = len(d[d["ticker"].astype(str).isin(izinli)]) if izinli else len(d)
+                    else:
+                        satir = db.tefas_fiyat_gecmisi_df_ekle(d, izinli_tickerlar=izinli)
+                        if satir == 0:
+                            yazma_hatasi += 1
+                            eksik.append((w, kind))
+                except KeyError:
+                    log(f"    [{kind}] beklenen sutunlar yok: {df.columns.tolist()}")
+                    eksik.append((w, kind))
+            yazilan_toplam += satir
+            log(f"[{w+1}/{toplam_pencere}] {kind} {bas.date()}..{bit.date()}: {len(df)} satir cekildi, "
+                f"{satir} yazildi ({time.time()-t0:.0f}sn, 429={r429})")
+            time.sleep(bekleme)
 
-    n1 = arsiv_sayisi()
-    log(f"BITTI: {yazilan_toplam} satir yazildi, arsiv {n0} -> {n1} satir, "
-        f"toplam sure {(time.time()-baslangic)/60:.1f} dk.")
+        if (w - ilk_pencere + 1) % 10 == 0:
+            gecen = (time.time() - t_basla) / 60
+            tamam = w - ilk_pencere + 1
+            kalan_pencere = son_pencere - w - 1
+            log(f"--- ILERLEME: {tamam} pencere tamam, ~{gecen/tamam*kalan_pencere:.0f} dk kaldi tahmini "
+                f"(gecen {gecen:.0f} dk, toplam 429: {toplam_429}) ---")
+
+    n1 = arsiv_sayisi() if not KURU else None
+    log(f"BITTI: {istek_sayisi} istek, {yazilan_toplam} satir yazildi, toplam 429 = {toplam_429}, "
+        f"arsiv {n0} -> {n1} satir, sure {(time.time()-t_basla)/60:.1f} dk.")
     if eksik:
-        log("EKSIK PARCALAR (yil_indeksi, tur): " + ", ".join(f"({y},{k})" for y, k in eksik))
-        log("Eksikleri tamamlamak icin workflow'u tekrar calistirin "
-            "(isterseniz 'baslangic_yil' ile kaldiginiz yildan).")
+        ilk_eksik_yil = min(w for w, _ in eksik) * PENCERE_GUN // 365
+        log(f"EKSIK ({len(eksik)} pencere/tur): " + ", ".join(f"({w},{k})" for w, k in eksik[:30])
+            + (" ..." if len(eksik) > 30 else ""))
+        log(f"Tamamlamak icin workflow'u tekrar calistirin (baslangic_yil={ilk_eksik_yil}; "
+            f"idempotent, zaten yazilanlar zarar gormez).")
     if yazma_hatasi:
-        log("HATA: bazi parcalar veritabanina YAZILAMADI (SUPABASE_DB_URL/ag sorunu olabilir).")
+        log("HATA: bazi pencereler veritabanina YAZILAMADI (SUPABASE_DB_URL/ag sorunu olabilir).")
         sys.exit(1)
 
 
