@@ -115,6 +115,14 @@ section.main [data-testid="stRadio"] label span,
 [data-testid="stSidebar"] [role="slider"]{background:#5b8dee!important;}
 .stCaption,[data-testid="stCaptionContainer"] p{color:#5a6a8a!important;}
 [data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:#2c3e6b!important;}
+/* v2.0.7.359: kenar cubugundaki TUM aciklama yazilari okunakli (koyu, buyuk, opak) */
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] span,
+[data-testid="stSidebar"] .stCaption,[data-testid="stSidebar"] small,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{color:#10203f!important;opacity:1!important;font-size:14px!important;line-height:1.5!important;font-weight:500!important;}
+[data-testid="stSidebar"] .strateji-not{color:#10203f!important;font-size:13.5px!important;line-height:1.5!important;background:#eaf2ff;border:1px solid #9fbbe6;border-radius:8px;padding:10px 12px;margin:4px 0 8px 0;}
+[data-testid="stSidebar"] .strateji-not b,[data-testid="stSidebar"] .strateji-not i{color:#0b1830!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
 /* Özel bileşenler */
@@ -340,12 +348,15 @@ if _qp.get("trigger") == "email":
         _admin_email = st.secrets.get("admin", {}).get("email", "")
 
         # send_report portfolio=None + user_email -> sadece o kullanicinin portfoyu
+        from db import get_portfoy_ayarlari_by_email
+        _kayitli_tr = get_portfoy_ayarlari_by_email(_admin_email) if _admin_email else {}
         send_report(_df_uni, portfolio=None, cfg=_cfg,
                     budget=_budget, risk=_risk, max_assets=_max_assets,
-                    user_email=_admin_email)
+                    user_email=_admin_email,
+                    strateji=_kayitli_tr.get("strateji", "kuresel"))
 
         _dt = _t.time() - _t0
-        st.write(f"OK: Email gonderildi ({fmt_tr(_dt,1)}s)")
+        st.write(f"OK: Email gonderildi ({_dt:.1f}s)")  # fmt_tr bu noktada henuz tanimli degildi (NameError)
         st.write(f"Alici: {_cfg['address']}")
         st.write(f"Universe: {len(_df_uni)} satir | Butce: {_budget} TL | "
                  f"Risk: {_risk} | Max varlik: {_max_assets}")
@@ -1117,8 +1128,39 @@ class _HistEmptyError(Exception):
                                               # yasagi ihlali oldugu icin) - dekorator artik DOGRU
                                               # sekilde _get_hist_cached'e uygulaniyor.
 def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
-    # TEFAS — önce yerel JSON cache, sonra pytefas, son çare sentetik
+    # TEFAS - v2.0.7.359 sirasi: (0) kalici fiyat arsivi (pytefas'a HIC gitmeden,
+    # hiz sinirindan bagimsiz), (1) yerel disk cache, (2) pytefas, (2b) kismi
+    # arsiv, (3) sentetik.
     if category == "TEFAS":
+        _df_arsiv_kismi = None
+        try:
+            from db import tefas_fiyat_gecmisi_oku
+            _gun_map = {"1mo": 35, "3mo": 95, "6mo": 190, "1y": 370, "3y": 1100, "5y": 1825}
+            _gun = _gun_map.get(period, 1825)
+            _arsiv = tefas_fiyat_gecmisi_oku(ticker, _gun)
+            if len(_arsiv) >= 5:
+                _da = pd.DataFrame(_arsiv, columns=["date", "Close"])
+                _da["date"] = pd.to_datetime(_da["date"])
+                _da = _da.set_index("date").sort_index()
+                _da["Open"] = _da["Close"].shift(1).fillna(_da["Close"])
+                _da["High"] = _da[["Open", "Close"]].max(axis=1)
+                _da["Low"] = _da[["Open", "Close"]].min(axis=1)
+                _da = _da[["Open", "High", "Low", "Close"]]
+                _df_arsiv_kismi = _da
+                _taze = (pd.Timestamp.now().normalize() - _da.index[-1].normalize()).days <= 6
+                # Kisa periyotlarda beklenen islem gunu sayisinin ~%60'i, uzun
+                # periyotlarda (pytefas'in tek-fon uzun aralik sorgusu guvenilmez
+                # oldugundan) en az 20 satir yeterli sayilir.
+                if period in ("1mo", "3mo"):
+                    _yeterli = len(_da) >= int(_gun * 5 / 7 * 0.6)
+                else:
+                    _yeterli = len(_da) >= 20
+                if _taze and _yeterli:
+                    print(f"[tefas-hist-TESHIS] {ticker}: KALICI ARSIVDEN {len(_da)} satir "
+                          f"({period}) - pytefas'a gidilmedi.", flush=True)
+                    return _da
+        except Exception as _arsiv_okuma_err:
+            print(f"[tefas-hist-TESHIS] {ticker}: arsiv okuma hatasi - {_arsiv_okuma_err}", flush=True)
         # 1. Yerel cache dene (worker.py tarafından oluşturulur)
         try:
             cache_hist = _load_tefas_cache(ticker, period)
@@ -1128,36 +1170,6 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 return cache_hist
         except Exception:
             pass
-        # 1b. v2.0.7.350 (3 Ekim 2026, Bahri'nin talebi - "en az 365 gün
-        # görmem lazım, dışarıda bir buffer kursak çözüm olur mu?"):
-        # pytefas'ın BÜYÜK tarihsel aralık sorgusu (1y/5y) TEFAS API'sinde
-        # çok yavaş/güvenilmez (CANLI ÖLÇÜLDÜ, bkz. _fetch_tefas_hist_
-        # cached'in notu) - ama "TEFAS Aksam Guncelle" HER GÜN GÜVENİLİR
-        # şekilde o günün fiyatını `tefas_fiyat_gecmisi` tablosuna
-        # biriktiriyor artık. "3 Ay"DAN UZUN periyotlar için önce BU
-        # KALICI ARŞİVE bakılıyor - pytefas'a hiç gidilmeden, ne kadar
-        # birikmişse o kadar GERÇEK veri kullanılır. Sistem yeni
-        # kurulduğu için bugün çok az satır olacak, ama HER GÜN büyüyüp
-        # birkaç ay içinde "3 Ay"ın ötesini de tamamen KENDİ ARŞİVİMİZDEN
-        # karşılayacak - pytefas'a hiç bağımlı kalınmadan.
-        if period not in ("1mo", "3mo"):
-            try:
-                from db import tefas_fiyat_gecmisi_oku
-                _gun_map = {"6mo": 190, "1y": 370, "3y": 1100, "5y": 1825}
-                _arsiv = tefas_fiyat_gecmisi_oku(ticker, _gun_map.get(period, 1825))
-                if len(_arsiv) >= 5:
-                    _df_arsiv = pd.DataFrame(_arsiv, columns=["date", "Close"])
-                    _df_arsiv["date"] = pd.to_datetime(_df_arsiv["date"])
-                    _df_arsiv = _df_arsiv.set_index("date").sort_index()
-                    _df_arsiv["Open"] = _df_arsiv["Close"].shift(1).fillna(_df_arsiv["Close"])
-                    _df_arsiv["High"] = _df_arsiv[["Open","Close"]].max(axis=1)
-                    _df_arsiv["Low"]  = _df_arsiv[["Open","Close"]].min(axis=1)
-                    print(f"[tefas-hist-TESHIS] {ticker}: KALICI ARSIVDEN "
-                          f"{len(_df_arsiv)} satir kullanildi (pytefas'a gidilmedi).", flush=True)
-                    return _df_arsiv[["Open","High","Low","Close"]]
-            except Exception as _arsiv_okuma_err:
-                print(f"[tefas-hist-TESHIS] {ticker}: arsiv okuma hatasi - "
-                      f"{_arsiv_okuma_err}", flush=True)
         # 2. pytefas ile gerçek veri (cache'li, yavaş ama doğru)
         try:
             df_u = load_universe()
@@ -1169,6 +1181,11 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 return hist
         except Exception:
             pass
+        # 2b. pytefas basarisiz: elimizdeki KISMI arsiv, sentetikten her zaman iyidir
+        if _df_arsiv_kismi is not None and len(_df_arsiv_kismi) >= 5:
+            print(f"[tefas-hist-TESHIS] {ticker}: pytefas basarisiz, KISMI ARSIV "
+                  f"({len(_df_arsiv_kismi)} satir) kullaniliyor.", flush=True)
+            return _df_arsiv_kismi
         # 3. Sentetik fallback
         try:
             from tefas_client import _synthetic_from_excel
@@ -3296,24 +3313,26 @@ with st.sidebar:
     # v2.0.7.353 (3 Ekim 2026, Bahri'nin talebi - "kullanıcı hangi portföy
     # tarzını tercih ederse emaillerde ve Ana Sayfa portföy bütçesinde AYNI
     # FORMÜL kullanılmalı, kullanıcıya açıklayıcı bir not ile sunulmalı"):
-    _strateji_etiketleri = {
-        "kuresel": "En iyi skor önce (kategori garantisi yok)",
-        "kategori_guvenceli": "Çeşitlendirilmiş (her kategoriye garantili pay)",
-    }
-    _secilen_strateji_etiket = st.selectbox(
-        "Bütçe Dağılım Stratejisi", list(_strateji_etiketleri.values()),
-        index=list(_strateji_etiketleri.keys()).index(_kayitli_ayarlar["strateji"]))
-    st.caption(
-        "**En iyi skor önce:** Tüm kategorilerden (TEFAS/BIST/DÖVİZ/MADEN/KRIPTO) "
-        "en yüksek skorlu varlıklar seçilir - bir kategori, o an başka kategoriler "
-        "daha yüksek skorluysa sepete HİÇ girmeyebilir (daha yoğunlaşmış, potansiyel "
-        "olarak daha yüksek skorlu bir sepet).  \n"
-        "**Çeşitlendirilmiş:** En az bir uygun adayı olan HER kategoriye garantili "
-        "bir pay ayrılır, bütçe kategori kalitesine göre ağırlıklandırılır (daha "
-        "dengeli dağılmış, tek bir kategoriye bağımlı olmayan bir sepet)."
-    )
-    _secilen_strateji = next(k for k, v in _strateji_etiketleri.items()
-                             if v == _secilen_strateji_etiket)
+    from portfoy_optimizasyon import STRATEJI_SECENEK, STRATEJI_ACIKLAMA
+    _secenek_listesi = [STRATEJI_SECENEK["kuresel"], STRATEJI_SECENEK["kategori_guvenceli"]]
+    _kod_by_secenek = {STRATEJI_SECENEK["kuresel"]: "kuresel",
+                       STRATEJI_SECENEK["kategori_guvenceli"]: "kategori_guvenceli"}
+    # v2.0.7.359 (Bahri'nin talebi - "combo box degil, alt alta secenekler ve
+    # solunda secim kutucugu"): st.radio + sabit key. Baslangic degeri kayitli
+    # tercihten SADECE ILK acilista verilir (index parametresi her calismada
+    # degisirse widget kimligi degisip secim sifirlanabiliyordu).
+    if "strateji_radio" not in st.session_state:
+        st.session_state["strateji_radio"] = _secenek_listesi[
+            1 if _kayitli_ayarlar["strateji"] == "kategori_guvenceli" else 0]
+    _secilen_strateji_etiket = st.radio("Bütçe Dağılım Stratejisi", _secenek_listesi,
+                                        key="strateji_radio")
+    st.markdown(
+        "<div class='strateji-not'>"
+        f"<b>a- En yüksek skorlar:</b> {STRATEJI_ACIKLAMA['kuresel']}<br><br>"
+        f"<b>b- Her kategoriden yüksekler:</b> {STRATEJI_ACIKLAMA['kategori_guvenceli']}<br><br>"
+        "<i>Seçiminiz kaydedilir; Ana Sayfa tablosu ve e-postalar aynı stratejiyle üretilir.</i>"
+        "</div>", unsafe_allow_html=True)
+    _secilen_strateji = _kod_by_secenek[_secilen_strateji_etiket]
 
     if _cur_user:
         _degisti = (budget != _kayitli_ayarlar["butce"] or risk != _kayitli_ayarlar["risk"]
@@ -3388,7 +3407,8 @@ with st.sidebar:
                 # Kullaniciya bilgilendirme:
                 if budget <= 0:
                     st.info("Bütçe girilmedi — İzleme Listesi (Top 10) modunda gönderiliyor.")
-                send_report(df_uni2,pf,budget,risk,max_assets,cfg=_ecfg)
+                send_report(df_uni2,pf,budget,risk,max_assets,cfg=_ecfg,
+                            strateji=st.session_state.get("_portfoy_stratejisi", "kuresel"))
                 st.success("E-posta gönderildi!")
             except Exception as ex:
                 st.error(f"Hata: {ex}")
@@ -5867,23 +5887,19 @@ if page=="Ana Sayfa":
         })
 
 
-    # Elenen kategorileri bildir
-    # v2.0.7.345 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS'ta GERÇEKTE 658
-    # uygun aday olmasina ragmen bu banner "yeterli AL sinyalli varlik
-    # bulunamadi" diyordu): KOK NEDEN - secim artik kategoriler arasi
-    # payda GOZETMEKSIZIN, TUM havuzdan kuresel olarak en yuksek skorlu
-    # max_assets varligi aliyor (bkz. yukaridaki "Esit bolusum...
-    # TAMAMEN KALDIRILDI" notu - KASITLI tasarim, DEGISTIRILMEDI). Yani
-    # bir kategori "elenmis" gorunuyorsa bunun GERCEK sebebi o kategoride
-    # hic AL sinyali OLMAMASI degil, o kategorinin EN IYI adaylarinin bile
-    # o an BASKA kategorilerin adaylarindan DAHA DUSUK skorlu olmasi -
-    # metin artik bunu doğru yansıtıyor.
+    # Elenen kategorileri bildir (v2.0.7.359: metin artik e-postayla AYNI ortak
+    # yardimciyla uretiliyor ve "hic aday yok" ile "adayi var ama yarisi
+    # kaybetti" ayrimini dogru yapiyor).
+    from portfoy_optimizasyon import elenen_notu, havuz_ozeti, STRATEJI_SECENEK
     elenen = _sonuc["elenen"]
-    if elenen:
-        st.info(f"Şu kategorilerde bu sepete girecek kadar yüksek skorlu "
-                f"varlık bulunamadı (diğer kategorilerin adayları şu an "
-                f"daha yüksek skorlu) - bütçe diğer kategorilere "
-                f"dağıtıldı: {', '.join(elenen)}")
+    _not = elenen_notu(_sonuc)
+    if _not:
+        st.info(_not)
+    st.markdown(
+        f"<div style='font-size:13px;color:#1b2a4a;margin:2px 0 6px 0;'>"
+        f"<b>Strateji:</b> {STRATEJI_SECENEK[_sonuc['strateji']]} &nbsp;|&nbsp; "
+        f"<b>Uygun aday havuzu</b> (skor ≥ 60 ve pozitif 1A getiri): {havuz_ozeti(_sonuc)}"
+        f"</div>", unsafe_allow_html=True)
     if karsilanamayan_kategoriler:
         st.info(f"Şu kategorilerde ayrılan bütçe, havuzdaki hiçbir varlığın "
                 f"birim fiyatını karşılamadığı için o kategoriye hiç alım "
@@ -5892,62 +5908,17 @@ if page=="Ana Sayfa":
     print(f"[timing][AnaSayfa] Sayfa basindan oneri listesi hazir olana kadar TOPLAM: "
           f"{_t_ana.perf_counter() - _t_ana_basla:.3f}s")
 
-    # v2.0.7.21 - BUTCE KULLANIM VERIMLILIGI (Bahri'nin talebi): Lot tam
-    # sayiya yuvarlandigi icin her varlikta Tutar'dan az kalan bir
-    # artik olusuyordu ve bu artik toplamda kullanilmadan kaliyordu (orn.
-    # 20.000 TL butcede Gercek Tutar toplami 19.831 TL'de kaliyordu). Mantik:
-    # kullanicinin elinde YATIRIMA AYRILACAK gercek bir tutar var - onemli
-    # olan bu paranin GERCEKTE ne kadari karsiliginda varlik alinabildigi,
-    # teorik hedef degil. Bu yuzden tum kategorilerin secimleri belirlendik-
-    # ten SONRA, kalan (harcanmamis) butce, Optima Skoru en yuksek secili
-    # varliklardan baslayarak sirayla birer LOT daha eklenerek (round-robin,
-    # kalan butce hicbir secili varligin fiyatini karsilayamayana kadar
-    # tekrarlanir) dagitilir. Sadece MEVCUT secili varliklara ek lot eklenir
-    # - Max Varlik Sayisi kisitini bozmaz, yeni varlik eklemez.
-    #
-    # v2.0.7.92 - KRITIK GUVENLIK FRENI (Bahri'nin bulgusu, 19 Temmuz 2026):
-    # Bu donguye eskiden hicbir ust sinir yoktu. Secili varliklardan biri
-    # asiri dusuk fiyatliysa (orn. bazi genisleme dovizleri - IDR gibi -
-    # 1 birimi bir kurusun cok altinda olabilir), kalan butceyi o fiyata
-    # bolup tuketmek MILYONLARCA iterasyon gerektirebilir - hata vermeden,
-    # sessizce, etkin olarak SURESIZ calisir. Artik hem TOPLAM ITERASYON
-    # SAYISI (100.000) hem DUVAR SAATI SURESI (5 saniye) icin sert bir
-    # tavan var - ikisinden biri asilirsa dongu GUVENLI sekilde durur,
-    # o ana kadar dagitilmis olan kismi sonuc kullanilir (hic cokme/askida
-    # kalma olmaz).
-    if opt_rows:
-        import time as _time_guard
-        _dongu_baslangic = _time_guard.time()
-        _iterasyon_sayaci = 0
-        _MAKS_ITERASYON = 100_000
-        _MAKS_SURE_SN = 5.0
-        _kalan_butce = budget - sum(r["Tutar (₺)"] for r in opt_rows)
-        _skor_sirali = sorted(
-            [r for r in opt_rows if r.get("_gercek_fiyat")],
-            key=lambda r: -r["Optima Skoru"])
-        _ilerleme = True
-        _guvenlik_frenine_takildi = False
-        while _kalan_butce > 0.01 and _ilerleme and _skor_sirali:
-            _ilerleme = False
-            for r in _skor_sirali:
-                _fiyat = r["Emir Fiyatı"]
-                if _fiyat > 0 and _fiyat <= _kalan_butce:
-                    r["Birim"] += 1
-                    r["Tutar (₺)"] = round(r["Tutar (₺)"] + _fiyat, 2)
-                    _kalan_butce = round(_kalan_butce - _fiyat, 2)
-                    _ilerleme = True
-                _iterasyon_sayaci += 1
-                if (_iterasyon_sayaci >= _MAKS_ITERASYON or
-                        _time_guard.time() - _dongu_baslangic > _MAKS_SURE_SN):
-                    _guvenlik_frenine_takildi = True
-                    break
-            if _guvenlik_frenine_takildi:
-                break
+    # v2.0.7.21 "BUTCE KULLANIM VERIMLILIGI" (artan bakiyenin skoru en yuksek
+    # varliklara ek lot olarak dagitilmasi, v2.0.7.92 guvenlik freniyle) -
+    # v2.0.7.359'da portfoy_optimizasyon.py'ye TASINDI: e-posta da ayni dagitimi
+    # yapsin diye (lot sayilari/toplam tutar Ana Sayfa ile birebir ayni olsun).
 
     if opt_rows:
         df_opt=pd.DataFrame(opt_rows)
-        # Optima Skoru'na göre azalan sırala
-        df_opt=df_opt.sort_values("Optima Skoru", ascending=False).reset_index(drop=True)
+        # Sira ortak modulden (yuvarlanmis skor azalan, Ticker artan) geldi;
+        # v2.0.7.359: pandas'in kararsiz varsayilan sort'u KALDIRILDI (esit
+        # skorlu varliklarin sirasi Ana Sayfa'da farkli cikiyordu).
+        df_opt=df_opt.reset_index(drop=True)
 
         # Gelir projeksiyonu sütunlarını ana tabloya ekle
         try:

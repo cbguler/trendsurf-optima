@@ -1,25 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-tefas_gecmis_derin_doldur.py - v2.0.7.358 (3 Ekim 2026, Bahri'nin talebi -
-"'5 yıl başarısız oldu' özrünü kabul etmiyorum, yeniden dene")
+tefas_gecmis_derin_doldur.py - TEFAS fiyat arşivini (tefas_fiyat_gecmisi) geriye
+doğru doldurur. GitHub Actions'ta elle tetiklenen "TEFAS Gecmis Derin Doldur"
+workflow'u çalıştırır.
 
-pytefas'ın BÜYÜK, TEK SEFERLİK bir aralığı (ör. 1800 gün/5 yıl) toplu modda
-bile istediğinde hız sınırına takıldığı CANLI OLARAK doğrulandı - ama AYNI
-5 yıllık aralık, ~370 GÜNLÜK (1 yıllık) PARÇALARA bölünüp ARDIŞIK olarak
-çekildiğinde HER PARÇA güvenilir şekilde başarılı oluyor (3 ayrı yıl parçası
-CANLI test edildi, üçü de başarılı - 62-77 saniye arası her biri).
+v2.0.7.359 (3 Ekim 2026, Bahri'nin bulgusu - "1 saati geçti, bir türlü
+durmadı, 1,5 saat sonra hata verdi"): Logdan KESİN kök neden bulundu:
+  1) Veritabanına yazma SATIR SATIR INSERT ile yapılıyordu (her gidiş-geliş
+     ~130 ms) - tek bir günün ~2000 satırı ~4,5 DAKİKA sürüyordu, bir yıllık
+     parçada 250+ gün olduğundan sadece YAZMA işi saatler sürerdi. Artık
+     db.tefas_fiyat_gecmisi_df_ekle() ile binlerce satır TEK sorguda yazılıyor.
+  2) Çıktı tamponlandığı için ilerleme satırları logda HİÇ görünmüyordu
+     (workflow'da `python -u` + her print'te flush ile giderildi).
+  3) Sadece evrendeki TEFAS fonları (optimized_universe.csv) yazılıyor - TEFAS'ın
+     toplu sorgusu evrenimizde olmayan ~700 fon daha döndürüyordu (gereksiz
+     veritabanı alanı).
+  4) Süre sınırı: script kendi bütçesini (varsayılan 105 dk) izler, yeni bir
+     parçaya başlamadan önce yeterli süre kalmadıysa TEMİZ şekilde durur ve
+     hangi parçaların eksik kaldığını yazar (yarım kalan iş boşa gitmez,
+     her parça yazıldıkça kalıcıdır).
+Sıralama: ÖNCE en yeni yıl (tüm türler için), sonra bir önceki yıl... böylece
+süre bitse bile en değerli (en yeni) veri tüm türlerde hazır olur.
 
-Bu script, TEFAS'ın YAT/EMK/BYF türlerinin HER BİRİ için 5 yılı 1'er yıllık
-5 parçaya bölüp sırayla çeker, her parçayı `tefas_fiyat_gecmisi` kalıcı
-arşivine yazar. Toplam ~15 istek x ~70sn ortalama ≈ 15-20 dakika - bu
-yüzden GÜNLÜK "TEFAS Aksam Guncelle" işleminin İÇİNE KONULMADI (onu çok
-yavaşlatırdı), AYRI, ELLE TETİKLENEN bir workflow olarak kuruldu
-(`tefas_gecmis_derin_doldur.yml`) - Bahri istediğinde (ya da örn. ayda bir)
-çalıştırılabilir, günlük otomasyonu YAVAŞLATMAZ.
-
-İdempotent: `tefas_fiyat_gecmisi_toplu_ekle()` zaten ON CONFLICT DO UPDATE
-kullanıyor - bu script defalarca çalıştırılsa bile sorun çıkmaz, sadece
-mevcut günleri günceller.
+Ortam değişkenleri: TEFAS_DERIN_YIL_SAYISI (5), TEFAS_DERIN_BASLANGIC_YIL (0,
+kaldığın yerden devam için), TEFAS_DERIN_SURE_DAKIKA (105).
+İdempotent: tekrar çalıştırmak zararsız (ON CONFLICT DO UPDATE).
 """
 import os
 import sys
@@ -27,94 +32,138 @@ import time
 from datetime import datetime, timedelta
 
 import pandas as pd
-from pytefas import Crawler
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from db import tefas_fiyat_gecmisi_toplu_ekle
 
-YIL_SAYISI = int(os.environ.get("TEFAS_DERIN_YIL_SAYISI", "5"))
-YIL_GUN = 370  # CANLI TEST: bu boyut guvenilir, 1 gun daha az (365) de olur
+YIL_SAYISI = int(os.environ.get("TEFAS_DERIN_YIL_SAYISI", "5") or 5)
+BASLANGIC_YIL = int(os.environ.get("TEFAS_DERIN_BASLANGIC_YIL", "0") or 0)
+SURE_DAKIKA = float(os.environ.get("TEFAS_DERIN_SURE_DAKIKA", "105") or 105)
+PARCA_GUN = 365
+ORTUSME_GUN = 5          # parçalar arası boşluk kalmasın
 TURLER = ["YAT", "EMK", "BYF"]
+DENEME = 4
+PARCA_ARASI_BEKLEME = 15
 
 
-def _parca_cek(c: Crawler, kind: str, baslangic_gun_once: int, bitis_gun_once: int,
-               deneme: int = 4) -> pd.DataFrame:
-    """v2.0.7.358 (canli test duzeltmesi): ayni boyuttaki (370 gun) bir
-    parca, ONCEKI testte max_retry=2 + bekleme OLMADAN 3/3 basarisiz
-    oldu, ama max_retry=3 + 30 saniyelik SOGUMA PAYI ile basarili oldu -
-    yani TEK BASINA Crawler'in kendi ic retry'i YETERLI DEGIL, parcalar
-    arasinda ACIKCA bir bekleme/artan-geri-cekilme SART. Bu fonksiyon
-    artik KENDI disaridan retry dongusunu yonetiyor (Crawler'in kendi
-    max_retry'inin USTUNE)."""
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def evren_tickerlari():
+    try:
+        df = pd.read_csv("optimized_universe.csv", on_bad_lines="skip")
+        t = set(df.loc[df["Kategori"] == "TEFAS", "Ticker"].astype(str))
+        log(f"Evren: {len(t)} TEFAS fonu (yalnizca bunlar arsive yazilacak).")
+        return t or None
+    except Exception as e:
+        log(f"UYARI: optimized_universe.csv okunamadi ({e}) - tum fonlar yazilacak.")
+        return None
+
+
+def parca_cek(crawler, kind, bas_gun, bit_gun):
     from pytefas import TefasRateLimitError
     bugun = datetime.now()
-    s = (bugun - timedelta(days=baslangic_gun_once)).strftime("%Y-%m-%d")
-    e = (bugun - timedelta(days=bitis_gun_once)).strftime("%Y-%m-%d")
-    for deneme_no in range(deneme):
+    s = (bugun - timedelta(days=bas_gun)).strftime("%Y-%m-%d")
+    e = (bugun - timedelta(days=bit_gun)).strftime("%Y-%m-%d")
+    for n in range(1, DENEME + 1):
         t0 = time.time()
         try:
-            df = c.fetch(start=s, end=e, kind=kind)
-            print(f"  [{kind}] {s}..{e}: {len(df)} satir, "
-                  f"{df['fund_code'].nunique() if not df.empty else 0} fon "
-                  f"({time.time()-t0:.1f}sn, deneme {deneme_no+1}/{deneme})")
+            df = crawler.fetch(start=s, end=e, kind=kind)
+            log(f"  [{kind}] {s}..{e}: {len(df)} satir, "
+                f"{df['fund_code'].nunique() if not df.empty else 0} fon "
+                f"({time.time()-t0:.0f}sn, deneme {n}/{DENEME})")
             return df
-        except TefasRateLimitError as ex:
-            _bekleme = 25 * (deneme_no + 1)  # 25, 50, 75, 100 sn - artan geri cekilme
-            print(f"  [{kind}] {s}..{e}: hiz siniri (deneme {deneme_no+1}/{deneme}, "
-                  f"{time.time()-t0:.1f}sn) - {_bekleme}sn bekleyip tekrar denenecek.")
-            if deneme_no < deneme - 1:
-                time.sleep(_bekleme)
+        except TefasRateLimitError:
+            bekle = 25 * n
+            log(f"  [{kind}] {s}..{e}: hiz siniri (deneme {n}/{DENEME}, {time.time()-t0:.0f}sn) "
+                f"- {bekle}sn bekleniyor")
+            if n < DENEME:
+                time.sleep(bekle)
         except Exception as ex:
-            print(f"  [{kind}] {s}..{e}: HATA ({time.time()-t0:.1f}sn, "
-                  f"deneme {deneme_no+1}/{deneme}) - {type(ex).__name__}: {ex}")
-            if deneme_no < deneme - 1:
+            log(f"  [{kind}] {s}..{e}: HATA {type(ex).__name__}: {ex} (deneme {n}/{DENEME})")
+            if n < DENEME:
                 time.sleep(20)
-    print(f"  [{kind}] {s}..{e}: {deneme} denemeden sonra VAZGECILDI.")
-    return pd.DataFrame()
+    log(f"  [{kind}] {s}..{e}: {DENEME} denemeden sonra VAZGECILDI")
+    return None
+
+
+def arsiv_sayisi():
+    try:
+        from db import get_conn
+        c = get_conn()
+        n = c.execute("SELECT COUNT(*) AS n FROM tefas_fiyat_gecmisi").fetchone()
+        c.close()
+        return int(list(n.values())[0])
+    except Exception:
+        return None
 
 
 def main():
-    print(f"[tefas-derin-doldur] Baslangic - {YIL_SAYISI} yil, tur basina "
-          f"{YIL_SAYISI} parca (yaklasik {YIL_SAYISI * len(TURLER)} istek).")
-    c = Crawler(timeout=90, max_retry=2)
-    toplam_satir_yazilan = 0
-    toplam_basarisiz_parca = 0
+    from pytefas import Crawler
+    import db
 
-    for kind in TURLER:
-        print(f"\n=== {kind} ===")
-        for yil_idx in range(YIL_SAYISI):
-            baslangic = (yil_idx + 1) * YIL_GUN
-            bitis = yil_idx * YIL_GUN
-            df_parca = _parca_cek(c, kind, baslangic, bitis)
-            if df_parca.empty:
-                toplam_basarisiz_parca += 1
+    baslangic = time.time()
+    son_an = baslangic + SURE_DAKIKA * 60
+    log(f"Basladi: {YIL_SAYISI} yil, baslangic yili={BASLANGIC_YIL}, sure butcesi={SURE_DAKIKA:.0f} dk.")
+
+    n0 = arsiv_sayisi()
+    if n0 is None:
+        log("Arsiv tablosu okunamadi - init_db() ile olusturuluyor...")
+        try:
+            db.init_db()
+            n0 = arsiv_sayisi()
+        except Exception as e:
+            log(f"HATA: veritabani hazirlanamadi: {e}")
+            sys.exit(1)
+    log(f"Arsivde baslangicta {n0} satir var.")
+
+    izinli = evren_tickerlari()
+    crawler = Crawler(timeout=120, max_retry=1)   # tekrar denemeyi kendimiz yonetiyoruz
+    yazilan_toplam, eksik, yazma_hatasi = 0, [], 0
+
+    durdu = False
+    for yil_idx in range(BASLANGIC_YIL, YIL_SAYISI):
+        for kind in TURLER:
+            kalan_dk = (son_an - time.time()) / 60
+            if kalan_dk < 8:
+                log(f"SURE BITIYOR (kalan {kalan_dk:.1f} dk) - yeni parcaya baslanmiyor.")
+                durdu = True
+                eksik.append((yil_idx, kind))
                 continue
-
-            col_price = next((c2 for c2 in df_parca.columns if c2.lower() in ("price", "fiyat")), None)
-            col_code = next((c2 for c2 in df_parca.columns if c2.lower() in ("fund_code", "fonkodu", "code", "kod")), None)
-            col_date = next((c2 for c2 in df_parca.columns if c2.lower() in ("date", "tarih")), None)
-            if not (col_price and col_code and col_date):
-                print(f"  [{kind}] beklenen sutunlar bulunamadi - {df_parca.columns.tolist()}")
-                toplam_basarisiz_parca += 1
+            bas_gun = (yil_idx + 1) * PARCA_GUN + ORTUSME_GUN
+            bit_gun = yil_idx * PARCA_GUN
+            log(f"--- Yil {yil_idx+1}/{YIL_SAYISI} | {kind} (kalan sure {kalan_dk:.0f} dk) ---")
+            df = parca_cek(crawler, kind, bas_gun, bit_gun)
+            if df is None or df.empty:
+                eksik.append((yil_idx, kind))
                 continue
+            kol = {c.lower(): c for c in df.columns}
+            try:
+                d = df[[kol["fund_code"], kol["date"], kol["price"]]].copy()
+            except KeyError:
+                log(f"  [{kind}] beklenen sutunlar yok: {df.columns.tolist()}")
+                eksik.append((yil_idx, kind))
+                continue
+            d.columns = ["ticker", "tarih", "fiyat"]
+            t0 = time.time()
+            n = db.tefas_fiyat_gecmisi_df_ekle(d, izinli_tickerlar=izinli)
+            log(f"  [{kind}] arsive yazildi: {n} satir ({time.time()-t0:.0f}sn)")
+            if n == 0:
+                yazma_hatasi += 1
+                eksik.append((yil_idx, kind))
+            yazilan_toplam += n
+            time.sleep(PARCA_ARASI_BEKLEME)
 
-            df_parca = df_parca[[col_code, col_date, col_price]].copy()
-            df_parca.columns = ["ticker", "tarih", "fiyat"]
-            df_parca["tarih"] = pd.to_datetime(df_parca["tarih"], errors="coerce")
-            df_parca["fiyat"] = pd.to_numeric(df_parca["fiyat"], errors="coerce")
-            df_parca = df_parca.dropna(subset=["ticker", "tarih", "fiyat"])
-
-            for tarih_str, grp in df_parca.groupby(df_parca["tarih"].dt.strftime("%Y-%m-%d")):
-                _fiyat_map = dict(zip(grp["ticker"], grp["fiyat"]))
-                toplam_satir_yazilan += tefas_fiyat_gecmisi_toplu_ekle(_fiyat_map, tarih=tarih_str)
-
-            # v2.0.7.358: parcalar arasinda bilincli bekleme - hiz
-            # sinirina "nefes aldirmak" icin (canli testte bunun ONEMLI
-            # oldugu goruldu).
-            time.sleep(20)
-
-    print(f"\n[tefas-derin-doldur] Bitti - toplam {toplam_satir_yazilan} (fon x gun) satir "
-          f"kalici arsive yazildi, {toplam_basarisiz_parca} parca basarisiz oldu.")
+    n1 = arsiv_sayisi()
+    log(f"BITTI: {yazilan_toplam} satir yazildi, arsiv {n0} -> {n1} satir, "
+        f"toplam sure {(time.time()-baslangic)/60:.1f} dk.")
+    if eksik:
+        log("EKSIK PARCALAR (yil_indeksi, tur): " + ", ".join(f"({y},{k})" for y, k in eksik))
+        log("Eksikleri tamamlamak icin workflow'u tekrar calistirin "
+            "(isterseniz 'baslangic_yil' ile kaldiginiz yildan).")
+    if yazma_hatasi:
+        log("HATA: bazi parcalar veritabanina YAZILAMADI (SUPABASE_DB_URL/ag sorunu olabilir).")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

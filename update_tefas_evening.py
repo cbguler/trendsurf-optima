@@ -77,10 +77,10 @@ def main():
     # gecmisi) TEK SEFERDE ~95 gün geriye DOLDURUYOR - v2.0.7.350'nin
     # "günde 1 satır" birikimini aylarca beklemek yerine, BUGÜN 95 günlük
     # gerçek veri hazır oluyor.
+    _arsiv_parcalar = []
     try:
         from pytefas import Crawler
         from datetime import datetime, timedelta
-        import db as _db_mod
 
         c = Crawler(timeout=60, max_retry=2)
         bugun = datetime.now()
@@ -97,7 +97,7 @@ def main():
         start = (bugun - timedelta(days=_derinlik_gun)).strftime("%Y-%m-%d")
         end   = bugun.strftime("%Y-%m-%d")
         toplam_fon = 0
-        toplam_arsiv_satir = 0
+        _arsiv_parcalar = []
 
         for kind in ["YAT", "EMK", "BYF"]:
             try:
@@ -146,19 +146,40 @@ def main():
             print(f"[tefas-aksam] {kind}: {len(_yeni_ret1m)} fon icin GERCEK Ret1M/Ret3M/RSI hesaplandi "
                   f"({df_bulk['ticker'].nunique()} fon, {len(df_bulk)} satir toplu veriden).")
 
-            # Ayni toplu veriyi kalici arsive de yaz (gun bazinda, en son
-            # fiyat tekrar etmesin diye drop_duplicates)
-            try:
-                for tarih_str, grp_tarih in df_bulk.groupby(df_bulk["tarih"].dt.strftime("%Y-%m-%d")):
-                    _fiyat_map = dict(zip(grp_tarih["ticker"], grp_tarih["fiyat"]))
-                    toplam_arsiv_satir += _db_mod.tefas_fiyat_gecmisi_toplu_ekle(_fiyat_map, tarih=tarih_str)
-            except Exception as _arsiv_err:
-                print(f"[tefas-aksam] {kind}: kalici arsive toplu yazma atlandi: {_arsiv_err}")
+            # Arsive yazilacak veriyi biriktir (yazma, tum turler bittikten
+            # SONRA ve CSV'yi ASLA geciktirmeyecek sekilde tek seferde yapilir)
+            _arsiv_parcalar.append(df_bulk)
 
-        print(f"[tefas-aksam] GERCEK Ret1M/Ret3M/RSI guncellendi: {toplam_fon} fon. "
-              f"Kalici arsive toplam {toplam_arsiv_satir} (fon x gun) satir yazildi.")
+        print(f"[tefas-aksam] GERCEK Ret1M/Ret3M/RSI guncellendi: {toplam_fon} fon.")
     except Exception as e:
         print(f"[tefas-aksam] Toplu gercek getiri/RSI guncellemesi atlandi: {e}")
+
+    # v2.0.7.359 (3 Ekim 2026, Bahri'nin bulgusu - TEFAS Derin Doldur loguyla
+    # ortaya cikti): kalici fiyat arsivine yazma ESKIDEN (a) satir satir INSERT
+    # ile (95 gun x ~2000 fon = ~130 bin ayri sorgu, saatler surecek bir is) ve
+    # (b) bu workflow'da SUPABASE_DB_URL / psycopg2-binary OLMADIGI icin
+    # SESSIZCE BASARISIZ olarak yapiliyordu - yani gunluk arsiv birikimi hic
+    # calismamisti. Artik: sadece SON N gun (varsayilan 10; derin gecmisi
+    # "TEFAS Gecmis Derin Doldur" tamamlar), sadece evrendeki fonlar, TEK toplu
+    # sorgu, ve hata olsa bile CSV guncellemesini ETKILEMEZ.
+    try:
+        if _arsiv_parcalar:
+            _son_gun = int(os.environ.get("TEFAS_ARSIV_SON_GUN", "10") or 10)
+            _tum = pd.concat(_arsiv_parcalar, ignore_index=True)
+            _esik = _tum["tarih"].max() - pd.Timedelta(days=_son_gun)
+            _tum = _tum[_tum["tarih"] >= _esik]
+            _evren = set(df_t["Ticker"].astype(str))
+            import db as _db_mod
+            _yazilan = _db_mod.tefas_fiyat_gecmisi_df_ekle(_tum, izinli_tickerlar=_evren)
+            if _yazilan > 0:
+                print(f"[tefas-aksam] Kalici fiyat arsivine yazildi: {_yazilan} (fon x gun) satir "
+                      f"(son {_son_gun} gun, yalnizca evren fonlari).")
+            else:
+                print("[tefas-aksam] UYARI: Kalici fiyat arsivine HICBIR satir yazilamadi "
+                      "(SUPABASE_DB_URL secret'i / veritabani erisimi kontrol edilmeli) - "
+                      "CSV guncellemesi bundan ETKILENMEDI.")
+    except Exception as _arsiv_err:
+        print(f"[tefas-aksam] Kalici arsive yazma atlandi (CSV guncellemesi ETKILENMEDI): {_arsiv_err}")
 
     # Mevcut CSV'yi oku, TEFAS D I S I satirlari koru, TEFAS satirlarini
     # tamamen yeni (aksam) veriyle degistir.

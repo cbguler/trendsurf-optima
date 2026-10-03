@@ -1683,38 +1683,80 @@ def get_aktif_piyasa_tedbirleri() -> list:
         return []
 
 
-def tefas_fiyat_gecmisi_toplu_ekle(fiyat_map: dict, tarih=None) -> int:
-    """v2.0.7.350: "TEFAS Aksam Guncelle"nin GÜVENİLİR şekilde çektiği
-    günlük fiyatları kalıcı arşive ekler - fiyat_map: {ticker: fiyat}.
-    `tarih` verilmezse bugün (TRT) kullanılır. Idempotent (ON CONFLICT
-    DO UPDATE) - aynı gün tekrar çalışırsa sorun olmaz. Döndürülen
-    sayı: kaç satır yazıldığı (hata olursa 0)."""
-    if not fiyat_map:
+def tefas_fiyat_gecmisi_df_ekle(df, izinli_tickerlar=None, sayfa_boyutu: int = 5000) -> int:
+    """v2.0.7.359 (3 Ekim 2026, Bahri'nin bulgusu - "TEFAS Gecmis Derin Doldur
+    1,5 saat calisip hata verdi"): ESKI yontem her (fon x gun) icin AYRI bir
+    INSERT gonderiyordu - Supabase'e her gidis-gelis ~130 ms oldugundan TEK bir
+    gunun ~2000 satiri bile ~4,5 DAKIKA surdu (logda `_get_db_url` satirinin
+    ~4,5 dakikada bir tekrarlanmasindan olculdu), 1 yillik bir parca (250+ gun)
+    ise SAATLER surerdi. Artik psycopg2'nin execute_values'u ile binlerce satir
+    TEK sorguda gonderiliyor (1 milyon satir icin birkac yuz sorgu, dakikalar).
+
+    df: sutunlar [ticker, tarih, fiyat]. izinli_tickerlar verilirse yalnizca
+    bunlar yazilir (evrende olmayan ~700 fonu arsive tasimamak icin).
+    Idempotent (ON CONFLICT DO UPDATE). Dondurulen: yazilan satir sayisi."""
+    import pandas as _pd
+    if df is None or len(df) == 0:
         return 0
     try:
-        from datetime import datetime, timezone, timedelta
-        if tarih is None:
-            tarih = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+        from psycopg2.extras import execute_values
+        d = df[["ticker", "tarih", "fiyat"]].copy()
+        d["ticker"] = d["ticker"].astype(str)
+        if izinli_tickerlar is not None:
+            d = d[d["ticker"].isin(set(map(str, izinli_tickerlar)))]
+        d["tarih"] = _pd.to_datetime(d["tarih"], errors="coerce").dt.strftime("%Y-%m-%d")
+        d["fiyat"] = _pd.to_numeric(d["fiyat"], errors="coerce")
+        d = d.dropna(subset=["ticker", "tarih", "fiyat"])
+        d = d[d["fiyat"] > 0]
+        # ON CONFLICT DO UPDATE ayni sorguda ayni satiri iki kez etkileyemez
+        d = d.drop_duplicates(subset=["ticker", "tarih"], keep="last")
+        satirlar = list(d.itertuples(index=False, name=None))
+        if not satirlar:
+            return 0
+
         conn = get_conn()
+        pg = conn._conn
         yazilan = 0
-        for ticker, fiyat in fiyat_map.items():
+        try:
+            cur = pg.cursor()
+            for i in range(0, len(satirlar), sayfa_boyutu):
+                sayfa = satirlar[i:i + sayfa_boyutu]
+                execute_values(
+                    cur,
+                    "INSERT INTO tefas_fiyat_gecmisi (ticker, tarih, fiyat) VALUES %s "
+                    "ON CONFLICT (ticker, tarih) DO UPDATE SET fiyat=EXCLUDED.fiyat",
+                    sayfa, page_size=len(sayfa))
+                yazilan += len(sayfa)
+                if (i // sayfa_boyutu) % 10 == 9:
+                    pg.commit()
+            pg.commit()
+            cur.close()
+        except Exception:
             try:
-                fiyat_f = float(fiyat)
-            except (TypeError, ValueError):
-                continue
-            if fiyat_f <= 0:
-                continue
-            conn.execute(
-                "INSERT INTO tefas_fiyat_gecmisi (ticker, tarih, fiyat) VALUES (?,?,?) "
-                "ON CONFLICT (ticker, tarih) DO UPDATE SET fiyat=EXCLUDED.fiyat",
-                (str(ticker), tarih, fiyat_f))
-            yazilan += 1
-        conn.commit()
-        conn.close()
+                pg.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
         return yazilan
     except Exception as e:
-        print(f"[db] tefas_fiyat_gecmisi_toplu_ekle hata: {e}", file=sys.stderr)
+        print(f"[db] tefas_fiyat_gecmisi_df_ekle hata: {type(e).__name__}: {e}", file=sys.stderr)
         return 0
+
+
+def tefas_fiyat_gecmisi_toplu_ekle(fiyat_map: dict, tarih=None) -> int:
+    """Geriye uyumluluk sarmalayicisi: {ticker: fiyat} + tek tarih -> toplu yazim."""
+    import pandas as _pd
+    if not fiyat_map:
+        return 0
+    if tarih is None:
+        from datetime import datetime, timezone, timedelta
+        tarih = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+    df = _pd.DataFrame({"ticker": list(fiyat_map.keys()),
+                        "tarih": tarih,
+                        "fiyat": list(fiyat_map.values())})
+    return tefas_fiyat_gecmisi_df_ekle(df)
 
 
 def tefas_fiyat_gecmisi_oku(ticker: str, gun: int = 1825) -> list:
@@ -1794,6 +1836,20 @@ def get_portfoy_ayarlari(user_id: int) -> dict:
     except Exception as e:
         print(f"[db] get_portfoy_ayarlari hata: {e}", file=sys.stderr)
         return _varsayilan
+
+
+def get_portfoy_ayarlari_by_email(email: str) -> dict:
+    """v2.0.7.359: e-posta adresinden kayitli portfoy ayarlari (tetikleyici
+    yolu icin - kullanici oturumu yokken)."""
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone()
+        conn.close()
+        if row:
+            return get_portfoy_ayarlari(row[0])
+    except Exception as e:
+        print(f"[db] get_portfoy_ayarlari_by_email hata: {e}", file=sys.stderr)
+    return {"butce": 20000.0, "risk": "Orta", "max_varlik": 10, "strateji": "kuresel"}
 
 
 def set_portfoy_ayarlari(user_id: int, butce: float = None, risk: str = None,

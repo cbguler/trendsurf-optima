@@ -99,7 +99,7 @@ concurrency:
 jobs:
   update_tefas:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     permissions:
       contents: write
@@ -119,9 +119,14 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          pip install pandas pytefas openpyxl --quiet
+          pip install pandas pytefas openpyxl psycopg2-binary --quiet
 
       - name: update_tefas_evening.py calistir
+        # v2.0.7.359: kalici fiyat arsivine yazabilmek icin DB erisimi
+        # (derin doldur workflow'uyla AYNI secret). Yoksa/erisilemezse arsiv
+        # adimi atlanir, CSV guncellemesi etkilenmez.
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           echo "TEFAS aksam guncellemesi baslatiliyor - $(date)"
           python update_tefas_evening.py

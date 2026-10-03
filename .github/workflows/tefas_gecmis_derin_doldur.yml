@@ -21,6 +21,10 @@ on:
         description: "Kaç yıl geriye doldurulsun (varsayılan 5)"
         required: false
         default: "5"
+      baslangic_yil:
+        description: "Kaldığın yerden devam için başlangıç yılı indeksi (0=en yeni yıl)"
+        required: false
+        default: "0"
 
 jobs:
   derin_doldur:
@@ -28,7 +32,7 @@ jobs:
     # v2.0.7.358 (guncelleme): script'e parcalar arasi bekleme + artan
     # geri-cekilmeli yeniden deneme eklendi (hiz sinirina karsi daha
     # sabirli) - en kotu senaryoda sure uzayabilir, 45 -> 90 dakika.
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Kodu indir
@@ -48,7 +52,9 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           TEFAS_DERIN_YIL_SAYISI: ${{ github.event.inputs.yil_sayisi }}
+          TEFAS_DERIN_BASLANGIC_YIL: ${{ github.event.inputs.baslangic_yil }}
+          TEFAS_DERIN_SURE_DAKIKA: "105"
         run: |
           echo "TEFAS derin gecmis doldurma baslatiliyor - $(date) - ${TEFAS_DERIN_YIL_SAYISI} yil"
-          python tefas_gecmis_derin_doldur.py
+          python -u tefas_gecmis_derin_doldur.py
           echo "Tamamlandi - $(date)"

@@ -8619,3 +8619,25 @@ git add app.py db.py emailer.py emailer_standalone.py portfoy_optimizasyon.py up
 
 ### Yeni sohbet için ilk adım:
 Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Push sonrası Bahri'den (1) Ana Sayfa'da Bütçe Dağılım Stratejisi seçimini görüp bir sonraki e-postanın BİREBİR aynı tabloyu verdiğini teyit etmesini, (2) BIST/DOVIZ/MADEN/KRIPTO'da 5 yıllık grafiklerin geri geldiğini teyit etmesini, (3) "TEFAS Gecmis Derin Doldur" workflow'unu GitHub Actions'tan elle bir kez çalıştırıp TEFAS fonlarında da artık 1+ yıl geçmiş görülüp görülmediğini kontrol etmesini iste. Hâlâ açık: `worker.py`'nin ANA akışına gerçek-Ret1M/RSI düzeltmesi (günlük ~30 dk'lık bayat pencere), Otomatik Piyasa Tedbiri İzleme'nin SPK Bülten İzleme script'i.
+
+
+### v2.0.7.359 (3 Ekim 2026 gece) - Derin Doldur takilmasi, TEFAS arsivi, strateji tutarliligi
+Bahri iki stratejiyi deneyip e-posta+ekran goruntulerini ve "TEFAS Gecmis Derin Doldur 1,5 saat calisip hata verdi" logunu paylasti.
+
+**KESIN KOK NEDENLER (loglardan/kodtan dogrulandi):**
+1. **Derin Doldur takilmasi:** arsive yazma SATIR SATIR INSERT idi (Supabase gidis-gelis ~130 ms). Logda `[db] _get_db_url` satiri ~4,5 dakikada bir tekrarlaniyordu = TEK BIR GUNUN ~2000 satirini yazmak ~4,5 dk. 1 yillik parcada 250+ gun var -> sadece yazma saatler. Ayrica cikti tamponlandigi icin ilerleme logda hic gorunmuyordu. COZUM: `db.tefas_fiyat_gecmisi_df_ekle()` (psycopg2 execute_values, tek sorguda binlerce satir; sahte imlecle test edildi: 20.000 satir = 4 sorgu), `python -u` + flush, sure butcesi (105 dk), sadece evren fonlari, ONCE en yeni yil (tum turler), `baslangic_yil` ile devam. Tahmini toplam sure ~35-45 dk.
+2. **Gunluk arsiv birikimi HIC CALISMAMISTI:** `update_tefas_evening.yml`'de SUPABASE_DB_URL ve psycopg2-binary yoktu (arsiv adimi sessizce atlaniyordu) ve eski yazma 10 dk zaman asimina sigmazdi. COZUM: workflow'a secret + psycopg2-binary + 15 dk; script artik sadece SON 10 gunu (TEFAS_ARSIV_SON_GUN) tek toplu sorguyla yaziyor; hata CSV guncellemesini etkilemiyor. Yerelde uctan uca calistirildi (DB yokken guvenle atlandi, "UYARI" logu).
+3. **TEFAS grafigi 95 gunde kaliyordu:** arsiv bos oldugu icin. `_get_hist_cached` artik TEFAS icin once arsivden okuyor (1ay/3ay: beklenen islem gununun %60'i, 6ay+: en az 20 satir, son kayit en fazla 6 gun eski), yetersizse pytefas, o da olmazsa KISMI arsiv, en son sentetik. Derin Doldur calisinca 5 yila kadar uzayacak.
+4. **E-posta stratejiyi hic almiyordu:** "Simdi Gonder" dugmesi `send_report`'a strateji gecirmiyordu (hep 'kuresel'); webhook yolu da gecirmiyordu. Ikisi de artik kayitli/secili stratejiyi geciriyor.
+5. **Lot/sira farki:** "artan bakiye" lot dagitimi (v2.0.7.21) sadece app.py'deydi; e-postada yoktu. Nihai sira app.py'de kararsiz (quicksort) sort ile yapiliyordu. IKISI de artik `portfoy_optimizasyon.py`'de tek yerde; sira (yuvarlanmis skor azalan, Ticker artan).
+6. **Eski "kategori garantili" algoritma butceyi ASIYORDU** (30.000 TL'de 38.940 TL). Iki strateji artik AYNI tahsis akisini paylasiyor, fark sadece kategori basina slot sayisi. Dogrulama: iki strateji de ~30.000 TL, uygulama fonksiyonu ile e-posta HTML'i ayni varliklar/sira/toplam.
+
+**Arayuz:** Strateji secimi radyo dugmesi (alt alta): "a- En yuksek skorlar", "b- Her kategoriden yuksekler" + okunakli aciklama kutusu; kenar cubugu aciklama yazilari koyu/buyuk/opak. Ana Sayfa ve e-postada "Strateji" + "Uygun aday havuzu" satiri ve dogru "elenen kategori" metni (hic aday yok / adayi var ama yarisi kaybetti ayrimi).
+
+**BIST kisa gecmis:** yfinance AHGAZ.IS ilk islem gunu 25.12.2022 (uygulama 1381 gun, uyumlu) -> kisa gecmisler sonradan halka arz hisseleri, hata degil. SKYMD icin yfinance 20.03.2024 (927 gun) gosteriyor, uygulama 1032 gun gosteriyor (uygulamada daha UZUN, aradaki farki kesin aciklayamadim).
+
+**Kucuk duzeltme:** webhook tetikleyici yolundaki `fmt_tr` NameError'u (fonksiyon henuz tanimli degildi) giderildi.
+
+**Gozlem (kod degismedi):** 'a' stratejisinde bir kategoriye tek slot dustugunde o kategorinin TUM butcesi tek varliga gider (orn. TEFAS agirligi .30 + tek fon HOA -> sepetin ~%75'i HOA'da). Risk konsantrasyonu - karar Bahri'nin.
+
+**Push sonrasi yapilacak:** (1) GitHub Secrets'ta SUPABASE_DB_URL oldugunu dogrula (derin doldur workflow'u zaten kullaniyor). (2) "TEFAS Gecmis Derin Doldur"u calistir (loglarda artik ilerleme satirlari gorunecek). (3) Bittikten sonra TEFAS 5 Yil grafigini dene. (4) Supabase DB kullanimini kontrol et: arsiv ~1 milyon satir (~100-150 MB tahmini, kesin degil).

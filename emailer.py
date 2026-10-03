@@ -209,8 +209,8 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     ]
     skipped_cats = _sonuc["elenen"]
 
-    # Skora göre azalan sırala — en iyi varlık her zaman en üstte
-    selected.sort(key=lambda x: x["skor"], reverse=True)
+    # v2.0.7.359: sira ORTAK modulden geliyor (yuvarlanmis skor azalan, Ticker
+    # artan) - Ana Sayfa ile birebir ayni; burada ayrica sort YAPILMIYOR.
 
     rows_html   = ""
     grand_total = 0.0
@@ -258,20 +258,20 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         return ""
 
     # v1.8 - Butce dagildi banner'i (Streamlit Ana Sayfa ile ayni davranis)
+    # v2.0.7.359: metin ve strateji/aday havuzu satiri artik Ana Sayfa'yla AYNI
+    # ortak yardimcilardan (portfoy_optimizasyon.py) uretiliyor.
+    from portfoy_optimizasyon import elenen_notu, havuz_ozeti, STRATEJI_SECENEK
     banner_html = ""
-    if skipped_cats and not watchlist_mode:
-        # v2.0.7.349: app.py'nin v2.0.7.345'teki duzeltilmis metniyle
-        # BIREBIR AYNI - "hic AL sinyali yok" degil, "bu sepete girecek
-        # kadar yuksek skorlu varlik yok" (dogru anlam: kategori kendi
-        # havuzunda aday bulmus olabilir, sadece kuresel yarisi kaybetti).
+    if not watchlist_mode:
+        _not = elenen_notu(_sonuc)
+        _durum = (f"<b>Strateji:</b> {STRATEJI_SECENEK.get(_sonuc.get('strateji'), '')} &nbsp;|&nbsp; "
+                  f"<b>Uygun aday havuzu</b> (skor &ge; 60, pozitif 1A getiri): {havuz_ozeti(_sonuc)}")
+        _icerik = (f"<b>Bütçe Dağılımı Notu:</b> {_not}<br>" if _not else "") + _durum
         banner_html = f"""
     <div style="background:#fff8e1;border-left:4px solid #f0a830;
                 padding:10px 12px;margin:10px 0 0 0;font-size:11px;color:#5a4a1a;
                 border-radius:4px;">
-      <b>Bütçe Dağılımı Notu:</b> Şu kategorilerde bu sepete girecek kadar
-      yüksek skorlu varlık bulunamadı (diğer kategorilerin adayları şu an
-      daha yüksek skorlu) - bütçe diğer kategorilere dağıtıldı:
-      <b>{', '.join(skipped_cats)}</b>
+      {_icerik}
     </div>"""
 
     # v1.9.7.3 - Watchlist modunda baslik ve tablo yapisi farkli
