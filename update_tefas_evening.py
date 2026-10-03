@@ -51,24 +51,104 @@ def main():
             df_t["Son_Fiyat"] = df_t["Ticker"].map(pytefas_prices).combine_first(df_t["Son_Fiyat"])
             ok = (df_t["Son_Fiyat"] > 0).sum()
             print(f"[tefas-aksam] pytefas fiyat guncellendi: {ok}/{len(df_t)} fon")
-
-            # v2.0.7.350 (3 Ekim 2026, Bahri'nin talebi - "en az 365 gun
-            # gorebilmem lazim, disarida bir buffer kursak cozum olur mu?"):
-            # EVET - bu adim ZATEN GUVENILIR sekilde cektigi gunun fiyatini
-            # KALICI bir arsive (tefas_fiyat_gecmisi) ekliyor. pytefas'in
-            # BUYUK TARIHSEL ARALIK sorgusu (1y/5y) yavas/guvenilmez oldugu
-            # icin (bkz. app.py'deki ayrintili not), bu SADECE BUGUNUN
-            # fiyatini eklemek SUPER HAFIF ve GUVENILIR - zamanla (bugunden
-            # itibaren) GERCEK, TAM bir tarihce birikecek, hicbir buyuk-
-            # aralik sorgusuna gerek kalmayacak.
-            try:
-                from db import tefas_fiyat_gecmisi_toplu_ekle
-                _yazilan = tefas_fiyat_gecmisi_toplu_ekle(pytefas_prices)
-                print(f"[tefas-aksam] Kalici fiyat arsivine eklendi: {_yazilan} fon.")
-            except Exception as _arsiv_err:
-                print(f"[tefas-aksam] Kalici fiyat arsivine ekleme atlandi: {_arsiv_err}")
     except Exception as e:
         print(f"[tefas-aksam] pytefas fiyat guncelleme atlandi: {e}")
+
+    # v2.0.7.352 (3 Ekim 2026, Bahri'nin bulgusu - ILU'nun "1 Aylık Getiri
+    # %+12,80" diye gösterdiği değer, GERÇEK 31 günlük grafiğin GÖSTERDİĞİ
+    # ~-%23 düşüşle TAMAMEN ÇELİŞİYORDU): KÖK NEDEN BULUNDU VE ÇÖK CİDDİ -
+    # TÜM TEFAS fonlarının "1 Ay/3 Ay/6 Ay Getiri" değerleri, repodaki
+    # "*_2026-05-26.xlsx" dosyalarından (worker.py'nin `load_tefas()`'ı
+    # üzerinden) geliyordu - bu dosyaların İÇİNDEKİ "Dışa Aktarım Tarihi"
+    # alanı doğrulandı: TAM OLARAK 26.05.2026 - yani bu veriler NEREDEYSE
+    # 5 AYDIR hiç yenilenmemiş, TEK SEFERLİK statik dosyalar! ILU'nun CSV'deki
+    # Ret1M değeri (12.8014), bu dosyadaki "1 Ay (%)" sütunuyla (0.128014)
+    # BİREBİR eşleşiyordu - yani Optima Skor, 1348 TEFAS fonunun TAMAMI için
+    # NEREDEYSE 5 AYLIK BAYAT momentum verisiyle hesaplanıyordu!
+    #
+    # ÇÖZÜM - CANLI ÖLÇÜLDÜ VE ÇOK DEĞERLİ: pytefas'ın `fund_code`
+    # VERİLMEDEN (fetch_all_current_prices'ın zaten kullandığı teknik)
+    # çağrılması, TÜM fonların GERÇEK GEÇMİŞİNİ TEK istekte döndürüyor -
+    # "3 Ay" (95 gün) için 2055 fon / 137.884 satır SADECE 13 saniyede!
+    # Bu toplu veriden HER fon için GERÇEK, GÜNCEL Ret1M/Ret3M ve RSI
+    # hesaplanıp CSV'nin bayat Excel-kaynaklı değerlerinin ÜZERİNE
+    # YAZILIYOR - artık kimse 5 ay önceki bir performansa göre "AL" önerisi
+    # almayacak. Aynı toplu veri, kalıcı fiyat arşivini de (tefas_fiyat_
+    # gecmisi) TEK SEFERDE ~95 gün geriye DOLDURUYOR - v2.0.7.350'nin
+    # "günde 1 satır" birikimini aylarca beklemek yerine, BUGÜN 95 günlük
+    # gerçek veri hazır oluyor.
+    try:
+        from pytefas import Crawler
+        from datetime import datetime, timedelta
+        import db as _db_mod
+
+        c = Crawler(timeout=60, max_retry=2)
+        bugun = datetime.now()
+        start = (bugun - timedelta(days=95)).strftime("%Y-%m-%d")
+        end   = bugun.strftime("%Y-%m-%d")
+        toplam_fon = 0
+        toplam_arsiv_satir = 0
+
+        for kind in ["YAT", "EMK", "BYF"]:
+            try:
+                df_bulk = c.fetch(start=start, end=end, kind=kind)
+            except Exception as _e_kind:
+                print(f"[tefas-aksam] Toplu gecmis ({kind}) cekilemedi: {_e_kind}")
+                continue
+            if df_bulk is None or df_bulk.empty:
+                print(f"[tefas-aksam] Toplu gecmis ({kind}): bos dondu.")
+                continue
+
+            col_price = next((c2 for c2 in df_bulk.columns if c2.lower() in ("price","fiyat")), None)
+            col_code  = next((c2 for c2 in df_bulk.columns if c2.lower() in ("fund_code","fonkodu","code","kod")), None)
+            col_date  = next((c2 for c2 in df_bulk.columns if c2.lower() in ("date","tarih")), None)
+            if not (col_price and col_code and col_date):
+                print(f"[tefas-aksam] Toplu gecmis ({kind}): beklenen sutunlar bulunamadi - {df_bulk.columns.tolist()}")
+                continue
+
+            df_bulk = df_bulk[[col_code, col_date, col_price]].copy()
+            df_bulk.columns = ["ticker", "tarih", "fiyat"]
+            df_bulk["tarih"] = pd.to_datetime(df_bulk["tarih"], errors="coerce")
+            df_bulk["fiyat"] = pd.to_numeric(df_bulk["fiyat"], errors="coerce")
+            df_bulk = df_bulk.dropna(subset=["ticker", "tarih", "fiyat"]).sort_values(["ticker", "tarih"])
+
+            # Her fon icin GERCEK Ret1M/Ret3M/RSI hesapla
+            from worker import calc_rsi
+            _yeni_ret1m, _yeni_ret3m, _yeni_rsi = {}, {}, {}
+            for ticker, grp in df_bulk.groupby("ticker"):
+                s = grp.set_index("tarih")["fiyat"]
+                if len(s) < 2:
+                    continue
+                son = float(s.iloc[-1])
+                _ay_once = s[s.index <= (s.index[-1] - pd.Timedelta(days=30))]
+                if not _ay_once.empty and _ay_once.iloc[-1] > 0:
+                    _yeni_ret1m[ticker] = round((son / float(_ay_once.iloc[-1]) - 1) * 100, 2)
+                _uc_ay_once = s[s.index <= (s.index[-1] - pd.Timedelta(days=90))]
+                if not _uc_ay_once.empty and _uc_ay_once.iloc[-1] > 0:
+                    _yeni_ret3m[ticker] = round((son / float(_uc_ay_once.iloc[-1]) - 1) * 100, 2)
+                _yeni_rsi[ticker] = calc_rsi(s)
+
+            _mask_kind = df_t["TEFAS_Kind"] == kind
+            df_t.loc[_mask_kind, "Ret1M"] = df_t.loc[_mask_kind, "Ticker"].map(_yeni_ret1m).combine_first(df_t.loc[_mask_kind, "Ret1M"])
+            df_t.loc[_mask_kind, "Ret3M"] = df_t.loc[_mask_kind, "Ticker"].map(_yeni_ret3m).combine_first(df_t.loc[_mask_kind, "Ret3M"])
+            df_t.loc[_mask_kind, "RSI"]   = df_t.loc[_mask_kind, "Ticker"].map(_yeni_rsi).combine_first(df_t.loc[_mask_kind, "RSI"])
+            toplam_fon += len(_yeni_ret1m)
+            print(f"[tefas-aksam] {kind}: {len(_yeni_ret1m)} fon icin GERCEK Ret1M/Ret3M/RSI hesaplandi "
+                  f"({df_bulk['ticker'].nunique()} fon, {len(df_bulk)} satir toplu veriden).")
+
+            # Ayni toplu veriyi kalici arsive de yaz (gun bazinda, en son
+            # fiyat tekrar etmesin diye drop_duplicates)
+            try:
+                for tarih_str, grp_tarih in df_bulk.groupby(df_bulk["tarih"].dt.strftime("%Y-%m-%d")):
+                    _fiyat_map = dict(zip(grp_tarih["ticker"], grp_tarih["fiyat"]))
+                    toplam_arsiv_satir += _db_mod.tefas_fiyat_gecmisi_toplu_ekle(_fiyat_map, tarih=tarih_str)
+            except Exception as _arsiv_err:
+                print(f"[tefas-aksam] {kind}: kalici arsive toplu yazma atlandi: {_arsiv_err}")
+
+        print(f"[tefas-aksam] GERCEK Ret1M/Ret3M/RSI guncellendi: {toplam_fon} fon. "
+              f"Kalici arsive toplam {toplam_arsiv_satir} (fon x gun) satir yazildi.")
+    except Exception as e:
+        print(f"[tefas-aksam] Toplu gercek getiri/RSI guncellemesi atlandi: {e}")
 
     # Mevcut CSV'yi oku, TEFAS D I S I satirlari koru, TEFAS satirlarini
     # tamamen yeni (aksam) veriyle degistir.

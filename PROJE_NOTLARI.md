@@ -8493,5 +8493,53 @@ mesajları):**
 git add app.py db.py emailer.py emailer_standalone.py update_tefas_evening.py PROJE_NOTLARI.md && git commit -m "v2.0.7.349/350/351: emailer/emailer_standalone Ana Sayfa ile birebir eslendi, TEFAS kalici fiyat arsivi kuruldu, ILU yuksek minimum tutar nedeniyle tedbir listesine eklendi" && git pull --no-rebase --no-edit && git push
 ```
 
+### ✅ v2.0.7.352 - ÇOK BÜYÜK BULGU: TEFAS'ın 1 Ay/3 Ay Getiri verisi NEREDEYSE 5 AYDIR BAYATTI (3 Ekim 2026)
+Bahri ILU'nun "+%12,80 1 Aylık Getiri" iddiasını, GERÇEK 31 günlük grafiğinin (~-%23 düşüş) ile karşılaştırıp haklı olarak itiraz etti. Araştırma SARSICI bir sonuç verdi: repodaki `*_2026-05-26.xlsx` dosyalarının İÇİNDE "Dışa Aktarım Tarihi: 26.05.2026" yazıyor - bu dosyalar TEK SEFERLİK, statik, NEREDEYSE 5 AYDIR yenilenmemiş! ILU'nun CSV'deki Ret1M'i (12.8014), bu dosyadaki "1 Ay (%)" sütunuyla (0.128014) BİREBİR eşleşiyordu - yani **Optima Skor, 1348 TEFAS fonunun TAMAMI için neredeyse 5 AYLIK BAYAT momentum verisiyle hesaplanıyordu.**
+
+- **v2.0.7.352 - ÇÖZÜM (CANLI ÖLÇÜLDÜ, ÇOK DEĞERLİ BİR KEŞİFLE):**
+  pytefas'ın `fund_code` VERİLMEDEN çağrılması (fetch_all_current_prices'ın
+  zaten kullandığı teknik) TÜM fonların GERÇEK geçmişini TEK istekte
+  döndürüyor - "3 Ay" (95 gün) için **2055 fon / 137.884 satır SADECE 13
+  saniyede**, "6 Ay" için 54 saniyede (arka plan işi için gayet makul)!
+  Bu, TEK TEK fon sorgularının (yavaş/güvenilmez) aksine ÇOK HIZLI ve
+  GÜVENİLİR. `update_tefas_evening.py` artık bu toplu veriden HER fon
+  için GERÇEK, GÜNCEL Ret1M/Ret3M/RSI hesaplayıp CSV'nin bayat
+  Excel-kaynaklı değerlerinin ÜZERİNE YAZIYOR.
+  - **CANLI DOĞRULAMA (ILU):** Gerçek Ret1M = **-%21,6** (eski bayat
+    değer: +%12,80!), gerçek RSI = **19,8** (aşırı satım - eski bayat
+    değer: 53,1 nötr). **Yeni Optima Skor: 13,3** (eski bayat skor:
+    78,7 "Kademeli Al"!) - TAMAMEN FARKLI, doğru bir sinyal.
+  - **BONUS:** Aynı toplu veri, `tefas_fiyat_gecmisi` kalıcı arşivini de
+    TEK SEFERDE ~95 gün geriye DOLDURUYOR - v2.0.7.350'nin "günde 1
+    satır" birikimini aylarca beklemek yerine, BUGÜN 95 günlük gerçek
+    veri hazır oluyor.
+  - **BİLİNEN, ÇÖZÜLMEMİŞ KALAN RİSK:** `worker.py`'nin ANA (`build()`,
+    "Veri Güncelle", günde 1 kez ~02:00-03:00 TRT) akışı HÂLÂ stale
+    Excel'den okuyor - "TEFAS Aksam Guncelle" (günde çok daha sık
+    çalışıyor) bunu HER ÇALIŞMASINDA düzeltiyor, yani en kötü ihtimalle
+    günde ~30 dakikalık bir pencerede eski değerler geri gelebilir.
+    TAM çözüm için `worker.py`'ye de AYNI düzeltme uygulanmalı - BİR
+    SONRAKİ oturumun önceliği.
+  - **PUSH BEKLİYOR:** Sadece `update_tefas_evening.py`.
+
+**Bahri'nin diğer iki sorusuna sohbette YANITLANDI (kod gerektirmedi):**
+- **E-posta mantığını (kategori-güvenceli dağılım) sol menüde genel bir
+  davranış seçeneği yapma fikri:** Mantıklı ve yapılabilir bulundu, AMA
+  önerilen yöntem: ÜÇ ayrı kopya (app.py/emailer.py/emailer_standalone.py)
+  yerine TEK PAYLAŞILAN fonksiyon + kullanıcı tercihi (DB'de saklı) -
+  v2.0.7.349'da düzelttiğimiz "iki algoritma birbirinden saptı" hatasının
+  TEKRARLANMAMASI için. Bahri'nin onayı bekleniyor, henüz kodlanmadı.
+- **Arşiv birikimini günlük yerine SAATTE BİR çalıştırma önerisi:**
+  DÜZELTİLDİ - TEFAS GÜNDE SADECE 1 NAV yayınlıyor, saatte bir
+  çalıştırmak AYNI günün değerini tekrar tekrar yazar, YENİ gün
+  EKLEMEZ - hızlanma SAĞLAMAZ. Bunun yerine v2.0.7.352'nin toplu-geçmiş
+  keşfi ÇOK DAHA İYİSİNİ yaptı: "saatte bir, günde 1 ilerleme" yerine
+  "BUGÜN TEK SEFERDE 95 gün" sağlandı.
+
+**Push komutu:**
+```
+git add update_tefas_evening.py PROJE_NOTLARI.md && git commit -m "v2.0.7.352: TEFAS Ret1M/Ret3M/RSI 5 aydir bayat Excel yerine pytefas toplu-gecmis sorgusundan GERCEK/GUNCEL hesaplaniyor - 1348 fonun TAMAMINI etkileyen kritik duzeltme" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Push sonrası (1) bir sonraki e-posta raporunun Ana Sayfa ile tutarlı olup olmadığını teyit et, (2) ILU'nun artık Optima Skor 0 ile göründüğünü (ve önerilmediğini) teyit et, (3) birkaç hafta sonra TEFAS fiyat arşivinin büyüyüp büyümediğini kontrol et. Hâlâ açık: v2.0.7.337'nin TEFAS teşhis print'leri (BAG dahil fonlar kararlı şekilde doğru görünürse temizlenebilir), Otomatik Piyasa Tedbiri İzleme'nin asıl SPK Bülten İzleme script'i henüz yazılmadı.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.352 push edildikten sonra Bahri'den (1) ILU'nun artık doğru/düşük skorla göründüğünü, (2) birkaç başka TEFAS fonunun da makul görünüp görünmediğini teyit etmesini iste. Sonra: `worker.py`'nin ANA akışına da AYNI gerçek-Ret1M/RSI düzeltmesini uygula (günlük ~30 dk'lık bayat pencereyi kapatmak için). Ayrıca açık: e-posta/Ana Sayfa davranış seçimi (kullanıcı tercihi) fikri için onay bekleniyor, Otomatik Piyasa Tedbiri İzleme'nin SPK Bülten İzleme script'i henüz yazılmadı.
