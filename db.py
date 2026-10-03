@@ -701,6 +701,25 @@ def init_db():
         islenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
     _piyasa_tedbir_tohumla(conn)
+    _piyasa_tedbir_ek_kurallar(conn)
+
+    # v2.0.7.350 (3 Ekim 2026, Bahri'nin talebi - "95 günden geriye
+    # gidilemiyor, en az 365 gün görebilmem lazım, dışarıda bir buffer
+    # kursak çözüm olur mu?"): EVET - pytefas'ın GERÇEK TARİHSEL ARALIK
+    # sorgusu (1y/5y) TEFAS API'sinde çok yavaş/güvenilmez çıktı (CANLI
+    # ÖLÇÜLDÜ: "3 Ay" 1,78 sn, "5 Yıl" 38+ sn'de HİÇ TAMAMLANMADI). Ama
+    # "TEFAS Aksam Guncelle" HER GÜN, TÜM 1348 fon için GÜNCEL fiyatı
+    # ZATEN GÜVENİLİR ŞEKİLDE çekiyor (bulk endpoint). Bu tablo, HER GÜN
+    # o günün fiyatını KALICI olarak biriktiren bir arşiv - zamanla
+    # (bugünden itibaren) pytefas'ın büyük-aralık sorgusuna HİÇ ihtiyaç
+    # duymadan GERÇEK, GÜVENİLİR bir tarihçe birikecek.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS tefas_fiyat_gecmisi (
+        ticker TEXT NOT NULL,
+        tarih  DATE NOT NULL,
+        fiyat  NUMERIC NOT NULL,
+        PRIMARY KEY (ticker, tarih)
+    )""")
 
     # v2.0.7.160: Gemini ücretsiz katman günlük istek limiti BELİRSİZ
     # (üçüncü taraf kaynaklar 20/50/250/500/1500 gibi çelişkili rakamlar
@@ -1018,19 +1037,19 @@ def init_db():
     # v2.0.7.333'teki guvenlik acigi (yeni tablo olusturulup bu listeye
     # eklenmeyi UNUTMA) burada TEKRARLANMAMASI icin.
     for _rls_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
-                       "spk_bulten_islenmis"):
+                       "spk_bulten_islenmis", "tefas_fiyat_gecmisi"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
             print(f"[db] RLS etkinlestirme atlandi ({_rls_tablo}): {_e}")
 
-    # v2.0.7.342: Supabase'in 30 Ekim 2026'dan itibaren YENI tablolara
+    # v2.0.7.342/350: Supabase'in 30 Ekim 2026'dan itibaren YENI tablolara
     # artik otomatik Data API (PostgREST) izni vermeyecegi bildirilmisti
     # (public.trendsurf-optima / Menu Muhendisi ile AYNI Supabase hesabi) -
-    # bu uc YENI tabloya ACIKCA grant veriliyor, ileride PostgREST
+    # bu YENI tablolara ACIKCA grant veriliyor, ileride PostgREST
     # uzerinden "erisilemiyor" sorunu yasanmasin diye.
     for _grant_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
-                         "spk_bulten_islenmis"):
+                         "spk_bulten_islenmis", "tefas_fiyat_gecmisi"):
         try:
             c.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON public.{_grant_tablo} "
                       f"TO anon, authenticated, service_role")
@@ -1293,6 +1312,33 @@ def _piyasa_tedbir_tohumla(conn):
               "spk_tedbir_fonlari.py'den tasindi).", file=sys.stderr)
     except Exception as e:
         print(f"[db] _piyasa_tedbir_tohumla hata: {e}", file=sys.stderr)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _piyasa_tedbir_ek_kurallar(conn):
+    """v2.0.7.351 (3 Ekim 2026, Bahri'nin bulgusu - ILU'yu ING Bank'ta
+    almaya calistiginde "minimum 1 milyon TL" sarti bildirilmisti, bunu
+    daha once iletmesine ragmen fon hala sistemde oneriliyordu): bu,
+    `_piyasa_tedbir_tohumla()`'nin AKSINE - tablo BOS OLMASA BILE HER
+    init_db() cagrisinda calisir (ON CONFLICT DO NOTHING ile idempotent) -
+    boylece BURAYA eklenecek YENI, tek tek dogrulanmis kisitlamalar bir
+    sonraki deploy'da otomatik aktif olur, tabloyu bosaltip yeniden
+    tohumlamaya gerek kalmaz. Bu, SPK/resmi bir karar DEGIL - ING Bank'in
+    KENDI aracilik/dagitim kisitlamasi (TEFAS'in genel verisinde yer
+    almaz, sadece Bahri'nin bildirdigi icin biliniyor)."""
+    try:
+        conn.execute(
+            "INSERT INTO piyasa_tedbir_listesi "
+            "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama) "
+            "VALUES ('TICKER', 'ILU', 'TEFAS', 'YUKSEK_MINIMUM_TUTAR', "
+            "'Bahri''nin bildirdigi - ING Bank minimum 1.000.000 TL yatirim sarti kosuyor') "
+            "ON CONFLICT (eslesme_turu, deger) DO NOTHING")
+        conn.commit()
+    except Exception as e:
+        print(f"[db] _piyasa_tedbir_ek_kurallar hata: {e}", file=sys.stderr)
         try:
             conn.rollback()
         except Exception:
@@ -1602,6 +1648,59 @@ def get_aktif_piyasa_tedbirleri() -> list:
         return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2]} for r in rows]
     except Exception as e:
         print(f"[db] get_aktif_piyasa_tedbirleri hata: {e}", file=sys.stderr)
+        return []
+
+
+def tefas_fiyat_gecmisi_toplu_ekle(fiyat_map: dict, tarih=None) -> int:
+    """v2.0.7.350: "TEFAS Aksam Guncelle"nin GÜVENİLİR şekilde çektiği
+    günlük fiyatları kalıcı arşive ekler - fiyat_map: {ticker: fiyat}.
+    `tarih` verilmezse bugün (TRT) kullanılır. Idempotent (ON CONFLICT
+    DO UPDATE) - aynı gün tekrar çalışırsa sorun olmaz. Döndürülen
+    sayı: kaç satır yazıldığı (hata olursa 0)."""
+    if not fiyat_map:
+        return 0
+    try:
+        from datetime import datetime, timezone, timedelta
+        if tarih is None:
+            tarih = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+        conn = get_conn()
+        yazilan = 0
+        for ticker, fiyat in fiyat_map.items():
+            try:
+                fiyat_f = float(fiyat)
+            except (TypeError, ValueError):
+                continue
+            if fiyat_f <= 0:
+                continue
+            conn.execute(
+                "INSERT INTO tefas_fiyat_gecmisi (ticker, tarih, fiyat) VALUES (?,?,?) "
+                "ON CONFLICT (ticker, tarih) DO UPDATE SET fiyat=EXCLUDED.fiyat",
+                (str(ticker), tarih, fiyat_f))
+            yazilan += 1
+        conn.commit()
+        conn.close()
+        return yazilan
+    except Exception as e:
+        print(f"[db] tefas_fiyat_gecmisi_toplu_ekle hata: {e}", file=sys.stderr)
+        return 0
+
+
+def tefas_fiyat_gecmisi_oku(ticker: str, gun: int = 1825) -> list:
+    """v2.0.7.350: Bir fonun kendi arşivimizdeki (pytefas'a HİÇ gitmeden)
+    birikmiş gerçek gecmisini okur - [(tarih, fiyat), ...] (tarihe göre
+    artan). `gun`: kaç gün geriye bakılacağı (varsayılan ~5 yıl, yani
+    arşivde ne kadar varsa hepsi döner)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT tarih, fiyat FROM tefas_fiyat_gecmisi WHERE ticker=? "
+            "AND tarih >= CURRENT_DATE - ? ORDER BY tarih ASC",
+            (str(ticker), int(gun))
+        ).fetchall()
+        conn.close()
+        return [(r[0], float(r[1])) for r in rows]
+    except Exception as e:
+        print(f"[db] tefas_fiyat_gecmisi_oku hata: {e}", file=sys.stderr)
         return []
 
 

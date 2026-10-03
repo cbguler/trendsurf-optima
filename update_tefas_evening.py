@@ -51,6 +51,22 @@ def main():
             df_t["Son_Fiyat"] = df_t["Ticker"].map(pytefas_prices).combine_first(df_t["Son_Fiyat"])
             ok = (df_t["Son_Fiyat"] > 0).sum()
             print(f"[tefas-aksam] pytefas fiyat guncellendi: {ok}/{len(df_t)} fon")
+
+            # v2.0.7.350 (3 Ekim 2026, Bahri'nin talebi - "en az 365 gun
+            # gorebilmem lazim, disarida bir buffer kursak cozum olur mu?"):
+            # EVET - bu adim ZATEN GUVENILIR sekilde cektigi gunun fiyatini
+            # KALICI bir arsive (tefas_fiyat_gecmisi) ekliyor. pytefas'in
+            # BUYUK TARIHSEL ARALIK sorgusu (1y/5y) yavas/guvenilmez oldugu
+            # icin (bkz. app.py'deki ayrintili not), bu SADECE BUGUNUN
+            # fiyatini eklemek SUPER HAFIF ve GUVENILIR - zamanla (bugunden
+            # itibaren) GERCEK, TAM bir tarihce birikecek, hicbir buyuk-
+            # aralik sorgusuna gerek kalmayacak.
+            try:
+                from db import tefas_fiyat_gecmisi_toplu_ekle
+                _yazilan = tefas_fiyat_gecmisi_toplu_ekle(pytefas_prices)
+                print(f"[tefas-aksam] Kalici fiyat arsivine eklendi: {_yazilan} fon.")
+            except Exception as _arsiv_err:
+                print(f"[tefas-aksam] Kalici fiyat arsivine ekleme atlandi: {_arsiv_err}")
     except Exception as e:
         print(f"[tefas-aksam] pytefas fiyat guncelleme atlandi: {e}")
 

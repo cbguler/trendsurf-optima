@@ -8416,5 +8416,82 @@ v2.0.7.347 push edildi: hız düzeldi, banner/grafik tutarlılığı düzeldi (T
 git add app.py PROJE_NOTLARI.md && git commit -m "v2.0.7.348: v2.0.7.347'nin 'her zaman 5y cek' karari GERI ALINDI (TEFAS API'si buyuk tarih araliklarinda cok yavas/guvenilmez cikti) - artik kullanicinin sectigi (hafif) periyot paylasiliyor" && git pull --no-rebase --no-edit && git push
 ```
 
+### 3 Ekim 2026 - Bahri'nin DEV, çok parçalı mesajı: üç büyük iş tamamlandı
+Bahri tek mesajda ~8 ayrı konu getirdi (TEFAS 365 gün, ILU skor/minimum tutar, CVL/BAG satış kapalılığı, e-posta/Ana Sayfa tutarsızlığı, vb.). Üçü kodlandı ve test edildi, geri kalanı AÇIKLAMA/yanıt olarak Bahri'ye sohbette verildi (kod gerektirmedi).
+
+- **v2.0.7.349 - E-posta/Ana Sayfa tutarsızlığı KESİN ÇÖZÜLDÜ (İKİ ayrı
+  kök neden):**
+  1. `emailer.py`'nin `_build_opt_section()` fonksiyonu, app.py'nin
+     BİLEREK kaldırdığı ESKİ "eşit bölüşüm" (her kategoriye garantili
+     slot) algoritmasını HÂLÂ kullanıyordu - app.py'nin güncel "saf
+     küresel en-iyi-N" algoritmasıyla (deterministik Ticker ikincil
+     sıralaması dahil) BİREBİR eşitlendi. Banner metni de v2.0.7.345'in
+     düzeltilmiş haliyle eşitlendi.
+  2. `emailer_standalone.py`'nin kendi, bağımsız evren oluşturma
+     pipeline'ı "Streamlit Cloud ile birebir" diye iddia ediyordu ama
+     YANLIŞTI - Fırsat Radarı'nın canlı `intraday_scores` katmanı VE
+     piyasa_tedbir_listesi sıfırlaması HİÇ YOKTU (CVL/BAG gibi
+     dondurulmuş fonlar bile e-postada normal önerilebiliyordu!). İkisi
+     de artık app.py'nin kendi koduyla birebir aynı şekilde ekleniyor.
+  - **PUSH BEKLİYOR:** `emailer.py`, `emailer_standalone.py`.
+
+- **v2.0.7.350 - TEFAS'ta "95 günden geriye gidilemiyor" sorunu için
+  KALICI ARŞİV sistemi kuruldu:** pytefas'ın büyük tarihsel aralık
+  sorgusu (1y/5y) CANLI ÖLÇÜLDÜ, çok yavaş/güvenilmez çıktı. Çözüm:
+  zaten güvenilir çalışan "TEFAS Aksam Guncelle" artık HER GÜN o günün
+  fiyatını yeni `tefas_fiyat_gecmisi` tablosuna KALICI olarak
+  biriktiriyor (idempotent, ON CONFLICT DO UPDATE). Detay sayfası "3
+  Ay"dan UZUN periyotlar için önce bu arşive bakıyor, pytefas'a hiç
+  gitmeden. **DÜRÜSTLÜK NOTU:** bu bugün anında 365 gün GÖSTERMEYECEK -
+  arşiv bugünden itibaren büyüyecek, birkaç ay içinde tam kapsayacak.
+  Anlık bir "geriye doldurma" script'i İSTENİRSE ayrı bir iş olarak ele
+  alınabilir, bu turda yapılmadı.
+  - **PUSH BEKLİYOR:** `app.py`, `db.py`, `update_tefas_evening.py`.
+
+- **v2.0.7.351 - ILU, Bahri'nin bildirdiği ING Bank minimum 1.000.000 TL
+  yatırım şartı nedeniyle piyasa_tedbir_listesi'ne eklendi** (TICKER
+  eşleşmesi, tedbir_turu='YUKSEK_MINIMUM_TUTAR'). Bu SPK/resmi bir karar
+  DEĞİL - sadece ING'nin kendi aracılık kısıtlaması, TEFAS'ın genel
+  verisinde yer almıyor, YALNIZCA Bahri bildirdiği için biliniyor. Yeni
+  bir `_piyasa_tedbir_ek_kurallar(conn)` fonksiyonu eklendi - bu,
+  `_piyasa_tedbir_tohumla()`'nin AKSİNE tablo dolu olsa bile HER
+  init_db()'de çalışır (ON CONFLICT DO NOTHING ile idempotent) - böylece
+  BUNDAN SONRA eklenecek tekil, doğrulanmış kısıtlamalar (başka "yüksek
+  minimum tutar" fonları bulunursa) bir sonraki deploy'da otomatik aktif
+  olur, tabloyu sıfırlayıp yeniden tohumlamaya gerek kalmaz. CANLI
+  DOĞRULANDI: gerçek evren verisiyle ILU artık KTLEV/GUNDG/DSTKF ile
+  birlikte doğru eşleşiyor (4/4).
+  - **PUSH BEKLİYOR:** Sadece `db.py`.
+
+**Bahri'ye sohbette YANITLANDI (kod gerektirmedi - bkz. son sohbet
+mesajları):**
+- ILU'nun yüksek skoruna rağmen grafiğin düşüş göstermesi: Optima Skor
+  formülü "1 Aylık Getiri"yi ağırlıklı kullanıyor - ILU'nun UZUN vadeli
+  (91 günlük) trendi düşüş olsa da, SON 30 GÜNDE bir toparlanma
+  yaşamış (+%12,80) - bu GERÇEK bir formül özelliği/sınırlaması,
+  "Trend: DUSUS" banner'ı zaten bunu doğru yakalıyor ama skor bunu tam
+  ağırlıklandırmıyor. Formülün uzun-vadeli trend teyidi eklemesi
+  istenirse AYRI bir karar/değişiklik olarak ele alınmalı.
+- CVL/BAG'ın "satamıyorum ama fiyat hareket ediyor" gizemi: TEFAS
+  fonlarının NAV'ı GÜNLÜK olarak fonun KENDİ PORTFÖYÜNDEKİ (hisse/tahvil)
+  varlıkların piyasa değerine göre hesaplanıyor - yatırımcı alım-satımı
+  donmuş olsa bile fonun ALTINDAKİ varlıklar piyasada hareket etmeye
+  devam ettiği için NAV değişmeye devam ediyor. Kimsenin gizlice
+  alıp-sattığı anlamına gelmiyor.
+- Nereye başvurulmalı/ne kadar sürecek: ING Bank'a ve SPK'nın kendi
+  başvuru kanallarına yönlendirildi, net bir hukuki/süre garantisi
+  verilmedi (avukat/finansal danışman değilim).
+- "ILU gibi başka fon var mı" / hangi fonlar-hisseler kapalı: TEFAS'ın
+  genel verisi broker-bazlı minimum tutar kısıtlamalarını İÇERMİYOR -
+  bu tür kısıtlamalar ancak Bahri bildirdikçe manuel olarak
+  piyasa_tedbir_listesi'ne eklenebilir (v2.0.7.351'in infrastrüktürü
+  bunun için hazır). SPK'nın RESMİ tasfiye/manipülasyon kararları
+  zaten listede (117 fon + 3 hisse - 17/16 Eylül kararları).
+
+**Toplu push komutu:**
+```
+git add app.py db.py emailer.py emailer_standalone.py update_tefas_evening.py PROJE_NOTLARI.md && git commit -m "v2.0.7.349/350/351: emailer/emailer_standalone Ana Sayfa ile birebir eslendi, TEFAS kalici fiyat arsivi kuruldu, ILU yuksek minimum tutar nedeniyle tedbir listesine eklendi" && git pull --no-rebase --no-edit && git push
+```
+
 ### Yeni sohbet için ilk adım:
-Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** v2.0.7.348 push edildikten sonra Bahri'den BAG dahil birkaç TEFAS fonunu TAZE bakışla (varsayılan "3 Ay" periyotunda) tekrar denemesini iste - bu sefer hızlı VE gerçek/dalgalı görünmeli. Onaylanırsa v2.0.7.337'nin teşhis print'lerini temizle, bu haftalardır süren TEFAS sagasını TAMAMEN kapat. Sonra: Otomatik Piyasa Tedbiri İzleme'nin "HENÜZ YAPILMADI" listesine devam - en değerlisi `spk_bulten_izleme.py` script'i.
+Depoyu klonla, bu dosyayı oku. **EN ÖNCELİKLİ:** Push sonrası (1) bir sonraki e-posta raporunun Ana Sayfa ile tutarlı olup olmadığını teyit et, (2) ILU'nun artık Optima Skor 0 ile göründüğünü (ve önerilmediğini) teyit et, (3) birkaç hafta sonra TEFAS fiyat arşivinin büyüyüp büyümediğini kontrol et. Hâlâ açık: v2.0.7.337'nin TEFAS teşhis print'leri (BAG dahil fonlar kararlı şekilde doğru görünürse temizlenebilir), Otomatik Piyasa Tedbiri İzleme'nin asıl SPK Bülten İzleme script'i henüz yazılmadı.

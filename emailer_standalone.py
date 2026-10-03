@@ -264,6 +264,69 @@ except FileNotFoundError:
     print("[1/5] UYARI: optimized_universe.csv yok - bos DataFrame ile devam")
     df_uni = pd.DataFrame()
 
+# v2.0.7.349 (3 Ekim 2026, Bahri'nin bulgusu - e-postadaki Portföy
+# Optimizasyonu, ÇOK YAKIN zamanda alınan Ana Sayfa ekran görüntüsünden
+# bile TAMAMEN FARKLI çıkıyordu): bu dosyanin KENDI yorumu "Streamlit
+# Cloud ile BİREBİR AYNI veri pipeline'i" diyordu ama bu YANLIŞTI - burada
+# app.py'nin load_universe()'indeki İKİ KRİTİK adım HİÇ YOKTU: (1) Fırsat
+# Radarı'nın intraday_scores canlı skor katmanı (KRIPTO'nun Ana Sayfa'da
+# neden sık sık 80,0'a yığıldığının asıl kaynağı - bu olmadan e-posta
+# TAMAMEN FARKLI, daha "sakin" skorlarla çalışıyordu), (2) piyasa_tedbir_
+# listesi (SPK kararıyla dondurulmuş 117 fon + 3 hisse) sıfırlaması - bu
+# olmadan e-posta CVL/BAG gibi DONDURULMUŞ fonları hâlâ normal skorla
+# önerebiliyordu! İkisi de artık app.py'nin KENDİ KODUYLA BİREBİR AYNI
+# şekilde burada da uygulanıyor.
+if not df_uni.empty and "Ticker" in df_uni.columns and "Kategori" in df_uni.columns:
+    try:
+        from db import get_conn
+        _rd_rows = get_conn().execute(
+            "SELECT ticker, kategori, skor, fiyat, rsi, ret1m FROM intraday_scores "
+            "WHERE updated_at > now() - interval '45 minutes'").fetchall()
+        if _rd_rows:
+            def _rv(r, k, i):
+                return r[k] if isinstance(r, dict) else r[i]
+            _rd_map = {}
+            for _r in _rd_rows:
+                _rd_map[str(_rv(_r, "ticker", 0))] = {
+                    "kategori": _rv(_r, "kategori", 1),
+                    "skor":  _rv(_r, "skor", 2),  "fiyat": _rv(_r, "fiyat", 3),
+                    "rsi":   _rv(_r, "rsi", 4),   "ret1m": _rv(_r, "ret1m", 5)}
+            _rd_kategori_map = {t: v["kategori"] for t, v in _rd_map.items()}
+            _df_rd_kat = df_uni["Ticker"].astype(str).map(_rd_kategori_map)
+            _mask_rd = df_uni["Ticker"].astype(str).isin(_rd_map.keys()) & (_df_rd_kat == df_uni["Kategori"])
+            if _mask_rd.any():
+                if "Optima_Skor" not in df_uni.columns:
+                    df_uni["Optima_Skor"] = pd.NA
+                df_uni.loc[_mask_rd, "Optima_Skor"] = df_uni.loc[_mask_rd, "Ticker"].astype(str).map(
+                    lambda t: _rd_map[t]["skor"])
+                _mask_bist = _mask_rd & (df_uni["Kategori"] == "BIST")
+                if _mask_bist.any():
+                    for _col, _key in (("Son_Fiyat","fiyat"),("RSI","rsi"),("Ret1M","ret1m")):
+                        df_uni.loc[_mask_bist, _col] = df_uni.loc[_mask_bist, "Ticker"].astype(str).map(
+                            lambda t, _k=_key: _rd_map[t][_k])
+            print(f"[1b/5] Fırsat Radarı overlay uygulandı ({_mask_rd.sum()} satır).")
+        else:
+            print("[1b/5] Fırsat Radarı overlay: 45 dk içinde taze kayıt yok, CSV skorları kullanılıyor.")
+    except Exception as _rd_err:
+        print(f"[1b/5] Fırsat Radarı overlay atlandı: {_rd_err}")
+
+    try:
+        from db import get_aktif_piyasa_tedbirleri
+        _aktif_tedbirler = get_aktif_piyasa_tedbirleri()
+        _sirket_adlari = [t["deger"] for t in _aktif_tedbirler if t["eslesme_turu"] == "SIRKET_ADI"]
+        _tickerlar = {t["deger"] for t in _aktif_tedbirler if t["eslesme_turu"] == "TICKER"}
+        if _sirket_adlari:
+            _sirket_maskesi = (df_uni["Kategori"] == "TEFAS") & df_uni["Ad"].apply(
+                lambda ad, _sl=_sirket_adlari: any(s in str(ad).upper() for s in _sl))
+            df_uni.loc[_sirket_maskesi, "Optima_Skor"] = 0.0
+        if _tickerlar:
+            _ticker_maskesi = df_uni["Ticker"].astype(str).str.upper().isin(_tickerlar)
+            df_uni.loc[_ticker_maskesi, "Optima_Skor"] = 0.0
+        print(f"[1c/5] Piyasa tedbiri sifirlamasi uygulandi "
+              f"({len(_sirket_adlari)} sirket + {len(_tickerlar)} ticker kurali).")
+    except Exception as _pt_err:
+        print(f"[1c/5] Piyasa tedbiri sifirlamasi atlandi: {_pt_err}")
+
 # ----------------------------------------------------------------------------
 # 2. Streamlit Cloud ile birebir veri pipeline'i (live_data.py)
 #    Hata olursa sessizce devam; e-posta yine de gonderilir

@@ -1128,6 +1128,36 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 return cache_hist
         except Exception:
             pass
+        # 1b. v2.0.7.350 (3 Ekim 2026, Bahri'nin talebi - "en az 365 gün
+        # görmem lazım, dışarıda bir buffer kursak çözüm olur mu?"):
+        # pytefas'ın BÜYÜK tarihsel aralık sorgusu (1y/5y) TEFAS API'sinde
+        # çok yavaş/güvenilmez (CANLI ÖLÇÜLDÜ, bkz. _fetch_tefas_hist_
+        # cached'in notu) - ama "TEFAS Aksam Guncelle" HER GÜN GÜVENİLİR
+        # şekilde o günün fiyatını `tefas_fiyat_gecmisi` tablosuna
+        # biriktiriyor artık. "3 Ay"DAN UZUN periyotlar için önce BU
+        # KALICI ARŞİVE bakılıyor - pytefas'a hiç gidilmeden, ne kadar
+        # birikmişse o kadar GERÇEK veri kullanılır. Sistem yeni
+        # kurulduğu için bugün çok az satır olacak, ama HER GÜN büyüyüp
+        # birkaç ay içinde "3 Ay"ın ötesini de tamamen KENDİ ARŞİVİMİZDEN
+        # karşılayacak - pytefas'a hiç bağımlı kalınmadan.
+        if period not in ("1mo", "3mo"):
+            try:
+                from db import tefas_fiyat_gecmisi_oku
+                _gun_map = {"6mo": 190, "1y": 370, "3y": 1100, "5y": 1825}
+                _arsiv = tefas_fiyat_gecmisi_oku(ticker, _gun_map.get(period, 1825))
+                if len(_arsiv) >= 5:
+                    _df_arsiv = pd.DataFrame(_arsiv, columns=["date", "Close"])
+                    _df_arsiv["date"] = pd.to_datetime(_df_arsiv["date"])
+                    _df_arsiv = _df_arsiv.set_index("date").sort_index()
+                    _df_arsiv["Open"] = _df_arsiv["Close"].shift(1).fillna(_df_arsiv["Close"])
+                    _df_arsiv["High"] = _df_arsiv[["Open","Close"]].max(axis=1)
+                    _df_arsiv["Low"]  = _df_arsiv[["Open","Close"]].min(axis=1)
+                    print(f"[tefas-hist-TESHIS] {ticker}: KALICI ARSIVDEN "
+                          f"{len(_df_arsiv)} satir kullanildi (pytefas'a gidilmedi).", flush=True)
+                    return _df_arsiv[["Open","High","Low","Close"]]
+            except Exception as _arsiv_okuma_err:
+                print(f"[tefas-hist-TESHIS] {ticker}: arsiv okuma hatasi - "
+                      f"{_arsiv_okuma_err}", flush=True)
         # 2. pytefas ile gerçek veri (cache'li, yavaş ama doğru)
         try:
             df_u = load_universe()

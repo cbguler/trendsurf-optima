@@ -189,9 +189,20 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     w = RISK_W.get(risk, RISK_W["Orta"])
     MIN_SKOR = 60.0
 
-    # Her kategori için havuz oluştur
+    # v2.0.7.349 (3 Ekim 2026, Bahri'nin bulgusu - e-postadaki Portföy
+    # Optimizasyonu tablosu, ÇOK YAKIN bir zamanda alınan Ana Sayfa ekran
+    # görüntüsünden TAMAMEN FARKLI çıkıyordu - önceki "farklı saat dilimi"
+    # açıklaması bu sefer GEÇERSİZDİ): KESİN KÖK NEDEN - bu fonksiyon
+    # app.py'nin KENDİ, BAĞIMSIZ bir KOPYASIYDI ve app.py'nin ESKİ "eşit
+    # bölüşüm" (her kategoriye garantili slot) algoritmasını kullanıyordu
+    # - app.py bunu "Bahri'nin açık kararı: kategori çeşitlendirme garantisi
+    # TAMAMEN kalksin" diyerek SAF KÜRESEL EN-İYİ-N seçimine geçeli uzun
+    # süre olmuştu, ama bu KOPYA hiç güncellenmemişti. Yani e-posta ile
+    # Ana Sayfa iki FARKLI ALGORİTMA kullanıyordu - zamanlamadan tamamen
+    # BAĞIMSIZ bir tutarsızlıktı. Artık app.py'nin GÜNCEL, onaylanmış
+    # algoritmasıyla (saf küresel en-iyi-N, deterministik Ticker ikincil
+    # sıralaması dahil) BİREBİR AYNI mantık kullanılıyor.
     cat_pools = {}
-    skipped_cats = []  # Agirligi >0 ama AL sinyali bulunmayan kategoriler
     for cat, weight in w.items():
         if weight <= 0:
             continue
@@ -200,86 +211,95 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         else:
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
         if df_c.empty:
-            skipped_cats.append(cat)
             continue
         df_c["_skor"] = df_c.apply(_optima_score, axis=1)
-        df_c = df_c[(df_c["Ret1M"] > 0) & (df_c["_skor"] >= MIN_SKOR)]
-        df_c = df_c.sort_values("_skor", ascending=False)
+        df_c = (df_c[(df_c["Ret1M"] > 0) & (df_c["_skor"] >= MIN_SKOR)]
+                .sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort"))
         if not df_c.empty:
             cat_pools[cat] = df_c
-        else:
-            skipped_cats.append(cat)
 
     if not cat_pools:
         return ""
 
-    n_cats      = len(cat_pools)
-    max_per_cat = max(1, max_assets // n_cats)
-
     # v1.9.7.3 - Watchlist modu: butce yok, kategori agirlik yok.
     # Tum havuzlarini birlestir, en yuksek skorlu Top N varlık secilir.
     if watchlist_mode:
-        all_candidates = []
-        for cat, pool in cat_pools.items():
-            for _, row in pool.iterrows():
-                all_candidates.append((cat, row, float(row["_skor"])))
-        # Skora gore azalan sirala
-        all_candidates.sort(key=lambda x: x[2], reverse=True)
-        # Top N al
+        _tum_havuz_wl = pd.concat(
+            [df.assign(_Kategori=c) for c, df in cat_pools.items()], ignore_index=True
+        ).sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort")
         selected = []
-        for cat, row, skor in all_candidates[:max_assets]:
+        for _, row in _tum_havuz_wl.head(max_assets).iterrows():
             price = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
             selected.append({
-                "cat": cat, "row": row, "price": price,
-                "lot": 0, "gercek": 0.0, "skor": skor
+                "cat": row["_Kategori"], "row": row, "price": price,
+                "lot": 0, "gercek": 0.0, "skor": float(row["_skor"])
             })
+        skipped_cats = [c for c in w if w.get(c, 0) > 0 and c not in cat_pools]
     else:
-        # Klasik butce-bazli optimizasyon
-        # Kalite ağırlıklı bütçe dağılımı
+        # v2.0.7.349: saf küresel en-iyi-N secimi (app.py ile BİREBİR AYNI)
+        # - kategori cesitlendirme garantisi YOK, en yuksek skorlu
+        # max_assets varlik dogrudan secilir.
+        _tum_havuz = pd.concat(
+            [df.assign(_Kategori=c) for c, df in cat_pools.items()], ignore_index=True
+        ).sort_values(["_skor", "Ticker"], ascending=[False, True], kind="mergesort")
+        _secilenler = _tum_havuz.head(max_assets)
+        slots = {c: 0 for c in cat_pools}
+        for _cat, _grp in _secilenler.groupby("_Kategori"):
+            slots[_cat] = len(_grp)
+
+        # Kalite bazlı ağırlık — kategori ortalama skoruna göre düzelt
         adj_weights = {}
-        total_adj   = 0.0
+        total_adj = 0.0
         for cat, weight in w.items():
             if cat not in cat_pools:
                 continue
-            quality = float(cat_pools[cat]["_skor"].head(max_per_cat).mean()) / 100.0
+            mpc = slots.get(cat, 0)
+            if mpc <= 0:
+                continue
+            quality = float(cat_pools[cat]["_skor"].head(mpc).mean()) / 100.0
             adj = weight * quality
             adj_weights[cat] = adj
             total_adj += adj
         if total_adj > 0:
             adj_weights = {c: a / total_adj for c, a in adj_weights.items()}
 
-        # Seçilen varlıkları topla
+        # Seçilen varlıkları topla (kategori içi su-doldurma/feasibility
+        # app.py ile ayni: payini karsilayamayan varlik elenir, kalan
+        # butce kalanlara yeniden dagitilir)
         selected = []
         for cat, weight in adj_weights.items():
-            sample  = cat_pools[cat].head(max_per_cat)
+            df_c   = cat_pools[cat]
+            mpc    = slots.get(cat, 0)
+            sample = df_c.head(min(mpc, len(df_c)))
             cat_bud = budget * weight
-            per     = cat_bud / len(sample)
-            for _, row in sample.iterrows():
+            aktif = list(sample.iterrows())
+            per = 0.0
+            while aktif:
+                pay = cat_bud / len(aktif)
+                karsilayamayan = [
+                    i for i, (_, row) in enumerate(aktif)
+                    if (float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0) > pay
+                ]
+                if not karsilayamayan:
+                    per = pay
+                    break
+                aktif = [item for i, item in enumerate(aktif) if i not in karsilayamayan]
+            else:
+                per = 0.0
+            if not aktif:
+                continue
+            for _, row in aktif:
                 price  = float(row["Son_Fiyat"]) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
                 lot    = int(per / price) if price > 0 else 0
                 gercek = round(lot * price, 2)
                 skor   = float(row["_skor"])
-                selected.append({
-                    "cat": cat, "row": row, "price": price,
-                    "lot": lot, "gercek": gercek, "skor": skor
-                })
+                selected.append({"cat": cat, "row": row, "price": price,
+                                  "lot": lot, "gercek": gercek, "skor": skor})
 
-        # max_assets'e tam ulaşmak için eksik yerleri doldur
-        if len(selected) < max_assets:
-            already = {(s["cat"], s["row"]["Ticker"]) for s in selected}
-            for cat in cat_pools:
-                for _, row in cat_pools[cat].iterrows():
-                    if len(selected) >= max_assets:
-                        break
-                    if (cat, row["Ticker"]) in already:
-                        continue
-                    price  = float(row.get("Son_Fiyat", 0)) if float(row.get("Son_Fiyat", 0)) > 0 else 1.0
-                    skor   = float(row["_skor"])
-                    per    = budget / max_assets
-                    lot    = int(per / price) if price > 0 else 0
-                    gercek = round(lot * price, 2)
-                    selected.append({"cat": cat, "row": row, "price": price,
-                                      "lot": lot, "gercek": gercek, "skor": skor})
+        # Elenen kategoriler - app.py'nin v2.0.7.345'teki DOĞRU metniyle
+        # AYNI (kategorinin KENDİ havuzunda aday olsa bile küresel yarışı
+        # kaybetmiş olabilir - "hiç AL sinyali yok" demek YANLIŞ olurdu).
+        skipped_cats = [c for c in w if w.get(c, 0) > 0 and c not in adj_weights]
 
     # Skora göre azalan sırala — en iyi varlık her zaman en üstte
     selected.sort(key=lambda x: x["skor"], reverse=True)
@@ -332,12 +352,17 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
     # v1.8 - Butce dagildi banner'i (Streamlit Ana Sayfa ile ayni davranis)
     banner_html = ""
     if skipped_cats and not watchlist_mode:
+        # v2.0.7.349: app.py'nin v2.0.7.345'teki duzeltilmis metniyle
+        # BIREBIR AYNI - "hic AL sinyali yok" degil, "bu sepete girecek
+        # kadar yuksek skorlu varlik yok" (dogru anlam: kategori kendi
+        # havuzunda aday bulmus olabilir, sadece kuresel yarisi kaybetti).
         banner_html = f"""
     <div style="background:#fff8e1;border-left:4px solid #f0a830;
                 padding:10px 12px;margin:10px 0 0 0;font-size:11px;color:#5a4a1a;
                 border-radius:4px;">
-      <b>Bütçe Dağılımı Notu:</b> Şu kategorilerde yeterli AL sinyalli varlık
-      bulunamadığı için bütçe diğer kategorilere dağıtıldı:
+      <b>Bütçe Dağılımı Notu:</b> Şu kategorilerde bu sepete girecek kadar
+      yüksek skorlu varlık bulunamadı (diğer kategorilerin adayları şu an
+      daha yüksek skorlu) - bütçe diğer kategorilere dağıtıldı:
       <b>{', '.join(skipped_cats)}</b>
     </div>"""
 
