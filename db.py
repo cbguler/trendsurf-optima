@@ -1562,6 +1562,38 @@ def spk_bulten_islendi_isaretle(bulten_no: str):
         print(f"[db] spk_bulten_islendi_isaretle hata: {e}", file=sys.stderr)
 
 
+def spk_islenmis_bultenler() -> set:
+    """v2.0.7.367: islenmis TUM bulten numaralari TEK sorguda (spk_bulten_islendi_mi bulten basina
+    ayri baglanti aciyordu: 30 bulten ~35 sn). Hata olursa BOS kume - bu durumda tarayici
+    bultenleri yeniden analiz eder ama tespit tekrarlari bekleyen/reddedilen kontroluyle engellenir."""
+    try:
+        conn = get_conn()
+        rows = conn.execute("SELECT bulten_no FROM spk_bulten_islenmis").fetchall()
+        conn.close()
+        return {r[0] for r in rows}
+    except Exception as e:
+        print(f"[db] spk_islenmis_bultenler hata: {e}", file=sys.stderr)
+        return set()
+
+
+def spk_bulten_toplu_isaretle(bulten_nolari) -> int:
+    """v2.0.7.367: bir baglantida cok bulteni 'islendi' isaretle (idempotent)."""
+    nolar = [str(n) for n in (bulten_nolari or [])]
+    if not nolar:
+        return 0
+    try:
+        conn = get_conn()
+        for n in nolar:
+            conn.execute("INSERT INTO spk_bulten_islenmis (bulten_no) VALUES (?) "
+                         "ON CONFLICT (bulten_no) DO NOTHING", (n,))
+        conn.commit()
+        conn.close()
+        return len(nolar)
+    except Exception as e:
+        print(f"[db] spk_bulten_toplu_isaretle hata: {e}", file=sys.stderr)
+        return 0
+
+
 def piyasa_tedbir_tespit_ekle(kaynak_turu: str, kaynak_referans: str, kaynak_url: str,
                               kaynak_tarihi, eslesme_turu: str, deger: str,
                               kategori: str, tedbir_turu: str,

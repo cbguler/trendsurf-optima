@@ -65,7 +65,7 @@ KALDIRMA_RX = re.compile(r"ISLEME ACILMASINA KARAR|ISLEME ACILMISTIR|ISLEM YASAG
                          r"TEDBIR(?:IN|LERIN) KALDIRILMASINA|KAPATILMASI KARARININ KALDIRILMASINA")
 SARTLI_RX = re.compile(r"ACILABILE|ACILABILIR|OLABILIR|MUMKUN|BELIRLENECEK|BELIRLENMESI|TARAFINDAN BELIRLE")
 AI_PENCERE_RX = re.compile(r"KALDIRIL|ISLEME ACIL|ISLEME KAPAT|TASFIYE ETTIRIL|ISLEM GORMESININ|"
-                           r"GECICI OLARAK DURDUR|TEDBIRIN|SUC DUYURU")
+                           r"GECICI OLARAK DURDUR|TEDBIRIN")
 BOLUM_SONU_RX = re.compile(r"\d{1,2}\. KURUL KARAR ORGANI|(?<=[A-Z\.] )[B-Z]\. [A-Z]{4,}")
 
 
@@ -305,9 +305,24 @@ def _ai_pencereleri(duz: str, n: str) -> str:
     return metin[:AI_MAKS_KARAKTER]
 
 
+_GEMINI_429 = {"goruldu": False}      # bir calismada bir kez 429 gorulduyse Gemini'ye TEKRAR gidilmez
+
+
+def _hata_govdesi(e) -> str:
+    try:
+        return f" | Govde: {e.response.text[:400]}"
+    except Exception:
+        return ""
+
+
 def ai_cagir_gercek(prompt: str, db_mod=None):
     """Gemini, olmazsa Groq (haber_izleme.py ile AYNI uc noktalar/modeller/anahtar adlari ve
-    PAYLASILAN gunluk butce). Dondurur: JSON dict | None (anahtar yok/butce bitti/hata)."""
+    PAYLASILAN gunluk butce). Dondurur: JSON dict | None (anahtar yok/butce bitti/hata).
+
+    v2.0.7.367 (canli kuru calisma logundan): Gemini anahtari haber_izleme ile PAYLASILIYOR ve
+    kotasi hep dolu (her cagri 429). Eskiden 429'da 65 sn bekleyip tekrar deniyordum -> 4 bulten
+    x 66 sn = ~4,5 dk bosa. Artik 429'da BEKLEME YOK, bu calismanin geri kalaninda Gemini atlanir,
+    dogrudan Groq'a gidilir. Groq'un 400 hatasinin govdesi artik loglaniyor (teshis icin)."""
     import requests
     if db_mod is not None and db_mod.ai_cagri_sayisi_bugun() >= GUNLUK_AI_BUTCESI:
         log("Gunluk AI butcesi doldu - AI ikinci gorus atlandi.")
@@ -316,37 +331,37 @@ def ai_cagir_gercek(prompt: str, db_mod=None):
     if not gk and not qk:
         log("GEMINI_API_KEY/GROQ_API_KEY yok - AI ikinci gorus atlandi (deterministik cikarici calisti).")
         return None
-    if gk:
+    if gk and not _GEMINI_429["goruldu"]:
         try:
             url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-            for deneme in (1, 2):
-                resp = requests.post(url, headers={"Content-Type": "application/json", "x-goog-api-key": gk},
-                                     json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=45)
-                if resp.status_code == 429 and deneme == 1:
-                    time.sleep(65)
-                    continue
-                resp.raise_for_status()
-                break
+            resp = requests.post(url, headers={"Content-Type": "application/json", "x-goog-api-key": gk},
+                                 json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=45)
+            resp.raise_for_status()
             metin = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
             metin = metin.replace("```json", "").replace("```", "").strip()
             if db_mod is not None:
                 db_mod.ai_cagri_kaydet(1)
             return json.loads(metin)
         except Exception as e:
-            log(f"Gemini AI hatasi: {type(e).__name__}: {str(e)[:120]}")
+            kod = getattr(getattr(e, "response", None), "status_code", None)
+            if kod == 429:
+                _GEMINI_429["goruldu"] = True
+                log("Gemini 429 (kota dolu) - bu calismanin geri kalaninda Gemini atlanacak, Groq'a geciliyor.")
+            else:
+                log(f"Gemini AI hatasi: {type(e).__name__}: {str(e)[:100]}{_hata_govdesi(e)}")
     if qk:
         try:
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions",
                                  headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
                                  json={"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": prompt}],
                                        "response_format": {"type": "json_object"}, "temperature": 0.2,
-                                       "max_completion_tokens": 2000}, timeout=45)
+                                       "max_completion_tokens": 4000}, timeout=60)
             resp.raise_for_status()
             if db_mod is not None:
                 db_mod.ai_cagri_kaydet(1)
             return json.loads(resp.json()["choices"][0]["message"]["content"].strip())
         except Exception as e:
-            log(f"Groq AI hatasi: {type(e).__name__}: {str(e)[:120]}")
+            log(f"Groq AI hatasi: {type(e).__name__}: {str(e)[:100]}{_hata_govdesi(e)}")
     return None
 
 
@@ -516,18 +531,28 @@ def calistir(yil=None, kuru=False, bugun=None, ilk_gun=ILK_CALISMA_GUN, maks_bul
 
     aktif = db_mod.get_aktif_piyasa_tedbirleri()
     evren = evren_hazirla(df_uni)
-    islenecek, baz = [], 0
+    # v2.0.7.367: tek sorguyla islenmis bultenler (eskiden bulten basina ayri baglanti: 30 baglanti ~35 sn)
+    if hasattr(db_mod, "spk_islenmis_bultenler"):
+        islenmis = db_mod.spk_islenmis_bultenler()
+    else:
+        islenmis = {b["no"] for b in liste if db_mod.spk_bulten_islendi_mi(b["no"])}
+    islenecek, baz_liste = [], []
     for b in liste:
-        if db_mod.spk_bulten_islendi_mi(b["no"]):
+        if b["no"] in islenmis:
             continue
         if (bugun - b["tarih"]).days > ilk_gun:
-            baz += 1
-            if not kuru:
-                db_mod.spk_bulten_islendi_isaretle(b["no"])          # eski bulten: analiz edilmeden "islendi"
+            baz_liste.append(b["no"])                                # eski bulten: analiz edilmeden "islendi"
             continue
         islenecek.append(b)
-    if baz:
-        log(f"{baz} eski bulten (>{ilk_gun} gun) analiz edilmeden 'islendi' sayildi (baz cizgisi).")
+    if baz_liste:
+        if not kuru:
+            if hasattr(db_mod, "spk_bulten_toplu_isaretle"):
+                db_mod.spk_bulten_toplu_isaretle(baz_liste)
+            else:
+                for no in baz_liste:
+                    db_mod.spk_bulten_islendi_isaretle(no)
+        log(f"{len(baz_liste)} eski bulten (>{ilk_gun} gun) analiz edilmeden 'islendi' sayildi (baz cizgisi)"
+            + (" [kuru calisma: yazilmadi]." if kuru else "."))
     islenecek = islenecek[:maks_bulten][::-1]                        # eskiden yeniye
 
     ozet = {"bulten": 0, "aday": 0, "yeni_tespit": [], "hata": 0}
