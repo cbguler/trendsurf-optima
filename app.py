@@ -4159,7 +4159,7 @@ def _kaynak_bolumu_goster(satir):
 # v2.0.7.366 (4 Ekim 2026, Bahri'nin talebi - "resmi kaynaklari devreye sok, pop-up onay
 # penceresi ile onaylayayim"): spk_bulten_izleme.py'nin SPK bultenlerinden buldugu fon/hisse
 # tedbirleri (islem kapatma, tasfiye, suc duyurusu, tedbirin kaldirilmasi) burada ADMIN'in
-# onayina sunulur. ONAYLANMADAN HICBIR SEY UYGULANMAZ. Haber modalinin (asagida) ogrettigi
+# onayina sunulur (v2.0.7.368: TUM giris yapmis kullanicilara). ONAYLANMADAN HICBIR SEY UYGULANMAZ. Haber modalinin (asagida) ogrettigi
 # kurallara uyuldu: (1) govde fonksiyonu KOSULSUZ modul seviyesinde tanimli (v2.0.7.251),
 # (2) bir calismada TEK dialog (bu acilirsa haber modali o turda atlanir), (3) "Daha sonra
 # incele" 5 dk'lik autorefresh'te pencerenin tekrar tekrar acilmasini onler, (4) pencere
@@ -4173,12 +4173,34 @@ def _bekleyen_piyasa_tedbirleri_onbellekli():
     return get_bekleyen_piyasa_tedbirleri()
 
 
+def _tedbir_zaten_karara_baglandi(tespit_id) -> bool:
+    """Karar TUM kullanicilar icin ortak: baska bir kullanici ayni karari az once verdiyse (veya
+    20 sn'lik onbellek bayatsa) onay/red False doner. Bu bir HATA degil - tespit artik bekleyenler
+    arasinda degilse True doner ve pencere sessizce bir sonraki karara gecer."""
+    try:
+        from db import get_bekleyen_piyasa_tedbirleri
+        return not any(x["id"] == tespit_id for x in get_bekleyen_piyasa_tedbirleri())
+    except Exception:
+        return False
+
+
 def _piyasa_tedbir_cache_temizle():
     _bekleyen_piyasa_tedbirleri_onbellekli.clear()
     try:
         load_universe.clear()          # onay/red sonrasi skorlar HEMEN yeniden hesaplansin
     except Exception:
         st.cache_data.clear()
+
+
+def _tedbir_yazi(metin, boyut=14.5, renk="#111827", kalin=False, italik=False):
+    """Pop-up'taki ACIKLAMA yazilari icin KOYU, okunur metin. v2.0.7.368 (Bahri'nin talebi - "aciklama
+    yazisi daha koyu renkli okunur olmali"): eskiden st.caption (kucuk ve soluk gri) kullaniliyordu.
+    Metin HTML'e KACIRILIR (bultenden gelen < > & karakterleri sayfayi bozmasin)."""
+    import html as _html
+    st.markdown(
+        f"<div style='color:{renk};font-size:{boyut}px;line-height:1.55;"
+        f"font-weight:{'700' if kalin else '400'};font-style:{'italic' if italik else 'normal'};'>"
+        f"{_html.escape(str(metin))}</div>", unsafe_allow_html=True)
 
 
 def _piyasa_tedbir_govdesi():
@@ -4193,7 +4215,7 @@ def _piyasa_tedbir_govdesi():
     tedbir = str(t.get("tedbir_turu") or "")
     kaldirma = tedbir == "KALDIRMA"
     if len(liste) > 1:
-        st.caption(f"1 / {len(liste)} bekleyen karar")
+        _tedbir_yazi(f"1 / {len(liste)} bekleyen karar", boyut=13.5, renk="#1f2937", kalin=True)
     try:
         _tarih = t["kaynak_tarihi"].strftime("%d.%m.%Y") if t.get("kaynak_tarihi") else ""
     except Exception:
@@ -4201,7 +4223,7 @@ def _piyasa_tedbir_govdesi():
     renk = "#166534" if kaldirma else "#b91c1c"
     st.markdown(
         f"<div style='border-left:5px solid {renk};background:#f8fafc;padding:10px 14px;border-radius:6px;'>"
-        f"<div style='font-size:13px;color:#475569;'>SPK Bülteni {t.get('kaynak_referans','')} &nbsp;·&nbsp; {_tarih}</div>"
+        f"<div style='font-size:13.5px;color:#1f2937;'>SPK Bülteni {t.get('kaynak_referans','')} &nbsp;·&nbsp; {_tarih}</div>"
         f"<div style='font-size:17px;font-weight:700;color:{renk};margin-top:2px;'>{TEDBIR_ETIKET.get(tedbir, tedbir)}</div>"
         f"<div style='font-size:15px;margin-top:4px;'><b>{t.get('deger','')}</b></div></div>",
         unsafe_allow_html=True)
@@ -4218,9 +4240,18 @@ def _piyasa_tedbir_govdesi():
     if etki["genis"]:
         st.error(f"Etki çok geniş ({etki['adet']} varlık). Onaylamadan önce bülteni mutlaka kontrol edin.")
     if etki["ornekler"]:
-        st.caption("Etkilenen varlıklar (örnek): " + ", ".join(f"{tk} - {str(ad)[:34]}" for tk, ad in etki["ornekler"]))
+        _tedbir_yazi("Etkilenen varlıklar (örnek): " + ", ".join(f"{tk} - {str(ad)[:34]}" for tk, ad in etki["ornekler"]),
+                     boyut=14, renk="#1f2937")
     if t.get("ai_gerekce"):
-        st.caption(str(t["ai_gerekce"]))
+        import html as _html
+        _ana, _ayrac, _alinti = str(t["ai_gerekce"]).partition(" Bültenden: ")
+        st.markdown(
+            "<div style='background:#f1f5f9;border:1px solid #94a3b8;border-radius:6px;padding:10px 12px;margin:6px 0;"
+            "color:#111827;font-size:14.5px;line-height:1.55;'>"
+            f"<div>{_html.escape(_ana)}</div>"
+            + (f"<div style='margin-top:6px;font-style:italic;color:#1f2937;'>Bültenden: {_html.escape(_alinti)}</div>"
+               if _ayrac else "")
+            + "</div>", unsafe_allow_html=True)
     if t.get("kaynak_url"):
         st.link_button("Bülteni PDF olarak aç", str(t["kaynak_url"]))
 
@@ -4231,6 +4262,9 @@ def _piyasa_tedbir_govdesi():
             if piyasa_tedbir_onayla(t["id"], _kid):
                 _piyasa_tedbir_cache_temizle()
                 st.rerun()
+            elif _tedbir_zaten_karara_baglandi(t["id"]):
+                _piyasa_tedbir_cache_temizle()
+                st.rerun()
             else:
                 st.error("Kaydedilemedi - veritabanı yazması başarısız (sunucu loglarına bakın). Tekrar deneyin.")
     with c2:
@@ -4238,13 +4272,17 @@ def _piyasa_tedbir_govdesi():
             if piyasa_tedbir_reddet(t["id"], _kid):
                 _piyasa_tedbir_cache_temizle()
                 st.rerun()
+            elif _tedbir_zaten_karara_baglandi(t["id"]):
+                _piyasa_tedbir_cache_temizle()
+                st.rerun()
             else:
                 st.error("Reddedilemedi - veritabanı yazması başarısız (sunucu loglarına bakın). Tekrar deneyin.")
     if st.button("Daha sonra incele", key=f"tedbir_ertele_{t['id']}", use_container_width=True):
         st.session_state[_TEDBIR_ERTELE_KEY] = True
         st.rerun()
-    st.caption("Onayladığınız karar hemen uygulanır. Reddettiğiniz karar 30 gün boyunca tekrar sorulmaz. "
-               "'Daha sonra incele' bu oturumda pencereyi susturur; karar silinmez.")
+    _tedbir_yazi("Bu karar TÜM kullanıcılar için geçerlidir ve hemen uygulanır; ilk veren kullanıcının kararı geçer. "
+                 "Reddedilen karar 30 gün boyunca tekrar sorulmaz. 'Daha sonra incele' bu oturumda pencereyi "
+                 "susturur; karar silinmez.", boyut=13.5, renk="#1f2937")
 
 
 _piyasa_tedbir_modali = (st.dialog("SPK kararı - onayınız gerekiyor")(_piyasa_tedbir_govdesi)
@@ -4252,8 +4290,8 @@ _piyasa_tedbir_modali = (st.dialog("SPK kararı - onayınız gerekiyor")(_piyasa
 
 _tedbir_modal_acik = False
 try:
-    _bekleyen_tedbirler = (_bekleyen_piyasa_tedbirleri_onbellekli()
-                           if (_cur_user and _cur_user.get("is_admin")) else [])
+    # v2.0.7.368 (Bahri'nin talebi): pencere artik GIRIS YAPMIS TUM kullanicilara acilir (eskiden yalniz admin).
+    _bekleyen_tedbirler = _bekleyen_piyasa_tedbirleri_onbellekli() if _cur_user else []
 except Exception:
     _bekleyen_tedbirler = []
 
