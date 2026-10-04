@@ -126,6 +126,14 @@ section.main [data-testid="stRadio"] label span,
 [data-testid="stSidebar"] .st-key-strateji_radio label p,
 [data-testid="stSidebar"] [role="radiogroup"][aria-label="Bütçe Dağılım Stratejisi"] label p{font-weight:700!important;}
 [data-testid="stSidebar"] .strateji-not b,[data-testid="stSidebar"] .strateji-not i{color:#0b1830!important;}
+/* v2.0.7.369 (Bahri'nin talebi - "Butce Dagilim Stratejisi basligini bir satir asagi al"): baslik 21 px'lik
+   BIR SATIR (14 px x 1,5) asagi kayar. Gercek tarayicida olculdu: bosluk 5,6 -> 26,6 px (+21). Ek bir bosluk
+   elemani KULLANILMADI (div yuksekligi cizilmiyordu, &nbsp; ise 31 px = 1,5 satir kaydiriyordu). Uc secici
+   AYNI elemani hedefler (ust uste binmez, olculdu); yedek seciciler st-key- sinifi olmayan eski
+   Streamlit surumlerinde de calisir. */
+[data-testid="stSidebar"] .st-key-strateji_radio,
+[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([role="radiogroup"][aria-label="Bütçe Dağılım Stratejisi"]),
+[data-testid="stSidebar"] .element-container:has([role="radiogroup"][aria-label="Bütçe Dağılım Stratejisi"]){margin-top:21px!important;}
 [data-testid="stAlert"] p{color:#1b2a4a!important;}
 [data-testid="stExpander"] summary p{color:#1b2a4a!important;font-weight:600!important;}
 /* Özel bileşenler */

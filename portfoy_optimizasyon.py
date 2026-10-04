@@ -30,12 +30,12 @@ STRATEJILER = ("kuresel", "kategori_guvenceli")
 
 # Kullanıcıya gösterilen ad/açıklamalar TEK yerde (uygulama + e-posta aynı metni kullanır)
 STRATEJI_ETIKET = {
-    "kuresel": "En yüksek skorlar",
-    "kategori_guvenceli": "Her kategoriden yüksekler",
+    "kuresel": "En yüksek skorlular",
+    "kategori_guvenceli": "Her kategoriden skorlular",
 }
 STRATEJI_SECENEK = {
-    "kuresel": "En yüksek skorlar",
-    "kategori_guvenceli": "Her kategoriden yüksekler",
+    "kuresel": "En yüksek skorlular",
+    "kategori_guvenceli": "Her kategoriden skorlular",
 }
 STRATEJI_ACIKLAMA = {
     "kuresel": ("Tüm kategoriler birlikte yarışır ve en yüksek Optima skorlu "
