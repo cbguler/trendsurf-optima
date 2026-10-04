@@ -1602,10 +1602,10 @@ def get_bekleyen_piyasa_tedbirleri() -> list:
             "ORDER BY tespit_zamani DESC"
         ).fetchall()
         conn.close()
-        cols = ["id", "kaynak_turu", "kaynak_referans", "kaynak_url", "kaynak_tarihi",
-                "tespit_zamani", "eslesme_turu", "deger", "kategori", "tedbir_turu",
-                "ai_gerekce", "ai_ozet"]
-        return [dict(zip(cols, r)) for r in rows]
+        # v2.0.7.366: `_CompatRow` bir dict alt sinifi - zip(cols, r) / a,b,c = r
+        # DEGERLERI degil ANAHTARLARI dondurur (gercek PostgreSQL'le test edilirken
+        # bulundu: onay kuyrugu 'id':'id','deger':'deger' gosteriyordu). Sozluk olarak al.
+        return [dict(r) for r in rows]
     except Exception as e:
         print(f"[db] get_bekleyen_piyasa_tedbirleri hata: {e}", file=sys.stderr)
         return []
@@ -1627,8 +1627,23 @@ def piyasa_tedbir_onayla(tespit_id: int, kullanici_id: int) -> bool:
         if not tespit:
             conn.close()
             return False
-        eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, kaynak_referans = tespit
+        eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, kaynak_referans = (
+            tespit["eslesme_turu"], tespit["deger"], tespit["kategori"],
+            tespit["tedbir_turu"], tespit["kaynak_turu"], tespit["kaynak_referans"])
         kaynak_aciklama = f"{kaynak_turu} {kaynak_referans or ''}".strip()
+        if str(tedbir_turu).upper() == "KALDIRMA":
+            # v2.0.7.366: tedbirin KALDIRILMASI - kural silinmez, pasife alinir (gecmis korunur)
+            conn.execute(
+                "UPDATE piyasa_tedbir_listesi SET aktif=FALSE, kaldirilma_tarihi=now(), "
+                "kaynak_aciklama=? WHERE eslesme_turu=? AND deger=?",
+                (f"KALDIRILDI - {kaynak_aciklama}", eslesme_turu, deger))
+            conn.execute(
+                "UPDATE piyasa_tedbir_tespit SET onay_durumu='onaylandi', "
+                "onay_zamani=now(), onaylayan_kullanici_id=? WHERE id=?",
+                (kullanici_id, tespit_id))
+            conn.commit()
+            conn.close()
+            return True
         conn.execute(
             "INSERT INTO piyasa_tedbir_listesi "
             "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id) "
@@ -1663,6 +1678,22 @@ def piyasa_tedbir_reddet(tespit_id: int, kullanici_id: int) -> bool:
     except Exception as e:
         print(f"[db] piyasa_tedbir_reddet hata: {e}", file=sys.stderr)
         return False
+
+
+def piyasa_tedbir_tespit_durumlari(eslesme_turu: str, deger: str, tedbir_turu: str) -> list:
+    """v2.0.7.366: tarayicinin AYNI tespiti tekrar kuyruga atmamasi icin - ayni (tur, deger,
+    tedbir) icin mevcut kayitlarin [(onay_durumu, tespit_zamani), ...] listesi."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT onay_durumu, tespit_zamani FROM piyasa_tedbir_tespit "
+            "WHERE eslesme_turu=? AND deger=? AND tedbir_turu=?",
+            (eslesme_turu, deger, tedbir_turu)).fetchall()
+        conn.close()
+        return [(r[0], r[1]) for r in rows]
+    except Exception as e:
+        print(f"[db] piyasa_tedbir_tespit_durumlari hata: {e}", file=sys.stderr)
+        return []
 
 
 def get_aktif_piyasa_tedbirleri() -> list:

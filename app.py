@@ -4155,8 +4155,130 @@ def _kaynak_bolumu_goster(satir):
         _numarali = "  \n".join(f"{i+1}- {m}" for i, m in enumerate(_tum_maddeler))
         st.caption(f"Kaynaklar: {_numarali}")
 
+# ══ BASLA: SPK_TEDBIR_ONAY ═══════════════════════════════════════════════════════════════
+# v2.0.7.366 (4 Ekim 2026, Bahri'nin talebi - "resmi kaynaklari devreye sok, pop-up onay
+# penceresi ile onaylayayim"): spk_bulten_izleme.py'nin SPK bultenlerinden buldugu fon/hisse
+# tedbirleri (islem kapatma, tasfiye, suc duyurusu, tedbirin kaldirilmasi) burada ADMIN'in
+# onayina sunulur. ONAYLANMADAN HICBIR SEY UYGULANMAZ. Haber modalinin (asagida) ogrettigi
+# kurallara uyuldu: (1) govde fonksiyonu KOSULSUZ modul seviyesinde tanimli (v2.0.7.251),
+# (2) bir calismada TEK dialog (bu acilirsa haber modali o turda atlanir), (3) "Daha sonra
+# incele" 5 dk'lik autorefresh'te pencerenin tekrar tekrar acilmasini onler, (4) pencere
+# acilirken hata olursa uygulama COKMEZ - ayni govde satir ici bir panelde gosterilir.
+_TEDBIR_ERTELE_KEY = "piyasa_tedbir_modal_ertelendi"
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _bekleyen_piyasa_tedbirleri_onbellekli():
+    from db import get_bekleyen_piyasa_tedbirleri
+    return get_bekleyen_piyasa_tedbirleri()
+
+
+def _piyasa_tedbir_cache_temizle():
+    _bekleyen_piyasa_tedbirleri_onbellekli.clear()
+    try:
+        load_universe.clear()          # onay/red sonrasi skorlar HEMEN yeniden hesaplansin
+    except Exception:
+        st.cache_data.clear()
+
+
+def _piyasa_tedbir_govdesi():
+    """Pop-up'in (ve acilamazsa satir ici yedegin) icerigi: bekleyen tespitleri sirayla gosterir."""
+    from db import piyasa_tedbir_onayla, piyasa_tedbir_reddet
+    from piyasa_tedbir import etki_ozeti, TEDBIR_ETIKET
+    liste = _bekleyen_piyasa_tedbirleri_onbellekli()
+    if not liste:
+        st.info("Onay bekleyen SPK kararı kalmadı.")
+        return
+    t = liste[0]
+    tedbir = str(t.get("tedbir_turu") or "")
+    kaldirma = tedbir == "KALDIRMA"
+    if len(liste) > 1:
+        st.caption(f"1 / {len(liste)} bekleyen karar")
+    try:
+        _tarih = t["kaynak_tarihi"].strftime("%d.%m.%Y") if t.get("kaynak_tarihi") else ""
+    except Exception:
+        _tarih = str(t.get("kaynak_tarihi") or "")
+    renk = "#166534" if kaldirma else "#b91c1c"
+    st.markdown(
+        f"<div style='border-left:5px solid {renk};background:#f8fafc;padding:10px 14px;border-radius:6px;'>"
+        f"<div style='font-size:13px;color:#475569;'>SPK Bülteni {t.get('kaynak_referans','')} &nbsp;·&nbsp; {_tarih}</div>"
+        f"<div style='font-size:17px;font-weight:700;color:{renk};margin-top:2px;'>{TEDBIR_ETIKET.get(tedbir, tedbir)}</div>"
+        f"<div style='font-size:15px;margin-top:4px;'><b>{t.get('deger','')}</b></div></div>",
+        unsafe_allow_html=True)
+
+    try:
+        etki = etki_ozeti(load_universe(), t["eslesme_turu"], t["deger"], 8)
+    except Exception:
+        etki = {"adet": 0, "ornekler": [], "genis": False}
+    if kaldirma:
+        st.markdown(f"Onaylarsanız bu kural **kaldırılır**; **{etki['adet']} varlığın** Optima Skoru yeniden hesaplanır.")
+    else:
+        st.markdown(f"Onaylarsanız **{etki['adet']} varlığın** Optima Skoru **0'a sabitlenir** "
+                    f"(Ana Sayfa, e-postalar ve tüm tablolarda).")
+    if etki["genis"]:
+        st.error(f"Etki çok geniş ({etki['adet']} varlık). Onaylamadan önce bülteni mutlaka kontrol edin.")
+    if etki["ornekler"]:
+        st.caption("Etkilenen varlıklar (örnek): " + ", ".join(f"{tk} - {str(ad)[:34]}" for tk, ad in etki["ornekler"]))
+    if t.get("ai_gerekce"):
+        st.caption(str(t["ai_gerekce"]))
+    if t.get("kaynak_url"):
+        st.link_button("Bülteni PDF olarak aç", str(t["kaynak_url"]))
+
+    c1, c2 = st.columns(2)
+    _kid = _cur_user["id"] if _cur_user else None
+    with c1:
+        if st.button("Onayla", key=f"tedbir_onay_{t['id']}", type="primary", use_container_width=True):
+            if piyasa_tedbir_onayla(t["id"], _kid):
+                _piyasa_tedbir_cache_temizle()
+                st.rerun()
+            else:
+                st.error("Kaydedilemedi - veritabanı yazması başarısız (sunucu loglarına bakın). Tekrar deneyin.")
+    with c2:
+        if st.button("Reddet", key=f"tedbir_red_{t['id']}", use_container_width=True):
+            if piyasa_tedbir_reddet(t["id"], _kid):
+                _piyasa_tedbir_cache_temizle()
+                st.rerun()
+            else:
+                st.error("Reddedilemedi - veritabanı yazması başarısız (sunucu loglarına bakın). Tekrar deneyin.")
+    if st.button("Daha sonra incele", key=f"tedbir_ertele_{t['id']}", use_container_width=True):
+        st.session_state[_TEDBIR_ERTELE_KEY] = True
+        st.rerun()
+    st.caption("Onayladığınız karar hemen uygulanır. Reddettiğiniz karar 30 gün boyunca tekrar sorulmaz. "
+               "'Daha sonra incele' bu oturumda pencereyi susturur; karar silinmez.")
+
+
+_piyasa_tedbir_modali = (st.dialog("SPK kararı - onayınız gerekiyor")(_piyasa_tedbir_govdesi)
+                         if hasattr(st, "dialog") else None)
+
+_tedbir_modal_acik = False
+try:
+    _bekleyen_tedbirler = (_bekleyen_piyasa_tedbirleri_onbellekli()
+                           if (_cur_user and _cur_user.get("is_admin")) else [])
+except Exception:
+    _bekleyen_tedbirler = []
+
+if _bekleyen_tedbirler:
+    st.warning(f"**{len(_bekleyen_tedbirler)} adet SPK kararı onayınızı bekliyor** — siz onaylamadan "
+               f"Optima Skor'a uygulanmaz.")
+    if st.session_state.get(_TEDBIR_ERTELE_KEY):
+        if st.button("Onay penceresini aç", key="tedbir_modal_yeniden_ac"):
+            st.session_state.pop(_TEDBIR_ERTELE_KEY, None)
+            st.rerun()
+    else:
+        try:
+            if _piyasa_tedbir_modali is None:
+                raise RuntimeError("st.dialog bu Streamlit surumunde yok")
+            _piyasa_tedbir_modali()
+            _tedbir_modal_acik = True
+        except Exception as _tedbir_modal_hata:
+            print(f"[app] SPK tedbir modali acilamadi (satir ici panele dusuldu): {_tedbir_modal_hata}", flush=True)
+            with st.expander("Onay bekleyen SPK kararları (pencere açılamadı - buradan onaylayabilirsiniz)", expanded=True):
+                _piyasa_tedbir_govdesi()
+# ══ BITTI: SPK_TEDBIR_ONAY ════════════════════════════════════════════════════════════════
+
 if (_bekleyen_tespitler and hasattr(st, "dialog")
-        and not st.session_state.get(_MODAL_ERTELE_KEY)):
+        and not st.session_state.get(_MODAL_ERTELE_KEY)
+        and not _tedbir_modal_acik):      # v2.0.7.366: bir calismada TEK dialog - SPK karari onceliklidir
 
     @st.dialog("Otomatik tespit")
     def _tespit_onay_modali():

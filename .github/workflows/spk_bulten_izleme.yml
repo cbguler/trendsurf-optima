@@ -1,0 +1,60 @@
+name: SPK Bulten Izleme
+
+# v2.0.7.366 (4 Ekim 2026, Bahri'nin talebi - "resmi kaynaklari devreye sok, pop-up onay
+# penceresi ile onaylayayim"): SPK Kurul Bultenlerini otomatik tarar; fon/hisse tedbirlerini
+# (islem kapatma, tasfiye, suc duyurusu, tedbirin kaldirilmasi) tespit edip uygulamada
+# ADMIN'in pop-up onayina sunar. ONAYLANMADAN HICBIR SEY UYGULANMAZ.
+#
+# Tetikleme: asagidaki `schedule` GitHub'in "best-effort" cron'udur (bazen gecikir). Haber
+# izleme gibi GUVENILIR zamanlama icin cron-job.org'a da bir is eklenebilir:
+#   POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/spk_bulten_izleme.yml/dispatches
+#   Body: {"ref":"main"}   (haber_izleme.yml ile AYNI token/yontem; saatte 1 yeterli)
+# SPK Cumartesi dahi bulten yayinladi (2026/68, 3 Ekim), bu yuzden her gun calisir.
+#
+# Ilk calisma: son 14 gunun bultenleri analiz edilir, daha eskiler "islendi" sayilir (baz cizgisi).
+# Daha eski bultenleri de taramak icin asagidaki SPK_ILK_CALISMA_GUN degerini artirin (ornegin 30).
+#
+# "Run workflow" ile elle calistirirken `kuru` kutusunu isaretlerseniz veritabanina HICBIR SEY
+# yazilmaz; log'da sadece ne bulacagi gorunur (ilk denemede onerilir).
+
+on:
+  workflow_dispatch:
+    inputs:
+      kuru:
+        description: "Kuru calisma (veritabanina yazmaz, sadece loga yazar)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "*/30 5-19 * * *"   # UTC 05-19 = TRT 08-22, her gun, 30 dakikada bir
+
+concurrency:
+  group: spk-bulten-izleme
+  cancel-in-progress: false
+
+jobs:
+  izle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install requests beautifulsoup4 pdfplumber pandas psycopg2-binary --quiet
+
+      - name: SPK bulten izleme calistir
+        run: python -u spk_bulten_izleme.py ${{ github.event.inputs.kuru == 'true' && '--kuru' || '' }}
+        env:
+          # haber_izleme.yml ile AYNI (batch betikler Session pooler kullanir, bkz. v2.0.7.312)
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          PYTHONUNBUFFERED: "1"
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SPK_ILK_CALISMA_GUN: "14"
