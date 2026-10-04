@@ -857,6 +857,97 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, re
     return sonuc
 
 
+TEMEL_VERI_MAKS_YAS_GUN = 30
+
+
+def _temel_veri_birlestir(taze: dict, tickers, csv_path=None, bugun=None,
+                          maks_yas_gun: int = TEMEL_VERI_MAKS_YAS_GUN, log=print, tohum_yolu=None):
+    """BIST temel verisi (PB/PE/DY): Yahoo bu gece bir hisse icin HIC veri vermediyse
+    (uc alan da bos = cekim basarisiz) onceki CSV'deki degerleri korur.
+
+    v2.0.7.365 (4 Ekim 2026, Bahri'nin bulgusu - 9 gecelik derlemeyi karsilastirinca):
+    PD/DD verisi gelen hisse sayisi geceden geceye 183 ile 605 arasinda DALGALANIYOR
+    (Yahoo, GitHub'in IP'sine "Crumb fetch rate-limited (HTTP 429)" veriyor; worker
+    zaten bir tekrar deneme turu yapiyor ama yetmiyor). Temel veri skorun %25'i:
+    CANLI OLCUM - ayni hisse (RSI 55, 1A +%8, vol 35): temel veri ucuz gorunumlu = 73
+    puan, veri YOK = 48 puan (25 puan kayip -> 60 esiginin altina dusup sepete
+    giremiyor). Yani BIST skorlari ve BIST'in sepete girip girmemesi Yahoo'nun o
+    geceki ruh haline bagliydi (en son 194/612 hisse; bir saat onceki derleme 605).
+    Temel oranlar ceyreklik degisir, bu yuzden basarisiz cekimde SON BILINEN deger
+    kullanilir - en fazla `maks_yas_gun` gun eskiyse atilir (eski veriyle yaniltmamak
+    icin). Kismi veri (orn. PB var, DY yok) GUVENILIR sayilir, o hisse korunmaz.
+
+    Dondurur: (birlesik {ticker: (pb, pe, dy)}, {ticker: son taze cekim tarihi 'YYYY-MM-DD'})."""
+    import math
+    from datetime import datetime, timezone, timedelta
+    csv_path = csv_path or CSV_PATH
+    bugun = bugun or datetime.now(timezone(timedelta(hours=3))).date()
+
+    def dolu(v):
+        if v is None:
+            return False
+        try:
+            return not math.isnan(float(v))
+        except (TypeError, ValueError):
+            return False
+
+    onceki = {}
+    try:
+        if os.path.exists(csv_path):
+            d = pd.read_csv(csv_path, on_bad_lines="skip")
+            if {"Ticker", "Kategori", "PB", "PE", "DY"}.issubset(d.columns):
+                d = d[d["Kategori"] == "BIST"].drop_duplicates(subset=["Ticker"], keep="last")
+                tcol = d["Temel_Tarihi"] if "Temel_Tarihi" in d.columns else [None] * len(d)
+                for tk, pb, pe, dy, ts in zip(d["Ticker"], d["PB"], d["PE"], d["DY"], tcol):
+                    onceki[str(tk)] = (pb, pe, dy, ts)
+    except Exception as e:
+        log(f"  [Fundamentals] Onceki CSV okunamadi: {e}")
+
+    # Tek seferlik tohum (bist_temel_tohum.json): ONCEKI CSV'de de veri olmayan hisseler
+    # icin yedek. Gerek: koruma devreye girdigi ilk gece "onceki CSV" cok olasilikla
+    # Yahoo'nun kotu davrandigi bir derlemenin CSV'sidir (9 derlemenin 6'sinda boyleydi).
+    n_tohum = 0
+    try:
+        tohum_yolu = tohum_yolu or os.path.join(os.path.dirname(os.path.abspath(csv_path)), "bist_temel_tohum.json")
+        if os.path.exists(tohum_yolu):
+            import json as _json
+            with open(tohum_yolu, encoding="utf-8") as _f:
+                _t = _json.load(_f)
+            for tk, (pb, pe, dy) in _t.get("veri", {}).items():
+                o = onceki.get(str(tk))
+                if (o is None or not any(dolu(x) for x in o[:3])) and any(dolu(x) for x in (pb, pe, dy)):
+                    onceki[str(tk)] = (pb, pe, dy, _t.get("Temel_Tarihi"))
+                    n_tohum += 1
+    except Exception as e:
+        log(f"  [Fundamentals] Tohum dosyasi okunamadi: {e}")
+
+    sonuc, tarih = {}, {}
+    n_taze = n_korunan = n_yok = n_eski = 0
+    for t in tickers:
+        v = taze.get(t, (None, None, None))
+        if any(dolu(x) for x in v):
+            sonuc[t] = v
+            tarih[t] = bugun.isoformat()
+            n_taze += 1
+            continue
+        o = onceki.get(str(t))
+        if o and any(dolu(x) for x in o[:3]):
+            ts = pd.to_datetime(o[3], errors="coerce")
+            ts_gun = (ts.date() if pd.notna(ts) else bugun - timedelta(days=1))   # damga yoksa: dunku derleme
+            if (bugun - ts_gun).days <= maks_yas_gun:
+                sonuc[t] = tuple(float(x) if dolu(x) else None for x in o[:3])
+                tarih[t] = ts_gun.isoformat()
+                n_korunan += 1
+                continue
+            n_eski += 1
+        else:
+            n_yok += 1
+        sonuc[t] = (None, None, None)
+    log(f"  [Fundamentals] Birlestirme: taze={n_taze}, ONCEKI CSV'DEN KORUNAN={n_korunan}, "
+        f"hic veri yok={n_yok}, {maks_yas_gun} gunden eski (atildi)={n_eski}, tohumdan yararlanilan={n_tohum}.")
+    return sonuc, tarih
+
+
 def _hacim_dd_duzeltmesi(close_series, volume_series, ret1m):
     """v2.0.7.86 (Bahri'nin talebi, CSKY ornegi): BIST'in batch_bist()'inde
     ve app.py'nin enrich()'inde kullanilan hacim trendi + Max Drawdown skor
@@ -1127,10 +1218,16 @@ def build():
     # listesi, Portfoyum, Detay sayfasi) okunacak TEK skor.
     _bist_priced = [r["Ticker"] for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0]
     _fundamentals = fetch_bist_fundamentals_parallel(_bist_priced)
+    try:
+        _fundamentals, _temel_tarih = _temel_veri_birlestir(_fundamentals, _bist_priced)
+    except Exception as _tv_err:       # koruma basarisiz olsa bile gece derlemesi DURMAZ
+        print(f"  [Fundamentals] Onceki degerleri koruma atlandi: {type(_tv_err).__name__}: {_tv_err}")
+        _temel_tarih = {}
     for r in all_rows:
         if r["Kategori"] != "BIST":
             continue
         _pb, _pe, _dy = _fundamentals.get(r["Ticker"], (None, None, None))
+        r["Temel_Tarihi"] = _temel_tarih.get(r["Ticker"])
         # v2.0.5.2: Fiyati olmayan (islem gormeyen) sembol notr varsayilanlarla
         # (RSI=50, Ret1M=0, Vol=30) 45 puan aliyordu - "veri yok" durumu
         # "vasat skor" gibi gorunuyordu. Islem gormeyen varligin skoru 0'dir.
