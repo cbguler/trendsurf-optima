@@ -1164,9 +1164,14 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                     return _da
         except Exception as _arsiv_okuma_err:
             print(f"[tefas-hist-TESHIS] {ticker}: arsiv okuma hatasi - {_arsiv_okuma_err}", flush=True)
+        # v2.0.7.364: arsiv bu istegi karsilayamadiysa (bos/bayat/hata) pytefas'a SADECE
+        # hafif bir sorgu gider ("3 Ay"a kadar): tek-fon 6 ay/1 yil/5 yil sorgusu TEFAS'ta
+        # yavas/hiz-sinirli (canli olculdu) - uzun periyot isteniyorsa bile eldeki en iyi
+        # (kisa ama GERCEK) veri gosterilir, sentetik/yavas sorgu yerine.
+        _pt_period = period if period in ("1mo", "3mo") else "3mo"
         # 1. Yerel cache dene (worker.py tarafından oluşturulur)
         try:
-            cache_hist = _load_tefas_cache(ticker, period)
+            cache_hist = _load_tefas_cache(ticker, _pt_period)
             if cache_hist is not None and not cache_hist.empty and len(cache_hist) >= 5:
                 print(f"[tefas-hist-TESHIS] {ticker}: YEREL DISK ONBELLEGINDEN "
                       f"donduruldu ({len(cache_hist)} satir) - pytefas HIC denenmedi.", flush=True)
@@ -1177,10 +1182,10 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         try:
             df_u = load_universe()
             kind = _guess_tefas_kind(ticker, df_u)
-            hist = _fetch_tefas_hist_cached(ticker, kind, period, _surum=2)
+            hist = _fetch_tefas_hist_cached(ticker, kind, _pt_period, _surum=2)
             if hist is not None and not hist.empty and len(hist) >= 5:
                 # Başarılı veriyi cache'e yaz (sonraki açılışta hızlı)
-                _save_tefas_cache(ticker, period, hist)
+                _save_tefas_cache(ticker, _pt_period, hist)
                 return hist
         except Exception:
             pass
@@ -1192,7 +1197,7 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         # 3. Sentetik fallback
         try:
             from tefas_client import _synthetic_from_excel
-            hist = _synthetic_from_excel(ticker, period)
+            hist = _synthetic_from_excel(ticker, _pt_period)
             if hist is not None and not hist.empty:
                 return hist
         except Exception:
@@ -6140,7 +6145,14 @@ if page=="Ana Sayfa":
                     # YAŞAMIYOR). Artık SADECE TEFAS kullanıcının seçtiği
                     # (hafif) periyodu kullanıyor - diğer TÜM kategoriler
                     # ESKİ, güvenilir "her zaman 5y" davranışına döndü.
-                    _ana_periyot = period_val if cat_ana == "TEFAS" else "5y"
+                    # v2.0.7.364 (4 Ekim 2026, Bahri'nin bulgusu - "TEFAS fonlarinda hala 95 gunle
+                    # sinirliyim, 5 yil gorunmuyor"): TEFAS de artik diger kategoriler gibi HER ZAMAN
+                    # "5y" ceker; gorunen pencere secilen periyoda gore ayarlanir, kullanici uzaklastirip
+                    # 5 yila kadar gorebilir. Eskiden TEFAS yalnizca secilen periyodu ceker (varsayilan
+                    # "3 Ay" = 95 gun) ve uzaklastirilacak veri HIC OLMAZDI - cunku tek-fon uzun pytefas
+                    # sorgusu guvenilmezdi. Artik kalici fiyat arsivi (1,2 milyon satir) bunu hizla
+                    # karsiliyor; arsiv kullanilamazsa _get_hist_cached hafif bir pytefas sorgusuna duser.
+                    _ana_periyot = "5y"
                     _hist_sel_ana = get_hist(sel_ana, str(sel_row_ana.get("YF_Symbol","")),
                                               str(sel_row_ana.get("Kategori","")), _ana_periyot)
                     d = enrich(sel_row_ana, period_val, pre_fetched_hist=_hist_sel_ana)
@@ -7161,7 +7173,14 @@ elif page=="Portföyüm":
                 # PAYLASILIYOR. v2.0.7.357: SADECE TEFAS icin - diger
                 # kategoriler (yfinance, buyuk araliklarda sorunsuz) "5y"ye
                 # geri dondu (bkz. Ana Sayfa'daki ayni not).
-                _pf_periyot = _pm2[_pl] if str(_sr.get("Kategori","")) == "TEFAS" else "5y"
+                # v2.0.7.364 (4 Ekim 2026, Bahri'nin bulgusu - "TEFAS fonlarinda hala 95 gunle
+                # sinirliyim, 5 yil gorunmuyor"): TEFAS de artik diger kategoriler gibi HER ZAMAN
+                # "5y" ceker; gorunen pencere secilen periyoda gore ayarlanir, kullanici uzaklastirip
+                # 5 yila kadar gorebilir. Eskiden TEFAS yalnizca secilen periyodu ceker (varsayilan
+                # "3 Ay" = 95 gun) ve uzaklastirilacak veri HIC OLMAZDI - cunku tek-fon uzun pytefas
+                # sorgusu guvenilmezdi. Artik kalici fiyat arsivi (1,2 milyon satir) bunu hizla
+                # karsiliyor; arsiv kullanilamazsa _get_hist_cached hafif bir pytefas sorgusuna duser.
+                _pf_periyot = "5y"
                 _hist_sel_pf = get_hist(_sel_tkr, str(_sr.get("YF_Symbol","")),
                                          str(_sr.get("Kategori","")), _pf_periyot)
                 _d = enrich(_sr, _pm2[_pl], pre_fetched_hist=_hist_sel_pf)
@@ -7535,7 +7554,14 @@ elif page in CAT:
         # enrich() hem grafik tarafindan TEK fetch'te paylasiliyor.
         # v2.0.7.357: SADECE TEFAS icin - diger kategoriler (yfinance,
         # buyuk araliklarda sorunsuz) "5y"ye geri dondu.
-        _cat_periyot = period_val if cat_code == "TEFAS" else "5y"
+        # v2.0.7.364 (4 Ekim 2026, Bahri'nin bulgusu - "TEFAS fonlarinda hala 95 gunle
+        # sinirliyim, 5 yil gorunmuyor"): TEFAS de artik diger kategoriler gibi HER ZAMAN
+        # "5y" ceker; gorunen pencere secilen periyoda gore ayarlanir, kullanici uzaklastirip
+        # 5 yila kadar gorebilir. Eskiden TEFAS yalnizca secilen periyodu ceker (varsayilan
+        # "3 Ay" = 95 gun) ve uzaklastirilacak veri HIC OLMAZDI - cunku tek-fon uzun pytefas
+        # sorgusu guvenilmezdi. Artik kalici fiyat arsivi (1,2 milyon satir) bunu hizla
+        # karsiliyor; arsiv kullanilamazsa _get_hist_cached hafif bir pytefas sorgusuna duser.
+        _cat_periyot = "5y"
         _hist_sel_cat = get_hist(sel, str(sel_row.get("YF_Symbol","")),
                                  str(sel_row.get("Kategori","")), _cat_periyot)
         d=enrich(sel_row,period_val, pre_fetched_hist=_hist_sel_cat)
