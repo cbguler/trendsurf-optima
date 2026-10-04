@@ -30,10 +30,11 @@ name: Beklenti Modu Haber Izleme
 # zorlanmis tetikleme yaptigi icin bu throttling sorununu tamamen by-pass
 # ediyor.
 #
-# ONEMLI HATIRLATMA: kullanilan PAT'in gecerlilik suresi 6 Ekim 2026'da
-# doluyor - o tarihten once yenilenmesi (ya da suresiz bir token ile
-# degistirilmesi) gerekiyor, yoksa bu tetikleme sessizce 401 hatasiyla
-# basarisiz olmaya baslar.
+# [COZULDU - 25 Agustos 2026] Bu yorum ESKIDEN "PAT 6 Ekim 2026'da doluyor, yenilenmeli"
+# diyordu. Artik GECERLI DEGIL: Bahri "cron-job-tetikleyici" adiyla SURESIZ (No expiration),
+# yalnizca bu repoya ve yalnizca Actions:Read-and-write izinli YENI bir token olusturdu ve
+# uc cron isinin (TrendSurf Mail, TrendSurf Haber Izleme, firsat_radari.yml) Authorization
+# basligini guncelledi; uc'u de "204 No Content" ile test edildi. Hatirlatma GEREKMIYOR.
 #
 # workflow_dispatch: asagida kaliyor - hem cron-job.org'un disaridan
 # tetiklemesi hem de GitHub arayuzunden manuel "Run workflow" ile
