@@ -2179,6 +2179,20 @@ def _plotly_js_govde_yukle():
         return f.read()
 
 
+# v2.0.7.361 (3 Ekim 2026, Bahri'nin bulgusu - "grafigin sol ustundeki yazi
+# yarim kesiliyor, okunmuyor"): efsane (legend) ogelerinin genisligi Plotly'nin
+# KENDI yazi tipiyle olculuyordu; sayfada farkli bir yazi tipi cizilince ogeler
+# (ticker / MA20 / MA50) ust uste biniyor, sonuncusu kirpiliyordu. Artik yazi
+# tipi acikca belirleniyor ve her ogeye SABIT piksel genisligi veriliyor
+# (olcumden bagimsiz, ust uste binme/kirpilma olamaz). Onizleme plotly+kaleido
+# ile cizilip dogrulandi.
+_CANDLE_LEGEND = dict(
+    orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+    bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Arial, Helvetica, sans-serif", size=13, color="#1b2a4a"),
+    entrywidth=120, entrywidthmode="pixels", itemsizing="constant", tracegroupgap=0)
+
+
 def candle_fig(hist, ticker, varsayilan_gun=90):
     """v2.0.3: Mum grafigi + opsiyonel hacim subplot.
 
@@ -2299,9 +2313,9 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
         _hacim_max = float(_gorunen_hacim.max()) * 1.05 if _gorunen_hacim is not None and len(_gorunen_hacim) else None
         # 2 satirli subplot duzeni
         fig.update_layout(
-            height=480, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
-            margin=dict(l=55, r=15, t=30, b=30))
+            height=490, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
+            legend=_CANDLE_LEGEND,
+            margin=dict(l=55, r=15, t=40, b=30))
         # v2.0.7.286 (10 Eylul 2026, Bahri'nin bulgusu - "X ekseninde
         # tarih iki yerde gosteriliyor, ustteki gereksiz"): iki panelli
         # (fiyat+hacim) duzende, UST panelin (row=1, fiyat) x-ekseni de
@@ -2321,11 +2335,11 @@ def candle_fig(hist, ticker, varsayilan_gun=90):
                          row=2, col=1)
     else:
         # Tek panel duzeni (DOVIZ/MADEN/TEFAS)
-        fig.update_layout(height=380, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
+        fig.update_layout(height=390, paper_bgcolor="#fff", plot_bgcolor="#fafbff",
             xaxis=dict(**_eksen_ortak, rangeslider=dict(visible=False)),
             yaxis=dict(**_eksen_ortak, range=[_y_min, _y_max], autorange=False),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
-            margin=dict(l=55, r=15, t=30, b=30))
+            legend=_CANDLE_LEGEND,
+            margin=dict(l=55, r=15, t=40, b=30))
 
     # v2.0.7.293 (12 Eylul 2026, Bahri'nin bulgusu - "11 Eylul goruluyor
     # ama mum yarim gorunuyor"): son mumun GOVDESI kendi tarihinin
