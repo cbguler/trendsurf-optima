@@ -989,6 +989,36 @@ def build():
         except Exception as e:
             print(f"  pytefas fiyat guncelleme atlandi: {e}")
 
+        # v2.0.7.363 (4 Ekim 2026, Bahri'nin bulgusu - ILU Ana Sayfa'da "78,7 puan,
+        # 1A getiri +%12,80, RSI 53,1" ile cikti): TEFAS getirileri/RSI'si repodaki
+        # "*_2026-05-26.xlsx" (26 Mayis'ta bir kez indirilmis, 5 aylik) dosyalardan
+        # geliyordu. v2.0.7.352 bunu SADECE update_tefas_evening.py'de duzeltmisti;
+        # BU tam calisma (gece 02:00 TRT) CSV'yi tekrar Excel'den kurup duzeltmeyi
+        # her gece SILIYORDU. Artik AYNI ortak fonksiyon (tefas_client.
+        # gercek_getiri_rsi_guncelle) burada da cagriliyor. Basarisiz olursa Excel'in
+        # bayat degerleri YERINE onceki CSV'deki (gunluk isin yazdigi) degerler korunur.
+        _getiri_ok = False
+        try:
+            from tefas_client import gercek_getiri_rsi_guncelle, GETIRI_TARIHI_KOLONU
+            df_t, _, _gozet = gercek_getiri_rsi_guncelle(df_t, log=lambda m: print(f"  {m}"))
+            _getiri_ok = _gozet.get("guncellenen", 0) > 0
+        except Exception as e:
+            print(f"  GERCEK getiri/RSI guncellemesi hata verdi: {type(e).__name__}: {e}")
+        if not _getiri_ok:
+            try:
+                if os.path.exists(CSV_PATH):
+                    _prev = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+                    _prev = (_prev[_prev["Kategori"] == "TEFAS"]
+                             .drop_duplicates(subset=["Ticker"], keep="last").set_index("Ticker"))
+                    _kol = ["Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y", "RSI", "Getiri_Tarihi"]
+                    for _c in _kol:
+                        if _c in _prev.columns:
+                            df_t[_c] = df_t["Ticker"].map(_prev[_c])
+                    print("  UYARI: gercek getiri hesaplanamadi - onceki CSV'deki getiri/RSI degerleri korundu "
+                          "(bayat Excel degerleri KULLANILMADI).")
+            except Exception as e:
+                print(f"  Onceki getiri degerlerini koruma atlandi: {e}")
+
         # v2.0.7.186 (Bahri'nin bulgusu, 25 Ağustos 2026 — "HTS ve HOY
         # yine 0 gösteriyor"): KRİTİK KAPSAM EKSİĞİ BULUNDU. v2.0.7.174'te
         # "önceki geçerli fiyatı koru" koruması SADECE

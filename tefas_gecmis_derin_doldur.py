@@ -73,7 +73,7 @@ def arsiv_sayisi():
 
 def pencere_cek(crawler, kind, bas, bit):
     """Tek 28 gunluk pencere = tek HTTP istegi. (df, deneme_sayisi, 429_sayisi)"""
-    from pytefas import TefasRateLimitError
+    from pytefas import TefasRateLimitError, TefasAPIError
     s, e = bas.strftime("%Y-%m-%d"), bit.strftime("%Y-%m-%d")
     r429 = 0
     for n in range(1, MAKS_DENEME + 1):
@@ -81,6 +81,9 @@ def pencere_cek(crawler, kind, bas, bit):
             return crawler.fetch(start=s, end=e, kind=kind), n, r429
         except TefasRateLimitError:
             r429 += 1                 # kutuphane 30 sn bekleyip pes etti, tekrar deneriz
+        except TefasAPIError as ex:       # kalici hata (orn. "5 yildan eski olamaz"): tekrar denemek anlamsiz
+            log(f"    [{kind}] {s}..{e}: TEFAS API hatasi, tekrar denenmeyecek: {str(ex)[:90]}")
+            return None, n, r429
         except Exception as ex:
             log(f"    [{kind}] {s}..{e}: {type(ex).__name__}: {str(ex)[:80]} (deneme {n}/{MAKS_DENEME})")
             time.sleep(5)
@@ -95,6 +98,9 @@ def main():
     son_an = t_basla + SURE_DAKIKA * 60
     toplam_pencere = math.ceil(YIL_SAYISI * 365 / PENCERE_GUN)
     ilk_pencere = int(BASLANGIC_YIL * 365 / PENCERE_GUN)
+    _bp = os.environ.get("TEFAS_DERIN_BASLANGIC_PENCERE", "").strip()
+    if _bp.isdigit():
+        ilk_pencere = int(_bp)        # tam pencere numarasindan devam (loglardaki [N/66])
     son_pencere = min(toplam_pencere, ilk_pencere + MAKS_PENCERE) if MAKS_PENCERE else toplam_pencere
     log(f"Basladi: {YIL_SAYISI} yil = {toplam_pencere} pencere x {len(TURLER)} tur "
         f"(baslangic pencere {ilk_pencere}, sure butcesi {SURE_DAKIKA:.0f} dk{', KURU CALISMA' if KURU else ''}).")
@@ -115,6 +121,12 @@ def main():
     izinli = evren_tickerlari()
     crawler = Crawler(timeout=60, max_retry=1)   # pencere basina tekrar denemeyi biz yonetiyoruz
     bugun = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # TEFAS: "Baslangic Tarihi 5 yildan eski olamaz" (canli log: son pencere bu yuzden
+    # 8 kez bosuna denendi). En eski gecerli gun = bugun - 5 yil (+2 gun guvenlik payi).
+    try:
+        en_eski = bugun.replace(year=bugun.year - 5) + timedelta(days=2)
+    except ValueError:               # 29 Subat
+        en_eski = bugun - timedelta(days=1825) + timedelta(days=2)
 
     yazilan_toplam = istek_sayisi = toplam_429 = yazma_hatasi = 0
     eksik, bekleme, sakin_kalan = [], TEMEL_BEKLEME, 0
@@ -123,6 +135,10 @@ def main():
     for w in range(ilk_pencere, son_pencere):
         bit = bugun - timedelta(days=w * PENCERE_GUN)
         bas = bit - timedelta(days=PENCERE_GUN - 1)
+        if bit < en_eski:
+            continue                  # tamamen 5 yil siniri disinda
+        if bas < en_eski:
+            bas = en_eski             # son pencere kirpilir
         for kind in TURLER:
             kalan_dk = (son_an - time.time()) / 60
             if kalan_dk < 3:

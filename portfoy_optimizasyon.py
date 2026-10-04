@@ -52,15 +52,43 @@ MIN_SKOR = 60.0
 def _skor_hesapla(row) -> float:
     """Önce varsa canlı Optima_Skor (Fırsat Radarı dahil), yoksa scoring.py
     formülüyle RSI/Ret1M/Vol'den taze hesaplar."""
+    # v2.0.7.363 (Bahri'nin bulgusu - ILU): ESKIDEN `if v > 0` vardi; piyasa tedbiri
+    # listesinin ACIKCA 0.0'a sifirladigi varliklar (117 fon + ILU + 3 hisse) "puan
+    # yok" sayilip bayat RSI/getiriden YENIDEN puanlaniyor (ILU 0 -> 78,7) ve
+    # sepete giriyordu. Artik NaN = eksik (hesapla), 0.0 = ACIK SIFIR (secilemez).
     for col in ["Optima_Skor", "optima_skor", "OptimaSkoru"]:
         if col in row.index and pd.notna(row[col]):
-            v = float(row[col])
-            if v > 0:
-                return v
+            return float(row[col])
     rsi = float(row.get("RSI", 50) or 50)
     ret1m = float(row.get("Ret1M", 0) or 0)
     vol = float(row.get("Vol", 30) or 30)
     return _optima_score_fn(rsi, ret1m, vol=vol, has_fundamental=False)
+
+
+MAKS_GETIRI_YASI_GUN = 10
+
+
+def _tefas_tazelik_suz(df_c: pd.DataFrame):
+    """TEFAS fonlarinin getiri/RSI'si (Getiri_Tarihi kolonu) son 10 gun icinde GERCEK
+    fiyatlardan hesaplanmamissa o fon onerilmez. Kolon hic yoksa dogrulanamaz ->
+    TEFAS tamamen disarida (bayat Excel verisiyle sessizce oneri vermemek icin).
+    Dondurur: (suzulmus df, kullaniciya gosterilecek uyari | None)."""
+    if df_c.empty:
+        return df_c, None
+    if "Getiri_Tarihi" not in df_c.columns:
+        return df_c.iloc[0:0], ("TEFAS: getiri/RSI verisinin güncelliği doğrulanamadı "
+                                "('Getiri_Tarihi' yok) - TEFAS fonları öneri dışı bırakıldı. "
+                                "'TEFAS Aksam Guncelle' iş akışı çalışınca düzelir.")
+    t = pd.to_datetime(df_c["Getiri_Tarihi"], errors="coerce")
+    taze = t >= (pd.Timestamp.now().normalize() - pd.Timedelta(days=MAKS_GETIRI_YASI_GUN))
+    n_bayat = int((~taze).sum())
+    if n_bayat == 0:
+        return df_c, None
+    uyari = None
+    if n_bayat / len(df_c) > 0.25:      # kucuk oranda (yeni fon vb.) sessizce elenir
+        uyari = (f"TEFAS: {n_bayat} fonun getiri/RSI verisi güncel değil (son {MAKS_GETIRI_YASI_GUN} "
+                 "günde gerçek fiyatlardan hesaplanmamış) - bu fonlar öneri dışı bırakıldı.")
+    return df_c[taze], uyari
 
 
 def _fiyat(row) -> float:
@@ -116,7 +144,8 @@ def optimize_portfolio(df_uni: pd.DataFrame, budget: float, risk_weights: dict,
     if strateji not in STRATEJILER:
         strateji = "kuresel"
     sonuc = {"secilenler": [], "elenen": [], "karsilanamayan": [],
-             "havuz_sayilari": {}, "strateji": strateji, "kalan_butce": float(budget or 0)}
+             "havuz_sayilari": {}, "strateji": strateji, "kalan_butce": float(budget or 0),
+             "uyarilar": []}
     if df_uni is None or df_uni.empty:
         return sonuc
 
@@ -126,6 +155,9 @@ def optimize_portfolio(df_uni: pd.DataFrame, budget: float, risk_weights: dict,
             continue
         if cat == "TEFAS":
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Ret1M"] != 0)].copy()
+            df_c, _uyari = _tefas_tazelik_suz(df_c)
+            if _uyari:
+                sonuc["uyarilar"].append(_uyari)
         else:
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
         if df_c.empty:

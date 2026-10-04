@@ -1759,6 +1759,31 @@ def tefas_fiyat_gecmisi_toplu_ekle(fiyat_map: dict, tarih=None) -> int:
     return tefas_fiyat_gecmisi_df_ekle(df)
 
 
+_TEFAS_ARSIV_FIYAT_SQL = (
+    "SELECT DISTINCT ON (ticker) ticker, fiyat FROM tefas_fiyat_gecmisi "
+    "WHERE tarih BETWEEN CAST(? AS DATE) - ? AND CAST(? AS DATE) + ? "
+    "ORDER BY ticker, ABS(tarih - CAST(? AS DATE)), tarih DESC")
+
+
+def tefas_arsiv_fiyatlari(hedef_tarih: str, tolerans_gun: int = 10):
+    """v2.0.7.363: kalici arsivden, her fon icin hedef tarihe EN YAKIN (+-tolerans
+    gun icindeki) fiyat -> {ticker: fiyat}. 6 ay/1-3-5 yillik getirileri bayat
+    Excel yerine GERCEK fiyatlardan hesaplamak icin. Veritabanina ulasilamazsa
+    None doner (cagiran mevcut degerleri korur; bos dict = arsivde o tarihte
+    veri yok)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            _TEFAS_ARSIV_FIYAT_SQL,
+            (hedef_tarih, int(tolerans_gun), hedef_tarih, int(tolerans_gun), hedef_tarih)
+        ).fetchall()
+        conn.close()
+        return {str(r[0]): float(r[1]) for r in rows if r[1] is not None and float(r[1]) > 0}
+    except Exception as e:
+        print(f"[db] tefas_arsiv_fiyatlari hata ({hedef_tarih}): {type(e).__name__}: {e}", file=sys.stderr)
+        return None
+
+
 def tefas_fiyat_gecmisi_oku(ticker: str, gun: int = 1825) -> list:
     """v2.0.7.350: Bir fonun kendi arşivimizdeki (pytefas'a HİÇ gitmeden)
     birikmiş gerçek gecmisini okur - [(tarih, fiyat), ...] (tarihe göre

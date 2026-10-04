@@ -561,3 +561,132 @@ def calc_tefas_metrics(ticker: str, kind: str, **kw) -> dict:
     return {"rsi":float(row.RSI),"ret1m":float(row.Ret1M),
             "ret3m":float(row.Ret3M),"ret1y":float(row.Ret1Y),
             "last_price":float(row.Son_Fiyat)}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# v2.0.7.363 - GERCEK getiri/RSI (bayat Excel'in yerine) - TEK ORTAK kaynak
+# ════════════════════════════════════════════════════════════════════════════
+# Bahri'nin bulgusu (4 Ekim 2026): ILU, Ana Sayfa bütçe tablosuna "78,7 puan,
+# 1A getiri +%12,80, RSI 53,1" ile girdi; oysa Detay'da skor 0,0 ve grafik düşüşteydi.
+# Kök neden (1/2): TEFAS getirileri repodaki "*_2026-05-26.xlsx" statik dosyalarından
+# (26.05.2026 dışa aktarımı) geliyordu. v2.0.7.352 bunu SADECE günlük işte
+# düzeltmişti; worker.py'nin gece tam çalışması (02:00 TRT) CSV'yi tekrar Excel'den
+# kurup düzeltmeyi SİLİYORDU. Artık İKİSİ de bu tek fonksiyonu çağırıyor.
+
+GETIRI_TARIHI_KOLONU = "Getiri_Tarihi"   # getirinin hesaplandigi son NAV tarihi (YYYY-MM-DD)
+
+
+def rsi14(s, p: int = 14) -> float:
+    """worker.calc_rsi ile BIREBIR ayni formul (dongusel import olmasin diye burada)."""
+    s = s.dropna()
+    if len(s) < p + 1:
+        return 50.0
+    d = s.diff()
+    g = d.where(d > 0, 0.0).rolling(p).mean()
+    l = (-d.where(d < 0, 0.0)).rolling(p).mean()
+    ll = l.iloc[-1]
+    if ll == 0:
+        return 100.0
+    return round(100 - (100 / (1 + g.iloc[-1] / ll)), 1)
+
+
+def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=print):
+    """TEFAS satirlarinin Ret1M/Ret3M/RSI degerlerini GERCEK gunluk fiyatlardan
+    yeniden hesaplar (pytefas toplu sorgu, fund_code VERILMEDEN), Ret6M/Ret1Y/Ret3Y/
+    Ret5Y'yi kalici fiyat arsivinden (varsa) hesaplar ve getirinin hangi NAV
+    tarihine ait oldugunu `Getiri_Tarihi` kolonuna yazar.
+
+    Dondurur: (df_t, arsiv_parcalari, ozet). `arsiv_parcalari`: arsive yazilabilecek
+    ham [ticker, tarih, fiyat] DataFrame listesi. Hesaplanamayan fonlarin
+    `Getiri_Tarihi`si BOS kalir -> optimizer bunlari 'bayat veri' sayip onermez."""
+    from pytefas import Crawler
+    ozet = {"guncellenen": 0, "uzun_vade": False, "kind_hata": []}
+    if df_t is None or df_t.empty:
+        return df_t, [], ozet
+
+    crawler = Crawler(timeout=60, max_retry=4)   # her 28 gunluk sayfa AYRI yeniden denenir
+    bugun = datetime.now()
+    start = (bugun - timedelta(days=derinlik_gun)).strftime("%Y-%m-%d")
+    end = bugun.strftime("%Y-%m-%d")
+    if GETIRI_TARIHI_KOLONU not in df_t.columns:
+        df_t[GETIRI_TARIHI_KOLONU] = None
+    else:
+        df_t[GETIRI_TARIHI_KOLONU] = None   # onceki degerler gecerli sayilmaz: yeniden dogrulanacak
+
+    parcalar, son_fiyat_tarihi = [], {}
+    for kind in ["YAT", "EMK", "BYF"]:
+        try:
+            df_bulk = crawler.fetch(start=start, end=end, kind=kind)
+        except Exception as e:
+            log(f"[getiri] Toplu gecmis ({kind}) cekilemedi: {type(e).__name__}: {str(e)[:120]}")
+            ozet["kind_hata"].append(kind)
+            continue
+        if df_bulk is None or df_bulk.empty:
+            log(f"[getiri] Toplu gecmis ({kind}): bos dondu.")
+            continue
+        kol = {c.lower(): c for c in df_bulk.columns}
+        try:
+            d = df_bulk[[kol["fund_code"], kol["date"], kol["price"]]].copy()
+        except KeyError:
+            log(f"[getiri] ({kind}) beklenen sutunlar yok: {df_bulk.columns.tolist()}")
+            continue
+        d.columns = ["ticker", "tarih", "fiyat"]
+        d["tarih"] = pd.to_datetime(d["tarih"], errors="coerce")
+        d["fiyat"] = pd.to_numeric(d["fiyat"], errors="coerce")
+        d = d.dropna(subset=["ticker", "tarih", "fiyat"]).sort_values(["ticker", "tarih"])
+
+        r1, r3, rsi, tarih = {}, {}, {}, {}
+        for ticker, grp in d.groupby("ticker"):
+            s = grp.set_index("tarih")["fiyat"]
+            if len(s) < 15:                       # RSI(14) icin yeterli veri yok
+                continue
+            son = float(s.iloc[-1])
+            a = s[s.index <= (s.index[-1] - pd.Timedelta(days=30))]
+            if a.empty or a.iloc[-1] <= 0:
+                continue                           # 1 aylik getiri hesaplanamaz
+            r1[ticker] = round((son / float(a.iloc[-1]) - 1) * 100, 2)
+            b = s[s.index <= (s.index[-1] - pd.Timedelta(days=90))]
+            if not b.empty and b.iloc[-1] > 0:
+                r3[ticker] = round((son / float(b.iloc[-1]) - 1) * 100, 2)
+            rsi[ticker] = rsi14(s)
+            tarih[ticker] = s.index[-1].strftime("%Y-%m-%d")
+
+        m = df_t["TEFAS_Kind"] == kind
+        tk = df_t.loc[m, "Ticker"].astype(str)
+        df_t.loc[m, "Ret1M"] = tk.map(r1).combine_first(df_t.loc[m, "Ret1M"])
+        df_t.loc[m, "Ret3M"] = tk.map(r3).combine_first(df_t.loc[m, "Ret3M"])
+        df_t.loc[m, "RSI"] = tk.map(rsi).combine_first(df_t.loc[m, "RSI"])
+        df_t.loc[m, GETIRI_TARIHI_KOLONU] = tk.map(tarih)
+        son_fiyat_tarihi.update(tarih)
+        log(f"[getiri] {kind}: {len(r1)} fon icin GERCEK Ret1M/Ret3M/RSI hesaplandi "
+            f"({d['ticker'].nunique()} fon, {len(d)} satir).")
+        parcalar.append(d)
+
+    # Uzun vadeli getiriler: kalici fiyat arsivinden (Excel'in 5 aylik bayat degerleri yerine).
+    # Once BOSALTILIR: arsive ulasilamazsa/hesaplanamazsa 5 aylik bayat Excel degeri
+    # gostermektense bos birakmak dogrudur (bir sonraki calismada dolar).
+    if son_fiyat_tarihi:
+        for _k in ("Ret6M", "Ret1Y", "Ret3Y", "Ret5Y"):
+            df_t[_k] = np.nan
+        try:
+            import db as _db
+            son_gun = max(pd.to_datetime(list(son_fiyat_tarihi.values())))
+            fiyat_simdi = pd.to_numeric(df_t["Son_Fiyat"], errors="coerce")
+            tk_all = df_t["Ticker"].astype(str)
+            for kol_adi, gun in (("Ret6M", 182), ("Ret1Y", 365), ("Ret3Y", 1095), ("Ret5Y", 1825)):
+                hedef = (son_gun - pd.Timedelta(days=gun)).strftime("%Y-%m-%d")
+                gecmis = _db.tefas_arsiv_fiyatlari(hedef, tolerans_gun=10)
+                if gecmis is None:
+                    log(f"[getiri] {kol_adi}: arsive ulasilamadi - bos birakildi (bayat Excel degeri gosterilmez).")
+                    continue
+                eski = tk_all.map(gecmis)
+                getiri = ((fiyat_simdi / eski - 1) * 100).round(2)
+                getiri = getiri.where((eski > 0) & (fiyat_simdi > 0))
+                df_t[kol_adi] = getiri          # hesaplanamayanlar (fon o tarihte yoktu) BOS
+                log(f"[getiri] {kol_adi}: {int(getiri.notna().sum())} fon icin arsivden hesaplandi.")
+                ozet["uzun_vade"] = True
+        except Exception as e:
+            log(f"[getiri] Uzun vadeli getiriler atlandi: {type(e).__name__}: {str(e)[:120]}")
+
+    ozet["guncellenen"] = int(df_t[GETIRI_TARIHI_KOLONU].notna().sum())   # yalnizca evrendeki fonlar
+    return df_t, parcalar, ozet

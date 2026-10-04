@@ -266,7 +266,8 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         _not = elenen_notu(_sonuc)
         _durum = (f"<b>Strateji:</b> {STRATEJI_SECENEK.get(_sonuc.get('strateji'), '')} &nbsp;|&nbsp; "
                   f"<b>Uygun aday havuzu</b> (skor &ge; 60, pozitif 1A getiri): {havuz_ozeti(_sonuc)}")
-        _icerik = (f"<b>Bütçe Dağılımı Notu:</b> {_not}<br>" if _not else "") + _durum
+        _uyarilar = "".join(f"<b style='color:#b71c1c'>Uyarı:</b> {u}<br>" for u in _sonuc.get("uyarilar", []))
+        _icerik = _uyarilar + (f"<b>Bütçe Dağılımı Notu:</b> {_not}<br>" if _not else "") + _durum
         banner_html = f"""
     <div style="background:#fff8e1;border-left:4px solid #f0a830;
                 padding:10px 12px;margin:10px 0 0 0;font-size:11px;color:#5a4a1a;

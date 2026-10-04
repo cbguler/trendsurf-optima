@@ -5914,6 +5914,8 @@ if page=="Ana Sayfa":
     _not = elenen_notu(_sonuc)
     if _not:
         st.info(_not)
+    for _uyari in _sonuc.get("uyarilar", []):
+        st.warning(_uyari)      # v2.0.7.363: ornegin bayat TEFAS getiri verisi nedeniyle disarida birakma
     st.markdown(
         f"<div style='font-size:13px;color:#1b2a4a;margin:2px 0 6px 0;'>"
         f"<b>Strateji:</b> {STRATEJI_SECENEK[_sonuc['strateji']]} &nbsp;|&nbsp; "
@@ -7802,7 +7804,12 @@ elif page in CAT:
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
                 s2.metric("Tahmini Max Drawdown",f"{fmt_tr(maxdd,2)}%",
                           help="Getiri noktalarindan uretilen sentetik seriden hesaplanmistir.")
-        st.caption("Kaynak: TEFAS Excel (TEFAS.gov.tr)")
+        _gtar = sel_row.get("Getiri_Tarihi") if "Getiri_Tarihi" in sel_row.index else None
+        if _gtar is not None and pd.notna(_gtar):
+            st.caption(f"Kaynak: TEFAS günlük fiyatları (pytefas + fiyat arşivi) - {_gtar} NAV tarihi itibarıyla hesaplandı.")
+        else:
+            st.caption("Kaynak: TEFAS Excel (26.05.2026 dışa aktarımı) - güncel olmayabilir; "
+                       "'TEFAS Aksam Guncelle' çalışınca gerçek fiyatlardan yenilenir.")
 
 # ══════════════════════════════════════════════════════════════
 # HALKA ARZ
