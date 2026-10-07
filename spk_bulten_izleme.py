@@ -262,10 +262,76 @@ def kaldirma_adaylari(duz: str, n: str, evren: dict, aktif_kurallar: list) -> li
             continue                                   # "açılabileceği" gibi sartli dil = KESIN karar degil
         for k in aktif_kurallar:
             anahtar = tr_norm(k["deger"])
-            if len(anahtar) >= 4 and _kelime_var(pencere, anahtar):
+            # v2.0.7.370: TICKER kurallarinda en az 3 karakter (TEFAS tickerlari 3 harfli, orn. ILU); eskiden
+            # herkes icin >=4 idi -> 3 harfli ticker kurallari OTOMATIK HIC kaldirilamiyordu.
+            if len(anahtar) >= (3 if k["eslesme_turu"] == "TICKER" else 4) and _kelime_var(pencere, anahtar):
                 adaylar.append({"eslesme_turu": k["eslesme_turu"], "deger": k["deger"], "kategori": k.get("kategori"),
                                 "tedbir_turu": "KALDIRMA", "alinti": _alinti(duz, m.start() - 160, m.end() + 80),
                                 "kaynak": "deterministik", "gerekce": "Bülten tedbirin kaldırıldığını bildiriyor"})
+    return adaylar
+
+
+def _kural_fonlari(evren: dict, eslesme_turu: str, deger: str) -> set:
+    """Bir kuralin evrendeki kapsadigi fonlarin (TEFAS) ORIJINAL unvanlari."""
+    df = evren["df"]
+    maske = esleyen_maske(df, eslesme_turu, deger)
+    return {str(ad) for ad in df[maske]["Ad"]} if int(maske.sum()) else set()
+
+
+def _tasfiye_fonlari(n: str, evren: dict) -> set:
+    """Ayni bultende TASFIYE listelerinde (zorunlu/gonullu) gecen fon unvanlari. Bu fonlar ASLA
+    "yeniden aciliyor" sayilmaz: bitisik listelerin karismasina karsi guvence (tasfiyedeki
+    fonlarin yanlislikla acilmasi en tehlikeli hata olurdu)."""
+    bulunan = set()
+    for rx, azami in ((TASFIYE_ZORUNLU_RX, 15000), (TASFIYE_IZNI_RX, 6000)):
+        for m in rx.finditer(n):
+            pencere = _bolum_penceresi(n, m.end(), azami)
+            bulunan |= {orj for nad, orj in evren["fon_adlari"].items() if nad in pencere}
+    return bulunan
+
+
+def acilan_fonlar(duz: str, n: str, evren: dict) -> dict:
+    """Bultende KESIN olarak yeniden islem acilmasina/tedbirin kaldirilmasina karar verilen fon
+    unvanlari: {orijinal_unvan: alinti}. Sartli dil ("acilabilir") sayilmaz."""
+    tasfiye = _tasfiye_fonlari(n, evren)
+    sonuc = {}
+    for m in KALDIRMA_RX.finditer(n):
+        if SARTLI_RX.search(n[max(0, m.start() - 200):m.end() + 200]):
+            continue
+        onceki = n[max(0, m.start() - 1200):m.start()]
+        idx = max((onceki.rfind(x) for x in ("KAPSAMINDA", "UYARINCA", "DUYURU:")), default=-1)
+        pencere = (onceki[idx:] if idx >= 0 else "") + " " + _bolum_penceresi(n, m.end(), 8000)
+        alinti = _alinti(duz, m.start() - 160, m.end() + 14)       # karar cumlesinde biter; sonraki unvan listesine TASMAZ
+        for nad, orj in evren["fon_adlari"].items():
+            if nad in pencere and orj not in tasfiye:
+                sonuc.setdefault(orj, alinti)
+    return sonuc
+
+
+def kismi_kaldirma_adaylari(acilan: dict, aktif_kurallar: list, evren: dict, kaynak: str = "deterministik") -> list:
+    """Yeniden acilan FONLAR -> aktif sirket kurallari (v2.0.7.370, CVL/BAG arastirmasindan: SPK
+    sirketin fonlarindan YALNIZCA BAZILARINI acabilir - A1 Capital'de 7 fon acilabilir, 4 fon
+    tasfiyede). Kuralin kapsadigi fonlarin HEPSI aciliyorsa KALDIRMA; yalnizca BAZILARI
+    aciliyorsa KISMI_KALDIRMA: sirket kurali pasife alinir, KAPALI KALANLAR icin tekil kural yazilir."""
+    adaylar = []
+    for k in aktif_kurallar:
+        if k["eslesme_turu"] != "SIRKET_ADI" or not acilan:
+            continue
+        fonlar = _kural_fonlari(evren, "SIRKET_ADI", k["deger"])
+        acilan_k = sorted(ad for ad in fonlar if ad in acilan)
+        if not acilan_k:
+            continue
+        kalacak = sorted(fonlar - set(acilan_k))
+        alinti = acilan[acilan_k[0]]
+        if not kalacak:
+            adaylar.append({"eslesme_turu": "SIRKET_ADI", "deger": k["deger"], "kategori": k.get("kategori"),
+                            "tedbir_turu": "KALDIRMA", "alinti": alinti, "kaynak": kaynak,
+                            "gerekce": "Bülten şirketin tüm fonlarının yeniden açıldığını bildiriyor"})
+        else:
+            adaylar.append({"eslesme_turu": "SIRKET_ADI", "deger": k["deger"], "kategori": k.get("kategori") or "TEFAS",
+                            "tedbir_turu": "KISMI_KALDIRMA", "alinti": alinti, "kaynak": kaynak,
+                            "gerekce": f"{len(acilan_k)} fon yeniden işleme açılıyor, {len(kalacak)} fon kapalı kalıyor",
+                            "ek_veri": {"acilan": [a.upper() for a in acilan_k], "kalacak": [a.upper() for a in kalacak]}})
     return adaylar
 
 
@@ -365,7 +431,7 @@ def ai_cagir_gercek(prompt: str, db_mod=None):
     return None
 
 
-def ai_adaylari(duz: str, n: str, evren: dict, aktif_kurallar: list, ai_fn) -> list:
+def ai_adaylari(duz: str, n: str, evren: dict, aktif_kurallar: list, ai_fn, acilan_cikti=None) -> list:
     """AI ciktisini KATI dogrular: kesin_karar + metinde aynen gecen alinti + evrende
     dogrulanabilir varlik. Dogrulanamayan HICBIR sey aday olmaz."""
     pencere = _ai_pencereleri(duz, n)
@@ -389,10 +455,19 @@ def ai_adaylari(duz: str, n: str, evren: dict, aktif_kurallar: list, ai_fn) -> l
             if islem == "KALDIR":
                 if SARTLI_RX.search(tr_norm(alinti)):
                     continue
+                if vtur == "FON" and acilan_cikti is not None and not any(
+                        r["eslesme_turu"] == "TICKER" and ticker and ticker == r["deger"] for r in aktif_kurallar):
+                    # TEK bir fon aciliyor: sirket kuralini komple kaldirmak tasfiyedeki fonlari da acardi.
+                    # Fon, KISMI_KALDIRMA mantigina devredilir (bkz. kismi_kaldirma_adaylari).
+                    orj = evren["fon_adlari"].get(tr_norm(ad))
+                    if orj and orj not in _tasfiye_fonlari(n, evren):
+                        acilan_cikti[orj] = alinti
+                    continue
                 aday = None
                 for r in aktif_kurallar:
                     anahtar = tr_norm(r["deger"])
-                    if (len(anahtar) >= 4 and (_kelime_var(tr_norm(ad), anahtar) or _kelime_var(anahtar, tr_norm(ad))
+                    if (len(anahtar) >= (3 if r["eslesme_turu"] == "TICKER" else 4)
+                            and (_kelime_var(tr_norm(ad), anahtar) or _kelime_var(anahtar, tr_norm(ad))
                                                or (ticker and ticker == anahtar))):
                         aday = {"eslesme_turu": r["eslesme_turu"], "deger": r["deger"], "kategori": r.get("kategori"),
                                 "tedbir_turu": "KALDIRMA", "alinti": alinti, "kaynak": "ai", "gerekce": gerekce}
@@ -448,7 +523,7 @@ def adaylari_suz(adaylar: list, evren: dict, aktif: list, durum_fn, bugun: date)
     for (tur, deger, tedbir), a in sirali:
         maske = esleyen_maske(df, tur, deger)
         n_etkilenen = int(maske.sum())
-        if tedbir == "KALDIRMA":
+        if tedbir in ("KALDIRMA", "KISMI_KALDIRMA"):
             if not any(r["eslesme_turu"] == tur and r["deger"] == deger for r in aktif):
                 continue                                    # kaldirilacak aktif kural yok
         else:
@@ -466,8 +541,14 @@ def adaylari_suz(adaylar: list, evren: dict, aktif: list, durum_fn, bugun: date)
             continue
         a["n_etkilenen"] = n_etkilenen
         a["etki"] = etki_ozeti(df, tur, deger)
+        if tedbir == "KISMI_KALDIRMA":
+            ek = a["ek_veri"]
+            ad_tk = {str(r.Ad).upper(): str(r.Ticker) for r in df[df["Kategori"] == "TEFAS"].itertuples()}
+            ek["acilan_tk"] = [ad_tk.get(x, "?") for x in ek["acilan"]]
+            ek["kalacak_tk"] = [ad_tk.get(x, "?") for x in ek["kalacak"]]
+            a["n_etkilenen"] = len(ek["acilan"])
         sonuc.append(a)
-        if tedbir != "KALDIRMA":
+        if tedbir not in ("KALDIRMA", "KISMI_KALDIRMA"):
             kapsanan = kapsanan | maske                    # sonraki adaylar bunu da "zaten kapsanmis" sayar
     return sonuc
 
@@ -478,7 +559,12 @@ def _tespit_metinleri(a: dict) -> tuple:
     gerekce = f"{etiket}. {a['gerekce']}. [{kaynak}] Bültenden: \"{a['alinti']}\""
     e = a["etki"]
     ornek = ", ".join(t for t, _ in e["ornekler"])
-    if a["tedbir_turu"] == "KALDIRMA":
+    if a["tedbir_turu"] == "KISMI_KALDIRMA":
+        ek = a["ek_veri"]
+        ozet = (f"Şirket kuralı kaldırılır: {len(ek['acilan'])} fon yeniden açılır, skoru yeniden hesaplanır "
+                f"({', '.join(ek['acilan_tk'][:10])}); {len(ek['kalacak'])} fon KAPALI KALIR, her biri için tekil kural "
+                f"yazılır ({', '.join(ek['kalacak_tk'][:10])}).")
+    elif a["tedbir_turu"] == "KALDIRMA":
         ozet = f"Kural kaldırılırsa {a['n_etkilenen']} varlığın skoru yeniden hesaplanır (örn. {ornek})."
         if a["eslesme_turu"] == "SIRKET_ADI" and a["n_etkilenen"] > 1:
             # CVL/BAG arastirmasindan (4 Ekim 2026): SPK sirketin fonlarindan YALNIZCA BAZILARINI yeniden
@@ -494,12 +580,22 @@ def _tespit_metinleri(a: dict) -> tuple:
 
 def bulten_adaylari(metin: str, evren: dict, aktif: list, ai_fn=None) -> list:
     duz, n = _hizala(metin)
-    adaylar = (kapatma_tasfiye_adaylari(duz, n, evren) + hisse_adaylari(duz, n, evren)
-               + kaldirma_adaylari(duz, n, evren, aktif))
+    acilan = acilan_fonlar(duz, n, evren)
+    duz_kaldirma = kaldirma_adaylari(duz, n, evren, aktif)
+    # Bultende yeniden acilan fon LISTESI varsa, sirket adi cumlede gectigi icin uretilen DUZ sirket
+    # KALDIRMA'si bastirilir (hepsini acardi); onun yerine KISMI/tam KALDIRMA uretilir.
+    duz_kaldirma = [a for a in duz_kaldirma
+                    if not (a["eslesme_turu"] == "SIRKET_ADI" and (_kural_fonlari(evren, "SIRKET_ADI", a["deger"]) & set(acilan)))]
+    adaylar = (kapatma_tasfiye_adaylari(duz, n, evren) + hisse_adaylari(duz, n, evren) + duz_kaldirma)
+    ai_acilan = {}
     try:
-        adaylar += ai_adaylari(duz, n, evren, aktif, ai_fn)
+        adaylar += ai_adaylari(duz, n, evren, aktif, ai_fn, acilan_cikti=ai_acilan)
     except Exception as e:
         log(f"AI ikinci gorus atlandi ({type(e).__name__}: {e})")
+    tum_acilan = {**ai_acilan, **acilan}
+    if tum_acilan:
+        kaynak = "deterministik+ai" if (acilan and ai_acilan) else ("deterministik" if acilan else "ai")
+        adaylar += kismi_kaldirma_adaylari(tum_acilan, aktif, evren, kaynak)
     return adaylar
 
 
@@ -572,8 +668,10 @@ def calistir(yil=None, kuru=False, bugun=None, ilk_gun=ILK_CALISMA_GUN, maks_bul
                 log(f"   + {a['eslesme_turu']}:{a['deger']} [{a['tedbir_turu']}] ({a['kaynak']}) - {a['n_etkilenen']} varlik")
                 if kuru:
                     continue
+                ek_kw = {"ek_veri": json.dumps(a["ek_veri"], ensure_ascii=False)} if a.get("ek_veri") else {}
                 if not db_mod.piyasa_tedbir_tespit_ekle("SPK_BULTEN", b["no"], b["url"], b["tarih"], a["eslesme_turu"],
-                                                        a["deger"], a.get("kategori"), a["tedbir_turu"], gerekce, ozet_m):
+                                                        a["deger"], a.get("kategori"), a["tedbir_turu"], gerekce, ozet_m,
+                                                        **ek_kw):
                     tum_yazildi = False
             if not kuru and tum_yazildi:
                 db_mod.spk_bulten_islendi_isaretle(b["no"])

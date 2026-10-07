@@ -26,6 +26,7 @@ TEDBIR_ETIKET = {
     "SUC_DUYURUSU": "Suç duyurusu",
     "YUKSEK_MINIMUM_TUTAR": "Aracı kurum minimum tutar şartı",
     "KALDIRMA": "Tedbirin kaldırılması",
+    "KISMI_KALDIRMA": "Tedbir kısmen kaldırılıyor (bazı fonlar yeniden açılıyor)",
 }
 
 # Etkilenen varlik sayisi bu esigi asarsa onay penceresinde ayrica uyarilir
@@ -38,8 +39,9 @@ def tr_harf_norm(s) -> str:
 
 
 def tr_norm(s) -> str:
-    """tr_harf_norm + bosluklari teke indir."""
-    return re.sub(r"\s+", " ", tr_harf_norm(s)).strip()
+    """tr_harf_norm + bosluklari teke indir. Birlesik noktali i (i + U+0307: `.title()`/AI ciktisinda
+    'İ'nin ayrisik hali) de temizlenir; aksi halde 'Capi̇tal' evren adiyla eslesmez."""
+    return re.sub(r"\s+", " ", tr_harf_norm(s).replace("\u0307", "")).strip()
 
 
 def sirket_anahtari(ad):

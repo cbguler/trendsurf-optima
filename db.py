@@ -701,8 +701,12 @@ def init_db():
         ai_ozet             TEXT,
         onay_durumu         TEXT NOT NULL DEFAULT 'bekliyor',
         onay_zamani         TIMESTAMP,
-        onaylayan_kullanici_id INTEGER REFERENCES users(id)
+        onaylayan_kullanici_id INTEGER REFERENCES users(id),
+        ek_veri             TEXT
     )""")
+    # v2.0.7.370: KISMI_KALDIRMA tespitlerinin yapisal verisi (JSON: acilan/kalacak fonlar).
+    # Mevcut (canli) tablo icin ALTER; yeni kurulumda CREATE zaten icerir.
+    c.execute("ALTER TABLE piyasa_tedbir_tespit ADD COLUMN IF NOT EXISTS ek_veri TEXT")
     # piyasa_tedbir_listesi: ONAYLANMIS, AKTIF kurallar - load_universe()
     # HER YUKLEMEDE bunu okur. eslesme_turu='TICKER' -> deger TAM ticker
     # (orn. KTLEV), kategori ZORUNLU. eslesme_turu='SIRKET_ADI' -> deger
@@ -1597,20 +1601,31 @@ def spk_bulten_toplu_isaretle(bulten_nolari) -> int:
 def piyasa_tedbir_tespit_ekle(kaynak_turu: str, kaynak_referans: str, kaynak_url: str,
                               kaynak_tarihi, eslesme_turu: str, deger: str,
                               kategori: str, tedbir_turu: str,
-                              ai_gerekce: str, ai_ozet: str) -> bool:
+                              ai_gerekce: str, ai_ozet: str, ek_veri: str = None) -> bool:
     """v2.0.7.342: spk_bulten_izleme.py (ve gelecekte Resmi Gazete/KAP
     taramaları) AI tespiti basarili olunca bunu cagirir - 'bekliyor'
     durumunda eklenir, HENUZ piyasa_tedbir_listesi'ne YANSIMAZ, Admin
     Panel'de onay bekler."""
     try:
         conn = get_conn()
-        conn.execute(
-            "INSERT INTO piyasa_tedbir_tespit "
-            "(kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
-            "eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi,
-             eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet))
+        if ek_veri is not None:
+            # Tarayici (GitHub Actions) uygulamadan ONCE calisabilir; kolon henuz yoksa olustur (idempotent).
+            conn.execute("ALTER TABLE piyasa_tedbir_tespit ADD COLUMN IF NOT EXISTS ek_veri TEXT")
+            conn.execute(
+                "INSERT INTO piyasa_tedbir_tespit "
+                "(kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+                "eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet, ek_veri) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi,
+                 eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet, ek_veri))
+        else:
+            conn.execute(
+                "INSERT INTO piyasa_tedbir_tespit "
+                "(kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+                "eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi,
+                 eslesme_turu, deger, kategori, tedbir_turu, ai_gerekce, ai_ozet))
         conn.commit()
         conn.close()
         return True
@@ -1626,13 +1641,27 @@ def get_bekleyen_piyasa_tedbirleri() -> list:
     Gazete olgusu, kisiye gore degisen bir yorum degil)."""
     try:
         conn = get_conn()
-        rows = conn.execute(
-            "SELECT id, kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
-            "tespit_zamani, eslesme_turu, deger, kategori, tedbir_turu, "
-            "ai_gerekce, ai_ozet "
-            "FROM piyasa_tedbir_tespit WHERE onay_durumu='bekliyor' "
-            "ORDER BY tespit_zamani DESC"
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                "SELECT id, kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+                "tespit_zamani, eslesme_turu, deger, kategori, tedbir_turu, "
+                "ai_gerekce, ai_ozet, ek_veri "
+                "FROM piyasa_tedbir_tespit WHERE onay_durumu='bekliyor' "
+                "ORDER BY tespit_zamani DESC"
+            ).fetchall()
+        except Exception:
+            # v2.0.7.370: ek_veri kolonu henuz yoksa (init_db calismadan) eski sorgu - kuyruk bos gorunmesin
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            rows = conn.execute(
+                "SELECT id, kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, "
+                "tespit_zamani, eslesme_turu, deger, kategori, tedbir_turu, "
+                "ai_gerekce, ai_ozet "
+                "FROM piyasa_tedbir_tespit WHERE onay_durumu='bekliyor' "
+                "ORDER BY tespit_zamani DESC"
+            ).fetchall()
         conn.close()
         # v2.0.7.366: `_CompatRow` bir dict alt sinifi - zip(cols, r) / a,b,c = r
         # DEGERLERI degil ANAHTARLARI dondurur (gercek PostgreSQL'le test edilirken
@@ -1651,11 +1680,22 @@ def piyasa_tedbir_onayla(tespit_id: int, kullanici_id: int) -> bool:
     riski olmasin."""
     try:
         conn = get_conn()
-        tespit = conn.execute(
-            "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, "
-            "kaynak_referans FROM piyasa_tedbir_tespit WHERE id=? AND onay_durumu='bekliyor'",
-            (tespit_id,)
-        ).fetchone()
+        try:
+            tespit = conn.execute(
+                "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, "
+                "kaynak_referans, ek_veri FROM piyasa_tedbir_tespit WHERE id=? AND onay_durumu='bekliyor'",
+                (tespit_id,)
+            ).fetchone()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            tespit = conn.execute(
+                "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_turu, "
+                "kaynak_referans FROM piyasa_tedbir_tespit WHERE id=? AND onay_durumu='bekliyor'",
+                (tespit_id,)
+            ).fetchone()
         if not tespit:
             conn.close()
             return False
@@ -1663,6 +1703,47 @@ def piyasa_tedbir_onayla(tespit_id: int, kullanici_id: int) -> bool:
             tespit["eslesme_turu"], tespit["deger"], tespit["kategori"],
             tespit["tedbir_turu"], tespit["kaynak_turu"], tespit["kaynak_referans"])
         kaynak_aciklama = f"{kaynak_turu} {kaynak_referans or ''}".strip()
+        if str(tedbir_turu).upper() == "KISMI_KALDIRMA":
+            # v2.0.7.370 (CVL/BAG arastirmasi): SPK sirketin fonlarindan YALNIZCA BAZILARINI aciyor. TEK
+            # islemde (atomik): sirket kurali pasife alinir + KAPALI KALACAK her fon icin TEKIL kural
+            # yazilir (tasfiyedeki fonlar yanlislikla yeniden skorlanmasin). Gecersiz veri = HICBIR sey degismez.
+            import json as _json
+            try:
+                ek = _json.loads(tespit["ek_veri"] or "{}")
+                kalacak = [str(x).strip() for x in ek.get("kalacak", [])]
+                if not isinstance(ek.get("kalacak"), list) or any(len(x) < 15 for x in kalacak):
+                    raise ValueError("kalacak listesi gecersiz")
+            except Exception as ve:
+                print(f"[db] piyasa_tedbir_onayla KISMI_KALDIRMA ek_veri gecersiz, ISLEM YAPILMADI: {ve}", file=sys.stderr)
+                conn.close()
+                return False
+            eski = conn.execute(
+                "SELECT tedbir_turu FROM piyasa_tedbir_listesi WHERE eslesme_turu=? AND deger=? AND aktif=TRUE",
+                (eslesme_turu, deger)).fetchone()
+            if not eski:
+                conn.close()
+                return False                      # kaldirilacak AKTIF sirket kurali yok
+            for ad in kalacak:
+                conn.execute(
+                    "INSERT INTO piyasa_tedbir_listesi "
+                    "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id) "
+                    "VALUES ('SIRKET_ADI',?,?,?,?,?) "
+                    "ON CONFLICT (eslesme_turu, deger) DO UPDATE SET "
+                    "aktif=TRUE, kaldirilma_tarihi=NULL, tedbir_turu=EXCLUDED.tedbir_turu, "
+                    "kaynak_aciklama=EXCLUDED.kaynak_aciklama, tespit_id=EXCLUDED.tespit_id",
+                    (ad, kategori or "TEFAS", eski["tedbir_turu"],
+                     f"KISMI KALDIRMA (kapali kaliyor) - {kaynak_aciklama}", tespit_id))
+            conn.execute(
+                "UPDATE piyasa_tedbir_listesi SET aktif=FALSE, kaldirilma_tarihi=now(), "
+                "kaynak_aciklama=? WHERE eslesme_turu=? AND deger=?",
+                (f"KISMI KALDIRILDI - {kaynak_aciklama}", eslesme_turu, deger))
+            conn.execute(
+                "UPDATE piyasa_tedbir_tespit SET onay_durumu='onaylandi', "
+                "onay_zamani=now(), onaylayan_kullanici_id=? WHERE id=?",
+                (kullanici_id, tespit_id))
+            conn.commit()
+            conn.close()
+            return True
         if str(tedbir_turu).upper() == "KALDIRMA":
             # v2.0.7.366: tedbirin KALDIRILMASI - kural silinmez, pasife alinir (gecmis korunur)
             conn.execute(

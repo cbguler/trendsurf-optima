@@ -4221,7 +4221,15 @@ def _piyasa_tedbir_govdesi():
         return
     t = liste[0]
     tedbir = str(t.get("tedbir_turu") or "")
-    kaldirma = tedbir == "KALDIRMA"
+    kaldirma = tedbir in ("KALDIRMA", "KISMI_KALDIRMA")
+    kismi = tedbir == "KISMI_KALDIRMA"
+    ek = {}
+    if kismi:                       # v2.0.7.370: acilan / kapali kalan fon listeleri (JSON)
+        import json as _json
+        try:
+            ek = _json.loads(t.get("ek_veri") or "{}")
+        except Exception:
+            ek = {}
     if len(liste) > 1:
         _tedbir_yazi(f"1 / {len(liste)} bekleyen karar", boyut=13.5, renk="#1f2937", kalin=True)
     try:
@@ -4240,14 +4248,23 @@ def _piyasa_tedbir_govdesi():
         etki = etki_ozeti(load_universe(), t["eslesme_turu"], t["deger"], 8)
     except Exception:
         etki = {"adet": 0, "ornekler": [], "genis": False}
-    if kaldirma:
+    if kismi:
+        _ac, _kal = list(ek.get("acilan_tk") or ek.get("acilan") or []), list(ek.get("kalacak_tk") or ek.get("kalacak") or [])
+        st.markdown(f"Onaylarsanız şirket kuralı **kaldırılır**: **{len(_ac)} fon yeniden açılır** (Optima Skoru yeniden "
+                    f"hesaplanır) ve **{len(_kal)} fon kapalı kalır** (her biri için tekil kural yazılır).")
+
+        def _liste(tk, azami=24):
+            return ", ".join(str(x) for x in tk[:azami]) + (f" (+{len(tk) - azami} daha)" if len(tk) > azami else "")
+        _tedbir_yazi("Yeniden açılacak: " + (_liste(_ac) or "-"), boyut=14, renk="#14532d", kalin=True)
+        _tedbir_yazi("Kapalı kalacak: " + (_liste(_kal) or "-"), boyut=14, renk="#7f1d1d", kalin=True)
+    elif kaldirma:
         st.markdown(f"Onaylarsanız bu kural **kaldırılır**; **{etki['adet']} varlığın** Optima Skoru yeniden hesaplanır.")
     else:
         st.markdown(f"Onaylarsanız **{etki['adet']} varlığın** Optima Skoru **0'a sabitlenir** "
                     f"(Ana Sayfa, e-postalar ve tüm tablolarda).")
     if etki["genis"]:
         st.error(f"Etki çok geniş ({etki['adet']} varlık). Onaylamadan önce bülteni mutlaka kontrol edin.")
-    if etki["ornekler"]:
+    if etki["ornekler"] and not kismi:
         _tedbir_yazi("Etkilenen varlıklar (örnek): " + ", ".join(f"{tk} - {str(ad)[:34]}" for tk, ad in etki["ornekler"]),
                      boyut=14, renk="#1f2937")
     if t.get("ai_gerekce"):
