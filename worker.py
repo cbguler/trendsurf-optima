@@ -130,14 +130,112 @@ def _load_dynamic_bist_universe() -> list:
         from db import get_conn
         conn = get_conn()
         _ensure_dynamic_universe_table(conn)
-        rows = conn.execute("SELECT ticker FROM bist_universe_dynamic").fetchall()
+        rows = conn.execute("SELECT ticker, company_name, source FROM bist_universe_dynamic").fetchall()
         tickers = [str(r["ticker"]).strip().upper() for r in rows if r.get("ticker")]
+        # v2.0.7.374: KAP listesinden eklenenlerin resmi unvani (yfinance'e dusmeden) isim olarak kullanilir
+        for r in rows:
+            if r.get("ticker") and str(r.get("source") or "") == "KAP_BIST_auto" and r.get("company_name"):
+                _KAP_AD_HARITASI[str(r["ticker"]).strip().upper()] = str(r["company_name"]).strip()
         conn.close()
         if tickers:
             print(f"[dinamik-evren] Supabase'den {len(tickers)} dinamik BIST ticker yuklendi: {tickers}")
         return tickers
     except Exception as e:
         print(f"[dinamik-evren] Supabase'den yukleme atlandi (hata): {e}")
+        return []
+
+
+# v2.0.7.374 (8 Ekim 2026, Bahri'nin bulgusu): KAP'in resmi "BIST sirketleri" listesinde olup evrende
+# olmayan hisseler (CITAS, EKIM, GOLDA, KPEKS, ORZAX, ALBTN, KARCL, MASFN, QUICK, TKNKA ...) icin KAP
+# bildirimi (VBTS, geri alim vb.) vardi ama uygulamada gosterilecek satir yoktu. XHARZ yolu bunlari
+# kacirmisti (endeksten cikmis / endekse hic girmemis olabilirler). Kok cozum: evreni KAP'in kendi
+# listesiyle her calismada tamamla. ISIM: KAP unvani ticker -> unvan haritasinda tutulur.
+_KAP_AD_HARITASI = {}
+
+
+def _fiyati_olanlar(tickers: list) -> set:
+    """yfinance ile (son 3 ay) kapanisi olan kodlar. Fiyati olmayan KAP kayitlari (fon/borc araci
+    ihraccisi vb. - hisse degil) evrene ALINMAZ. Hata -> bos set (hicbir sey eklenmez, sonraki
+    calismada tekrar denenir)."""
+    if not tickers:
+        return set()
+    try:
+        import yfinance as yf
+        raw = yf.download([f"{t}.IS" for t in tickers], period="3mo", progress=False,
+                          auto_adjust=True, group_by="ticker")
+        ok = set()
+        for t in tickers:
+            try:
+                sub = raw[f"{t}.IS"] if len(tickers) > 1 else raw
+                col = sub["Close"].dropna()
+                if hasattr(col, "squeeze"):
+                    col = col.squeeze()
+                if len(col) and float(col.iloc[-1]) > 0:
+                    ok.add(t)
+            except Exception:
+                continue
+        return ok
+    except Exception as e:
+        print(f"[kap-evren] fiyat kontrolu basarisiz (bu calismada ekleme yapilmadi): {e}")
+        return set()
+
+
+def _kap_listesinden_evreni_tamamla(existing_tickers: list) -> list:
+    """KAP BIST sirket listesinde olup `existing_tickers`ta olmayan VE fiyati olan hisseleri
+    bist_universe_dynamic'e (source='KAP_BIST_auto') kaydeder, bu calismanin evrenine ekler.
+    Kapsam disi: baska kategoriyle kod cakisanlar (log'a yazilir), fiyati olmayanlar (hisse degil).
+    Hata durumunda SESSIZCE [] doner - worker ASLA durmaz."""
+    try:
+        import kap_evren
+        kap = kap_evren.kap_bist_listesini_cek()
+        diger = set()
+        try:
+            diger |= {t.upper() for t, _ in _kripto_evren_al()}
+            diger |= {t.upper() for t, _ in DOVIZ}
+            diger |= {t.upper() for t, _ in MADEN}
+        except Exception:
+            pass
+        try:
+            from tefas_client import load_excel_all
+            _dft = load_excel_all(os.getcwd())
+            if not _dft.empty and "Ticker" in _dft.columns:
+                diger |= {t.upper() for t in _dft["Ticker"].dropna().astype(str)}
+        except Exception as _te:
+            print(f"[kap-evren] TEFAS kod listesi alinamadi, cakisma kontrolu eksik: {_te}")
+        adaylar, cakisan = kap_evren.eksik_adaylar(kap, existing_tickers, diger)
+        if cakisan:
+            print(f"[kap-evren] UYARI: {cakisan} kodlari baska kategorilerle cakistigi icin "
+                  f"BIST evrenine EKLENMEDI - manuel kontrol gerekebilir")
+        if not adaylar:
+            print(f"[kap-evren] KAP listesi ({len(kap)} satir) ile evren uyumlu, eklenecek yok.")
+            return []
+        fiyatli = _fiyati_olanlar([a["ticker"] for a in adaylar])
+        eklenecek = [a for a in adaylar if a["ticker"] in fiyatli]
+        atlanan = [a["ticker"] for a in adaylar if a["ticker"] not in fiyatli]
+        if atlanan:
+            print(f"[kap-evren] fiyati olmadigi icin EKLENMEDI ({len(atlanan)}): {atlanan}")
+        if not eklenecek:
+            return []
+        from db import get_conn
+        conn = get_conn()
+        _ensure_dynamic_universe_table(conn)
+        kayitli = []
+        for a in eklenecek:
+            try:
+                conn.execute(
+                    "INSERT INTO bist_universe_dynamic (ticker, company_name, source) "
+                    "VALUES (?,?,?) ON CONFLICT DO NOTHING",
+                    (a["ticker"], a["ad"], "KAP_BIST_auto"))
+                kayitli.append(a["ticker"])
+                _KAP_AD_HARITASI[a["ticker"]] = a["ad"]
+            except Exception as e:
+                print(f"[kap-evren] {a['ticker']} kaydi basarisiz (atlandi): {e}")
+        conn.commit()
+        conn.close()
+        print(f"[kap-evren] KAP listesinden evrene EKLENDI ({len(kayitli)}): {kayitli}")
+        return kayitli
+    except Exception as e:
+        print(f"[kap-evren] KAP listesinden evren tamamlama atlandi (hata): {e}")
         return []
 
 
@@ -1052,6 +1150,9 @@ def build():
     _dyn_existing = _load_dynamic_bist_universe()
     _combined = list(dict.fromkeys(BIST_TICKERS + _dyn_existing))
     _new_grads = _detect_and_register_new_bist_listings(_combined)
+    # v2.0.7.374: KAP'in resmi BIST listesiyle evreni tamamla (XHARZ'in kacirdiklari dahil).
+    _new_kap = _kap_listesinden_evreni_tamamla(list(dict.fromkeys(_combined + _new_grads)))
+    _new_grads = list(dict.fromkeys(_new_grads + _new_kap))
     if _new_grads or _dyn_existing:
         BIST_TICKERS = list(dict.fromkeys(_combined + _new_grads))
         print(f"[dinamik-evren] Toplam BIST evreni: {len(BIST_TICKERS)} "
@@ -1156,6 +1257,10 @@ def build():
     # Sadece fiyat gelen hisseler için isim çek
     priced_tickers = [t for t in BIST_TICKERS if bist_data.get(t, {}).get("price", 0) > 0]
     bist_names = fetch_bist_names_fast(priced_tickers)
+    # v2.0.7.374: KAP listesinden eklenen hisselerin resmi unvani (yfinance kisa adi yerine).
+    for _t, _ad in _KAP_AD_HARITASI.items():
+        if _t in priced_tickers and _ad:
+            bist_names[_t] = _ad
     for t in BIST_TICKERS:
         if t not in bist_names:
             # Fiyat gelen ama isim gelemeyen hisseler
