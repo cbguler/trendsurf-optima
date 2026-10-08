@@ -1,0 +1,49 @@
+name: KAP Risk Tarama (Tum BIST)
+
+# v2.0.7.373 (8 Ekim 2026, Bahri'nin bulgusu - ENERY): KAP'in TOPLU bildirim listesinden (tum sirketler,
+# tek istekte tarih araligi) risk uretebilecek bildirimleri toplar (VBTS/brut takas, islem sirasi kapatma,
+# SPK tedbiri, olumsuz denetim, konkordato, gec finansal tablo, bedelli sermaye artirimi vb.), arsivler ve
+# hisse bazli guncel riskleri `kap_risk_uyari` tablosuna yazar. Uygulama (app.py) bu tabloyu okuyup
+# etiket + skor dusurme uygular (load_universe onbellegi 5 dk).
+#
+# HAFIF: ilk calismada ~130 gun geriye (~120 istek, 3-5 dk), sonraki calismalarda son 4 gun (~2 istek +
+# yeni VBTS bildirimi basina 1 istek) - sirket basina tarama GEREKMEZ, KAP hiz sinirina takilmaz.
+# KAP erisilemezse hicbir sey silinmez (tablo onceki durumunda kalir).
+#
+# TETIKLEME: GitHub'in schedule'i guvenilmez oldugu icin (bkz. kap_bildirim_izleme.yml, TEFAS deneyimi)
+# sadece workflow_dispatch. cron-job.org'dan 15 dakikada bir (Pzt-Cuma 09:00-23:00 TR) onerilir:
+#   POST https://api.github.com/repos/cbguler/trendsurf-optima/actions/workflows/kap_risk_tarama.yml/dispatches
+#   Body: {"ref":"main"}   Auth: mevcut fine-grained PAT (kap_bildirim_izleme.yml ile AYNI)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: kap-risk-tarama
+  cancel-in-progress: false
+
+jobs:
+  tara:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          # kap_risk_tarama.py streamlit/pandas'a bagimli DEGIL; db.py psycopg2 ister.
+          pip install requests psycopg2-binary pandas --quiet
+
+      - name: KAP risk taramasi
+        run: python kap_risk_tarama.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          PYTHONUNBUFFERED: "1"

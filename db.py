@@ -670,6 +670,41 @@ def init_db():
         UNIQUE(ticker, gonderim_tarihi, kap_baslik)
     )""")
 
+    # v2.0.7.373 (8 Ekim 2026, Bahri'nin bulgusu - ENERY): TUM BIST evreni icin KAP bildirimlerinden
+    # cikarilan HISSE BAZLI risk uyarilari. YUKARIDAKI kap_bildirim_takip'ten (sadece portfoy, sadece
+    # bilgi) BILEREK AYRI: bu tablo load_universe()'te etiket + skor dusurme icin kullanilir.
+    # kap_risk_tarama.py her taramada riskleri bildirim arsivinden (kap_risk_bildirim) SIFIRDAN hesaplayip
+    # kap_risk_hepsini_yaz() ile bu tabloyu TAMAMEN degistirir (durum tutulmaz; suresi dolan/kalkan uyari silinir).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS kap_risk_uyari (
+        id              SERIAL PRIMARY KEY,
+        ticker          TEXT NOT NULL,
+        kural           TEXT NOT NULL,
+        seviye          TEXT NOT NULL,
+        ad              TEXT,
+        baslik          TEXT,
+        gonderim_tarihi TIMESTAMP,
+        bitis_tarihi    DATE NOT NULL,
+        ozet            TEXT,
+        tespit_tarihi   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ticker, kural)
+    )""")
+    # Bildirim ARSIVI: kap_risk_tarama.py KAP'in toplu bildirim listesinden SADECE risk uretebilecek
+    # turleri (VBTS, sira kapatma, denetim, sermaye...) buraya saklar (disclosure_index = KAP bildirim no,
+    # tekrar eklenmez). Risk listesi her taramada bu arsivden SIFIRDAN hesaplanir (kap_risk.py).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS kap_risk_bildirim (
+        disclosure_index BIGINT PRIMARY KEY,
+        yayin_tarihi     TIMESTAMP NOT NULL,
+        gonderen         TEXT,
+        konu             TEXT NOT NULL,
+        ozet             TEXT,
+        gonderen_kodlar  TEXT,
+        ilgili_kodlar    TEXT,
+        metin            TEXT,
+        eklenme_tarihi   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
     # v2.0.7.342 (3 Ekim 2026, Bahri'nin talebi - "KAP, TEFAS, BIST, TCMB,
     # Cumhurbaskanligi/Bakanlar Kurulu, Resmi Gazete'nin fon krizi ile
     # ilgili bildirimlerinin otomatik izlenip ilgili varliklarin skoruna
@@ -1073,7 +1108,8 @@ def init_db():
     # v2.0.7.333'teki guvenlik acigi (yeni tablo olusturulup bu listeye
     # eklenmeyi UNUTMA) burada TEKRARLANMAMASI icin.
     for _rls_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
-                       "spk_bulten_islenmis", "tefas_fiyat_gecmisi"):
+                       "spk_bulten_islenmis", "tefas_fiyat_gecmisi",
+                       "kap_risk_uyari", "kap_risk_bildirim"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -1085,7 +1121,8 @@ def init_db():
     # bu YENI tablolara ACIKCA grant veriliyor, ileride PostgREST
     # uzerinden "erisilemiyor" sorunu yasanmasin diye.
     for _grant_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
-                         "spk_bulten_islenmis", "tefas_fiyat_gecmisi"):
+                         "spk_bulten_islenmis", "tefas_fiyat_gecmisi",
+                         "kap_risk_uyari", "kap_risk_bildirim"):
         try:
             c.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON public.{_grant_tablo} "
                       f"TO anon, authenticated, service_role")
@@ -1538,6 +1575,130 @@ def kap_bildirim_temizle(gun: int = 14):
         conn.close()
     except Exception as e:
         print(f"[db] kap_bildirim_temizle hata: {e}", file=sys.stderr)
+
+
+def kap_risk_hepsini_yaz(riskler_tickera: dict) -> bool:
+    """kap_risk_tarama.py: TUM guncel risk listesini TEK islemde YAZAR (eski satirlarin hepsini
+    degistirir; kalkan/suresi dolan uyari silinir). riskler_tickera: kap_risk.riskleri_hesapla() ciktisi.
+    Hata olursa hicbir sey degismez (rollback)."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM kap_risk_uyari")
+        for ticker, riskler in (riskler_tickera or {}).items():
+            for r in riskler:
+                conn.execute(
+                    "INSERT INTO kap_risk_uyari "
+                    "(ticker, kural, seviye, ad, baslik, gonderim_tarihi, bitis_tarihi, ozet) "
+                    "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (ticker, kural) DO NOTHING",
+                    (ticker.upper(), r["kural"], r["seviye"], r.get("ad"), r.get("baslik"),
+                     r.get("tarih"), r["bitis"], r.get("ozet")))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] kap_risk_hepsini_yaz hata: {e}", file=sys.stderr)
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
+        return False
+
+
+def kap_risk_bildirim_idleri(gun: int = 140) -> set:
+    """Arsivde zaten olan KAP bildirim numaralari (tekrar indirmemek icin)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT disclosure_index FROM kap_risk_bildirim "
+            "WHERE yayin_tarihi > now() - interval '%s days'" % int(gun)).fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kap_risk_bildirim_idleri hata: {e}", file=sys.stderr)
+        return set()
+    return {int(r["disclosure_index"] if isinstance(r, dict) else r[0]) for r in rows}
+
+
+def kap_risk_bildirim_ekle(b: dict) -> bool:
+    """Bir bildirimi arsive ekler (ayni numara zaten varsa sessizce atlanir)."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO kap_risk_bildirim (disclosure_index, yayin_tarihi, gonderen, konu, ozet, "
+            "gonderen_kodlar, ilgili_kodlar, metin) VALUES (?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (disclosure_index) DO NOTHING",
+            (int(b["id"]), b["tarih"], b.get("gonderen"), b["konu"], b.get("ozet"),
+             ",".join(b.get("gonderen_kodlar") or []), ",".join(b.get("ilgili_kodlar") or []),
+             b.get("metin") or ""))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] kap_risk_bildirim_ekle hata ({b.get('id')}): {e}", file=sys.stderr)
+        return False
+
+
+def kap_risk_bildirimleri_oku(gun: int = 140) -> list:
+    """Arsivdeki bildirimler (kap_risk.riskleri_hesapla girdisi)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT disclosure_index, yayin_tarihi, gonderen, konu, ozet, gonderen_kodlar, ilgili_kodlar, metin "
+            "FROM kap_risk_bildirim WHERE yayin_tarihi > now() - interval '%s days' "
+            "ORDER BY yayin_tarihi DESC" % int(gun)).fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kap_risk_bildirimleri_oku hata: {e}", file=sys.stderr)
+        return []
+    out = []
+    for r in rows:
+        def _v(k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+        out.append({"id": int(_v("disclosure_index", 0)), "tarih": _v("yayin_tarihi", 1),
+                    "gonderen": _v("gonderen", 2), "konu": _v("konu", 3), "ozet": _v("ozet", 4),
+                    "gonderen_kodlar": [k for k in (_v("gonderen_kodlar", 5) or "").split(",") if k],
+                    "ilgili_kodlar": [k for k in (_v("ilgili_kodlar", 6) or "").split(",") if k],
+                    "metin": _v("metin", 7) or ""})
+    return out
+
+
+def kap_risk_bildirim_temizle(gun: int = 140):
+    """Gecerlilik penceresinden (en uzunu 120 gun) eski arsiv kayitlarini siler."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM kap_risk_bildirim WHERE yayin_tarihi < now() - interval '%s days'" % int(gun))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[db] kap_risk_bildirim_temizle hata: {e}", file=sys.stderr)
+
+
+def get_aktif_kap_riskleri() -> dict:
+    """app.py load_universe(): {TICKER: [ {kural, seviye, ad, baslik, tarih, bitis, ozet}, ... ]}
+    SADECE suresi dolmamis olanlar. Hata/tablo yoksa {} (uygulama calismaya devam eder)."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT ticker, kural, seviye, ad, baslik, gonderim_tarihi, bitis_tarihi, ozet "
+            "FROM kap_risk_uyari WHERE bitis_tarihi >= CURRENT_DATE "
+            "ORDER BY ticker, gonderim_tarihi DESC").fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"[db] get_aktif_kap_riskleri hata: {e}", file=sys.stderr)
+        return {}
+    sonuc = {}
+    for r in rows:
+        def _v(k, i):
+            return r[k] if isinstance(r, dict) else r[i]
+        sonuc.setdefault(str(_v("ticker", 0)).upper(), []).append({
+            "kural": _v("kural", 1), "seviye": _v("seviye", 2), "ad": _v("ad", 3),
+            "baslik": _v("baslik", 4), "tarih": _v("gonderim_tarihi", 5),
+            "bitis": _v("bitis_tarihi", 6), "ozet": _v("ozet", 7)})
+    # siddet sirasi (AGIR > ORTA > BILGI), icinde yeni -> eski
+    _s = {"AGIR": 0, "ORTA": 1, "BILGI": 2}
+    for lst in sonuc.values():
+        lst.sort(key=lambda x: _s.get(x["seviye"], 9))
+    return sonuc
 
 
 def spk_bulten_islendi_mi(bulten_no: str) -> bool:
