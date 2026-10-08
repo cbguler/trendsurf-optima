@@ -1466,11 +1466,77 @@ def _tedbir_serit_goster(row):
             '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #1f4e79;'
             'border-left:10px solid #1f4e79;background:#dbeafe;padding:12px 16px;border-radius:8px;'
             'margin:8px 0 14px 0;color:#0f2a4a;">'
-            '<span style="background:#1f4e79;color:#ffffff;font-weight:800;font-size:13px;'
-            'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">KAP BİLGİ</span>'
+            '<div style="background:#1f4e79;color:#ffffff!important;font-weight:800;font-size:13px;'
+            'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">'
+            '<span style="color:#ffffff!important;">KAP BİLGİ</span></div>'
             f'<div><div style="font-size:16px;font-weight:700;line-height:1.35;">{_html.escape(bilgi)}</div>'
             '<div style="font-size:13px;margin-top:4px;color:#27476b;">'
             'Bu bildirim tek başına risk sayılmaz; skor ve sinyal değişmedi.</div></div></div>',
+            unsafe_allow_html=True)
+
+
+# v2.0.7.376 (Bahri'nin talebi): Halka Arz (XHARZ) ve Temettu tablolarinda da tedbir/KAP uyarisi gorunsun.
+# Skor zaten load_universe'ten (KAP carpani uygulanmis) geliyor; eksik olan ETIKET + aciklamaydi.
+def _uyari_haritasi(df_uni_):
+    """{TICKER: (etiket, aciklama)}: Piyasa_Tedbiri etiketi olanlar (SPK tedbiri / KAP UYARISI / KAP DİKKAT /
+    İŞLEME KAPALI) + yalniz KAP_Bilgi'si olanlar ('KAP BİLGİ')."""
+    harita = {}
+    try:
+        if df_uni_ is None or df_uni_.empty or "Ticker" not in df_uni_.columns:
+            return harita
+        for _, r in df_uni_.iterrows():
+            t = _tedbir_deger(r)
+            if t:
+                acik = r.get("Tedbir_Aciklama")
+                harita[str(r["Ticker"]).upper()] = (t, acik if isinstance(acik, str) else "")
+                continue
+            bilgi = r.get("KAP_Bilgi") if "KAP_Bilgi" in df_uni_.columns else ""
+            if isinstance(bilgi, str) and bilgi:
+                harita[str(r["Ticker"]).upper()] = ("KAP BİLGİ", bilgi)
+    except Exception:
+        return {}
+    return harita
+
+
+def _uyari_rozet_html(etiket, aciklama=""):
+    """Tablo hucresi icin renkli rozet (beyaz yazi, uygulamanin '.block-container span' kuralini !important ile ezer)."""
+    import html as _html
+    if not etiket:
+        return "—"
+    if etiket == "KAP BİLGİ":
+        renk = "#1f4e79"
+    else:
+        renk = SIG_COLORS.get(_TEDBIR_SINIF.get(etiket, ""), "#444")
+    return (f'<span title="{_html.escape(aciklama or "")}" style="background:{renk};color:#ffffff!important;'
+            f'padding:4px 9px;border-radius:12px;font-size:12px;font-weight:700;display:inline-block;'
+            f'white-space:nowrap;">{_html.escape(etiket)}</span>')
+
+
+def _uyari_ozeti_goster(tickerlar, harita):
+    """Tablo ustunde ozet: gorunen hisselerden uyarisi olanlari listeler. Hic yoksa hicbir sey cizmez."""
+    import html as _html
+    uyarili, bilgili = [], []
+    for t in tickerlar:
+        v = harita.get(str(t).upper())
+        if not v:
+            continue
+        (bilgili if v[0] == "KAP BİLGİ" else uyarili).append((str(t).upper(), v[0], v[1]))
+    if uyarili:
+        satirlar = "".join(
+            f'<li><b>{_html.escape(t)}</b> — {_html.escape(e)}: {_html.escape(a)}</li>' for t, e, a in uyarili)
+        st.markdown(
+            '<div style="border:2px solid #8e1b10;border-left:10px solid #8e1b10;background:#fdecea;'
+            'padding:10px 16px;border-radius:8px;margin:8px 0 12px 0;color:#5a1109;">'
+            f'<div style="font-weight:800;font-size:15px;">Bu listede piyasa tedbiri / KAP uyarısı olan {len(uyarili)} hisse var</div>'
+            f'<ul style="margin:6px 0 0 18px;font-size:14px;">{satirlar}</ul></div>',
+            unsafe_allow_html=True)
+    if bilgili:
+        st.markdown(
+            '<div style="border:2px solid #1f4e79;border-left:10px solid #1f4e79;background:#dbeafe;'
+            'padding:8px 16px;border-radius:8px;margin:6px 0 12px 0;color:#0f2a4a;font-size:14px;font-weight:600;">'
+            f'KAP bilgi notu olan {len(bilgili)} hisse: '
+            + _html.escape(", ".join(t for t, _, _ in bilgili)) +
+            ' (geri alım vb.; tek başına risk sayılmaz)</div>',
             unsafe_allow_html=True)
 # ══ BITIS: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
 
@@ -8409,6 +8475,12 @@ elif page=="Halka Arz":
         st.info("Arama sonucu bulunamadı.")
         st.stop()
 
+    # v2.0.7.376: tedbir/KAP uyarisi (Uyari sutunu + ustte ozet)
+    _ha_uyari = _uyari_haritasi(df_uni)
+    df_show = df_show.copy()
+    df_show["Uyari"] = df_show["Ticker"].astype(str).str.upper().map(lambda t: _ha_uyari.get(t, ("", ""))[0])
+    _uyari_ozeti_goster(df_show["Ticker"].tolist(), _ha_uyari)
+
     # ── Tablo ───────────────────────────────────────────────
     display_cols = []
     col_cfg = {}
@@ -8432,6 +8504,9 @@ elif page=="Halka Arz":
         display_cols.append("Optima_Skor")
         col_cfg["Optima_Skor"] = st.column_config.NumberColumn("Optima Skor", format="%.1f")
 
+    display_cols.append("Uyari")
+    col_cfg["Uyari"] = st.column_config.TextColumn(
+        "Uyarı", help="SPK tedbiri / KAP uyarısı (KAP UYARISI, KAP DİKKAT, İŞLEME KAPALI...) veya KAP BİLGİ (geri alım vb.)")
     display_cols.append("KAP_URL")
     col_cfg["KAP_URL"] = st.column_config.LinkColumn("KAP", display_text="Görüntüle")
 
@@ -8596,6 +8671,12 @@ elif page=="Temettü":
     if "Toplam_Getiri" in df_show.columns:
         _kolonlar.append(("Toplam_Getiri", "Tahmini Toplam Getiri %", "8%",
                            "1 Aylık Momentum + Temettü Verimi (gösterge, yatırım tavsiyesi değildir)", ""))
+    # v2.0.7.376: tedbir/KAP uyarisi sutunu + ustte ozet
+    _tm_uyari = _uyari_haritasi(df_uni)
+    if "Ticker" in df_show.columns:
+        _kolonlar.append(("Uyari", "Uyarı", "9%",
+                           "SPK tedbiri / KAP uyarısı veya KAP bilgi notu (imleci rozetin üzerine getirin)", "nowrap"))
+        _uyari_ozeti_goster(df_show["Ticker"].tolist(), _tm_uyari)
     if "KAP_URL" in df_show.columns:
         _kolonlar.append(("KAP_URL", "KAP", "9%", "Kamuyu Aydınlatma Platformu şirket sayfası", ""))
 
@@ -8639,6 +8720,9 @@ elif page=="Temettü":
                 deger = _fmt_num(v, ondalik=1)
             elif anahtar == "Toplam_Getiri":
                 deger = _fmt_num(v, suffix="%")
+            elif anahtar == "Uyari":
+                _u = _tm_uyari.get(str(r.get("Ticker")).upper())
+                deger = _uyari_rozet_html(_u[0], _u[1]) if _u else "—"
             elif anahtar == "KAP_URL":
                 _bos = v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).lower() == "nan"
                 deger = ("—" if _bos else f'<a href="{_html.escape(str(v))}" target="_blank">Görüntüle</a>')
