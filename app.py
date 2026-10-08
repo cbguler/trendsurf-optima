@@ -7231,35 +7231,38 @@ elif page=="Portföyüm":
     _tcc = "#27ae60" if _total_kz >= 0 else "#e74c3c"
     _tcs = "+" if _total_kz > 0 else ""
     _tcs_pct = "+" if _total_kz_pct > 0 else ""
-    _footer_kolonlar = [
-        ("ETIKET", 2.45),  # checkbox spaceri + Ticker + Tarih birlesik
-        ("Miktar", 1), ("Birim", 1),
-        ("Alış", 1), ("Güncel", 1),
-        ("TOPLAM", 1), ("KZ", 1),
-        ("KZPCT", 1), ("", 1.2), ("", 1.9),
-    ]
-    _footer_html = ""
-    for _etiket, _w in _footer_kolonlar:
-        if _etiket == "ETIKET":
-            _icerik = "<b style='font-size:13px;color:#6c7a9c;white-space:nowrap;'>TOPLAM PORTFÖY DEĞERİ</b>"
-        elif _etiket == "Alış":
-            # v2.0.7.318 (16 Eylul 2026, Bahri'nin talebi): Alis MALIYETI
-            # toplami da (_total_maliyet, KZ%'nin paydasi olarak zaten
-            # HESAPLANMISTI) footer'a, KENDI sutununun ALTINA eklendi.
-            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_maliyet)} TL</b>"
-        elif _etiket == "TOPLAM":
-            _icerik = f"<b style='font-size:15px;color:#1b2a4a;white-space:nowrap;'>{fmt_tr(_total_val)} TL</b>"
-        elif _etiket == "KZ":
-            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs}{fmt_tr(_total_kz)} TL</b>"
-        elif _etiket == "KZPCT":
-            _icerik = f"<b style='font-size:15px;color:{_tcc};white-space:nowrap;'>{_tcs_pct}{fmt_tr(_total_kz_pct)}%</b>"
-        else:
-            _icerik = ""
-        _hiza = "left" if _etiket == "ETIKET" else "right"
-        _footer_html += f"<div style='flex:{_w};text-align:{_hiza};padding:0 4px;white-space:nowrap;'>{_icerik}</div>"
+    # v2.0.7.372 (8 Ekim 2026, Bahri'nin bulgusu - "alis toplami biraz saga, guncel toplam, K/Z
+    # ve K/Z % hic uymuyor"): eski satir `flex:` AGIRLIKLARIYLA hizaliyordu; oysa st.dataframe
+    # sutunlari sabit piksel (Ticker 79, Tarih 75, Miktar 64, Birim 54, "small"=75, Sinyal 120)
+    # verilip tablo genisligine ORANTILI gerilir (checkbox sutunu ise ~33 px SABIT kalir, olculdu).
+    # Footer artik AYNI kurali CSS grid ile uygular: `33px` + her sutun icin `<piksel>fr` ->
+    # ayni genislikte, ayni oranla; sutunlar tablo ile birebir ust uste gelir (her genislikte).
+    # Hucre ici bosluk: dataframe hucrelerinde sag-yasli sayilar kenardan ~8 px iceridedir.
+    _G = "min-width:0;white-space:nowrap;padding:0 8px;text-align:right;"
+    _footer_html = (
+        f"<div style='grid-column:1 / span 3;min-width:0;white-space:nowrap;padding:0 8px;text-align:left;'>"
+        f"<b style='font-size:13px;color:#6c7a9c;'>TOPLAM PORTFÖY DEĞERİ</b></div>"
+        f"<div style='grid-column:4 / span 2;'></div>"
+        f"<div style='grid-column:6;{_G}'><b style='font-size:14px;color:#1b2a4a;'>{fmt_tr(_total_maliyet)} TL</b></div>"
+        f"<div style='grid-column:7;'></div>"
+        f"<div style='grid-column:8;{_G}'><b style='font-size:14px;color:#1b2a4a;'>{fmt_tr(_total_val)} TL</b></div>"
+        f"<div style='grid-column:9;{_G}'><b style='font-size:14px;color:{_tcc};'>{_tcs}{fmt_tr(_total_kz)} TL</b></div>"
+        f"<div style='grid-column:10;{_G}'><b style='font-size:14px;color:{_tcc};'>{_tcs_pct}{fmt_tr(_total_kz_pct)}%</b></div>"
+    )
+    # Olculen davranis (1100/1500/1900 px'te dogrulandi): checkbox sutunu 33 px SABIT; geri kalan 11
+    # sutunun HER BIRI ham piksel genisligine ESIT miktarda ek alan alir (e = (tablo - 875) / 11),
+    # orantili GERMEZ - eski "oranli fr" yaklasimi dar sutunlarda (Miktar/Birim) sapiyordu.
+    # CSS'te ayni formul: her iz = calc(<ham px> + max(0px, (100% - 875px) / 11)).
+    # Streamlit ek alani TAM PIKSELE yuvarlar (asagi) ve tablo kenarligi ~2 px yer kaplar: gercek e =
+    # floor((tablo - 877) / 11). CSS round(down, ...) bunu birebir yapar (Chrome 125+/Safari/Firefox 118+);
+    # eski tarayicilar icin ikinci bildirim gecersiz sayilir ve yuvarlamasiz ilk bildirim gecerli kalir (<=3 px sapma).
+    def _sutunlar(ek):
+        return "33px " + " ".join(f"calc({_ham}px + {ek})" for _ham in (79, 75, 64, 54, 75, 75, 75, 75, 75, 75, 120))
+    _grid_stil = (f"grid-template-columns:{_sutunlar('max(0px, (100% - 877px) / 11)')};"
+                  f"grid-template-columns:{_sutunlar('max(0px, round(down, (100% - 877px) / 11, 1px))')};")
     st.markdown(
         f"<div style='border-top:2px solid #2c3e6b;padding-top:6px;margin-top:6px;'></div>"
-        f"<div style='display:flex;flex-wrap:nowrap;padding:2px 4px 8px 4px;'>"
+        f"<div style='display:grid;{_grid_stil}padding:2px 0 8px 0;overflow:hidden;'>"
         f"{_footer_html}</div>",
         unsafe_allow_html=True
     )
