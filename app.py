@@ -145,6 +145,9 @@ section.main [data-testid="stRadio"] label span,
 .sig-t{background:#fef9e6!important;color:#8a5e00!important;border:1px solid #c8890a!important;}
 .sig-s{background:#fef0eb!important;color:#c0451b!important;border:1px solid #c0451b!important;}
 .sig-n{background:#fde8e8!important;color:#b71c1c!important;border:2px solid #b71c1c!important;}
+.sig-kapali{background:#eceff3!important;color:#3b4350!important;border:2px solid #5b6472!important;}
+.sig-tedbir{background:#f4e9f8!important;color:#6a1b8a!important;border:2px solid #6a1b8a!important;}
+.sig-kisitli{background:#e8f0f9!important;color:#1f4e79!important;border:1px solid #1f4e79!important;}
 .top5-row{background:#fff;border:1px solid #c8d6e8;border-radius:8px;padding:8px 14px;margin:3px 0;
   display:flex;align-items:center;gap:10px;cursor:pointer;}
 .top5-ticker{font-weight:700;color:#1b2a4a!important;font-size:14px;min-width:70px;}
@@ -181,7 +184,8 @@ PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","
 # veriye gore hesaplanir (bkz. render_candle_interactive cagri noktalari).
 _PERIYOT_GUN_MAP = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "5y": 1825}
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
-SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c"}
+SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c",
+              "sig-kapali":"#3b4350","sig-tedbir":"#6a1b8a","sig-kisitli":"#1f4e79"}
 
 def _bist_seans_acik() -> bool:
     """BIST seans saatleri icinde miyiz? (Hafta ici 10:00-18:00 TRT)
@@ -948,6 +952,32 @@ def load_universe():
     except Exception as _pt_err:
         print(f"[piyasa-tedbir] atlandi: {_pt_err}")
 
+    # v2.0.7.371: tedbirli varliklara sinyal etiketi (tedbirin TURUNE gore) + NAV'i sifir fonlar.
+    # get_signal_row() bu iki kolonu okur; boylece tablo/detay/birlesik sinyal HEP AYNI olur.
+    df["Piyasa_Tedbiri"] = ""
+    df["Tedbir_Aciklama"] = ""
+    try:
+        from piyasa_tedbir import tedbir_isaretle, tedbir_aciklamasi, SINYAL_KAPALI as _SK
+        _iz = tedbir_isaretle(df, locals().get("_aktif_tedbirler") or [])
+        df["Piyasa_Tedbiri"] = _iz["Piyasa_Tedbiri"]
+        df["Tedbir_Aciklama"] = _iz["Tedbir_Aciklama"]
+        # TEFAS'ta fiyati 0'a dusen fon (NAV_Durumu=SIFIR): kural eslesmese bile islem kapali say
+        if "NAV_Durumu" in df.columns:
+            _nav0 = (df["Kategori"] == "TEFAS") & (df["NAV_Durumu"].astype(str).str.upper() == "SIFIR") \
+                    & (df["Piyasa_Tedbiri"] == "")
+            if _nav0.any():
+                df.loc[_nav0, "Piyasa_Tedbiri"] = _SK
+                df.loc[_nav0, "Tedbir_Aciklama"] = (
+                    "TEFAS bu fonun fiyatını 0,0000 yayınlıyor (fon fiilen değersiz/kapalı). "
+                    "Son sıfır olmayan fiyat gösterilmez; alım/satım sinyali üretilmez.")
+        _tum = df["Piyasa_Tedbiri"] != ""
+        if _tum.any():
+            if "Optima_Skor" not in df.columns:
+                df["Optima_Skor"] = pd.NA
+            df.loc[_tum, "Optima_Skor"] = 0.0
+    except Exception as _ts_err:
+        print(f"[piyasa-tedbir] sinyal etiketi atlandi: {_ts_err}")
+
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)
@@ -1343,6 +1373,55 @@ def calc_macd(s):
 from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal, optima_score_breakdown
 
 
+# ══ BASLA: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
+# v2.0.7.371 (8 Ekim 2026, Bahri'nin bulgusu - DFI): tedbirli/islem kapali bir varlik tabloda
+# "TUT IZLE", detayda "NET SAT" gosteriyordu. Kok neden: get_signal() skor<40 iken TRENDE bakar;
+# tablo trendi bayat Ret1M isaretinden, detay ise gercek fiyat gecmisinden geliyordu. Ustelik
+# islem kapali varlik icin "NET SAT" anlamsiz (satilamaz). Tum sinyal noktalari artik
+# get_signal_row() kullanir: satirda Piyasa_Tedbiri varsa (load_universe isaretler) SKOR/TREND
+# NE OLURSA OLSUN tedbirin etiketi gosterilir -> tablo = detay = birlesik sinyal, hep ayni.
+from piyasa_tedbir import SINYAL_KAPALI, SINYAL_TEDBIR, SINYAL_KISITLI
+
+_TEDBIR_SINIF = {SINYAL_KAPALI: "sig-kapali", SINYAL_TEDBIR: "sig-tedbir", SINYAL_KISITLI: "sig-kisitli"}
+
+
+def _tedbir_deger(row) -> str:
+    """Satirdaki Piyasa_Tedbiri etiketi ('' = tedbir yok). row: Series/dict/None."""
+    try:
+        v = row.get("Piyasa_Tedbiri") if row is not None else None
+    except Exception:
+        return ""
+    return v if isinstance(v, str) and v in _TEDBIR_SINIF else ""
+
+
+def get_signal_row(row, score, rsi, trend):
+    """get_signal() ile ayni donus (etiket, css sinifi); tedbirli varlikta tedbir etiketi."""
+    t = _tedbir_deger(row)
+    if t:
+        return t, _TEDBIR_SINIF[t]
+    return get_signal(score, rsi, trend)
+
+
+def _tedbir_serit_goster(row):
+    """Detay basliginin altinda tedbir seridi (tedbir yoksa hicbir sey cizmez)."""
+    t = _tedbir_deger(row)
+    if not t:
+        return
+    try:
+        acik = row.get("Tedbir_Aciklama")
+    except Exception:
+        acik = ""
+    acik = acik if isinstance(acik, str) else ""
+    renk = SIG_COLORS.get(_TEDBIR_SINIF[t], "#444")
+    import html as _html
+    st.markdown(
+        f'<div style="border-left:6px solid {renk};background:#f7f7fa;padding:10px 14px;'
+        f'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
+        f'<b style="color:{renk};">{_html.escape(t)}</b> &nbsp;{_html.escape(acik)}</div>',
+        unsafe_allow_html=True)
+# ══ BITIS: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
+
+
 def _render_skor_pasta_grafigi(d, row, key_prefix="det"):
     """v2.0.7.144 (Bahri'nin talebi, 18 Ağustos 2026): "Optima Skor'u
     oluşturan unsurları pasta grafik olarak görebilmek istiyorum, her
@@ -1587,6 +1666,13 @@ def _sinyal_renk_stil(v):
     yazinin rengi degissin, hucre komple degismesin'). clickable_table()
     ve Portfoyum tablosunda ortak kullanilir."""
     v = str(v).upper()
+    # v2.0.7.371: tedbir etiketleri (TUT/SAT aramalarindan ONCE bakilir)
+    if "İŞLEME KAPALI" in v or "ISLEME KAPALI" in v:
+        return "color: #5b6472; font-weight: 700;"
+    elif "SPK TEDB" in v:
+        return "color: #6a1b8a; font-weight: 700;"
+    elif "KISITLI" in v:
+        return "color: #1f4e79; font-weight: 700;"
     if "GÜÇLÜ AL" in v or "GUCLU AL" in v:
         return "color: #1b8a4a; font-weight: 700;"
     elif "KADEMELİ AL" in v or "KADEMELI AL" in v:
@@ -6304,6 +6390,7 @@ if page=="Ana Sayfa":
                 cat_ana = str(sel_row_ana["Kategori"])
                 st.divider()
                 st.subheader(f"Detay: {sel_ana}  —  {str(sel_row_ana['Ad'])[:60]}")
+                _tedbir_serit_goster(sel_row_ana)
 
                 period_map = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yil":"1y","5 Yil":"5y"}
                 p_lbl = st.radio("Periyot", list(period_map.keys()),
@@ -6366,7 +6453,7 @@ if page=="Ana Sayfa":
                     # yanlislikla hep 0 gosteriyordu - "== True" ile duzeltildi.
                     if sel_row_ana.get("_gecmis_veri_yok") == True:
                         disp_score_ana = 0.0
-                    sig_lbl, sig_cls = get_signal(disp_score_ana, d["rsi"], d["trend"])
+                    sig_lbl, sig_cls = get_signal_row(sel_row_ana, disp_score_ana, d["rsi"], d["trend"])
 
                 r1,r2,r3,r4,r5 = st.columns(5)
                 r1.metric("Son Fiyat",    fmt_tr(float(sel_row_ana['Son_Fiyat']),4))
@@ -6539,7 +6626,7 @@ if page=="Ana Sayfa":
                             _total_adj = d.get("total_adj", d.get("score_adj", 0))
                             teknik_skor = teknik_skor + _total_adj
                             combined = max(0, min(100, round(tech_with_fund + _total_adj, 1)))
-                        final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
+                        final_lbl, final_cls = get_signal_row(sel_row_ana, combined, d["rsi"], d["trend"])
                         src_note = "yfinance"
                         if raw.get("_kap_available"): src_note += " + KAP"
                         elif raw.get("_kap_note"):    src_note += f" | KAP: {raw['_kap_note']}"
@@ -7002,7 +7089,7 @@ elif page=="Portföyüm":
                 _rsi_v = _sf(_row.get("RSI"), 50.0)
                 _ret1m_v = _sf(_row.get("Ret1M"), 0.0)
                 _trend_v = "YUKSELIS" if _ret1m_v >= 0 else "DUSUS"
-            _sig_lbl, _ = get_signal(_skor, _rsi_v, _trend_v)
+            _sig_lbl, _ = get_signal_row(_row, _skor, _rsi_v, _trend_v)
         else:
             _sig_lbl = "—"
 
@@ -7348,6 +7435,7 @@ elif page=="Portföyüm":
             _sr = _sm.iloc[0]
             st.divider()
             st.subheader(f"Detay: {_sel_tkr} — {str(_sr['Ad'])[:60]}")
+            _tedbir_serit_goster(_sr)
             _pm2 = {"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
             _pl  = st.radio("Periyot", list(_pm2.keys()), index=1, horizontal=True, key="pf_per")
             with st.spinner("Yükleniyor..."):
@@ -7383,7 +7471,7 @@ elif page=="Portföyüm":
                 # yanlislikla hep 0 gosteriyordu - "== True" ile duzeltildi.
                 if _sr.get("_gecmis_veri_yok") == True:
                     disp_score_pf = 0.0
-                _sig_lbl, _sig_cls = get_signal(disp_score_pf,_d["rsi"],_d["trend"])
+                _sig_lbl, _sig_cls = get_signal_row(_sr, disp_score_pf, _d["rsi"], _d["trend"])
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   fmt_tr(float(_sr['Son_Fiyat']),4))
             _m2.metric("Optima Skor", fmt_tr(disp_score_pf,1))
@@ -7512,7 +7600,7 @@ elif page=="Portföyüm":
                         _total_adj2 = _d.get("total_adj", _d.get("score_adj", 0))
                         _teknik_skor = _teknik_skor + _total_adj2
                         _combined = max(0, min(100, round(_tech_with_fund + _total_adj2, 1)))
-                    _final_lbl, _final_cls = get_signal(_combined, _d["rsi"], _d["trend"])
+                    _final_lbl, _final_cls = get_signal_row(_sr, _combined, _d["rsi"], _d["trend"])
 
                     # Kaynak bilgisi
                     _src_note = "yfinance"
@@ -7700,8 +7788,8 @@ elif page in CAT:
     # tablosuna da Sinyal eklendi - hizli yontem, 1300+ satirda bile
     # ag cagrisi olmadigi icin performans maliyeti yok.
     _sinyal_hizli_tum = df_cat.apply(
-        lambda r: get_signal(
-            float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
+        lambda r: get_signal_row(
+            r, float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
             "YUKSELIS" if float(r.get("Ret1M", 0) or 0) >= 0 else "DUSUS")[0],
         axis=1)
     df_page_show = df_cat[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
@@ -7728,6 +7816,7 @@ elif page in CAT:
     sel_row=df_uni[(df_uni["Ticker"]==sel) & (df_uni["Kategori"]==cat_code)].iloc[0]
     st.divider()
     st.subheader(f"Detay: {sel}  —  {str(sel_row['Ad'])[:60]}")
+    _tedbir_serit_goster(sel_row)
 
     period_map={"1 Ay":"1mo","3 Ay":"3mo","6 Ay":"6mo","1 Yıl":"1y","5 Yıl":"5y"}
     p_lbl=st.radio("Periyot",list(period_map.keys()),index=1,horizontal=True,key=f"per_{page}")
@@ -7781,7 +7870,7 @@ elif page in CAT:
         # liste ile birebir ayni (dogru) mantigi kullanir.
         if sel_row.get("_gecmis_veri_yok") == True:
             disp_score_cat = 0.0
-        sig_lbl,sig_cls=get_signal(disp_score_cat,d["rsi"],d["trend"])
+        sig_lbl,sig_cls=get_signal_row(sel_row,disp_score_cat,d["rsi"],d["trend"])
 
     r1,r2,r3,r4,r5=st.columns(5)
     r1.metric("Son Fiyat",fmt_tr(float(sel_row['Son_Fiyat']),4))
@@ -7911,7 +8000,7 @@ elif page in CAT:
                 _total_adj3 = d.get("total_adj", d.get("score_adj", 0))
                 teknik_skor = teknik_skor + _total_adj3
                 combined = max(0, min(100, round(_tech_with_fund + _total_adj3, 1)))
-            final_lbl, final_cls = get_signal(combined, d["rsi"], d["trend"])
+            final_lbl, final_cls = get_signal_row(sel_row, combined, d["rsi"], d["trend"])
 
             # Kaynak bilgisi
             # v2.0.7.50 - DUZELTME (Bahri'nin bulgusu): "_kap_note" alani

@@ -1817,11 +1817,13 @@ def get_aktif_piyasa_tedbirleri() -> list:
     try:
         conn = get_conn()
         rows = conn.execute(
-            "SELECT eslesme_turu, deger, kategori FROM piyasa_tedbir_listesi "
-            "WHERE aktif=TRUE"
+            "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama "
+            "FROM piyasa_tedbir_listesi WHERE aktif=TRUE"
         ).fetchall()
         conn.close()
-        return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2]} for r in rows]
+        # v2.0.7.371: tedbir_turu + kaynak_aciklama da donuyor (sinyal etiketi tedbir TURUNE gore)
+        return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2],
+                 "tedbir_turu": r[3], "kaynak_aciklama": r[4]} for r in rows]
     except Exception as e:
         print(f"[db] get_aktif_piyasa_tedbirleri hata: {e}", file=sys.stderr)
         return []

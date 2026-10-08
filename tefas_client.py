@@ -575,6 +575,64 @@ def calc_tefas_metrics(ticker: str, kind: str, **kw) -> dict:
 
 GETIRI_TARIHI_KOLONU = "Getiri_Tarihi"   # getirinin hesaplandigi son NAV tarihi (YYYY-MM-DD)
 
+# v2.0.7.371 (8 Ekim 2026, Bahri'nin bulgusu - DFI): TEFAS'ta fiyati 0,0000'a dusen fonlar.
+# DFI 25 Eylul'den beri 0,0000 yayinliyor (fon buyuklugu 0,01 TL); CSV'de ise 24 Eylul'un son
+# sifir-olmayan fiyati (0,4058) "son fiyat" diye duruyordu, cunku "fiyat alinamayan fonun onceki
+# satirini koru" korumasi (v2.0.7.174/186) SIFIR fiyati da "alinamadi" sayip eski satiri geri
+# yaziyordu. Gercek sifir (TEFAS acikca 0 yayinliyor) ile eksik veri (hic gelmedi) AYRI
+# ele alinmali: ilki korunmaz, ikincisi korunur.
+NAV_DURUMU_KOLONU = "NAV_Durumu"   # "SIFIR" = TEFAS yakin zamandan beri 0 fiyat yayinliyor
+NAV_SIFIR_MIN_GUN = 3              # en az bu kadar ARDISIK son kayit 0 olmali (tek gunluk glitch degil)
+NAV_SIFIR_MAKS_YAS_GUN = 10        # son kayit en fazla bu kadar gun eski olmali (veri tazeligi)
+
+
+def nav_sifir_fonlari(parcalar, bugun=None, min_gun: int = NAV_SIFIR_MIN_GUN,
+                      maks_yas_gun: int = NAV_SIFIR_MAKS_YAS_GUN) -> set:
+    """Son `min_gun`+ kaydi ARDISIK 0 olan, oncesinde pozitif fiyati bulunan ve son kaydi taze
+    (<= maks_yas_gun gun) olan fon kodlari. `parcalar`: [ticker, tarih, fiyat] DataFrame listesi.
+    Hic fiyati olmayan (hep 0) fon ya da TEFAS'tan hic gelmeyen fon BURADA sayilmaz."""
+    bugun = pd.Timestamp(bugun if bugun is not None else datetime.now()).normalize()
+    sonuc = set()
+    for d in parcalar or []:
+        if d is None or len(d) == 0:
+            continue
+        for ticker, grp in d.sort_values(["ticker", "tarih"]).groupby("ticker"):
+            f = pd.to_numeric(grp["fiyat"], errors="coerce").dropna().to_numpy()
+            if len(f) <= min_gun or (f[-min_gun:] > 0).any() or not (f[:-min_gun] > 0).any():
+                continue
+            son_tarih = pd.Timestamp(grp["tarih"].iloc[-1]).normalize()
+            if (bugun - son_tarih).days > maks_yas_gun:
+                continue
+            sonuc.add(str(ticker))
+    return sonuc
+
+
+def onceki_satiri_koru(df_t: pd.DataFrame, onceki_tefas: pd.DataFrame) -> int:
+    """Bu turda fiyat alinamayan (Son_Fiyat<=0) TEFAS satirlari icin, onceki CSV'de GECERLI (>0)
+    fiyat varsa o satirin TAMAMINI geri yazar (v2.0.7.174/186). v2.0.7.371: NAV_Durumu=="SIFIR"
+    olan fonlar (TEFAS acikca 0 yayinliyor) ATLANIR - bu 'veri yok' degil, 'fiyat gercekten 0'.
+    onceki_tefas: Ticker index'li DataFrame. Dondurur: korunan fon sayisi."""
+    if df_t is None or df_t.empty or onceki_tefas is None or len(onceki_tefas) == 0:
+        return 0
+    sifir_isaretli = (df_t[NAV_DURUMU_KOLONU].astype(str).str.upper() == "SIFIR"
+                      if NAV_DURUMU_KOLONU in df_t.columns else pd.Series(False, index=df_t.index))
+    korunan = 0
+    for idx in df_t.index[(pd.to_numeric(df_t["Son_Fiyat"], errors="coerce").fillna(0) <= 0)]:
+        if bool(sifir_isaretli.get(idx, False)):
+            continue
+        tkr = df_t.at[idx, "Ticker"]
+        if tkr in onceki_tefas.index:
+            try:
+                onceki_fiyat = float(onceki_tefas.at[tkr, "Son_Fiyat"] or 0)
+            except Exception:
+                onceki_fiyat = 0.0
+            if onceki_fiyat > 0:
+                for col in df_t.columns:
+                    if col in onceki_tefas.columns:
+                        df_t.at[idx, col] = onceki_tefas.at[tkr, col]
+                korunan += 1
+    return korunan
+
 
 def rsi14(s, p: int = 14) -> float:
     """worker.calc_rsi ile BIREBIR ayni formul (dongusel import olmasin diye burada)."""
@@ -600,7 +658,7 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
     ham [ticker, tarih, fiyat] DataFrame listesi. Hesaplanamayan fonlarin
     `Getiri_Tarihi`si BOS kalir -> optimizer bunlari 'bayat veri' sayip onermez."""
     from pytefas import Crawler
-    ozet = {"guncellenen": 0, "uzun_vade": False, "kind_hata": []}
+    ozet = {"guncellenen": 0, "uzun_vade": False, "kind_hata": [], "nav_sifir": []}
     if df_t is None or df_t.empty:
         return df_t, [], ozet
 
@@ -612,6 +670,7 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
         df_t[GETIRI_TARIHI_KOLONU] = None
     else:
         df_t[GETIRI_TARIHI_KOLONU] = None   # onceki degerler gecerli sayilmaz: yeniden dogrulanacak
+    df_t[NAV_DURUMU_KOLONU] = ""            # v2.0.7.371: her turda yeniden belirlenir
 
     parcalar, son_fiyat_tarihi = [], {}
     for kind in ["YAT", "EMK", "BYF"]:
@@ -687,6 +746,23 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
                 ozet["uzun_vade"] = True
         except Exception as e:
             log(f"[getiri] Uzun vadeli getiriler atlandi: {type(e).__name__}: {str(e)[:120]}")
+
+    # v2.0.7.371: NAV'i 0'a dusen fonlar. Son_Fiyat 0'lanir (Excel/pytefas'taki bayat deger de ezilir),
+    # RSI 0 (anlamsiz 'notr' degil), getiriler -%100, NAV_Durumu="SIFIR" -> onceki_satiri_koru atlar.
+    try:
+        sifir = nav_sifir_fonlari(parcalar, bugun)
+        if sifir:
+            m0 = df_t["Ticker"].astype(str).isin(sifir)
+            df_t.loc[m0, "Son_Fiyat"] = 0.0
+            df_t.loc[m0, "RSI"] = 0.0
+            for _k in ("Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y"):
+                if _k in df_t.columns:
+                    df_t.loc[m0, _k] = -100.0
+            df_t.loc[m0, NAV_DURUMU_KOLONU] = "SIFIR"
+            ozet["nav_sifir"] = sorted(df_t.loc[m0, "Ticker"].astype(str))
+            log(f"[getiri] NAV SIFIR (TEFAS 0 fiyat yayinliyor): {', '.join(ozet['nav_sifir'])}")
+    except Exception as e:
+        log(f"[getiri] NAV sifir tespiti atlandi: {type(e).__name__}: {str(e)[:120]}")
 
     ozet["guncellenen"] = int(df_t[GETIRI_TARIHI_KOLONU].notna().sum())   # yalnizca evrendeki fonlar
     return df_t, parcalar, ozet

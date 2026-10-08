@@ -1134,16 +1134,9 @@ def build():
                     .drop_duplicates(subset=["Ticker"], keep="last")
                     .set_index("Ticker")
                 )
-                _korunan = 0
-                for _idx in df_t.index[df_t["Son_Fiyat"].fillna(0) <= 0]:
-                    _tkr = df_t.at[_idx, "Ticker"]
-                    if _tkr in _onceki_tefas.index:
-                        _onceki_fiyat = float(_onceki_tefas.at[_tkr, "Son_Fiyat"] or 0)
-                        if _onceki_fiyat > 0:
-                            for _col in df_t.columns:
-                                if _col in _onceki_tefas.columns:
-                                    df_t.at[_idx, _col] = _onceki_tefas.at[_tkr, _col]
-                            _korunan += 1
+                # v2.0.7.371: ortak fonksiyon; NAV_Durumu="SIFIR" (TEFAS acikca 0 yayinliyor) geri yuklenmez
+                from tefas_client import onceki_satiri_koru
+                _korunan = onceki_satiri_koru(df_t, _onceki_tefas)
                 if _korunan:
                     print(f"  {_korunan} TEFAS fonu bu turda fiyat alamadı - "
                           f"onceki gecerli fiyatlar korundu (worker.py tam calismasi).")

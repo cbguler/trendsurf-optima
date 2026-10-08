@@ -20,6 +20,8 @@ _TR_HARITA = str.maketrans({"İ": "I", "ı": "I", "Ş": "S", "ş": "S", "Ğ": "G
 # tedbir_turu -> kullaniciya gosterilen ad
 TEDBIR_ETIKET = {
     "ISLEME_KAPATMA": "TEFAS'ta alım-satıma kapatıldı",
+    "ISLEM_DURDURMA_TASFIYE": "Alım-satıma kapatıldı ve tasfiye edilecek",
+    "TASFIYE_VE_ISLEME_KAPATMA": "Alım-satıma kapatıldı ve tasfiye edilecek",
     "TASFIYE": "Zorunlu tasfiye kararı",
     "TASFIYE_IZNI": "Gönüllü tasfiye izni",
     "MANIPULASYON_SUPHESI": "Piyasa dolandırıcılığı suç duyurusu",
@@ -89,3 +91,65 @@ def etki_ozeti(df: pd.DataFrame, eslesme_turu: str, deger: str, n_ornek: int = 6
     sub = df[m] if len(m) else df.iloc[0:0]
     ornek = [(str(r.Ticker), str(r.Ad)) for r in sub.head(n_ornek).itertuples()]
     return {"adet": int(len(sub)), "ornekler": ornek, "genis": len(sub) > GENIS_ETKI_ESIGI}
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# v2.0.7.371 (8 Ekim 2026, Bahri'nin bulgusu - DFI): tedbirli bir varligin TABLODA "TUT IZLE",
+# DETAYDA "NET SAT" gostermesi. Kok neden: Optima Skor tedbirde 0'a sabitleniyordu ama sinyal
+# (get_signal) skor<40 iken TRENDE bakiyor; trend tabloda bayat Ret1M isaretinden, detayda
+# gercek fiyat gecmisinden geliyordu -> iki ekran farkli sinyal verdi. Ustelik "NET SAT" islem
+# kapali bir varlik icin anlamsiz (satamazsin). Cozum: tedbirli varlik, tedbirin TURUNE gore
+# acik bir etiket alir; bu etiket skor/trend ne olursa olsun sinyalin yerine gecer.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+SINYAL_KAPALI = "İŞLEME KAPALI"     # alinamaz/satilamaz/tasfiyede veya fiyati sifir
+SINYAL_TEDBIR = "SPK TEDBİRİ"       # islem yasagi DEGIL ama SPK tedbiri/suc duyurusu var
+SINYAL_KISITLI = "KISITLI"          # alinabilir ama kisit var (orn. yuksek minimum tutar)
+
+_KAPALI_TURLERI = {"ISLEME_KAPATMA", "ISLEM_DURDURMA_TASFIYE", "TASFIYE_VE_ISLEME_KAPATMA",
+                   "TASFIYE", "TASFIYE_IZNI"}
+_KISITLI_TURLERI = {"YUKSEK_MINIMUM_TUTAR"}
+_SIDDET = {SINYAL_KAPALI: 3, SINYAL_TEDBIR: 2, SINYAL_KISITLI: 1, "": 0}
+
+
+def tedbir_sinyali(tur) -> str:
+    """tedbir_turu -> sinyal etiketi. Bilinmeyen tur 'SPK TEDBIRI' sayilir (guvenli taraf)."""
+    t = str(tur or "").upper().strip()
+    if t in _KAPALI_TURLERI:
+        return SINYAL_KAPALI
+    if t in _KISITLI_TURLERI:
+        return SINYAL_KISITLI
+    return SINYAL_TEDBIR
+
+
+def tedbir_aciklamasi(sinyal: str, tur=None, kaynak=None) -> str:
+    """Detay panelindeki seritte gosterilen tek cumlelik aciklama."""
+    etiket = TEDBIR_ETIKET.get(str(tur or "").upper().strip(), "")
+    kaynak = str(kaynak or "").strip()
+    if sinyal == SINYAL_KAPALI:
+        bas = "Bu varlık alım-satıma kapalı veya tasfiye sürecinde"
+    elif sinyal == SINYAL_KISITLI:
+        bas = "Bu varlık için yatırım kısıtı var"
+    else:
+        bas = "Bu varlık için SPK tedbiri/suç duyurusu var (işlem yasağı olmayabilir, ancak risk çok yüksek)"
+    ek = f" — {etiket}" if etiket else ""
+    kay = f" ({kaynak})" if kaynak else ""
+    return f"{bas}{ek}{kay}. Optima Skor 0'a sabitlenmiştir; alım/satım sinyali üretilmez."
+
+
+def tedbir_isaretle(df: pd.DataFrame, kurallar) -> pd.DataFrame:
+    """Her varlik icin {Piyasa_Tedbiri, Tedbir_Aciklama} dondurur (df ile ayni index).
+    Birden cok kural ayni varligi kapsarsa EN SIKI olan kazanir (kapali > tedbir > kisitli).
+    Kural: {'eslesme_turu','deger','tedbir_turu'(ops.),'kaynak_aciklama'(ops.)}."""
+    cikti = pd.DataFrame({"Piyasa_Tedbiri": "", "Tedbir_Aciklama": ""}, index=df.index)
+    if df is None or df.empty:
+        return cikti
+    for k in kurallar or []:
+        m = esleyen_maske(df, k.get("eslesme_turu"), k.get("deger"))
+        if not len(m) or not m.any():
+            continue
+        sin = tedbir_sinyali(k.get("tedbir_turu"))
+        acik = tedbir_aciklamasi(sin, k.get("tedbir_turu"), k.get("kaynak_aciklama"))
+        daha_siki = m & (cikti["Piyasa_Tedbiri"].map(_SIDDET).fillna(0) < _SIDDET[sin])
+        cikti.loc[daha_siki, "Piyasa_Tedbiri"] = sin
+        cikti.loc[daha_siki, "Tedbir_Aciklama"] = acik
+    return cikti

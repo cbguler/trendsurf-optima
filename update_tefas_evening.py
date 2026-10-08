@@ -123,16 +123,10 @@ def main():
         .drop_duplicates(subset=["Ticker"], keep="last")
         .set_index("Ticker")
     )
-    _korunan_sayisi = 0
-    for _idx in df_t.index[df_t["Son_Fiyat"].fillna(0) <= 0]:
-        _tkr = df_t.at[_idx, "Ticker"]
-        if _tkr in _onceki_tefas_fiyat.index:
-            _onceki_fiyat = float(_onceki_tefas_fiyat.at[_tkr, "Son_Fiyat"] or 0)
-            if _onceki_fiyat > 0:
-                for _col in df_t.columns:
-                    if _col in _onceki_tefas_fiyat.columns:
-                        df_t.at[_idx, _col] = _onceki_tefas_fiyat.at[_tkr, _col]
-                _korunan_sayisi += 1
+    # v2.0.7.371: mantik tefas_client.onceki_satiri_koru()'ya tasindi (worker.py ile ORTAK).
+    # TEFAS'in acikca 0 yayinladigi fonlar (NAV_Durumu="SIFIR", orn. DFI) GERI YUKLENMEZ.
+    from tefas_client import onceki_satiri_koru
+    _korunan_sayisi = onceki_satiri_koru(df_t, _onceki_tefas_fiyat)
     if _korunan_sayisi:
         print(f"[tefas-aksam] {_korunan_sayisi} fon bu turda fiyat alamadı - "
               f"ÖNCEKİ GEÇERLİ FİYATLARI KORUNDU (sıfıra düşürülmedi).")
