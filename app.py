@@ -148,6 +148,8 @@ section.main [data-testid="stRadio"] label span,
 .sig-kapali{background:#eceff3!important;color:#3b4350!important;border:2px solid #5b6472!important;}
 .sig-tedbir{background:#f4e9f8!important;color:#6a1b8a!important;border:2px solid #6a1b8a!important;}
 .sig-kisitli{background:#e8f0f9!important;color:#1f4e79!important;border:1px solid #1f4e79!important;}
+.sig-kap-agir{background:#fdecea!important;color:#8e1b10!important;border:2px solid #8e1b10!important;}
+.sig-kap-orta{background:#fff4e0!important;color:#9a5b00!important;border:2px solid #c77700!important;}
 .top5-row{background:#fff;border:1px solid #c8d6e8;border-radius:8px;padding:8px 14px;margin:3px 0;
   display:flex;align-items:center;gap:10px;cursor:pointer;}
 .top5-ticker{font-weight:700;color:#1b2a4a!important;font-size:14px;min-width:70px;}
@@ -185,7 +187,8 @@ PAGES = ["Ana Sayfa","Portföyüm","BIST","TEFAS","Döviz","Değerli Madenler","
 _PERIYOT_GUN_MAP = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "5y": 1825}
 CAT   = {"BIST":"BIST","TEFAS":"TEFAS","Döviz":"DOVIZ","Değerli Madenler":"MADEN","Kriptolar":"KRIPTO"}
 SIG_COLORS = {"sig-g":"#00732f","sig-k":"#1a7a3a","sig-t":"#8a5e00","sig-s":"#c0451b","sig-n":"#b71c1c",
-              "sig-kapali":"#3b4350","sig-tedbir":"#6a1b8a","sig-kisitli":"#1f4e79"}
+              "sig-kapali":"#3b4350","sig-tedbir":"#6a1b8a","sig-kisitli":"#1f4e79",
+              "sig-kap-agir":"#8e1b10","sig-kap-orta":"#9a5b00"}
 
 def _bist_seans_acik() -> bool:
     """BIST seans saatleri icinde miyiz? (Hafta ici 10:00-18:00 TRT)
@@ -978,6 +981,39 @@ def load_universe():
     except Exception as _ts_err:
         print(f"[piyasa-tedbir] sinyal etiketi atlandi: {_ts_err}")
 
+    # v2.0.7.373 (8 Ekim 2026, Bahri'nin bulgusu - ENERY): KAP bildirimlerinden cikarilan HISSE
+    # BAZLI risk uyarilari (kap_risk_tarama.py -> kap_risk_uyari tablosu). AGIR -> sinyal "KAP UYARISI"
+    # + Optima Skor 0; ORTA -> "KAP DIKKAT" + skor x0.5; BILGI (geri alim, bedelsiz...) -> sadece detay
+    # seridinde bilgi. SPK tedbiri/islem kapali zaten etiketliyse onun etiketi KORUNUR (daha siki).
+    df["KAP_Bilgi"] = ""
+    try:
+        from kap_risk import (kap_isaretle, SINYAL_KAP_AGIR, SINYAL_KAP_ORTA,
+                              SEVIYE_AGIR, SEVIYE_ORTA)
+        from db import get_aktif_kap_riskleri
+        _kr = get_aktif_kap_riskleri()
+        if _kr:
+            _kap = kap_isaretle(df, _kr)
+            df["KAP_Bilgi"] = _kap["KAP_Bilgi"]
+            _kap_var = _kap["KAP_Seviye"] != ""
+            if _kap_var.any():
+                if "Optima_Skor" not in df.columns:
+                    df["Optima_Skor"] = pd.NA
+                _etiketsiz = _kap_var & (df["Piyasa_Tedbiri"] == "")
+                for _sev, _sin, _not in (
+                        (SEVIYE_AGIR, SINYAL_KAP_AGIR, "Optima Skor 0'a sabitlenmiştir; alım/satım sinyali üretilmez."),
+                        (SEVIYE_ORTA, SINYAL_KAP_ORTA, "Optima Skor yarıya indirilmiştir; dikkatli olun.")):
+                    _m = _etiketsiz & (_kap["KAP_Seviye"] == _sev)
+                    if _m.any():
+                        df.loc[_m, "Piyasa_Tedbiri"] = _sin
+                        df.loc[_m, "Tedbir_Aciklama"] = (
+                            "KAP bildirimi: " + _kap.loc[_m, "KAP_Aciklama"] + ". " + _not)
+                        _sk = pd.to_numeric(df.loc[_m, "Optima_Skor"], errors="coerce")
+                        df.loc[_m, "Optima_Skor"] = _sk * (0.0 if _sev == SEVIYE_AGIR else 0.5)
+                print(f"[kap-risk] {int(_kap_var.sum())} hisse KAP risk uyarisi kapsaminda "
+                      f"({int((_kap['KAP_Seviye'] == SEVIYE_AGIR).sum())} agir).")
+    except Exception as _kr_err:
+        print(f"[kap-risk] atlandi: {_kr_err}")
+
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)
@@ -1381,8 +1417,10 @@ from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal,
 # get_signal_row() kullanir: satirda Piyasa_Tedbiri varsa (load_universe isaretler) SKOR/TREND
 # NE OLURSA OLSUN tedbirin etiketi gosterilir -> tablo = detay = birlesik sinyal, hep ayni.
 from piyasa_tedbir import SINYAL_KAPALI, SINYAL_TEDBIR, SINYAL_KISITLI
+from kap_risk import SINYAL_KAP_AGIR, SINYAL_KAP_ORTA
 
-_TEDBIR_SINIF = {SINYAL_KAPALI: "sig-kapali", SINYAL_TEDBIR: "sig-tedbir", SINYAL_KISITLI: "sig-kisitli"}
+_TEDBIR_SINIF = {SINYAL_KAPALI: "sig-kapali", SINYAL_TEDBIR: "sig-tedbir", SINYAL_KISITLI: "sig-kisitli",
+                 SINYAL_KAP_AGIR: "sig-kap-agir", SINYAL_KAP_ORTA: "sig-kap-orta"}
 
 
 def _tedbir_deger(row) -> str:
@@ -1403,22 +1441,31 @@ def get_signal_row(row, score, rsi, trend):
 
 
 def _tedbir_serit_goster(row):
-    """Detay basliginin altinda tedbir seridi (tedbir yoksa hicbir sey cizmez)."""
-    t = _tedbir_deger(row)
-    if not t:
-        return
-    try:
-        acik = row.get("Tedbir_Aciklama")
-    except Exception:
-        acik = ""
-    acik = acik if isinstance(acik, str) else ""
-    renk = SIG_COLORS.get(_TEDBIR_SINIF[t], "#444")
+    """Detay basliginin altinda tedbir/KAP seridi (hicbiri yoksa hicbir sey cizmez).
+    v2.0.7.373: KAP etiketleri ayni seride; etiketsiz KAP bilgisi (geri alim, bedelsiz...) mavi bilgi seridi."""
     import html as _html
-    st.markdown(
-        f'<div style="border-left:6px solid {renk};background:#f7f7fa;padding:10px 14px;'
-        f'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
-        f'<b style="color:{renk};">{_html.escape(t)}</b> &nbsp;{_html.escape(acik)}</div>',
-        unsafe_allow_html=True)
+    t = _tedbir_deger(row)
+    try:
+        acik = row.get("Tedbir_Aciklama") if row is not None else ""
+        bilgi = row.get("KAP_Bilgi") if row is not None else ""
+    except Exception:
+        acik, bilgi = "", ""
+    acik = acik if isinstance(acik, str) else ""
+    bilgi = bilgi if isinstance(bilgi, str) else ""
+    if t:
+        renk = SIG_COLORS.get(_TEDBIR_SINIF[t], "#444")
+        st.markdown(
+            f'<div style="border-left:6px solid {renk};background:#f7f7fa;padding:10px 14px;'
+            f'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
+            f'<b style="color:{renk};">{_html.escape(t)}</b> &nbsp;{_html.escape(acik)}</div>',
+            unsafe_allow_html=True)
+    if bilgi:
+        st.markdown(
+            '<div style="border-left:6px solid #1f4e79;background:#eef4fb;padding:8px 14px;'
+            'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
+            f'<b style="color:#1f4e79;">KAP BİLGİ</b> &nbsp;{_html.escape(bilgi)}. '
+            'Bu bildirim tek başına risk sayılmaz; skor ve sinyal değişmedi.</div>',
+            unsafe_allow_html=True)
 # ══ BITIS: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
 
 
@@ -1673,6 +1720,10 @@ def _sinyal_renk_stil(v):
         return "color: #6a1b8a; font-weight: 700;"
     elif "KISITLI" in v:
         return "color: #1f4e79; font-weight: 700;"
+    elif "KAP UYARISI" in v:
+        return "color: #8e1b10; font-weight: 700;"
+    elif "KAP D" in v and "KKAT" in v:
+        return "color: #9a5b00; font-weight: 700;"
     if "GÜÇLÜ AL" in v or "GUCLU AL" in v:
         return "color: #1b8a4a; font-weight: 700;"
     elif "KADEMELİ AL" in v or "KADEMELI AL" in v:
