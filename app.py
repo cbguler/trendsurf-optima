@@ -76,6 +76,8 @@ st.markdown("""<style>
 /* Ana içerik koyu metin */
 .main p,.main span,.main div,.main label,.block-container p,
 .block-container span,.block-container label{color:#1b2a4a!important;}
+/* v2.0.7.377: Streamlit st.markdown satir ici '!important' bildirimlerini SILER; beyaz rozet yazisi sinif kuraliyla. */
+.block-container .kap-rozet,.block-container .kap-rozet *,.block-container .uyari-rozet,.block-container .uyari-rozet *{color:#ffffff!important;}
 h1,h2,h3,h4{color:#1b2a4a!important;font-weight:700!important;}
 h1{font-size:26px!important;} h2{font-size:20px!important;} h3{font-size:16px!important;}
 /* Metrik kartları */
@@ -1466,9 +1468,9 @@ def _tedbir_serit_goster(row):
             '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #1f4e79;'
             'border-left:10px solid #1f4e79;background:#dbeafe;padding:12px 16px;border-radius:8px;'
             'margin:8px 0 14px 0;color:#0f2a4a;">'
-            '<div style="background:#1f4e79;color:#ffffff!important;font-weight:800;font-size:13px;'
+            '<div class="kap-rozet" style="background:#1f4e79;font-weight:800;font-size:13px;'
             'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">'
-            '<span style="color:#ffffff!important;">KAP BİLGİ</span></div>'
+            '<span>KAP BİLGİ</span></div>'
             f'<div><div style="font-size:16px;font-weight:700;line-height:1.35;">{_html.escape(bilgi)}</div>'
             '<div style="font-size:13px;margin-top:4px;color:#27476b;">'
             'Bu bildirim tek başına risk sayılmaz; skor ve sinyal değişmedi.</div></div></div>',
@@ -1507,7 +1509,7 @@ def _uyari_rozet_html(etiket, aciklama=""):
         renk = "#1f4e79"
     else:
         renk = SIG_COLORS.get(_TEDBIR_SINIF.get(etiket, ""), "#444")
-    return (f'<span title="{_html.escape(aciklama or "")}" style="background:{renk};color:#ffffff!important;'
+    return (f'<span class="uyari-rozet" title="{_html.escape(aciklama or "")}" style="background:{renk};'
             f'padding:4px 9px;border-radius:12px;font-size:12px;font-weight:700;display:inline-block;'
             f'white-space:nowrap;">{_html.escape(etiket)}</span>')
 
