@@ -1460,11 +1460,17 @@ def _tedbir_serit_goster(row):
             f'<b style="color:{renk};">{_html.escape(t)}</b> &nbsp;{_html.escape(acik)}</div>',
             unsafe_allow_html=True)
     if bilgi:
+        # v2.0.7.375 (Bahri'nin talebi): KAP BILGI seridi belirginlestirildi - koyu rozet, kalin 16px metin,
+        # 2px cerceve + 10px sol serit. Hala uyari (kirmizi/turuncu) renklerinden farkli: mavi = bilgi.
         st.markdown(
-            '<div style="border-left:6px solid #1f4e79;background:#eef4fb;padding:8px 14px;'
-            'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
-            f'<b style="color:#1f4e79;">KAP BİLGİ</b> &nbsp;{_html.escape(bilgi)}. '
-            'Bu bildirim tek başına risk sayılmaz; skor ve sinyal değişmedi.</div>',
+            '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #1f4e79;'
+            'border-left:10px solid #1f4e79;background:#dbeafe;padding:12px 16px;border-radius:8px;'
+            'margin:8px 0 14px 0;color:#0f2a4a;">'
+            '<span style="background:#1f4e79;color:#ffffff;font-weight:800;font-size:13px;'
+            'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">KAP BİLGİ</span>'
+            f'<div><div style="font-size:16px;font-weight:700;line-height:1.35;">{_html.escape(bilgi)}</div>'
+            '<div style="font-size:13px;margin-top:4px;color:#27476b;">'
+            'Bu bildirim tek başına risk sayılmaz; skor ve sinyal değişmedi.</div></div></div>',
             unsafe_allow_html=True)
 # ══ BITIS: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
 
