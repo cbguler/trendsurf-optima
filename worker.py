@@ -1300,6 +1300,17 @@ def _gecmis_gun_hesapla(tickers, onceki):
     return sonuc
 
 
+def _maden_tl_fiyat(p_tl: float, p_usd: float, ons_gram: bool, usdtry: float, sentetik_yasak: bool) -> float:
+    """v2.0.7.387: Maden TL fiyati secimi. Turkiye kaynagindan (Bigpara/Truncgil) gelen TL fiyat (p_tl > 0) ASLA
+    ABD piyasasi USD fiyatindan sentetik cevrimle ezilmez (Bahri'nin ilkesi; v2.0.7.173'un amaci). Yalniz TL fiyat yoksa
+    ve sentetik cevrim yasak degilse USD x kur (ons -> gram: / 31,1035) kullanilir."""
+    if p_tl and p_tl > 0:
+        return p_tl
+    if sentetik_yasak or not p_usd or p_usd <= 0 or not usdtry or usdtry <= 0:
+        return p_tl
+    return round(p_usd * usdtry / 31.1035, 4) if ons_gram else round(p_usd * usdtry, 4)
+
+
 def build():
     global BIST_TICKERS
 
@@ -1758,10 +1769,14 @@ def build():
     # HIC sokulmaz - zaten Truncgil'den (Kademe 1) geliyorlar.
     maden_syms = [yf_s for _, yf_s in MADEN if not yf_s.startswith("NOYF_")]
     maden_map  = {yf_s: t for t, yf_s in MADEN}
+    # v2.0.7.387: `yf` bu fonksiyonda HIC import edilmemisti -> asagidaki yf.download NameError veriyor, bos
+    # `except:` yutuyor, toplu download HIC calismiyordu (v2.0.7.43'ten beri). Import eklendi, hata artik loglanir.
     try:
+        import yfinance as yf
         raw_m = yf.download(maden_syms, start=maden_start, end=maden_end,
                             auto_adjust=True, progress=False, group_by="ticker")
-    except:
+    except Exception as _m_err:
+        print(f"  [maden] toplu yfinance download basarisiz ({type(_m_err).__name__}: {_m_err}); tek tek denenecek")
         raw_m = pd.DataFrame()
 
     # USDTRY kuru — döviz bölümünden al, yoksa yfinance'den çek
@@ -1851,20 +1866,13 @@ def build():
             # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
             # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
             # icin normalde girmez, ama yedek olarak burada kalir).
-            if p == 0.0 and not _sentetik_yasak:
-                if yf_s in ONS_TO_GRAM:
-                    p = round(p_usd * usdtry_rate / 31.1035, 4)
-                else:
-                    p = round(p_usd * usdtry_rate, 4)
+            p = _maden_tl_fiyat(p, p_usd, yf_s in ONS_TO_GRAM, usdtry_rate, _sentetik_yasak)
         except Exception:
             if not _sentetik_yasak:
                 p2, rsi, ret, vol_v = single_full(yf_s, t)
                 if p2 > 0:
                     _gecmis_veri_var = True
-                    if yf_s in ONS_TO_GRAM:
-                        p = round(p2 * usdtry_rate / 31.1035, 4)
-                    else:
-                        p = round(p2 * usdtry_rate, 4)
+                    p = _maden_tl_fiyat(p, p2, yf_s in ONS_TO_GRAM, usdtry_rate, _sentetik_yasak)
 
         # Kademe 3: Son CSV'den tamamla
         if p == 0.0 and os.path.exists(CSV_PATH):
