@@ -151,7 +151,7 @@ def pay_adetleri(html: str) -> dict:
 
 import threading
 
-_ist = {"ok": 0, "fail": 0}
+_ist = {"ok": 0, "fail": 0, "ardisik": 0}
 _ist_kilit = threading.Lock()
 
 
@@ -163,7 +163,7 @@ def istatistik() -> dict:
 
 def istatistik_sifirla():
     with _ist_kilit:
-        _ist["ok"] = _ist["fail"] = 0
+        _ist["ok"] = _ist["fail"] = _ist["ardisik"] = 0
 
 
 def _cek(url: str, deneme: int = 2, bekle: float = 1.0) -> Optional[str]:
@@ -175,52 +175,89 @@ def _cek(url: str, deneme: int = 2, bekle: float = 1.0) -> Optional[str]:
             if r.status_code == 200 and r.text and len(r.text) > 500:
                 with _ist_kilit:
                     _ist["ok"] += 1
+                    _ist["ardisik"] = 0
                 return r.text
-        except Exception:
-            pass
+            with _ist_kilit:
+                _ist["son_hata"] = f"HTTP {r.status_code}"
+        except Exception as e:
+            with _ist_kilit:
+                _ist["son_hata"] = type(e).__name__
         if i + 1 < deneme:
             time.sleep(bekle * (i + 1))
     with _ist_kilit:
         _ist["fail"] += 1
+        _ist["ardisik"] += 1
     return None
 
 
-def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = None,
-            fin_html: str = None, genel_html: str = None) -> dict:
-    """Tek hisse icin KAP'tan PD/DD ve F/K. Her zaman bir sozluk doner:
+def ham_cek(ticker: str, fin_html: str = None, genel_html: str = None, bugun: str = None) -> Optional[dict]:
+    """KAP'tan (2 sayfa) FIYATTAN BAGIMSIZ ham verileri ceker; JSON'a yazilabilir sozluk doner (onbellek icin).
+    None = KAP'a ulasilamadi (gecici hata; onbellekteki eski kayit korunmali).
+    Kayit: tarih, yok (veri bulunamadiysa neden), genel_ok, para, donem, ozkaynak, kar [donem, deger, para, etiket],
+    onceki_yil_kar [donem, deger, para] (ara donemde bir onceki yilin 12. ay kari), sermaye [donem, deger, para],
+    paylar {borsa_kodu: toplam_pay_adedi}, notlar."""
+    import datetime as _dt
+    slug = slug_getir(ticker)
+    if not slug:
+        return {"tarih": bugun or _dt.date.today().isoformat(), "yok": "KAP sirket sayfasi (slug) yok", "genel_ok": True,
+                "notlar": []}
+    fin_html = fin_html or _cek(FIN_URL.format(slug=slug))
+    if not fin_html:
+        return None
+    ham = {"tarih": bugun or _dt.date.today().isoformat(), "yok": None, "genel_ok": True, "notlar": []}
+    seri = kap_seriler(_kap_tablolar_metin(fin_html))
+    oz = _en_guncel(seri, OZKAYNAK_ETIKETLERI)
+    if not oz:
+        ham["yok"] = "KAP'ta ozkaynak satiri bulunamadi"
+        return ham
+    ham.update(donem=oz[0], ozkaynak=oz[1], para=oz[2])
+    sm = _en_guncel(seri, ("Ödenmiş Sermaye",))
+    if sm:
+        ham["sermaye"] = [sm[0], sm[1], sm[2]]
+    kd = _en_guncel(seri, NET_KAR_ETIKETLERI)
+    if kd:
+        ham["kar"] = [kd[0], kd[1], kd[2], kd[3]]
+        yil, ay = _donem_anahtar(kd[0])
+        if ay != 12:
+            tam = seri.get(_norm(kd[3]), {}).get(f"{yil - 1}/12")
+            if tam:
+                ham["onceki_yil_kar"] = [f"{yil - 1}/12", tam[0], tam[1]]
+    genel_html = genel_html or _cek(GENEL_URL.format(slug=slug))
+    if genel_html:
+        ham["paylar"] = pay_adetleri(genel_html)
+    else:
+        ham["paylar"] = {}
+        ham["genel_ok"] = False        # gecici hata olabilir: onbellek kotasinda yaslanmadan yeniden denenir
+    return ham
+
+
+def hesapla_ham(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = None, ham: dict = None) -> dict:
+    """ham_cek() verisi + GUNCEL fiyattan PD/DD ve F/K (ag yok). Her zaman bir sozluk doner:
       pb, pe (None olabilir), pe_tur ('TTM'|'YILLIK'|None), pe_durum ('hesaplandi'|'zarar'|'yok'),
-      donem (ozkaynak donemi), kar_donem, piyasa_degeri, ozkaynak, net_kar, para, pay_adedi, pay_kaynak, notlar[]"""
+      donem (ozkaynak donemi), kar_donem, piyasa_degeri, ozkaynak, net_kar, para, pay_adedi, pay_kaynak, notlar[],
+      kap_tarihi (ham verinin cekildigi gun)"""
     out = {"pb": None, "pe": None, "pe_tur": None, "pe_durum": "yok", "donem": None, "kar_donem": None,
            "piyasa_degeri": None, "ozkaynak": None, "net_kar": None, "para": None,
-           "pay_adedi": None, "pay_kaynak": None, "notlar": []}
+           "pay_adedi": None, "pay_kaynak": None, "notlar": [], "kap_tarihi": (ham or {}).get("tarih")}
     notlar = out["notlar"]
     fiyatlar = fiyatlar or {}
     kurlar = kurlar or {}
     if not fiyat or fiyat <= 0:
         notlar.append("fiyat yok")
         return out
-    slug = slug_getir(ticker)
-    if not slug:
-        notlar.append("KAP sirket sayfasi (slug) yok")
+    if not ham:
+        notlar.append("KAP verisi yok (alinamadi, onbellekte de yok)")
         return out
-
-    fin_html = fin_html or _cek(FIN_URL.format(slug=slug))
-    if not fin_html:
-        notlar.append("KAP finansal sayfasi alinamadi")
+    if ham.get("yok"):
+        notlar.append(ham["yok"])
         return out
-    seri = kap_seriler(_kap_tablolar_metin(fin_html))
-
-    oz = _en_guncel(seri, OZKAYNAK_ETIKETLERI)
-    if not oz:
-        notlar.append("KAP'ta ozkaynak satiri bulunamadi")
-        return out
-    donem, ozkaynak, para, _etiket = oz
+    donem, ozkaynak, para = ham["donem"], ham["ozkaynak"], ham["para"]
     out.update(donem=donem, ozkaynak=ozkaynak, para=para)
+    sm = ham.get("sermaye")
 
     # ── pay adedi ve piyasa degeri (TL) ──────────────────────
-    genel_html = genel_html or _cek(GENEL_URL.format(slug=slug))
-    paylar = pay_adetleri(genel_html) if genel_html else {}
-    pd_tl = None
+    paylar = ham.get("paylar") or {}
+    pd_tl = adet = None
     if paylar:
         if ticker in paylar and len(paylar) == 1:
             adet = paylar[ticker]
@@ -235,19 +272,15 @@ def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = Non
             kod, adet = next(iter(paylar.items()))
             pd_tl = fiyat * adet
             notlar.append(f"KAP pay tablosunda kod {kod} (aranan {ticker})")
-        else:
-            adet = None
         if pd_tl:
             out.update(pay_adedi=adet, pay_kaynak="KAP genel")
             # donem sonundan sonra sermaye degismis mi (bedelsiz: sorun yok, fiyat zaten ayarli; bedelli: ozkaynak
             # henuz yansimadigi icin PD/DD yuksek gorunebilir) - karar vermeden yalnizca isaretle
-            _sm = _en_guncel(seri, ("Ödenmiş Sermaye",))
-            if _sm and _sm[2] == "TL" and _sm[1] > 0 and abs(sum(paylar.values()) - _sm[1]) / _sm[1] > 0.10:
-                notlar.append(f"sermaye {_sm[0]} doneminden sonra degismis: {_sm[1]:,.0f} -> {sum(paylar.values()):,.0f} pay")
+            if sm and sm[2] == "TL" and sm[1] > 0 and abs(sum(paylar.values()) - sm[1]) / sm[1] > 0.10:
+                notlar.append(f"sermaye {sm[0]} doneminden sonra degismis: {sm[1]:,.0f} -> {sum(paylar.values()):,.0f} pay")
     if not pd_tl:
         # yedek: son donem odenmis sermaye (TL ise; 1 lot = 1 TL nominal). Donem sonu degeri - sonradan olan
         # sermaye artirimlarini icermeyebilir; bu yuzden etiketlenir.
-        sm = _en_guncel(seri, ("Ödenmiş Sermaye",))
         if sm and sm[2] == "TL":
             pd_tl = fiyat * sm[1]
             out.update(pay_adedi=sm[1], pay_kaynak=f"KAP odenmis sermaye ({sm[0]})")
@@ -275,11 +308,11 @@ def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = Non
         notlar.append("ozkaynak negatif/sifir: PD/DD anlamsiz")
 
     # ── F/K ──────────────────────────────────────────────────
-    kd = _en_guncel(seri, NET_KAR_ETIKETLERI)
+    kd = ham.get("kar")
     if not kd:
         notlar.append("KAP'ta net kar satiri yok")
         return out
-    k_donem, kar, k_para, _ke = kd
+    k_donem, kar, k_para = kd[0], kd[1], kd[2]
     out["kar_donem"], out["net_kar"] = k_donem, kar
     if k_para != para:
         notlar.append("bilanco ve gelir tablosu para birimleri farkli: F/K hesaplanmadi")
@@ -289,16 +322,15 @@ def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = Non
         kullan, tur, kd_donem = kar, "TTM", k_donem
     else:
         # ara donem: iz. 12A icin onceki yilin ayni donemi gerekir, sayfada yok -> son tam yil
-        etiket = _ke
-        tam = seri.get(_norm(etiket), {}).get(f"{yil - 1}/12")
+        tam = ham.get("onceki_yil_kar")
         if kar < 0:
             out["pe_durum"] = "zarar"
             notlar.append(f"{k_donem} donemi zarar: F/K yok")
             return out
-        if not tam or tam[1] != k_para:
+        if not tam or tam[2] != k_para:
             notlar.append(f"{yil - 1}/12 yillik net kar KAP sayfasinda yok: F/K hesaplanmadi")
             return out
-        kullan, tur, kd_donem = tam[0], "YILLIK", f"{yil - 1}/12"
+        kullan, tur, kd_donem = tam[1], "YILLIK", tam[0]
     out["kar_donem"] = kd_donem
     if kullan > 0:
         out["pe"] = pd_p / kullan
@@ -308,6 +340,74 @@ def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = Non
         out["pe_durum"] = "zarar"
         notlar.append(f"{kd_donem} net kar <= 0: F/K yok")
     return out
+
+
+def hesapla(ticker: str, fiyat: float, fiyatlar: dict = None, kurlar: dict = None,
+            fin_html: str = None, genel_html: str = None) -> dict:
+    """Tek hisse: ham_cek() + hesapla_ham() (onbellek kullanmadan, dogrudan KAP'tan)."""
+    if not fiyat or fiyat <= 0:
+        return hesapla_ham(ticker, fiyat, fiyatlar, kurlar, None)
+    ham = ham_cek(ticker, fin_html, genel_html)
+    out = hesapla_ham(ticker, fiyat, fiyatlar, kurlar, ham)
+    if ham is None:
+        out["notlar"] = ["KAP finansal sayfasi alinamadi"]
+    return out
+
+
+# ───────────────────────────────────────────────────────────
+#  Gunluk onbellek (KAP'a her gece 632x2 istek atmamak icin)
+# ───────────────────────────────────────────────────────────
+# NEDEN (v2.0.7.383): ilk canli calismada KAP, GitHub'in IP'sine ~200 istekten (99 hisse) sonra yanit vermeyi
+# kesti (sonraki 500+ istek basarisiz) ve ayni dakikalarda Halka Arz istegine de HTTP 429 dondu. KAP bilancosu
+# ceyreklik degisir; her gece tum hisseleri cekmek gereksizdir. Ham KAP verisi (ozkaynak, net kar, pay adedi)
+# JSON onbellekte tutulur, PD/DD ve F/K her gece GUNCEL fiyatla yeniden hesaplanir. Gece yalniz en eski/eksik
+# KAYITLARIN bir kismi (kota) yenilenir.
+ONBELLEK_YENILEME_GUN = 7
+ONBELLEK_GUNLUK_KOTA = 90
+
+
+def onbellek_yukle(yol: str) -> dict:
+    import json
+    import os
+    try:
+        if os.path.exists(yol):
+            with open(yol, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict):
+                return d.get("veri", d) if "veri" in d else d
+    except Exception:
+        pass
+    return {}
+
+
+def onbellek_kaydet(yol: str, veri: dict) -> None:
+    import json
+    with open(yol, "w", encoding="utf-8") as f:
+        json.dump({"aciklama": "KAP ham verisi (kap_temel.py); PD/DD ve F/K her gece guncel fiyatla yeniden hesaplanir",
+                   "veri": veri}, f, ensure_ascii=False, sort_keys=True, indent=0)
+
+
+def yenilenecekler(tickers, onbellek: dict, bugun, yas_gun: int = ONBELLEK_YENILEME_GUN,
+                   kota: int = ONBELLEK_GUNLUK_KOTA) -> list:
+    """Yenilenmesi gereken hisseler, en acil olandan baslayarak en fazla `kota` tane.
+    Oncelik: onbellekte hic olmayan > genel sayfasi alinamamis kayit > en eski kayit (yas_gun'u asmis olanlar)."""
+    import datetime as _dt
+    adaylar = []
+    for t in tickers:
+        k = onbellek.get(t)
+        if not k:
+            adaylar.append((0, "", t))
+            continue
+        try:
+            yas = (bugun - _dt.date.fromisoformat(k.get("tarih"))).days
+        except Exception:
+            yas = 10 ** 6
+        if not k.get("genel_ok", True):
+            adaylar.append((1, k.get("tarih") or "", t))
+        elif yas >= yas_gun:
+            adaylar.append((2, k.get("tarih") or "", t))
+    adaylar.sort()
+    return [t for _, _, t in adaylar[:kota]]
 
 
 # ───────────────────────────────────────────────────────────
