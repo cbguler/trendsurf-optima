@@ -414,6 +414,9 @@ def yenilenecekler(tickers, onbellek: dict, bugun, yas_gun: int = ONBELLEK_YENIL
 #  KAP + yfinance birlesimi (KAP birincil)
 # ───────────────────────────────────────────────────────────
 PB_TUTARLILIK_ALT, PB_TUTARLILIK_UST = 0.6, 1.6
+# Yahoo F/K icin ic tutarlilik: trailingEps x KAP pay adedi ~ Yahoo netIncomeToCommon olmali (TL raporlayanlarda
+# 0,99-1,26 olculdu; ORZAX 3,68 - EPS ile net kar ayni hisse sayisina cikmiyor).
+FK_EPS_TUTARLILIK_ALT, FK_EPS_TUTARLILIK_UST = 0.6, 1.6
 
 
 def _sayi(v):
@@ -438,6 +441,18 @@ def yahoo_tutarli_mi(yf: dict, kap_pb: Optional[float]) -> Optional[bool]:
     if fc:
         return fc == cur
     return None
+
+
+def yahoo_fk_tutarli_mi(yf: dict, pay_adedi: Optional[float]) -> Optional[bool]:
+    """Yahoo F/K'sinin dayandigi hisse basi kar (trailingEps), Yahoo'nun kendi net kari (netIncomeToCommon) ve KAP pay
+    adediyle ic tutarli mi? oran = EPS x pay adedi / net kar. Hesaplanamiyorsa (eksik veri, zarar) None: bu durumda
+    reddetmek icin kanit yok. Yalniz kanitli tutarsizlikta False."""
+    if not yf or not pay_adedi:
+        return None
+    eps, ni = _sayi(yf.get("eps")), _sayi(yf.get("net_income"))
+    if not eps or not ni or eps <= 0 or ni <= 0:
+        return None
+    return FK_EPS_TUTARLILIK_ALT <= eps * pay_adedi / ni <= FK_EPS_TUTARLILIK_UST
 
 
 def oranlari_birlestir(kap: Optional[dict], yf: Optional[dict], fiyat: float, kurlar: dict = None) -> tuple:
@@ -479,11 +494,15 @@ def oranlari_birlestir(kap: Optional[dict], yf: Optional[dict], fiyat: float, ku
         pe, meta["fk_tur"], meta["fk_donem"] = kap["pe"], "TTM", kap.get("kar_donem")
     elif kap.get("pb") is not None:
         # KAP bilancosu var ama son donem ara donem (veya net kar satiri yok): iz. 12A KAP'ta hesaplanamaz.
-        if ype and tutarli:
+        fk_tutarli = yahoo_fk_tutarli_mi(yf, kap.get("pay_adedi")) if ype and tutarli else None
+        if ype and tutarli and fk_tutarli is not False:
             pe, meta["fk_tur"] = ype, "yfinance"
             meta["notlar"].append("F/K: yfinance iz. 12A (KAP PD/DD ile para birimi tutarliligi dogrulandi)")
         elif kap.get("pe_durum") == "hesaplandi":
             pe, meta["fk_tur"], meta["fk_donem"] = kap["pe"], kap.get("pe_tur"), kap.get("kar_donem")
+        if ype and tutarli and fk_tutarli is False and pe is None:
+            meta["fk_not"] = ("F/K hesaplanamadi: KAP'ta tam yil net kar yok, yfinance F/K'si kendi net kariyla "
+                              "tutarsiz (EPS x pay adedi != net kar)")
     elif yf:
         if ype and tutarli is not False and fc in (None, cur):
             pe, meta["fk_tur"] = ype, "yfinance"
@@ -497,6 +516,8 @@ def oranlari_birlestir(kap: Optional[dict], yf: Optional[dict], fiyat: float, ku
     uyari = next((n for n in meta["notlar"] if n.startswith("sermaye ")), None)
     if uyari and meta["kaynak"] == "KAP":
         meta["uyari"] = uyari[0].upper() + uyari[1:] + "; bedelli artirimsa PD/DD yuksek gorunebilir"
+    if meta.get("fk_not"):
+        meta["uyari"] = (meta["uyari"] + " | " if meta["uyari"] else "") + meta["fk_not"]
     dy = _sayi(yf.get("div_yield")) if yf else None
     if pb is not None and not (pb > 0):
         pb = None

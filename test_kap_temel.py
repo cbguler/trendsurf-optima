@@ -175,6 +175,33 @@ def test_birlestir_yahoo_pe_ara_donem():
     ok(pe == 13.7 and m["fk_tur"] == "TTM", "KAP 12 aylik (TTM) varsa Yahoo'ya hic bakilmaz")
 
 
+def test_birlestir_yahoo_fk_ic_tutarlilik():
+    # ORZAX: halka arz 2026, KAP'ta yalniz 2026/06 var (yillik kar yok); Yahoo EPS 12,57 x 338,5M pay = 4,25 milyar,
+    # Yahoo net kari 1,16 milyar -> oran 3,68: EPS ile net kar tutarsiz -> Yahoo F/K (5,85) alinmaz
+    orz_kap = {"pb": 7.03, "pe": None, "pe_tur": None, "pe_durum": "yok", "donem": "2026/06", "kar_donem": "2026/06",
+               "pay_adedi": 338.5e6, "notlar": []}
+    orz_yf = {"_source": "yfinance", "pb_ratio": 7.03, "pe_ratio": 5.85, "eps": 12.57, "net_income": 1.1575e9,
+              "div_yield": 0.0, "financial_currency": None, "currency": "TRY"}
+    pb, pe, dy, m = T.oranlari_birlestir(orz_kap, orz_yf, 73.5, {})
+    ok(pb == 7.03 and pe is None, f"ORZAX: tutarsiz Yahoo F/K alinmaz, F/K bos ({pe})")
+    ok(m.get("fk_not") and "tutarsiz" in m["uyari"], f"kullaniciya neden F/K yok yazilir: {m['uyari']}")
+    # tutarli TL raporlayan (GARAN benzeri oran ~0,99): Yahoo F/K kabul
+    gar_kap = dict(orz_kap, pb=1.3, pay_adedi=4.2e9)
+    gar_yf = dict(orz_yf, pb_ratio=1.3, pe_ratio=4.54, eps=28.45, net_income=1.204e11)
+    pb, pe, dy, m = T.oranlari_birlestir(gar_kap, gar_yf, 129.0, {})
+    ok(pe == 4.54 and m["fk_tur"] == "yfinance" and not m.get("fk_not"), "tutarli Yahoo F/K kabul edilir")
+    # kanit yoksa (EPS veya net kar yok / zarar) reddetmek icin neden yok -> onceki davranis
+    ok(T.yahoo_fk_tutarli_mi({"eps": 5.0}, 1e9) is None, "net kar yoksa None")
+    ok(T.yahoo_fk_tutarli_mi({"eps": -1.0, "net_income": -1e9}, 1e9) is None, "zararda None")
+    ok(T.yahoo_fk_tutarli_mi(orz_yf, None) is None, "pay adedi yoksa None")
+    pb, pe, dy, m = T.oranlari_birlestir(gar_kap, {k: v for k, v in gar_yf.items() if k != "net_income"}, 129.0, {})
+    ok(pe == 4.54, "net kar bilgisi yoksa mevcut dogrulama (PD/DD) gecerli sayilir")
+    # tutarsiz Yahoo ama KAP son tam yil kari varsa KAP yillik F/K kullanilir
+    kap_y = dict(orz_kap, pe=21.5, pe_tur="YILLIK", pe_durum="hesaplandi", kar_donem="2025/12")
+    pb, pe, dy, m = T.oranlari_birlestir(kap_y, orz_yf, 73.5, {})
+    ok(pe == 21.5 and m["fk_tur"] == "YILLIK" and not m.get("fk_not"), "tutarsiz Yahoo -> KAP yillik F/K")
+
+
 def test_birlestir_yedek_yahoo():
     yf = {"_source": "yfinance", "pb_ratio": 2.0, "pe_ratio": 10.0, "div_yield": 0.05, "financial_currency": "TRY",
           "currency": "TRY"}
