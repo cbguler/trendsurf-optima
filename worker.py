@@ -1521,6 +1521,7 @@ def build():
         r["Temel_FK_Tur"] = _tm.get("fk_tur")
         r["Temel_FK_Donem"] = _tm.get("fk_donem")
         r["Temel_Uyari"] = _tm.get("uyari")
+        r["Temel_PD"] = _tm.get("piyasa_degeri")     # v2.0.7.385: KAP pay adedi x fiyat (TL)
         # onceki derlemeden KORUNAN deger (bu gece taze cekilemedi): kaynak/donem bilgisi de eskidir
         if r["Temel_Tarihi"] and not _tm.get("kaynak"):
             r["Temel_Kaynak"] = "yfinance" if (not _temel_meta and r["Temel_Tarihi"] == _bugun_iso) else "onceki derleme"

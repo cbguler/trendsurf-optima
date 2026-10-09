@@ -404,6 +404,26 @@ def test_detay_tablosu():
     ok(t["pb"] == 0.39 and t["pe"] is None and t["kaynak"] == "KAP", "temel_satiri NaN'i None yapar")
 
 
+def test_piyasa_degeri_kap():
+    # ORZAX: Yahoo marketCap 18,11 milyar (246,4M pay) - KAP pay adediyla 24,9 milyar; tabloda KAP degeri gorunur
+    kap = {"pb": 7.03, "pe": None, "pe_tur": None, "pe_durum": "yok", "donem": "2026/06", "kar_donem": "2026/06",
+           "pay_adedi": 338.5e6, "piyasa_degeri": 24.88e9, "notlar": []}
+    pb, pe, dy, m = T.oranlari_birlestir(kap, {"_source": "yfinance", "pb_ratio": 7.03}, 73.5, {})
+    ok(m["piyasa_degeri"] == 24.88e9, "KAP kaynakli PD/DD'de piyasa degeri meta'ya yazilir")
+    pb, pe, dy, m = T.oranlari_birlestir({}, {"_source": "yfinance", "pb_ratio": 2.0, "financial_currency": "TRY"}, 10.0, {})
+    ok(m["piyasa_degeri"] is None, "KAP yoksa piyasa degeri bos (Yahoo'nunki yazilmaz)")
+    raw = {"market_cap": 18.11e9, "pe_ratio": None, "pb_ratio": None, "revenue": 5e9, "_kap_available": True}
+    temel = K.temel_satiri({"PB": 7.03, "PE": float("nan"), "DY": 0.0, "Temel_Kaynak": "KAP", "Temel_Donem": "2026/06",
+                            "Temel_PD": 24.88e9})
+    ok(temel["pd"] == 24.88e9, "temel_satiri Temel_PD'yi okur")
+    d = K.fundamentals_to_display(raw, temel)
+    ok("Piyasa Değeri" not in d and "Piyasa Değeri (KAP pay adedi × fiyat)" in d, f"etiket KAP'li: {list(d)[:3]}")
+    ok(d["Piyasa Değeri (KAP pay adedi × fiyat)"].startswith("24.88"), f"deger KAP'tan: {d['Piyasa Değeri (KAP pay adedi × fiyat)']}")
+    ok(list(d)[0].startswith("Piyasa Değeri"), "satir sirasi korunur")
+    d2 = K.fundamentals_to_display(raw, K.temel_satiri({"PB": 7.03, "Temel_Kaynak": "onceki derleme"}))
+    ok("Piyasa Değeri" in d2, "Temel_PD yoksa Yahoo satiri aynen kalir")
+
+
 if __name__ == "__main__":
     for ad, f in list(globals().items()):
         if ad.startswith("test_"):
