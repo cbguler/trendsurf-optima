@@ -6628,11 +6628,12 @@ if page=="Ana Sayfa":
                     try:
                         from kap_client import (fetch_kap_fundamentals,
                                                 fundamentals_to_display,
-                                                get_kap_url)
+                                                get_kap_url, temel_satiri)
                         kap_url = get_kap_url(sel_ana)
                         with st.spinner("Temel veriler yukleniyor..."):
                             raw  = fetch_kap_fundamentals(sel_ana)
-                            disp = fundamentals_to_display(raw)
+                            _temel_k = temel_satiri(sel_row_ana)        # v2.0.7.381: Temel Skor girdileri (KAP oncelikli)
+                            disp = fundamentals_to_display(raw, _temel_k)
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
                         # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi): Skor
@@ -6698,10 +6699,8 @@ if page=="Ana Sayfa":
                             teknik_skor = teknik_skor + _total_adj
                             combined = max(0, min(100, round(tech_with_fund + _total_adj, 1)))
                         final_lbl, final_cls = get_signal_row(sel_row_ana, combined, d["rsi"], d["trend"])
-                        src_note = "yfinance"
-                        if raw.get("_kap_available"): src_note += " + KAP"
-                        elif raw.get("_kap_note"):    src_note += f" | KAP: {raw['_kap_note']}"
-                        st.caption(f"Kaynak: {src_note}")
+                        from kap_client import kaynak_notu
+                        st.caption(f"Kaynak: {kaynak_notu(raw, _temel_k)}")
                         if kap_url: st.caption(f"[KAP Finansal Bilgiler Sayfasi]({kap_url})")
                         ka, kb = st.columns([2, 1])
                         with ka:
@@ -7632,12 +7631,12 @@ elif page=="Portföyüm":
                 st.subheader("Temel Analiz")
                 try:
                     from kap_client import (fetch_kap_fundamentals,
-                                            fundamentals_to_display, get_kap_url)
+                                            fundamentals_to_display, get_kap_url, temel_satiri)
                     _kap_url = get_kap_url(_sel_tkr)
 
-                    with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
+                    with st.spinner("Temel veriler yükleniyor (KAP + yfinance)..."):
                         _raw  = fetch_kap_fundamentals(_sel_tkr)
-                        _disp = fundamentals_to_display(_raw)
+                        _disp = fundamentals_to_display(_raw, temel_satiri(_sr))   # v2.0.7.381
 
                     _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
                     # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz.
@@ -7677,12 +7676,8 @@ elif page=="Portföyüm":
                     _final_lbl, _final_cls = get_signal_row(_sr, _combined, _d["rsi"], _d["trend"])
 
                     # Kaynak bilgisi
-                    _src_note = "yfinance"
-                    if _raw.get("_kap_available"):
-                        _src_note += " + KAP"
-                    elif _raw.get("_kap_note"):
-                        _src_note += f" | KAP: {_raw['_kap_note']}"
-                    st.caption(f"Kaynak: {_src_note}")
+                    from kap_client import kaynak_notu, temel_satiri as _ts_
+                    st.caption(f"Kaynak: {kaynak_notu(_raw, _ts_(_sr))}")
 
                     if _kap_url:
                         st.caption(f"[KAP Finansal Bilgiler Sayfası]({_kap_url})")
@@ -8033,12 +8028,12 @@ elif page in CAT:
         st.subheader("Temel Analiz")
         try:
             from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
-                                    get_kap_url)
+                                    get_kap_url, temel_satiri)
             kap_url = get_kap_url(sel)
 
-            with st.spinner("Temel veriler yükleniyor (yfinance + KAP)..."):
+            with st.spinner("Temel veriler yükleniyor (KAP + yfinance)..."):
                 raw  = fetch_kap_fundamentals(sel)
-                disp = fundamentals_to_display(raw)
+                disp = fundamentals_to_display(raw, temel_satiri(sel_row))   # v2.0.7.381
 
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
             # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz. yukaridaki
@@ -8082,10 +8077,8 @@ elif page in CAT:
             # "KAP: " oneki eklenerek yapistiriliyordu - sonuc "Kaynak:
             # yfinance | KAP: Veri kaynağı: yfinance" gibi anlamsiz,
             # tekrarli bir metin oluyordu. Artik acik ve tek seferlik.
-            src_note = "yfinance"
-            if raw.get("_kap_available"):
-                src_note += " + KAP"
-            st.caption(f"Kaynak: {src_note}")
+            from kap_client import kaynak_notu
+            st.caption(f"Kaynak: {kaynak_notu(raw, temel_satiri(sel_row))}")
             if not raw.get("_kap_available"):
                 st.caption("Bu hisse için KAP bilanço verisi bulunamadı, sadece yfinance kullanıldı.")
 

@@ -1,0 +1,290 @@
+# -*- coding: utf-8 -*-
+"""v2.0.7.381: KAP-oncelikli PD/DD + F/K (kap_temel.py), metin tabanli KAP tablo okuyucu, Yahoo para birimi
+tutarliligi, detay tablosu etiketleri, temettu koruma. Calistir: python test_kap_temel.py
+Ag KULLANILMAZ: KAP sayfalari sentetik HTML ile verilir (gercek sayfa yapisindan: THYAO/GARAN/KRDMD, 9 Ekim 2026)."""
+import os
+import sys
+import tempfile
+
+import pandas as pd
+
+import kap_client as K
+import kap_temel as T
+
+_n = {"ok": 0}
+
+
+def ok(kosul, mesaj):
+    assert kosul, "BASARISIZ: " + mesaj
+    _n["ok"] += 1
+
+
+def yakin(a, b, tol=1e-6):
+    return a is not None and abs(a - b) <= tol * max(1.0, abs(b))
+
+
+# ── sentetik KAP sayfalari ───────────────────────────────────
+def _tablo(basliklar, satirlar):
+    h = "<thead><tr>" + "".join(f"<th>{b}</th>" for b in basliklar) + "</tr></thead>" if basliklar else ""
+    g = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in s) + "</tr>" for s in satirlar)
+    return f"<table>{h}<tbody>{g}</tbody></table>"
+
+
+def fin_html(donemler, birimler, ozk, kar, etiket_ozk="Ana Ortaklığa Ait Özkaynaklar",
+             etiket_kar="Dönem Kârının (Zararının) Dağılımı, Ana Ortaklık Payları", sermaye=None):
+    """ozk/kar: donem sayisi kadar deger (metin, KAP formati) ya da ''."""
+    bilanco = _tablo(["FİNANSAL DURUM TABLOSU"] + donemler,
+                     [["Sunum Para Birimi"] + birimler, ["Toplam Varlıklar"] + ["9.999"] * len(donemler),
+                      [etiket_ozk] + ozk] + ([["Ödenmiş Sermaye"] + [sermaye] * len(donemler)] if sermaye else []))
+    gelir_baslik = _tablo(["KAR VEYA ZARAR VE DİĞER KAPSAMLI GELİR TABLOSU"] + donemler,
+                          [["Sunum Para Birimi"] + birimler])
+    kar_satiri = _tablo(None, [[etiket_kar] + kar])
+    return f"<html><body>{bilanco}{gelir_baslik}{kar_satiri}{'x' * 600}</body></html>"
+
+
+def genel_html(satirlar):
+    return ("<html><body>" + _tablo(
+        ["Borsa Kodu", "Toplam Pay Adedi", "Borsada İşlem Görmeyen Pay Adedi", "Fiili Dolaşımdaki Pay Oranı(%)"],
+        [[k, a, "0,00", "50,00"] for k, a in satirlar]) + "x" * 600 + "</body></html>")
+
+
+def test_metin_tablo_sondaki_sifir():
+    """pandas.read_html '745.430'u 745.43 yapip 74543 okutuyordu; metin okuyucu bunu korumali."""
+    html = _tablo(None, [["Hasılat", "504.398", "745.430", "955.472"]])
+    t = K._kap_tablolar_metin(html)
+    ok(len(t) == 1 and t[0].iloc[0, 2] == "745.430", "hucre metni oldugu gibi kalir")
+    ok(T.tr_sayi("745.430") == 745430.0, "tr_sayi 745.430 -> 745430")
+    ok(T.tr_sayi("119.470.352,22") == 119470352.22, "tr_sayi ondalikli")
+    ok(T.tr_sayi("-") is None and T.tr_sayi("") is None and T.tr_sayi(None) is None, "bos degerler None")
+    r = {}
+    K._parse_kap_financials(K._kap_tablolar_metin(fin_html(["2025/12", "2026/06"], ["1000000TL", "1000000TL"],
+                                                           ["900.000", "1.018.520"], ["100.000", "745.430"],
+                                                           etiket_kar="Net Dönem Kârı (Zararı)")), r)
+    ok(r.get("kap_net_income") == 745430 * 1e6, f"eski ayristirici da sondaki sifiri korur ({r.get('kap_net_income')})")
+    ok(r.get("kap_equity") == 1018520 * 1e6, "ozkaynak 1.018.520 -> 1018520 (milyon TL)")
+
+
+def test_seriler_sutun_basina_birim():
+    """GARAN: 2025/12 sutunu 1000TL, 2026/06 sutunu 1000000TL - her sutunun kendi carpani."""
+    t = K._kap_tablolar_metin(fin_html(["2025/12", "2026/06"], ["1000TL", "1000000TL"],
+                                       ["500.000", "600"], ["100.000", "50"]))
+    s = T.kap_seriler(t)
+    oz = s[T._norm("Ana Ortaklığa Ait Özkaynaklar")]
+    ok(oz["2025/12"] == (500000 * 1e3, "TL") and oz["2026/06"] == (600 * 1e6, "TL"), f"sutun basina carpan: {oz}")
+    ok(T._en_guncel(s, T.OZKAYNAK_ETIKETLERI)[0] == "2026/06", "en guncel donem 2026/06")
+
+
+def test_pay_adetleri():
+    p = T.pay_adetleri(genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(p == {"THYAO": 1.38e9}, f"tek kodlu: {p}")
+    p = T.pay_adetleri(genel_html([("KRDMB", "119.470.352,22"), ("KRDMA", "240.303.646,14"), ("KRDMD", "780.226.001,64")]))
+    ok(set(p) == {"KRDMA", "KRDMB", "KRDMD"} and yakin(p["KRDMD"], 780226001.64), f"cok sinifli: {p}")
+    ok(T.pay_adetleri("<html><body>bos</body></html>") == {}, "tablo yoksa bos sozluk")
+
+
+# ── hesapla ──────────────────────────────────────────────────
+def _thyao(kar_son="18.864", birim="1000000TL"):
+    return fin_html(["2024/12", "2025/12", "2026/06"], [birim] * 3, ["679.887", "911.222", "1.018.517"],
+                    ["113.378", "118.208", kar_son])
+
+
+def test_thyao_ara_donem_yillik():
+    r = T.hesapla("THYAO", 287.5, fin_html=_thyao(), genel_html=genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(yakin(r["piyasa_degeri"], 287.5 * 1.38e9), "piyasa degeri = fiyat x KAP pay adedi")
+    ok(yakin(r["pb"], 287.5 * 1.38e9 / (1018517 * 1e6)), f"PD/DD 0,39 civari ({r['pb']})")
+    ok(0.38 < r["pb"] < 0.40, "THYAO PD/DD ~0,39 (Yahoo'da 18,1 idi)")
+    ok(r["donem"] == "2026/06" and r["pay_kaynak"] == "KAP genel", "donem ve pay kaynagi etiketli")
+    ok(r["pe_tur"] == "YILLIK" and r["kar_donem"] == "2025/12", "ara donemde F/K son tam yil kariyla ve YILLIK etiketli")
+    ok(yakin(r["pe"], 287.5 * 1.38e9 / (118208 * 1e6)), f"F/K = PD / 2025 net kar ({r['pe']})")
+
+
+def test_yillik_donem_ttm():
+    h = fin_html(["2024/12", "2025/12"], ["1000000TL"] * 2, ["679.887", "911.222"], ["113.378", "118.208"])
+    r = T.hesapla("THYAO", 287.5, fin_html=h, genel_html=genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(r["pe_tur"] == "TTM" and r["kar_donem"] == "2025/12" and r["donem"] == "2025/12", "12. ay donemi = tam iz. 12A")
+
+
+def test_ara_donem_zarar_ve_olmayan_yil():
+    r = T.hesapla("THYAO", 100.0, fin_html=_thyao("-5.000"), genel_html=genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(r["pe"] is None and r["pe_durum"] == "zarar" and r["pb"] is not None, "ara donem zarar: F/K yok, PD/DD var")
+    h = fin_html(["2026/06"], ["1000000TL"], ["1.018.517"], ["18.864"])
+    r = T.hesapla("THYAO", 100.0, fin_html=h, genel_html=genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(r["pe"] is None and r["pb"] is not None and any("yillik net kar" in n for n in r["notlar"]),
+       "onceki yil 12. ay yoksa F/K hesaplanmaz (yillandirma/tahmin yok)")
+    h = fin_html(["2025/12"], ["1000000TL"], ["-5.000"], ["100"])
+    r = T.hesapla("THYAO", 100.0, fin_html=h, genel_html=genel_html([("THYAO", "1.380.000.000,00")]))
+    ok(r["pb"] is None, "negatif ozkaynakta PD/DD anlamsiz: None")
+
+
+def test_cok_sinifli():
+    h = fin_html(["2025/12"], ["1000TL"], ["108.343.586"], ["5.975.641"])
+    g = genel_html([("KRDMB", "119.470.352,22"), ("KRDMA", "240.303.646,14"), ("KRDMD", "780.226.001,64")])
+    fy = {"KRDMA": 39.18, "KRDMB": 72.15, "KRDMD": 43.20}
+    r = T.hesapla("KRDMD", 43.20, fy, fin_html=h, genel_html=g)
+    bek = (119470352.22 * 72.15 + 240303646.14 * 39.18 + 780226001.64 * 43.20)
+    ok(yakin(r["piyasa_degeri"], bek), "her grup kendi fiyatiyla carpilip toplanir")
+    r2 = T.hesapla("KRDMA", 39.18, fy, fin_html=h, genel_html=g)
+    ok(yakin(r["pb"], r2["pb"]), "ayni sirketin tum siniflari ayni PD/DD'yi alir")
+    r3 = T.hesapla("KRDMD", 43.20, {}, fin_html=h, genel_html=g)
+    ok(any("fiyati olmayan" in n for n in r3["notlar"]), "diger sinif fiyati yoksa not dusulur")
+
+
+def test_pay_adedi_yedegi_ve_yabanci_para():
+    h = fin_html(["2025/12"], ["1000000TL"], ["900"], ["100"], sermaye="1.380")
+    r = T.hesapla("THYAO", 10.0, fin_html=h, genel_html="x" * 600)
+    ok(r["pay_kaynak"].startswith("KAP odenmis sermaye") and yakin(r["piyasa_degeri"], 10.0 * 1380 * 1e6),
+       f"genel sayfa yoksa donem sonu odenmis sermaye (etiketli): {r['pay_kaynak']}")
+    h = fin_html(["2025/12"], ["1000USD"], ["100.000"], ["10.000"])
+    r = T.hesapla("THYAO", 50.0, kurlar={"USD": 50.0}, fin_html=h, genel_html=genel_html([("THYAO", "1.000.000,00")]))
+    ok(yakin(r["pb"], (50.0 * 1e6 / 50.0) / (100000 * 1e3)), f"USD raporlayan: piyasa degeri USD'ye cevrilir ({r['pb']})")
+    r = T.hesapla("THYAO", 50.0, kurlar={}, fin_html=h, genel_html=genel_html([("THYAO", "1.000.000,00")]))
+    ok(r["pb"] is None and any("kuru yok" in n for n in r["notlar"]), "kur yoksa oran hesaplanmaz, kur uydurulmaz")
+
+
+def test_veri_yok():
+    ok(T.hesapla("THYAO", 0.0)["notlar"] == ["fiyat yok"], "fiyat yoksa hesap yok")
+    r = T.hesapla("THYAO", 10.0, fin_html="<html>" + "x" * 600 + "</html>", genel_html="x" * 600)
+    ok(r["pb"] is None and r["pe"] is None, "finansal tablo yoksa her sey None")
+
+
+# ── birlestirme (KAP -> yfinance) ────────────────────────────
+def _kap(pb=0.39, pe=3.36, tur="YILLIK", durum="hesaplandi"):
+    return {"pb": pb, "pe": pe, "pe_tur": tur, "pe_durum": durum, "donem": "2026/06", "kar_donem": "2025/12", "notlar": []}
+
+
+def test_birlestir_thyao():
+    yf = {"_source": "yfinance", "pb_ratio": 18.1, "pe_ratio": None, "div_yield": 0.0, "financial_currency": "USD",
+          "currency": "TRY", "equity": 15.884, "eps": -5.98}
+    pb, pe, dy, m = T.oranlari_birlestir(_kap(), yf, 287.5, {"USD": 49.3})
+    ok(pb == 0.39 and pe == 3.36 and dy == 0.0, f"THYAO: KAP degerleri kullanilir ({pb},{pe},{dy})")
+    ok(m["kaynak"] == "KAP" and m["fk_tur"] == "YILLIK" and m["donem"] == "2026/06", "kaynak etiketleri")
+    ok(m["fk_donem"] == "2025/12", "F/K donemi meta'da")
+    from scoring import _temel_alt_skor
+    ok(_temel_alt_skor(pb, pe, dy) == 18, "THYAO Temel Skor 18/25 (eskiden 0)")
+
+
+def test_birlestir_yahoo_pe_ara_donem():
+    yf = {"_source": "yfinance", "pb_ratio": 0.4, "pe_ratio": 32.4, "div_yield": 0.03, "financial_currency": "TRY",
+          "currency": "TRY"}
+    pb, pe, dy, m = T.oranlari_birlestir(_kap(0.42, 509.0), yf, 100.0, {})
+    ok(pe == 32.4 and m["fk_tur"] == "yfinance", "ara donem: Yahoo iz. 12A (KAP PD/DD ile dogrulanmis) KAP yillik F/K'dan once gelir")
+    yf2 = dict(yf, pb_ratio=55.0)
+    pb, pe, dy, m = T.oranlari_birlestir(_kap(1.2, 13.7), yf2, 100.0, {})
+    ok(pe == 13.7 and m["fk_tur"] == "YILLIK", "Yahoo tutarsizsa (PD/DD 55 vs 1,2) Yahoo F/K reddedilir, KAP yillik kalir")
+    pb, pe, dy, m = T.oranlari_birlestir(_kap(1.2, 13.7, tur="TTM"), yf, 100.0, {})
+    ok(pe == 13.7 and m["fk_tur"] == "TTM", "KAP 12 aylik (TTM) varsa Yahoo'ya hic bakilmaz")
+
+
+def test_birlestir_yedek_yahoo():
+    yf = {"_source": "yfinance", "pb_ratio": 2.0, "pe_ratio": 10.0, "div_yield": 0.05, "financial_currency": "TRY",
+          "currency": "TRY"}
+    pb, pe, dy, m = T.oranlari_birlestir({"notlar": ["KAP finansal sayfasi alinamadi"]}, yf, 10.0, {})
+    ok((pb, pe, dy) == (2.0, 10.0, 0.05) and m["kaynak"] == "yfinance", "KAP yoksa tutarli Yahoo yedek")
+    yf = {"_source": "yfinance", "pb_ratio": 230.0, "pe_ratio": 21.4, "financial_currency": "EUR", "currency": "TRY",
+          "equity": 47.0, "eps": 504.0}
+    pb, pe, dy, m = T.oranlari_birlestir({}, yf, 10795.0, {"EUR": 55.5})
+    ok(pb is not None and 4.0 < pb < 4.3 and m["kaynak"] == "yfinance (kurla)", f"DOCO: EUR defter degeri kurla cevrilir ({pb})")
+    ok(pe is None, "rapor para birimi farkliysa hisse basi kar para birimi dogrulanamaz: F/K alinmaz")
+    pb, pe, dy, m = T.oranlari_birlestir({}, yf, 10795.0, {})
+    ok(pb is None and pe is None, "kur yoksa Yahoo'nun 230'u asla kullanilmaz")
+
+
+def test_sermaye_uyarisi():
+    k = dict(_kap(), notlar=["sermaye 2026/06 doneminden sonra degismis: 1,400,000,000 -> 3,780,000,000 pay"])
+    m = T.oranlari_birlestir(k, {}, 10.0, {})[3]
+    ok(m["uyari"] and m["uyari"].startswith("Sermaye 2026/06") and "bedelli" in m["uyari"], f"sermaye degisimi uyarisi: {m['uyari']}")
+    ok(T.oranlari_birlestir(_kap(), {}, 10.0, {})[3]["uyari"] is None, "sermaye degismediyse uyari yok")
+    h = fin_html(["2025/12"], ["1000TL"], ["8.893.812"], ["1.000"], sermaye="1.400.000")
+    r = T.hesapla("THYAO", 13.5, fin_html=h, genel_html=genel_html([("THYAO", "3.780.000.000,00")]))
+    ok(any(n.startswith("sermaye ") for n in r["notlar"]), "hesapla: odenmis sermaye ile pay adedi %10'dan fazla ayriysa not")
+    r = T.hesapla("THYAO", 13.5, fin_html=h, genel_html=genel_html([("THYAO", "1.400.000.000,00")]))
+    ok(not any(n.startswith("sermaye ") for n in r["notlar"]), "ayniysa not yok")
+    ok("| Not: X" in K.kaynak_notu({}, {"uyari": "X"}), "kaynak notuna eklenir")
+
+
+def test_yf_ok_bayragi():
+    ok(T.oranlari_birlestir(_kap(), {}, 10.0, {})[3]["yf_ok"] is False, "Yahoo bos -> yf_ok False")
+    ok(T.oranlari_birlestir(_kap(), {"_source": "yfinance_error"}, 10.0, {})[3]["yf_ok"] is False, "Yahoo hata -> False")
+    ok(T.oranlari_birlestir(_kap(), {"_source": "yfinance", "div_yield": 0.0}, 10.0, {})[3]["yf_ok"] is True, "Yahoo yanit verdi -> True")
+
+
+# ── worker: temettu koruma ───────────────────────────────────
+def test_temettu_koruma():
+    import worker
+    import datetime as dt
+    with tempfile.TemporaryDirectory() as d:
+        csv = os.path.join(d, "u.csv")
+        pd.DataFrame([{"Ticker": "AAA", "Kategori": "BIST", "PB": 1.0, "PE": 5.0, "DY": 0.06, "Temel_Tarihi": "2026-10-08"},
+                      {"Ticker": "BBB", "Kategori": "BIST", "PB": 1.0, "PE": 5.0, "DY": 0.06, "Temel_Tarihi": "2026-10-08"}]
+                     ).to_csv(csv, index=False)
+        bugun = dt.date(2026, 10, 9)
+        taze = {"AAA": (0.4, 3.0, None), "BBB": (0.4, 3.0, None)}
+        s, _t = worker._temel_veri_birlestir(taze, ["AAA", "BBB"], csv_path=csv, bugun=bugun, log=lambda *a: None,
+                                             tohum_yolu=os.path.join(d, "yok.json"), dy_koru={"AAA"})
+        ok(s["AAA"] == (0.4, 3.0, 0.06), "Yahoo bu gece yanit vermeyen hissede temettu onceki degerden korunur")
+        ok(s["BBB"] == (0.4, 3.0, None), "Yahoo yanit verip temettu yoksa bos kalir (korunmaz)")
+        s, _t = worker._temel_veri_birlestir(taze, ["AAA"], csv_path=csv, bugun=dt.date(2026, 12, 31), log=lambda *a: None,
+                                             tohum_yolu=os.path.join(d, "yok.json"), dy_koru={"AAA"})
+        ok(s["AAA"][2] is None, "30 gunden eski temettu korunmaz")
+
+
+# ── worker.build() icindeki temel veri blogu (sahte KAP katmaniyla) ─
+def test_worker_blogu():
+    import textwrap
+    import worker
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py"), encoding="utf-8").read().split("\n")
+    a = next(i for i, l in enumerate(src) if l.startswith('    _bist_priced = [r["Ticker"]'))
+    b = next(i for i, l in enumerate(src) if i > a and "# ── 3. Kripto" in l)
+    blok = textwrap.dedent("\n".join(src[a:b]))
+    rows = [{"Ticker": t, "Kategori": "BIST", "Son_Fiyat": p, "RSI": 55.0, "Ret1M": 3.0, "Vol": 30.0,
+             "_score_adj": 0, "_dd_adj": 0} for t, p in [("THYAO", 287.5), ("GARAN", 150.0), ("ZZZZZ", 0.0)]]
+
+    def sahte(tk, fy, kur):
+        return ({"THYAO": (0.39, 3.36, 0.0), "GARAN": (1.1, 4.5, None)},
+                {"THYAO": {"kaynak": "KAP", "donem": "2026/06", "fk_tur": "YILLIK", "fk_donem": "2025/12",
+                           "uyari": "Sermaye degismis", "yf_ok": True},
+                 "GARAN": {"kaynak": "yfinance", "donem": None, "fk_tur": "yfinance", "fk_donem": None, "uyari": None,
+                           "yf_ok": True}})
+    g = dict(vars(worker), all_rows=rows, fetch_bist_temel_kap_oncelikli=sahte, _temel_icin_kurlar=lambda: {},
+             _temel_veri_birlestir=lambda t, k, **kw: (t, {x: "2026-10-09" for x in t}))
+    exec(compile(blok, "blok", "exec"), g)
+    th, ga, zz = rows
+    ok((th["PB"], th["PE"], th["DY"]) == (0.39, 3.36, 0.0) and th["Temel_Kaynak"] == "KAP" and th["Temel_Donem"] == "2026/06",
+       "THYAO satiri KAP degerleri + kaynak/donem")
+    ok(th["Temel_FK_Tur"] == "YILLIK" and th["Temel_FK_Donem"] == "2025/12" and th["Temel_Uyari"] == "Sermaye degismis", "F/K ve uyari alanlari")
+    from scoring import optima_score
+    ok(th["Optima_Skor"] == optima_score(55.0, 3.0, 30.0, True, 0.39, 3.36, 0.0), "THYAO Optima skoru KAP girdileriyle hesaplanir")
+    ok(th["Optima_Skor"] - optima_score(55.0, 3.0, 30.0, True, None, None, None) == 18, "temel puan katkisi tam 18 (eskiden 0)")
+    ok(ga["Temel_Kaynak"] == "yfinance", "yedek kaynak etiketi")
+    ok(zz["Optima_Skor"] == 0.0 and zz["Temel_Kaynak"] is None, "fiyati olmayan satir 0 ve kaynaksiz")
+
+
+# ── detay tablosu ────────────────────────────────────────────
+def test_detay_tablosu():
+    raw = {"pe_ratio": None, "pb_ratio": None, "forward_pe": None, "_para_uyumsuz": "USD", "revenue": 5e10,
+           "net_income": 2e9, "eps": -5.98, "equity": 15.9, "market_cap": 3.9e11, "_kap_available": True,
+           "kap_equity": 1.018e12, "kap_donemler": {"kap_equity": "2026/06"}}
+    temel = {"pb": 0.39, "pe": 3.36, "dy": 0.0, "kaynak": "KAP", "donem": "2026/06", "fk_tur": "YILLIK",
+             "fk_donem": "2025/12"}
+    d = K.fundamentals_to_display(raw, temel)
+    ok("PD/DD Oranı (KAP, 2026/06)" in d and d["PD/DD Oranı (KAP, 2026/06)"] == "0.39", f"PD/DD satiri KAP etiketli: {list(d)}")
+    ok("F/K Oranı (KAP, 2025/12 yıllık net kâr)" in d, "F/K satiri yillik ve donem etiketli")
+    ok("PD/DD Oranı" not in d and "F/K Oranı (İz. 12A)" not in d, "Yahoo'nun ayni adli satirlari kalkar")
+    ok(any(k.startswith("Ciro (Yıllık, yfinance, USD)") and v.endswith("$") for k, v in d.items()),
+       "Yahoo tutar satirlari para birimiyle etiketlenir (USD)")
+    ok(list(d).index("PD/DD Oranı (KAP, 2026/06)") < list(d).index("Net Kâr (yfinance, USD)"), "satir sirasi korunur")
+    d2 = K.fundamentals_to_display({"pe_ratio": 9.0, "pb_ratio": 1.1, "revenue": 1e9, "_kap_available": False})
+    ok("PD/DD Oranı" in d2 and "F/K Oranı (İz. 12A)" in d2, "temel verilmezse eski gorunum aynen kalir")
+    n = K.kaynak_notu(raw, temel)
+    ok(n.startswith("KAP (PD/DD ve F/K, 2026/06 bilançosu)") and "USD" in n, f"kaynak notu: {n}")
+    ok(K.kaynak_notu({"_kap_available": False, "_kap_note": "x"}, None).startswith("yfinance"), "temel yoksa eski not")
+    t = K.temel_satiri({"PB": 0.39, "PE": float("nan"), "DY": 0.0, "Temel_Kaynak": "KAP", "Temel_Donem": "2026/06"})
+    ok(t["pb"] == 0.39 and t["pe"] is None and t["kaynak"] == "KAP", "temel_satiri NaN'i None yapar")
+
+
+if __name__ == "__main__":
+    for ad, f in list(globals().items()):
+        if ad.startswith("test_"):
+            f()
+    print(f"kap_temel testleri TAMAM ({_n['ok']} kontrol)")
+    sys.exit(0)
