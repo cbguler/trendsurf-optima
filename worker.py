@@ -1300,17 +1300,6 @@ def _gecmis_gun_hesapla(tickers, onceki):
     return sonuc
 
 
-def _maden_tl_fiyat(p_tl: float, p_usd: float, ons_gram: bool, usdtry: float, sentetik_yasak: bool) -> float:
-    """v2.0.7.387: Maden TL fiyati secimi. Turkiye kaynagindan (Bigpara/Truncgil) gelen TL fiyat (p_tl > 0) ASLA
-    ABD piyasasi USD fiyatindan sentetik cevrimle ezilmez (Bahri'nin ilkesi; v2.0.7.173'un amaci). Yalniz TL fiyat yoksa
-    ve sentetik cevrim yasak degilse USD x kur (ons -> gram: / 31,1035) kullanilir."""
-    if p_tl and p_tl > 0:
-        return p_tl
-    if sentetik_yasak or not p_usd or p_usd <= 0 or not usdtry or usdtry <= 0:
-        return p_tl
-    return round(p_usd * usdtry / 31.1035, 4) if ons_gram else round(p_usd * usdtry, 4)
-
-
 def build():
     global BIST_TICKERS
 
@@ -1756,28 +1745,11 @@ def build():
         "BGNTRY": "Bulgar Levasi / Turk Lirasi",
     }
     print(f"\n[4/4] {len(MADEN)} maden + {len(DOVIZ)} doviz (toplu download)...")
-    maden_start = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
-    # v2.0.4.x: kripto_end degiskeni kripto bolumu borsapy'ye tasinirken
-    # silinmisti ama iki kullanim (maden download + doviz cross-rate)
-    # gozden kacmisti -> gece worker'i NameError ile cokuyordu.
-    # Bitis tarihi = yarin (yfinance 'end' exclusive oldugundan bugunu kapsasin).
-    maden_end = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-
-    # Maden toplu
-    # v2.0.7.43 - NOYF_ ile baslayan yer tutucu semboller (yeni 9 sikke/
-    # ayar altin turu) gercekte var olmadigi icin yf.download listesine
-    # HIC sokulmaz - zaten Truncgil'den (Kademe 1) geliyorlar.
-    maden_syms = [yf_s for _, yf_s in MADEN if not yf_s.startswith("NOYF_")]
-    maden_map  = {yf_s: t for t, yf_s in MADEN}
-    # v2.0.7.387: `yf` bu fonksiyonda HIC import edilmemisti -> asagidaki yf.download NameError veriyor, bos
-    # `except:` yutuyor, toplu download HIC calismiyordu (v2.0.7.43'ten beri). Import eklendi, hata artik loglanir.
-    try:
-        import yfinance as yf
-        raw_m = yf.download(maden_syms, start=maden_start, end=maden_end,
-                            auto_adjust=True, progress=False, group_by="ticker")
-    except Exception as _m_err:
-        print(f"  [maden] toplu yfinance download basarisiz ({type(_m_err).__name__}: {_m_err}); tek tek denenecek")
-        raw_m = pd.DataFrame()
+    # v2.0.7.388 (Bahri, 10 Ekim 2026: "uygulamamizda asla ve asla capraz fiyat kullanilmama kurali"): MADEN icin
+    # yfinance (GC=F/SI=F/PL=F ons USD serisi) HIC kullanilmaz - ne fiyat, ne RSI/Ret1M/Vol. Fiyat yalniz Turkiye
+    # kaynagindan (Truncgil/Bigpara); teknik gostergeler uygulamada Turkiye gecmisinden (borsapy gram-altin vb.)
+    # hesaplanir (live_data.refresh_fx_maden_kripto). Kaynak yoksa "veri yok" (_gecmis_veri_yok), uydurma yok.
+    # Not: v2.0.7.387'deki `yf` import duzeltmesi bu blokla birlikte gereksiz kaldi (blok silindi).
 
     # USDTRY kuru — döviz bölümünden al, yoksa yfinance'den çek
     try:
@@ -1804,11 +1776,6 @@ def build():
     except Exception as _bp_err:
         print(f"  [Bigpara] Atlanıyor: {_bp_err}")
 
-    # Gram dönüşüm katsayıları (ons → gram)
-    # GC=F (Altın): ons/troy ounce → gram: 1 troy oz = 31.1035 gram
-    # SI=F (Gümüş): ons → gram: 1 troy oz = 31.1035 gram
-    ONS_TO_GRAM = {"GC=F", "SI=F"}
-
     for t, yf_s in MADEN:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0
         _gecmis_veri_var = False
@@ -1822,57 +1789,8 @@ def build():
             vol_v = 25.0
             print(f"    [Bigpara] {t}: {p:,.4f} TL (birincil)")
 
-        # Kademe 2: yfinance USD fiyatı → TRY dönüşümü
-        _sentetik_yasak = yf_s in _MADEN_SENTETIK_CEVRIM_YASAK
-        # v2.0.7.173 (Bahri'nin bulgusu, 20 Ağustos 2026 — "gram altın
-        # günlerdir artıyor ama Optima Skoru değişmiyor"): KÖK NEDEN
-        # BULUNDU - bu blok ESKİDEN `if p == 0.0 or _sentetik_yasak:`
-        # şartına bağlıydı. Yani Bigpara BAŞARILI olduğunda (ki genelde
-        # öyle - Altın/Gümüş fiyatı GERÇEK ve hareket ediyor), bu blok
-        # HİÇ ÇALIŞMIYORDU - fiyat kaynağı (Bigpara) İLE teknik gösterge
-        # kaynağı (yfinance RSI/Ret1M/Vol) YANLIŞLIKLA TEK BİR KOŞULA
-        # bağlanmıştı. Sonuç: ALTIN_TRY/GUMUS_TRY için RSI HER ZAMAN
-        # 50.0 (nötr varsayılan), Ret1M HER ZAMAN 0.0 (düz varsayılan)
-        # SABİT KALIYORDU - gerçek piyasa hareketi (ör. güncel aşırı alım
-        # durumu) ASLA yansımıyordu, `_gecmis_veri_var` da hiç True
-        # olmadığı için Detay sayfasındaki "_gecmis_veri_yok==True ise
-        # skoru 0 yap" kuralı (v2.0.7.71/77) devreye girip Optima Skor'u
-        # SIFIRLIYORDU - fiyat gerçek olsa bile.
-        # ÇÖZÜM: fiyat VE teknik gösterge kaynakları AYRILDI - bu blok
-        # ARTIK HER ZAMAN çalışır (RSI/Ret1M/Vol için yfinance HER ZAMAN
-        # denenir), fiyatın (`p`) KENDİSİ ise hâlâ SADECE Bigpara
-        # başarısızsa VEYA sentetik çevrim yasaksa buradan atanır (aşağıda
-        # değişmedi) - Bahri'nin "sentetik fiyat asla gösterilmesin"
-        # ilkesi KORUNUYOR, sadece RSI/Ret1M artık bu ilkeden BAĞIMSIZ
-        # hesaplanıyor.
-        try:
-            if raw_m.empty:
-                raise ValueError("bos")
-            if len(maden_syms) == 1:
-                col = raw_m["Close"].dropna()
-            else:
-                col = raw_m[yf_s]["Close"].dropna() if yf_s in raw_m.columns.get_level_values(0) else pd.Series()
-            if hasattr(col, "squeeze"):
-                col = col.squeeze()
-            if col.empty or len(col) < 2:
-                raise ValueError("yetersiz")
-            p_usd = round(float(col.iloc[-1]), 4)
-            rsi   = calc_rsi(col)
-            ret   = round((float(col.iloc[-1]) / float(col.iloc[-22]) - 1) * 100, 2) if len(col) >= 22 else 0.0
-            rets_m = col.pct_change().dropna()
-            vol_v  = round(float(rets_m.std() * (252 ** 0.5) * 100), 1) if len(rets_m) > 10 else 25.0
-            _gecmis_veri_var = True
-            # USD → TRY dönüşümü + ons → gram (gerekiyorsa) - SADECE
-            # sentetik cevrim yasak OLMAYAN varliklar icin (Altin/Gumus
-            # bu yola zaten Kademe 1'de Bigpara'dan basariyla geldigi
-            # icin normalde girmez, ama yedek olarak burada kalir).
-            p = _maden_tl_fiyat(p, p_usd, yf_s in ONS_TO_GRAM, usdtry_rate, _sentetik_yasak)
-        except Exception:
-            if not _sentetik_yasak:
-                p2, rsi, ret, vol_v = single_full(yf_s, t)
-                if p2 > 0:
-                    _gecmis_veri_var = True
-                    p = _maden_tl_fiyat(p, p2, yf_s in ONS_TO_GRAM, usdtry_rate, _sentetik_yasak)
+        # Kademe 2 (yfinance USD -> TRY cevrimi ve ons serisinden RSI/Ret1M/Vol) v2.0.7.388'de KALDIRILDI:
+        # capraz fiyat kurali (Bahri). Turkiye kaynagi yoksa Kademe 3'e (onceki CSV fiyati) dusulur.
 
         # Kademe 3: Son CSV'den tamamla
         if p == 0.0 and os.path.exists(CSV_PATH):
@@ -1880,13 +1798,9 @@ def build():
                 _df_c = pd.read_csv(CSV_PATH)
                 _row  = _df_c[_df_c["Ticker"] == t]
                 if not _row.empty:
+                    # v2.0.7.388: yalniz FIYAT tasinir (Turkiye kaynagi o gece alinamadiysa); eski RSI/Ret1M/Vol
+                    # (v2.0.7.387 oncesi yfinance ons serisinden) tasinmaz -> "veri yok" (_gecmis_veri_var=False)
                     p     = float(_row["Son_Fiyat"].iloc[0])
-                    rsi   = float(_row["RSI"].iloc[0])
-                    ret   = float(_row["Ret1M"].iloc[0])
-                    vol_v = float(_row.get("Vol", pd.Series([25.0])).iloc[0])
-                    # Onceki calistirmada bu satir da isaretliyse (veya
-                    # isaret yoksa - eski CSV) durumu koru/varsay.
-                    _gecmis_veri_var = not bool(_row.get("_gecmis_veri_yok", pd.Series([False])).iloc[0])
                     print(f"    [cache] {t} maden fiyati CSV'den alindi.")
             except Exception:
                 pass

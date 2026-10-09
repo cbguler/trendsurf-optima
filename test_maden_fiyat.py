@@ -1,7 +1,8 @@
-"""v2.0.7.387: maden fiyat secimi ve worker.build() icinde `yf` tanimi (sessizce yutulan NameError)."""
-import ast, sys, warnings
+"""v2.0.7.388: MADEN icin capraz fiyat YOK - worker maden blogunda yfinance (ons USD serisi) kullanilmaz.
+Bahri'nin kurali: 'uygulamamizda asla ve asla capraz fiyat kullanilmama kurali' (Turkiye piyasasi degeri
+baska ulkelerde farkli olabilir)."""
+import re, sys, warnings
 warnings.filterwarnings("ignore")
-import worker as W
 
 _n = {"ok": 0}
 
@@ -11,40 +12,46 @@ def ok(kosul, mesaj):
     _n["ok"] += 1
 
 
-def test_turkiye_fiyati_ezilmez():
-    # Bigpara/Truncgil'den gelen TL fiyat (ALTIN_TRY 6644,78) USD x kur cevrimiyle ezilmemeli
-    p = W._maden_tl_fiyat(6644.78, 4220.0, True, 49.3174, False)
-    ok(p == 6644.78, f"TL fiyat korunur ({p})")
-    ok(W._maden_tl_fiyat(96.37, 61.1, True, 49.3174, False) == 96.37, "gumus TL fiyati korunur")
-
-
-def test_tl_fiyat_yoksa_yedek():
-    p = W._maden_tl_fiyat(0.0, 4220.0, True, 49.3174, False)
-    ok(abs(p - round(4220.0 * 49.3174 / 31.1035, 4)) < 1e-9, f"ons -> gram yedek cevrim ({p})")
-    ok(W._maden_tl_fiyat(0.0, 10.0, False, 40.0, False) == 400.0, "ons olmayan: USD x kur")
-
-
-def test_sentetik_yasak_ve_veri_yok():
-    ok(W._maden_tl_fiyat(0.0, 2000.0, True, 49.0, True) == 0.0, "sentetik cevrim yasaksa (Platin vb.) cevrilmez")
-    ok(W._maden_tl_fiyat(2680.54, 2000.0, True, 49.0, True) == 2680.54, "yasakli varlikta TL fiyat aynen")
-    ok(W._maden_tl_fiyat(0.0, 0.0, True, 49.0, False) == 0.0, "USD fiyat yoksa 0")
-    ok(W._maden_tl_fiyat(0.0, 4220.0, True, 0.0, False) == 0.0, "kur yoksa cevrilmez (kur uydurulmaz)")
-
-
-def test_build_icinde_yf_tanimli():
-    """build() icinde `yf.` kullanan her yerden ONCE `import yfinance as yf` olmali (aksi halde NameError)."""
+def _maden_blogu():
     src = open("worker.py", encoding="utf-8").read()
-    tree = ast.parse(src)
-    build = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "build")
-    imp = [m.lineno for m in ast.walk(build) if isinstance(m, ast.Import)
-           and any(a.name == "yfinance" and a.asname == "yf" for a in m.names)]
-    kullanim = [m.lineno for m in ast.walk(build) if isinstance(m, ast.Attribute)
-                and isinstance(m.value, ast.Name) and m.value.id == "yf"]
-    ok(kullanim, "build() icinde yf kullanimi var (test anlamli)")
-    ok(imp and min(imp) < min(kullanim), f"yf import (satir {imp}) kullanimdan (satir {kullanim}) once")
-    # bos `except:` yok: hatalar sessizce yutulmasin (maden toplu download blogu)
-    blok = src[src.index("maden_syms = [yf_s"):src.index("# USDTRY kuru")]
-    ok(not any(l.strip() == "except:" for l in blok.splitlines()), "maden toplu download blogunda bos except yok")
+    a = src.index('print(f"\\n[4/4] {len(MADEN)} maden')
+    b = src.index("# Döviz — her parite ayrı çek")
+    return src[a:b]
+
+
+def _kod(blok):
+    """Yorum satirlarini at (yorumlarda yasakli kelimeler gecebilir)."""
+    return "\n".join(l for l in blok.splitlines() if not l.strip().startswith("#"))
+
+
+def test_maden_blogunda_yfinance_yok():
+    k = _kod(_maden_blogu())
+    ok("yf.download" not in k and "yf.Ticker" not in k, "maden blogunda yf.download / yf.Ticker yok")
+    ok("single_full" not in k, "maden blogunda tek tek yfinance (single_full) yok")
+    ok("31.1035" not in k, "ons -> gram sentetik cevrimi yok")
+    ok("* usdtry_rate" not in k and "*usdtry_rate" not in k, "USD x kur cevrimi yok")
+    ok("ONS_TO_GRAM" not in k, "ons yardimcisi yok")
+    # blokta kalan tek yfinance cagrisi USDTRY=X kuru (Bigpara'nin kripto yolu icin; maden fiyatina girmez)
+    ok(re.findall(r'_yf2\.download\("([^"]+)"', k) in ([], ["USDTRY=X"]), "yfinance yalniz USDTRY=X kuru icin")
+
+
+def test_fiyat_yalniz_turkiye_kaynagi_veya_onceki_csv():
+    k = _maden_blogu()
+    ok("bp_maden.get(t" in k, "birincil fiyat Bigpara/Truncgil'den")
+    ok("Kademe 3: Son CSV" in k, "yedek: onceki CSV fiyati")
+    blok3 = k[k.index("Kademe 3: Son CSV"):k.index('all_rows.append({"Ticker": t, "Ad": MADEN_ADLAR')]
+    kod3 = _kod(blok3)
+    ok('p     = float(_row["Son_Fiyat"]' in kod3, "Kademe 3 fiyati tasir")
+    ok('_row["RSI"]' not in kod3 and '_row["Ret1M"]' not in kod3 and "_gecmis_veri_var = not" not in kod3,
+       "Kademe 3 eski RSI/Ret1M/Vol'u TASIMAZ (eski degerler yfinance ons serisindendi)")
+
+
+def test_teknik_gosterge_varsayilanlari_veri_yok_isaretli():
+    k = _maden_blogu()
+    ok("p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0" in k, "RSI/Ret1M/Vol notr varsayilan")
+    ok("_gecmis_veri_var = False" in k, "baslangicta 'gecmis veri yok'")
+    ok(not re.search(r"_gecmis_veri_var\s*=\s*True", _kod(k)), "worker maden blogunda 'gecmis veri var' True'ya cekilmez")
+    ok('"_gecmis_veri_yok": not _gecmis_veri_var' in k, "satir 'veri yok' bayragiyla yazilir (uygulama Turkiye gecmisiyle tazeler)")
 
 
 if __name__ == "__main__":
