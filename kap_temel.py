@@ -495,16 +495,21 @@ def oranlari_birlestir(kap: Optional[dict], yf: Optional[dict], fiyat: float, ku
     if kap.get("pe_durum") == "hesaplandi" and kap.get("pe_tur") == "TTM":
         pe, meta["fk_tur"], meta["fk_donem"] = kap["pe"], "TTM", kap.get("kar_donem")
     elif kap.get("pb") is not None:
-        # KAP bilancosu var ama son donem ara donem (veya net kar satiri yok): iz. 12A KAP'ta hesaplanamaz.
-        fk_tutarli = yahoo_fk_tutarli_mi(yf, kap.get("pay_adedi")) if ype and tutarli else None
-        if ype and tutarli and fk_tutarli is not False:
-            pe, meta["fk_tur"] = ype, "yfinance"
-            meta["notlar"].append("F/K: yfinance iz. 12A (KAP PD/DD ile para birimi tutarliligi dogrulandi)")
-        elif kap.get("pe_durum") == "hesaplandi":
+        # v2.0.7.385 (Bahri: "iki veri arasinda fark varsa KAP verileri onceliklidir"): KAP'tan hesaplanabiliyorsa
+        # (12. ay TTM veya son tam yil YILLIK) KAP kullanilir; Yahoo yalniz KAP'ta F/K icin veri YOKSA yedektir.
+        # KAP "donem zarari" diyorsa F/K yok (Yahoo'ya dusulmez).
+        if kap.get("pe_durum") == "hesaplandi":
             pe, meta["fk_tur"], meta["fk_donem"] = kap["pe"], kap.get("pe_tur"), kap.get("kar_donem")
-        if ype and tutarli and fk_tutarli is False and pe is None:
-            meta["fk_not"] = ("F/K hesaplanamadi: KAP'ta tam yil net kar yok, yfinance F/K'si kendi net kariyla "
-                              "tutarsiz (EPS x pay adedi != net kar)")
+            if ype and tutarli and abs(ype - kap["pe"]) / kap["pe"] > 0.25:
+                meta["notlar"].append(f"F/K: yfinance iz. 12A {ype:.1f} farkli; KAP degeri {kap['pe']:.1f} kullanildi")
+        elif kap.get("pe_durum") != "zarar":
+            fk_tutarli = yahoo_fk_tutarli_mi(yf, kap.get("pay_adedi")) if ype and tutarli else None
+            if ype and tutarli and fk_tutarli is not False:
+                pe, meta["fk_tur"] = ype, "yfinance"
+                meta["notlar"].append("F/K: yfinance iz. 12A (KAP'ta F/K icin veri yok; para birimi ve EPS tutarliligi dogrulandi)")
+            elif ype and tutarli and fk_tutarli is False:
+                meta["fk_not"] = ("F/K hesaplanamadi: KAP'ta tam yil net kar yok, yfinance F/K'si kendi net kariyla "
+                                  "tutarsiz (EPS x pay adedi != net kar)")
     elif yf:
         if ype and tutarli is not False and fc in (None, cur):
             pe, meta["fk_tur"] = ype, "yfinance"

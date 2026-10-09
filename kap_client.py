@@ -594,6 +594,32 @@ def fundamentals_to_display(raw: dict, temel: dict = None) -> dict:
             # v2.0.7.379: KAP dönemi etikette ("Ciro (KAP, 2026/06)") - yfinance satırları farklı dönem olabilir
             yf[label.replace("(KAP)", f"(KAP, {d})") if d else label] = _fmt_mil(raw[field])
 
+    # v2.0.7.385 (Bahri: "iki veri arasinda fark varsa KAP verileri onceliklidir"): KAP'ta karsiligi olan Yahoo
+    # tutar satirlari kalkar (Yahoo 12 aylik, KAP son donem - iki rakami yan yana gostermek kafa karistirir);
+    # marjlar KAP'in kendi (ayni donem) ciro/kar rakamlarindan hesaplanir. KAP'ta karsiligi olmayanlar Yahoo etiketli kalir.
+    def _kap_var(alan):
+        return raw.get(alan) is not None
+
+    def _sil(onek):
+        for _k in [k for k in yf if k.startswith(onek)]:
+            del yf[_k]
+
+    if _kap_var("kap_revenue"):
+        _sil("Ciro (Yıllık, yfinance")
+    if _kap_var("kap_net_income"):
+        _sil("Net Kâr (yfinance")
+    if _kap_var("kap_equity") or _kap_var("kap_total_equity"):
+        _sil("Özkaynak (Defter, yfinance")
+    gelir = raw.get("kap_revenue")
+    for _alan, _etiket, _yf_etiket in (("kap_operating_income", "Faaliyet Marjı", "Faaliyet Marjı"),
+                                       ("kap_net_income", "Net Kâr Marjı", "Net Kâr Marjı")):
+        _d = donemler.get(_alan)
+        if gelir and gelir > 0 and raw.get(_alan) is not None and _d and _d == donemler.get("kap_revenue"):
+            yf.pop(_yf_etiket, None)
+            yf[f"{_etiket} (KAP, {_d})"] = _fmt_pct(raw[_alan] / gelir)
+        elif _yf_etiket in yf:
+            yf[f"{_yf_etiket} (yfinance)"] = yf.pop(_yf_etiket)
+
     # KAP durumu
     # v2.0.7.50 - DUZELTME: "_kap_note" alani duz "Veri kaynağı: yfinance"
     # metniydi - "KAP Durumu" satirinin ETIKETIYLE uyumsuzdu (etiket KAP'in

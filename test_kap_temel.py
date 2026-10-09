@@ -164,42 +164,23 @@ def test_birlestir_thyao():
 
 
 def test_birlestir_yahoo_pe_ara_donem():
+    # v2.0.7.385: KAP onceliklidir - KAP'tan F/K hesaplanabiliyorsa (YILLIK/TTM) Yahoo F/K'si farkli olsa da KAP kullanilir
     yf = {"_source": "yfinance", "pb_ratio": 0.4, "pe_ratio": 32.4, "div_yield": 0.03, "financial_currency": "TRY",
           "currency": "TRY"}
     pb, pe, dy, m = T.oranlari_birlestir(_kap(0.42, 509.0), yf, 100.0, {})
-    ok(pe == 32.4 and m["fk_tur"] == "yfinance", "ara donem: Yahoo iz. 12A (KAP PD/DD ile dogrulanmis) KAP yillik F/K'dan once gelir")
+    ok(pe == 509.0 and m["fk_tur"] == "YILLIK", "KAP yillik F/K, Yahoo iz. 12A (32,4) farkli olsa da kullanilir (KAP oncelikli)")
+    ok(any("farkli" in n and "KAP degeri" in n for n in m["notlar"]), "fark notlara yazilir")
+    kap_yok = {"pb": 0.42, "pe": None, "pe_tur": None, "pe_durum": "yok", "donem": "2026/06", "kar_donem": "2026/06", "notlar": []}
+    pb, pe, dy, m = T.oranlari_birlestir(kap_yok, yf, 100.0, {})
+    ok(pe == 32.4 and m["fk_tur"] == "yfinance", "KAP'ta F/K icin veri yoksa Yahoo (dogrulanmis) yedek")
+    kap_zarar = dict(kap_yok, pe_durum="zarar")
+    pb, pe, dy, m = T.oranlari_birlestir(kap_zarar, yf, 100.0, {})
+    ok(pe is None, "KAP donem zarari diyorsa F/K yok, Yahoo'ya dusulmez")
     yf2 = dict(yf, pb_ratio=55.0)
-    pb, pe, dy, m = T.oranlari_birlestir(_kap(1.2, 13.7), yf2, 100.0, {})
-    ok(pe == 13.7 and m["fk_tur"] == "YILLIK", "Yahoo tutarsizsa (PD/DD 55 vs 1,2) Yahoo F/K reddedilir, KAP yillik kalir")
+    pb, pe, dy, m = T.oranlari_birlestir(kap_yok, yf2, 100.0, {})
+    ok(pe is None, "KAP'ta veri yok + Yahoo para birimi tutarsiz (PD/DD 55 vs 0,42) -> F/K yok")
     pb, pe, dy, m = T.oranlari_birlestir(_kap(1.2, 13.7, tur="TTM"), yf, 100.0, {})
     ok(pe == 13.7 and m["fk_tur"] == "TTM", "KAP 12 aylik (TTM) varsa Yahoo'ya hic bakilmaz")
-
-
-def test_birlestir_yahoo_fk_ic_tutarlilik():
-    # ORZAX: halka arz 2026, KAP'ta yalniz 2026/06 var (yillik kar yok); Yahoo EPS 12,57 x 338,5M pay = 4,25 milyar,
-    # Yahoo net kari 1,16 milyar -> oran 3,68: EPS ile net kar tutarsiz -> Yahoo F/K (5,85) alinmaz
-    orz_kap = {"pb": 7.03, "pe": None, "pe_tur": None, "pe_durum": "yok", "donem": "2026/06", "kar_donem": "2026/06",
-               "pay_adedi": 338.5e6, "notlar": []}
-    orz_yf = {"_source": "yfinance", "pb_ratio": 7.03, "pe_ratio": 5.85, "eps": 12.57, "net_income": 1.1575e9,
-              "div_yield": 0.0, "financial_currency": None, "currency": "TRY"}
-    pb, pe, dy, m = T.oranlari_birlestir(orz_kap, orz_yf, 73.5, {})
-    ok(pb == 7.03 and pe is None, f"ORZAX: tutarsiz Yahoo F/K alinmaz, F/K bos ({pe})")
-    ok(m.get("fk_not") and "tutarsiz" in m["uyari"], f"kullaniciya neden F/K yok yazilir: {m['uyari']}")
-    # tutarli TL raporlayan (GARAN benzeri oran ~0,99): Yahoo F/K kabul
-    gar_kap = dict(orz_kap, pb=1.3, pay_adedi=4.2e9)
-    gar_yf = dict(orz_yf, pb_ratio=1.3, pe_ratio=4.54, eps=28.45, net_income=1.204e11)
-    pb, pe, dy, m = T.oranlari_birlestir(gar_kap, gar_yf, 129.0, {})
-    ok(pe == 4.54 and m["fk_tur"] == "yfinance" and not m.get("fk_not"), "tutarli Yahoo F/K kabul edilir")
-    # kanit yoksa (EPS veya net kar yok / zarar) reddetmek icin neden yok -> onceki davranis
-    ok(T.yahoo_fk_tutarli_mi({"eps": 5.0}, 1e9) is None, "net kar yoksa None")
-    ok(T.yahoo_fk_tutarli_mi({"eps": -1.0, "net_income": -1e9}, 1e9) is None, "zararda None")
-    ok(T.yahoo_fk_tutarli_mi(orz_yf, None) is None, "pay adedi yoksa None")
-    pb, pe, dy, m = T.oranlari_birlestir(gar_kap, {k: v for k, v in gar_yf.items() if k != "net_income"}, 129.0, {})
-    ok(pe == 4.54, "net kar bilgisi yoksa mevcut dogrulama (PD/DD) gecerli sayilir")
-    # tutarsiz Yahoo ama KAP son tam yil kari varsa KAP yillik F/K kullanilir
-    kap_y = dict(orz_kap, pe=21.5, pe_tur="YILLIK", pe_durum="hesaplandi", kar_donem="2025/12")
-    pb, pe, dy, m = T.oranlari_birlestir(kap_y, orz_yf, 73.5, {})
-    ok(pe == 21.5 and m["fk_tur"] == "YILLIK" and not m.get("fk_not"), "tutarsiz Yahoo -> KAP yillik F/K")
 
 
 def test_birlestir_yedek_yahoo():
@@ -382,6 +363,25 @@ def test_worker_onbellek_kota_devre_kesici():
 
 
 # ── detay tablosu ────────────────────────────────────────────
+def test_detay_kap_oncelikli_satirlar():
+    raw = {"revenue": 8.53e9, "net_income": 1.16e9, "equity": 10.87, "op_margin": 0.2077, "net_margin": 0.1357,
+           "ebitda": 2.91e9, "kap_revenue": 4.53e9, "kap_net_income": 306.45e6, "kap_operating_income": 1.25e9,
+           "kap_equity": 3.54e9, "kap_donemler": {"kap_revenue": "2026/06", "kap_net_income": "2026/06",
+                                                  "kap_operating_income": "2026/06", "kap_equity": "2026/06"},
+           "_kap_available": True}
+    d = K.fundamentals_to_display(raw)
+    ok(not any(k.startswith("Ciro (Yıllık, yfinance") for k in d), "KAP ciro varsa Yahoo ciro satiri yok")
+    ok(not any(k.startswith("Net Kâr (yfinance") for k in d), "KAP net kar varsa Yahoo net kar satiri yok")
+    ok(not any(k.startswith("Özkaynak (Defter, yfinance") for k in d), "KAP ozkaynak varsa Yahoo defter satiri yok")
+    ok(d.get("Faaliyet Marjı (KAP, 2026/06)") == "27.59%", f"faaliyet marji KAP'tan: {d.get('Faaliyet Marjı (KAP, 2026/06)')}")
+    ok(d.get("Net Kâr Marjı (KAP, 2026/06)") == "6.76%", f"net kar marji KAP'tan: {d.get('Net Kâr Marjı (KAP, 2026/06)')}")
+    ok("Faaliyet Marjı" not in d and "Net Kâr Marjı" not in d, "Yahoo marj satirlari kalkar")
+    ok(any(k.startswith("FAVÖK (yfinance") for k in d), "KAP karsiligi olmayan FAVOK Yahoo etiketli kalir")
+    d2 = K.fundamentals_to_display({"revenue": 1e9, "op_margin": 0.1, "net_margin": 0.05, "_kap_available": False})
+    ok("Faaliyet Marjı (yfinance)" in d2 and "Net Kâr Marjı (yfinance)" in d2 and any(k.startswith("Ciro (Yıllık") for k in d2),
+       "KAP yoksa Yahoo satirlari kalir, marjlar yfinance etiketli")
+
+
 def test_detay_tablosu():
     raw = {"pe_ratio": None, "pb_ratio": None, "forward_pe": None, "_para_uyumsuz": "USD", "revenue": 5e10,
            "net_income": 2e9, "eps": -5.98, "equity": 15.9, "market_cap": 3.9e11, "_kap_available": True,
