@@ -1016,6 +1016,21 @@ def load_universe():
     except Exception as _kr_err:
         print(f"[kap-risk] atlandi: {_kr_err}")
 
+    # v2.0.7.378 (9 Ekim 2026, Bahri'nin karari): BIST hissesi 260 islem gununden az fiyat gecmisine sahipse
+    # SINIRLI VERI bayragi (uyari seridi + AL sinyali siniri). Gecmis_Gun worker'dan gelir; yoksa/bilinmiyorsa
+    # bayrak YOK. Skor degistirilmez.
+    df["Veri_Sinirli"] = False
+    try:
+        from scoring import sinirli_veri_mi as _svm
+        if "Gecmis_Gun" in df.columns:
+            df["Gecmis_Gun"] = pd.to_numeric(df["Gecmis_Gun"], errors="coerce")
+            df["Veri_Sinirli"] = [
+                _svm(k, p, g) for k, p, g in zip(df["Kategori"], df["Son_Fiyat"], df["Gecmis_Gun"])]
+        else:
+            df["Gecmis_Gun"] = pd.NA
+    except Exception as _vs_err:
+        print(f"[veri-sinirli] atlandi: {_vs_err}")
+
     return df.reset_index(drop=True)
 
 @st.cache_data(ttl=3600,show_spinner=False)
@@ -1408,7 +1423,7 @@ def calc_macd(s):
 # hem temettu_client.py AYNI, TEK kaynagi kullaniyor (temettu_client.py
 # app.py'yi guvenle import edemezdi, bu yuzden CSV'den donmus deger
 # kopyaliyordu - bkz. scoring.py'nin modul docstring'i).
-from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal, optima_score_breakdown
+from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal, optima_score_breakdown, sinyal_sinirla
 
 
 # ══ BASLA: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
@@ -1434,12 +1449,30 @@ def _tedbir_deger(row) -> str:
     return v if isinstance(v, str) and v in _TEDBIR_SINIF else ""
 
 
+def _veri_sinirli_mi(row) -> bool:
+    """v2.0.7.378: satirda Veri_Sinirli bayragi (load_universe) var mi. row: Series/dict/None."""
+    try:
+        return bool(row.get("Veri_Sinirli")) if row is not None else False
+    except Exception:
+        return False
+
+
+def _veri_sinirli_aciklama(row) -> str:
+    try:
+        g = int(float(row.get("Gecmis_Gun")))
+    except Exception:
+        return ""
+    return (f"Yeni halka arz / kısa geçmiş: {g} işlem günü fiyat geçmişi var (260'tan az, yaklaşık bir yıl). "
+            f"Optima Skor kısa bir teknik geçmişe dayanır; bu nedenle AL sinyali üretilmez, en fazla TUT İZLE verilir.")
+
+
 def get_signal_row(row, score, rsi, trend):
     """get_signal() ile ayni donus (etiket, css sinifi); tedbirli varlikta tedbir etiketi."""
     t = _tedbir_deger(row)
     if t:
         return t, _TEDBIR_SINIF[t]
-    return get_signal(score, rsi, trend)
+    lbl, cls = get_signal(score, rsi, trend)
+    return sinyal_sinirla(lbl, cls, _veri_sinirli_mi(row))
 
 
 def _tedbir_serit_goster(row):
@@ -1460,6 +1493,18 @@ def _tedbir_serit_goster(row):
             f'<div style="border-left:6px solid {renk};background:#f7f7fa;padding:10px 14px;'
             f'border-radius:6px;margin:6px 0 10px 0;color:#1b2a4a;">'
             f'<b style="color:{renk};">{_html.escape(t)}</b> &nbsp;{_html.escape(acik)}</div>',
+            unsafe_allow_html=True)
+    if _veri_sinirli_mi(row):
+        # v2.0.7.378: 260 islem gunu altindaki BIST hissesi - amber uyari seridi (tedbir/KAP ile birlikte gorunebilir)
+        st.markdown(
+            '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #b45309;'
+            'border-left:10px solid #b45309;background:#fef3c7;padding:12px 16px;border-radius:8px;'
+            'margin:8px 0 14px 0;color:#5a2d02;">'
+            '<div class="uyari-rozet" style="background:#b45309;font-weight:800;font-size:13px;'
+            'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">'
+            '<span>SINIRLI VERİ</span></div>'
+            f'<div style="font-size:15px;font-weight:600;line-height:1.4;">{_html.escape(_veri_sinirli_aciklama(row))}'
+            '</div></div>',
             unsafe_allow_html=True)
     if bilgi:
         # v2.0.7.375 (Bahri'nin talebi): KAP BILGI seridi belirginlestirildi - koyu rozet, kalin 16px metin,
@@ -1495,6 +1540,9 @@ def _uyari_haritasi(df_uni_):
             bilgi = r.get("KAP_Bilgi") if "KAP_Bilgi" in df_uni_.columns else ""
             if isinstance(bilgi, str) and bilgi:
                 harita[str(r["Ticker"]).upper()] = ("KAP BİLGİ", bilgi)
+                continue
+            if _veri_sinirli_mi(r):
+                harita[str(r["Ticker"]).upper()] = ("SINIRLI VERİ", _veri_sinirli_aciklama(r))
     except Exception:
         return {}
     return harita
@@ -1507,6 +1555,8 @@ def _uyari_rozet_html(etiket, aciklama=""):
         return "—"
     if etiket == "KAP BİLGİ":
         renk = "#1f4e79"
+    elif etiket == "SINIRLI VERİ":
+        renk = "#b45309"
     else:
         renk = SIG_COLORS.get(_TEDBIR_SINIF.get(etiket, ""), "#444")
     return (f'<span class="uyari-rozet" title="{_html.escape(aciklama or "")}" style="background:{renk};'
@@ -1517,12 +1567,15 @@ def _uyari_rozet_html(etiket, aciklama=""):
 def _uyari_ozeti_goster(tickerlar, harita):
     """Tablo ustunde ozet: gorunen hisselerden uyarisi olanlari listeler. Hic yoksa hicbir sey cizmez."""
     import html as _html
-    uyarili, bilgili = [], []
+    uyarili, bilgili, sinirli = [], [], []
     for t in tickerlar:
         v = harita.get(str(t).upper())
         if not v:
             continue
-        (bilgili if v[0] == "KAP BİLGİ" else uyarili).append((str(t).upper(), v[0], v[1]))
+        if v[0] == "SINIRLI VERİ":
+            sinirli.append(str(t).upper())
+        else:
+            (bilgili if v[0] == "KAP BİLGİ" else uyarili).append((str(t).upper(), v[0], v[1]))
     if uyarili:
         satirlar = "".join(
             f'<li><b>{_html.escape(t)}</b> — {_html.escape(e)}: {_html.escape(a)}</li>' for t, e, a in uyarili)
@@ -1539,6 +1592,14 @@ def _uyari_ozeti_goster(tickerlar, harita):
             f'KAP bilgi notu olan {len(bilgili)} hisse: '
             + _html.escape(", ".join(t for t, _, _ in bilgili)) +
             ' (geri alım vb.; tek başına risk sayılmaz)</div>',
+            unsafe_allow_html=True)
+    if sinirli:
+        gosterilen = ", ".join(sinirli[:15]) + (f" ve {len(sinirli) - 15} diğeri" if len(sinirli) > 15 else "")
+        st.markdown(
+            '<div style="border:2px solid #b45309;border-left:10px solid #b45309;background:#fef3c7;'
+            'padding:8px 16px;border-radius:8px;margin:6px 0 12px 0;color:#5a2d02;font-size:14px;font-weight:600;">'
+            f'Sınırlı veri: {len(sinirli)} hissenin fiyat geçmişi 260 işlem gününden kısa '
+            f'({_html.escape(gosterilen)}). Bu hisseler için AL sinyali üretilmez; en fazla TUT İZLE verilir.</div>',
             unsafe_allow_html=True)
 # ══ BITIS: TEDBIR_SINYAL ═══════════════════════════════════════════════════════════════
 
@@ -6292,6 +6353,11 @@ if page=="Ana Sayfa":
         rsi_v = _s["rsi"]
         trend_v = "YUKSELIS" if _s["ret1m"] >= 0 else "DUSUS"
         sig_lbl, _ = get_signal(_s["skor"], rsi_v, trend_v)
+        try:   # v2.0.7.378: sinirli veride AL sinyali verilmez (get_signal_row ile ayni kural)
+            _vr = df_uni[df_uni["Ticker"] == _s["ticker"]]
+            sig_lbl, _ = sinyal_sinirla(sig_lbl, "", bool(_vr["Veri_Sinirli"].iloc[0]) if not _vr.empty else False)
+        except Exception:
+            pass
         opt_rows.append({
             "Kategori": _s["cat"],
             "Ticker": _s["ticker"],

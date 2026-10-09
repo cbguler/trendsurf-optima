@@ -101,6 +101,40 @@ def get_signal(score, rsi, trend):
     return lbl, cls
 
 
+# v2.0.7.378 (9 Ekim 2026, Bahri'nin karari): BIST hissesinin fiyat gecmisi 260 islem gununden
+# (yaklasik bir yil) azsa Optima Skor kisa bir teknik gecmise dayanir: uyari seridi + AL sinyali siniri.
+# Skorun kendisi DEGISMEZ; yalniz sinyal etiketi "KADEMELI AL / GUCLU AL" yerine "TUT IZLE" olur.
+GECMIS_GUN_ESIK = 260
+_AL_ETIKETLERI = ("GÜÇLÜ AL", "KADEMELİ AL")
+
+
+def gecmis_gun_say(close) -> int:
+    """Kapanis serisindeki (NaN olmayan) islem gunu sayisi."""
+    try:
+        return int(close.dropna().shape[0])
+    except Exception:
+        return 0
+
+
+def sinirli_veri_mi(kategori, son_fiyat, gecmis_gun) -> bool:
+    """Yalniz BIST, fiyati olan ve gecmis gun sayisi BILINEN (>0) satir icin: gun < GECMIS_GUN_ESIK.
+    Bilinmiyorsa (NaN/None/0/kolon yok) False - bilinmeyen veri uyari sebebi sayilmaz."""
+    try:
+        if str(kategori) != "BIST" or not float(son_fiyat) > 0:
+            return False
+        g = float(gecmis_gun)
+        return 0 < g < GECMIS_GUN_ESIK
+    except (TypeError, ValueError):
+        return False
+
+
+def sinyal_sinirla(lbl, cls, sinirli):
+    """Sinirli veride AL etiketlerini TUT IZLE'ye indirir; diger etiketler aynen kalir."""
+    if sinirli and lbl in _AL_ETIKETLERI:
+        return "TUT İZLE", "sig-t"
+    return lbl, cls
+
+
 def optima_score_breakdown(rsi, ret1m, vol=30.0, has_fundamental=False,
                             pb=None, pe=None, dy=None):
     """v2.0.7.144 (Bahri'nin talebi, 18 Ağustos 2026): "Optima Skor'u

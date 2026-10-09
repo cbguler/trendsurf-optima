@@ -160,6 +160,10 @@ def optimize_portfolio(df_uni: pd.DataFrame, budget: float, risk_weights: dict,
                 sonuc["uyarilar"].append(_uyari)
         else:
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
+            # v2.0.7.378: 260 islem gunu altindaki (SINIRLI VERI) hisse icin AL sinyali uretilmedigi
+            # icin otomatik portfoy onerisine de ALINMAZ (izleme listesi modunda kullanicinin secimi korunur).
+            if not watchlist_mode and "Veri_Sinirli" in df_c.columns:
+                df_c = df_c[~df_c["Veri_Sinirli"].fillna(False).astype(bool)]
         if df_c.empty:
             sonuc["havuz_sayilari"][cat] = 0
             continue

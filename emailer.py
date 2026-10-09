@@ -371,6 +371,13 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
             skor = _optima_score(match.iloc[0])
         sc  = _sig_color(skor)
         sl  = _sig_lbl(skor) if skor > 0 else "—"
+        try:   # v2.0.7.378: 260 islem gunu altindaki BIST hissesinde AL etiketi verilmez (uygulama ile ayni kural)
+            from scoring import sinirli_veri_mi as _svm
+            if not match.empty and _svm(cat, cur, match["Gecmis_Gun"].iloc[0] if "Gecmis_Gun" in match.columns else None) \
+                    and sl in ("GÜÇLÜ AL", "KADEMELİ AL"):
+                sl, sc = "TUT İZLE", _sig_color(40.0)
+        except Exception:
+            pass
 
         pnl_pct = round((cur / mal - 1) * 100, 2) if mal > 0 and cur > 0 else 0.0
         toplam  = round(cur * adet, 2)
