@@ -85,6 +85,31 @@ def test_kap_birim_ve_slug():
         K._CANLI_SLUG.update({"harita": None, "son_deneme": 0.0})
 
 
+def test_kap_donem_etiketi():
+    import kap_client as K
+    bilanco = pd.DataFrame([["Sunum Para Birimi", None, None, "TL"], ["Toplam Varlıklar", None, None, "10.111.895.062"]],
+                           columns=["FİNANSAL DURUM TABLOSU", "u1", "u2", "2026/06"])
+    gelir_baslik = pd.DataFrame([["Sunum Para Birimi", None, None, "TL"]],
+                                columns=["KAR VEYA ZARAR VE DİĞER KAPSAMLI GELİR TABLOSU", "u1", "u2", "2026/06"])
+    gelir_satir = pd.DataFrame([["Hasılat", None, None, "4.525.914.424"]], columns=["0", "1", "2", "3"])
+    r = {}
+    K._parse_kap_financials([bilanco, gelir_baslik, gelir_satir], r)
+    ok(r["kap_donemler"]["kap_total_assets"] == "2026/06", "bilanco alani kendi basligindan donem alir")
+    ok(r["kap_donemler"]["kap_revenue"] == "2026/06", "gelir satiri onceki baslik tablosundan donem alir")
+    g = K.fundamentals_to_display(r)
+    ok("Toplam Varlık (KAP, 2026/06)" in g and "Ciro (KAP, 2026/06)" in g, "etikette donem")
+    # donem yoksa eski etiket
+    r2 = {"kap_total_assets": 5.0e9, "_kap_available": True}
+    g2 = K.fundamentals_to_display(r2)
+    ok("Toplam Varlık (KAP)" in g2, "donem bilinmiyorsa eski etiket (uydurma donem yok)")
+    # cok donemli baslik: en sagdaki dolu sutunun donemi
+    b = pd.DataFrame([["Toplam Varlıklar", "1.000", "2.000", None]], columns=["FİNANSAL DURUM TABLOSU", "2024/12", "2025/12", "2026/06"])
+    r3 = {}
+    K._parse_kap_financials([b], r3)
+    ok(r3["kap_total_assets"] == 2000.0 and r3["kap_donemler"]["kap_total_assets"] == "2025/12",
+       "en sagdaki DOLU sutunun donemi (bos 2026/06 degil)")
+
+
 def test_worker_gecmis_gun():
     import sys as _s, types
     import numpy as np
