@@ -149,15 +149,39 @@ def pay_adetleri(html: str) -> dict:
     return sonuc
 
 
-def _cek(url: str, deneme: int = 3, bekle: float = 2.0) -> Optional[str]:
+import threading
+
+_ist = {"ok": 0, "fail": 0}
+_ist_kilit = threading.Lock()
+
+
+def istatistik() -> dict:
+    """KAP sayfa cekim sayaclari (gece derlemesi logu ve devre kesici icin)."""
+    with _ist_kilit:
+        return dict(_ist)
+
+
+def istatistik_sifirla():
+    with _ist_kilit:
+        _ist["ok"] = _ist["fail"] = 0
+
+
+def _cek(url: str, deneme: int = 2, bekle: float = 1.0) -> Optional[str]:
+    """KAP sayfasi. Kisa zaman asimi (baglanti 5 sn, okuma 20 sn) ve az deneme: KAP GitHub IP'lerini yavaslatirsa
+    gece derlemesi 45 dk'lik sinira takilmasin (v2.0.7.381 - ilk canli calismada 25 dk'yi astigi icin eklendi)."""
     for i in range(deneme):
         try:
-            r = requests.get(url, headers=KAP_HEADERS, timeout=30)
+            r = requests.get(url, headers=KAP_HEADERS, timeout=(5, 20))
             if r.status_code == 200 and r.text and len(r.text) > 500:
+                with _ist_kilit:
+                    _ist["ok"] += 1
                 return r.text
         except Exception:
             pass
-        time.sleep(bekle * (i + 1))
+        if i + 1 < deneme:
+            time.sleep(bekle * (i + 1))
+    with _ist_kilit:
+        _ist["fail"] += 1
     return None
 
 

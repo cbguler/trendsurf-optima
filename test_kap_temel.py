@@ -259,6 +259,38 @@ def test_worker_blogu():
     ok(zz["Optima_Skor"] == 0.0 and zz["Temel_Kaynak"] is None, "fiyati olmayan satir 0 ve kaynaksiz")
 
 
+# ── KAP adimi zaman butcesi / devre kesici ───────────────────
+def test_zaman_butcesi_ve_devre_kesici():
+    import worker
+    cagri = []
+    orj_h, orj_f, orj_b = T.hesapla, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN
+    T.hesapla = lambda t, *a, **k: (cagri.append(t) or dict(_kap(), notlar=[]))
+    worker.fetch_bist_fundamentals_parallel = lambda tk, **kw: {}
+    try:
+        s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], {"AAA": 1.0, "BBB": 1.0}, {}, log=lambda *a: None)
+        ok(sorted(cagri) == ["AAA", "BBB"], "normalde her hisse hesaplanir")
+        ok(m["AAA"]["kaynak"] == "KAP", "KAP sonucu kullanilir")
+        cagri.clear()
+        worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = -1
+        s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], {"AAA": 1.0, "BBB": 1.0}, {}, log=lambda *a: None)
+        ok(cagri == [] and m["AAA"]["kaynak"] == "", "zaman butcesi dolunca KAP'a hic gidilmez, hisse yedege kalir")
+        ok(any("atlandi" in n for n in m["AAA"]["notlar"]), "atlama notu")
+        worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_b
+        # devre kesici: sayac sifirlanir, hesapla sahtesi sayaci elle bozar
+        def bozuk(t, *a, **k):
+            cagri.append(t)
+            with T._ist_kilit:
+                T._ist["fail"] += 50
+            return {"notlar": ["KAP finansal sayfasi alinamadi"]}
+        T.hesapla = bozuk
+        cagri.clear()
+        worker.fetch_bist_temel_kap_oncelikli(["A1", "A2", "A3", "A4"], {}, {}, max_workers=1, log=lambda *a: None)
+        ok(len(cagri) == 1, f"ilk 40 sayfa cekimi basarisizsa KAP adimi kesilir (cagri: {len(cagri)})")
+    finally:
+        T.hesapla, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_h, orj_f, orj_b
+        T.istatistik_sifirla()
+
+
 # ── detay tablosu ────────────────────────────────────────────
 def test_detay_tablosu():
     raw = {"pe_ratio": None, "pb_ratio": None, "forward_pe": None, "_para_uyumsuz": "USD", "revenue": 5e10,

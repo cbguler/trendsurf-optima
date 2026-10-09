@@ -957,6 +957,9 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, re
     return sonuc
 
 
+KAP_TEMEL_ZAMAN_BUTCESI_SN = 15 * 60   # KAP PD/DD + F/K adimi icin ust sinir (gece derlemesi 45 dk'lik zaman asimli)
+
+
 def _temel_icin_kurlar():
     """USD/EUR -> TL kuru (yalniz USD/EUR raporlayan sirketlerin PD/DD ve F/K'sini ayni para biriminde
     hesaplamak icin). Doviz satirlari bu adimdan SONRA uretildigi icin son CSV'den (en fazla 1 gun eski),
@@ -994,17 +997,37 @@ def fetch_bist_temel_kap_oncelikli(tickers, fiyatlar, kurlar, max_workers=6, log
     raw = {}
     yahoo = fetch_bist_fundamentals_parallel(tickers, raw_out=raw)
 
-    def _kap(t):
-        try:
-            return t, kap_temel.hesapla(t, float(fiyatlar.get(t) or 0), fiyatlar, kurlar)
-        except Exception as e:      # tek hissenin hatasi tum geceyi durdurmasin
-            return t, {"notlar": [f"KAP hesap hatasi: {type(e).__name__}: {str(e)[:80]}"]}
+    import time as _tm_
+    kap_temel.istatistik_sifirla()
+    _son = _tm_.monotonic() + KAP_TEMEL_ZAMAN_BUTCESI_SN
+    _sayac = {"i": 0, "atlanan": 0}
 
-    log(f"  [KAP-Temel] {len(tickers)} hisse icin KAP PD/DD + F/K hesaplaniyor ({max_workers} worker)...")
+    def _kap(t):
+        # Zaman butcesi doldu veya KAP hic yanit vermiyor (ilk 40 sayfa cekiminin hepsi basarisiz): kalan hisseler
+        # KAP'siz birakilir (yfinance yedegi), gece derlemesi 45 dk'lik zaman asimina takilmaz.
+        ist = kap_temel.istatistik()
+        if _tm_.monotonic() > _son or (ist["ok"] == 0 and ist["fail"] >= 40):
+            _sayac["atlanan"] += 1
+            return t, {"notlar": ["KAP atlandi: zaman butcesi doldu veya KAP yanit vermiyor"]}
+        try:
+            r = kap_temel.hesapla(t, float(fiyatlar.get(t) or 0), fiyatlar, kurlar)
+        except Exception as e:      # tek hissenin hatasi tum geceyi durdurmasin
+            r = {"notlar": [f"KAP hesap hatasi: {type(e).__name__}: {str(e)[:80]}"]}
+        _sayac["i"] += 1
+        if _sayac["i"] % 100 == 0:
+            i2 = kap_temel.istatistik()
+            log(f"  [KAP-Temel] ilerleme: {_sayac['i']}/{len(tickers)} hisse, sayfa ok={i2['ok']} basarisiz={i2['fail']}, "
+                f"{int(KAP_TEMEL_ZAMAN_BUTCESI_SN - (_son - _tm_.monotonic()))} sn gecti")
+        return t, r
+
+    log(f"  [KAP-Temel] {len(tickers)} hisse icin KAP PD/DD + F/K hesaplaniyor ({max_workers} worker, "
+        f"en fazla {KAP_TEMEL_ZAMAN_BUTCESI_SN // 60} dk)...")
     kap = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for t, r in ex.map(_kap, tickers):
             kap[t] = r
+    _i = kap_temel.istatistik()
+    log(f"  [KAP-Temel] KAP sayfa cekimi: basarili={_i['ok']}, basarisiz={_i['fail']}, atlanan hisse={_sayac['atlanan']}.")
     sonuc, meta = {}, {}
     n_kap = n_yf = n_yok = 0
     for t in tickers:
