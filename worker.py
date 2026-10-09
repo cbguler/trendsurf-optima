@@ -957,7 +957,8 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, re
     return sonuc
 
 
-KAP_TEMEL_ZAMAN_BUTCESI_SN = 15 * 60   # KAP PD/DD + F/K adimi icin ust sinir (gece derlemesi 45 dk'lik zaman asimli)
+KAP_TEMEL_ARDISIK_HATA = 15           # KAP art arda bu kadar sayfa cekimini basarisiz yaparsa o gece KAP birakilir
+KAP_TEMEL_ZAMAN_BUTCESI_SN = 10 * 60   # KAP PD/DD + F/K adimi icin ust sinir (gece derlemesi 45 dk'lik zaman asimli)
 
 
 def _temel_icin_kurlar():
@@ -987,47 +988,67 @@ def _temel_icin_kurlar():
     return kurlar
 
 
-def fetch_bist_temel_kap_oncelikli(tickers, fiyatlar, kurlar, max_workers=6, log=print):
+def fetch_bist_temel_kap_oncelikli(tickers, fiyatlar, kurlar, max_workers=3, log=print, onbellek_yolu=None, bugun=None):
     """v2.0.7.381 (Bahri, 9 Ekim 2026, THYAO Temel Skor 0/25): Optima Temel Skoru girdileri (PD/DD, F/K, temettu)
     artik KAP'tan (birincil kaynak) hesaplanir; yfinance yalniz (a) temettu verimi, (b) KAP'ta verisi olmayan
     hisseler icin PARA BIRIMI TUTARLIYSA yedek, (c) ara donemde iz. 12A F/K icin (KAP PD/DD ile dogrulanarak).
-    Bkz. kap_temel.py. Dondurur: ({ticker: (pb, pe, dy)}, {ticker: meta})."""
+    Bkz. kap_temel.py.
+
+    v2.0.7.383: KAP ham verisi (ozkaynak, net kar, pay adedi) `kap_temel_onbellek.json`'da tutulur; PD/DD ve F/K her
+    gece GUNCEL fiyatla bu veriden hesaplanir. KAP'a gece yalniz en eksik/eski kayitlarin bir kismi (kota) sorulur:
+    ilk canli calismada KAP, GitHub IP'sine ~200 istekten sonra yanit vermeyi kesmisti.
+    Dondurur: ({ticker: (pb, pe, dy)}, {ticker: meta})."""
     from concurrent.futures import ThreadPoolExecutor
+    import datetime as _dt
+    import time as _tm_
     import kap_temel
     raw = {}
     yahoo = fetch_bist_fundamentals_parallel(tickers, raw_out=raw)
 
-    import time as _tm_
+    bugun = bugun or _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=3))).date()
+    yol = onbellek_yolu or os.path.join(os.path.dirname(os.path.abspath(CSV_PATH)), "kap_temel_onbellek.json")
+    onbellek = kap_temel.onbellek_yukle(yol)
+    liste = kap_temel.yenilenecekler(tickers, onbellek, bugun)
+    log(f"  [KAP-Temel] onbellek: {sum(1 for t in tickers if t in onbellek)}/{len(tickers)} hisse kayitli; bu gece "
+        f"yenilenecek: {len(liste)} (kota {kap_temel.ONBELLEK_GUNLUK_KOTA}).")
+
     kap_temel.istatistik_sifirla()
     _son = _tm_.monotonic() + KAP_TEMEL_ZAMAN_BUTCESI_SN
-    _sayac = {"i": 0, "atlanan": 0}
+    _sayac = {"yenilendi": 0, "basarisiz": 0, "atlanan": 0}
 
-    def _kap(t):
-        # Zaman butcesi doldu veya KAP hic yanit vermiyor (ilk 40 sayfa cekiminin hepsi basarisiz): kalan hisseler
-        # KAP'siz birakilir (yfinance yedegi), gece derlemesi 45 dk'lik zaman asimina takilmaz.
-        ist = kap_temel.istatistik()
-        if _tm_.monotonic() > _son or (ist["ok"] == 0 and ist["fail"] >= 40):
+    def _yenile(t):
+        # Zaman butcesi doldu veya KAP art arda yanit vermiyor (devre kesici): kalan hisseler yarina kalir.
+        if _tm_.monotonic() > _son or kap_temel.istatistik()["ardisik"] >= KAP_TEMEL_ARDISIK_HATA:
             _sayac["atlanan"] += 1
-            return t, {"notlar": ["KAP atlandi: zaman butcesi doldu veya KAP yanit vermiyor"]}
+            return t, "atlandi"
         try:
-            r = kap_temel.hesapla(t, float(fiyatlar.get(t) or 0), fiyatlar, kurlar)
+            ham = kap_temel.ham_cek(t, bugun=bugun.isoformat())
         except Exception as e:      # tek hissenin hatasi tum geceyi durdurmasin
-            r = {"notlar": [f"KAP hesap hatasi: {type(e).__name__}: {str(e)[:80]}"]}
-        _sayac["i"] += 1
-        if _sayac["i"] % 100 == 0:
-            i2 = kap_temel.istatistik()
-            log(f"  [KAP-Temel] ilerleme: {_sayac['i']}/{len(tickers)} hisse, sayfa ok={i2['ok']} basarisiz={i2['fail']}, "
-                f"{int(KAP_TEMEL_ZAMAN_BUTCESI_SN - (_son - _tm_.monotonic()))} sn gecti")
-        return t, r
+            log(f"  [KAP-Temel] {t}: {type(e).__name__}: {str(e)[:80]}")
+            ham = None
+        return t, ham
 
-    log(f"  [KAP-Temel] {len(tickers)} hisse icin KAP PD/DD + F/K hesaplaniyor ({max_workers} worker, "
-        f"en fazla {KAP_TEMEL_ZAMAN_BUTCESI_SN // 60} dk)...")
+    if liste:
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            for t, ham in ex.map(_yenile, liste):
+                if ham == "atlandi":
+                    continue
+                if ham is None:
+                    _sayac["basarisiz"] += 1        # onbellekteki eski kayit (varsa) korunur
+                else:
+                    onbellek[t] = ham
+                    _sayac["yenilendi"] += 1
+        _i = kap_temel.istatistik()
+        log(f"  [KAP-Temel] KAP sayfa cekimi: basarili={_i['ok']}, basarisiz={_i['fail']} (son hata: {_i.get('son_hata')}); "
+            f"hisse: yenilendi={_sayac['yenilendi']}, basarisiz={_sayac['basarisiz']}, yarina kalan={_sayac['atlanan']}.")
+        try:
+            kap_temel.onbellek_kaydet(yol, onbellek)
+        except Exception as e:
+            log(f"  [KAP-Temel] onbellek yazilamadi: {type(e).__name__}: {e}")
+
     kap = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        for t, r in ex.map(_kap, tickers):
-            kap[t] = r
-    _i = kap_temel.istatistik()
-    log(f"  [KAP-Temel] KAP sayfa cekimi: basarili={_i['ok']}, basarisiz={_i['fail']}, atlanan hisse={_sayac['atlanan']}.")
+    for t in tickers:
+        kap[t] = kap_temel.hesapla_ham(t, float(fiyatlar.get(t) or 0), fiyatlar, kurlar, onbellek.get(t))
     sonuc, meta = {}, {}
     n_kap = n_yf = n_yok = 0
     for t in tickers:

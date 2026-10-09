@@ -259,35 +259,98 @@ def test_worker_blogu():
     ok(zz["Optima_Skor"] == 0.0 and zz["Temel_Kaynak"] is None, "fiyati olmayan satir 0 ve kaynaksiz")
 
 
-# ── KAP adimi zaman butcesi / devre kesici ───────────────────
-def test_zaman_butcesi_ve_devre_kesici():
+# ── onbellek, kota, zaman butcesi, devre kesici ──────────────
+def _ham(tarih="2026-10-09", genel_ok=True):
+    return {"tarih": tarih, "yok": None, "genel_ok": genel_ok, "para": "TL", "donem": "2026/06", "ozkaynak": 1000.0,
+            "kar": ["2025/12", 100.0, "TL", "x"], "paylar": {"AAA": 10.0}, "notlar": []}
+
+
+def test_yenilenecekler():
+    import datetime as dt
+    bugun = dt.date(2026, 10, 20)
+    onb = {"T1": _ham("2026-10-19"), "T2": _ham("2026-10-01"), "T3": _ham("2026-10-10"), "T4": _ham("2026-10-19", genel_ok=False)}
+    sonuc = T.yenilenecekler(["T1", "T2", "T3", "T4", "T5"], onb, bugun, yas_gun=7, kota=10)
+    ok(sonuc == ["T5", "T4", "T2", "T3"], f"oncelik: kayitsiz > genel_ok=False > en eski; taze (T1) yok: {sonuc}")
+    ok(T.yenilenecekler(["T1", "T2", "T3", "T4", "T5"], onb, bugun, kota=2) == ["T5", "T4"], "kota uygulanir")
+    ok(T.yenilenecekler(["T1"], onb, bugun) == [], "taze kayit yenilenmez")
+    onb["T6"] = {"tarih": "bozuk"}
+    ok(T.yenilenecekler(["T6"], onb, bugun) == ["T6"], "tarihi okunamayan kayit eski sayilir")
+
+
+def test_onbellek_dosyasi():
+    with tempfile.TemporaryDirectory() as d:
+        y = os.path.join(d, "o.json")
+        ok(T.onbellek_yukle(y) == {}, "dosya yoksa bos")
+        T.onbellek_kaydet(y, {"AAA": _ham()})
+        ok(T.onbellek_yukle(y)["AAA"]["ozkaynak"] == 1000.0, "yaz/oku turu")
+        open(y, "w").write("bozuk{")
+        ok(T.onbellek_yukle(y) == {}, "bozuk dosya sessizce bos sayilir")
+
+
+def test_ham_ve_hesapla_ham_ayni_sonuc():
+    h = fin_html(["2024/12", "2025/12", "2026/06"], ["1000000TL"] * 3, ["679.887", "911.222", "1.018.517"],
+                 ["113.378", "118.208", "18.864"], sermaye="1.380")
+    g = genel_html([("THYAO", "1.380.000.000,00")])
+    ham = T.ham_cek("THYAO", h, g, bugun="2026-10-09")
+    ok(ham["tarih"] == "2026-10-09" and ham["donem"] == "2026/06" and ham["paylar"] == {"THYAO": 1.38e9}, f"ham kayit: {ham}")
+    ok(ham["onceki_yil_kar"][0] == "2025/12" and ham["kar"][0] == "2026/06", "ara donemde onceki yil 12. ay kari saklanir")
+    import json
+    ham2 = json.loads(json.dumps(ham))          # onbellek gidis-donusu
+    a = T.hesapla_ham("THYAO", 287.5, ham=ham2)
+    b = T.hesapla("THYAO", 287.5, fin_html=h, genel_html=g)
+    ok(a["pb"] == b["pb"] and a["pe"] == b["pe"] and a["pe_tur"] == "YILLIK", "onbellekten hesap = dogrudan hesap")
+    ok(a["kap_tarihi"] == "2026-10-09", "ham verinin tarihi sonuca tasinir")
+    ok(T.hesapla_ham("THYAO", 287.5, ham=None)["pb"] is None, "ham yoksa hesap yok (hata vermez)")
+    ok(T.ham_cek("THYAO", fin_html="<html>" + "x" * 600 + "</html>", genel_html="x" * 600)["yok"], "tablo yoksa 'yok' notu (onbellege de yazilir)")
+    ok(T.ham_cek("THYAO", fin_html=h, genel_html="<html>" + "x" * 600 + "</html>")["paylar"] == {}, "genel sayfada tablo yoksa bos paylar")
+
+
+def test_worker_onbellek_kota_devre_kesici():
     import worker
+    import datetime as dt
     cagri = []
-    orj_h, orj_f, orj_b = T.hesapla, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN
-    T.hesapla = lambda t, *a, **k: (cagri.append(t) or dict(_kap(), notlar=[]))
+    orj_h, orj_f, orj_b = T.ham_cek, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN
     worker.fetch_bist_fundamentals_parallel = lambda tk, **kw: {}
+    bugun = dt.date(2026, 10, 9)
+    fy = {"AAA": 2.0, "BBB": 2.0}
     try:
-        s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], {"AAA": 1.0, "BBB": 1.0}, {}, log=lambda *a: None)
-        ok(sorted(cagri) == ["AAA", "BBB"], "normalde her hisse hesaplanir")
-        ok(m["AAA"]["kaynak"] == "KAP", "KAP sonucu kullanilir")
-        cagri.clear()
-        worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = -1
-        s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], {"AAA": 1.0, "BBB": 1.0}, {}, log=lambda *a: None)
-        ok(cagri == [] and m["AAA"]["kaynak"] == "", "zaman butcesi dolunca KAP'a hic gidilmez, hisse yedege kalir")
-        ok(any("atlandi" in n for n in m["AAA"]["notlar"]), "atlama notu")
-        worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_b
-        # devre kesici: sayac sifirlanir, hesapla sahtesi sayaci elle bozar
-        def bozuk(t, *a, **k):
-            cagri.append(t)
-            with T._ist_kilit:
-                T._ist["fail"] += 50
-            return {"notlar": ["KAP finansal sayfasi alinamadi"]}
-        T.hesapla = bozuk
-        cagri.clear()
-        worker.fetch_bist_temel_kap_oncelikli(["A1", "A2", "A3", "A4"], {}, {}, max_workers=1, log=lambda *a: None)
-        ok(len(cagri) == 1, f"ilk 40 sayfa cekimi basarisizsa KAP adimi kesilir (cagri: {len(cagri)})")
+        with tempfile.TemporaryDirectory() as d:
+            y = os.path.join(d, "o.json")
+            T.ham_cek = lambda t, *a, **k: (cagri.append(t) or _ham(k.get("bugun") or "2026-10-09"))
+            s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], fy, {}, log=lambda *a: None, onbellek_yolu=y, bugun=bugun)
+            ok(sorted(cagri) == ["AAA", "BBB"], "onbellek bos: iki hisse de KAP'tan cekilir")
+            ok(set(T.onbellek_yukle(y)) == {"AAA", "BBB"}, "onbellek dosyaya yazildi")
+            cagri.clear()
+            s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], fy, {}, log=lambda *a: None, onbellek_yolu=y, bugun=bugun)
+            ok(cagri == [], "taze onbellek: KAP'a HIC gidilmez")
+            ok(m["AAA"]["kaynak"] == "KAP" and abs(s["AAA"][0] - (2.0 * 10.0) / 1000.0) < 1e-12, "PD/DD onbellekten guncel fiyatla hesaplanir")
+            s2, _ = worker.fetch_bist_temel_kap_oncelikli(["AAA", "BBB"], {"AAA": 4.0, "BBB": 2.0}, {}, log=lambda *a: None, onbellek_yolu=y, bugun=bugun)
+            ok(abs(s2["AAA"][0] - 0.04) < 1e-12, "fiyat degisince KAP'a gitmeden PD/DD degisir")
+            # zaman butcesi: yeni hisse + sure dolmus
+            cagri.clear()
+            worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = -1
+            s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA", "CCC"], {"AAA": 2.0, "CCC": 2.0}, {}, log=lambda *a: None, onbellek_yolu=y, bugun=bugun)
+            ok(cagri == [] and m["CCC"]["kaynak"] == "" and m["AAA"]["kaynak"] == "KAP", "butce doldu: yeni hisse yarina kalir, onbellekli hisse etkilenmez")
+            worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_b
+            # ham_cek hata (None): eski kayit korunur
+            y2 = os.path.join(d, "o2.json")
+            T.onbellek_kaydet(y2, {"AAA": _ham("2026-09-01")})
+            T.ham_cek = lambda t, *a, **k: None
+            s, m = worker.fetch_bist_temel_kap_oncelikli(["AAA"], {"AAA": 2.0}, {}, log=lambda *a: None, onbellek_yolu=y2, bugun=bugun)
+            ok(m["AAA"]["kaynak"] == "KAP" and T.onbellek_yukle(y2)["AAA"]["tarih"] == "2026-09-01", "KAP basarisizsa eski onbellek kaydi korunur ve kullanilir")
+            # devre kesici: art arda hata sayaci
+            def bozuk(t, *a, **k):
+                cagri.append(t)
+                with T._ist_kilit:
+                    T._ist["ardisik"] += 100
+                return None
+            T.ham_cek = bozuk
+            cagri.clear()
+            y3 = os.path.join(d, "o3.json")
+            worker.fetch_bist_temel_kap_oncelikli(["A1", "A2", "A3", "A4"], {}, {}, max_workers=1, log=lambda *a: None, onbellek_yolu=y3, bugun=bugun)
+            ok(len(cagri) == 1, f"art arda hata esigi asilinca KAP adimi kesilir (cagri: {len(cagri)})")
     finally:
-        T.hesapla, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_h, orj_f, orj_b
+        T.ham_cek, worker.fetch_bist_fundamentals_parallel, worker.KAP_TEMEL_ZAMAN_BUTCESI_SN = orj_h, orj_f, orj_b
         T.istatistik_sifirla()
 
 
