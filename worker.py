@@ -1140,6 +1140,40 @@ def single_full(yf_sym, label="", period="1y"):
 # bu 8 parite icin de dogrudan canlidoviz'in gercek Turkiye fiyatini
 # (Harem/serbest piyasa) ilk once deniyor.
 
+def _gecmis_gun_hesapla(tickers, onceki):
+    """v2.0.7.378: BIST hisselerinin yfinance'taki islem gunu sayisi (en fazla 2 yil bakilir).
+    onceki: {ticker: gun} son CSV'den. Onceden >= esik olan hisse bir daha sorgulanmaz (gecmis
+    kisalmaz). Bir parti basarisiz olursa o hisseler icin onceki deger (varsa) korunur, yoksa
+    sonuca konmaz -> uygulama 'bilinmiyor' sayar, uyari uretmez (uydurma yok)."""
+    import yfinance as yf
+    from scoring import GECMIS_GUN_ESIK, gecmis_gun_say
+    sonuc = {t: int(g) for t, g in onceki.items() if t in set(tickers) and g and g > 0}
+    sorgula = [t for t in tickers if sonuc.get(t, 0) < GECMIS_GUN_ESIK]
+    print(f"  [gecmis-gun] {len(sorgula)}/{len(tickers)} hisse icin islem gunu sayisi hesaplaniyor...")
+    for i in range(0, len(sorgula), 100):
+        parca = sorgula[i:i + 100]
+        syms = [f"{t}.IS" for t in parca]
+        try:
+            raw = yf.download(syms, period="2y", progress=False, auto_adjust=True, group_by="ticker")
+            for t, sym in zip(parca, syms):
+                try:
+                    sub = raw if len(syms) == 1 else (
+                        raw[sym] if sym in raw.columns.get_level_values(0) else None)
+                    if sub is None or "Close" not in sub.columns:
+                        continue
+                    col = sub["Close"]
+                    if hasattr(col, "squeeze"):
+                        col = col.squeeze()
+                    g = gecmis_gun_say(col)
+                    if g > 0:
+                        sonuc[t] = g
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"  [gecmis-gun] parti {i // 100 + 1} basarisiz (onceki degerler korunur): {e}")
+    return sonuc
+
+
 def build():
     global BIST_TICKERS
 
@@ -1308,6 +1342,23 @@ def build():
                 print(f"  [cache] {bist_cache_ok} BIST fiyati son CSV'den tamamlandi.")
         except Exception as _ce:
             print(f"  [cache] BIST cache atlanıyor: {_ce}")
+
+    # v2.0.7.378: islem gunu sayisi (Gecmis_Gun) - uygulama 260 gunden azsa SINIRLI VERI uyarisi + AL siniri
+    try:
+        _onceki_gun = {}
+        if os.path.exists(CSV_PATH):
+            _dg = pd.read_csv(CSV_PATH)
+            if "Gecmis_Gun" in _dg.columns:
+                _onceki_gun = {str(t): float(g) for t, g in zip(_dg["Ticker"], _dg["Gecmis_Gun"])
+                               if pd.notna(g)}
+        _gun = _gecmis_gun_hesapla(
+            [r["Ticker"] for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0],
+            _onceki_gun)
+        for r in all_rows:
+            if r["Kategori"] == "BIST":
+                r["Gecmis_Gun"] = _gun.get(r["Ticker"])
+    except Exception as _gg_err:     # bu bilgi eksik kalsa da gece derlemesi DURMAZ
+        print(f"  [gecmis-gun] atlandi: {type(_gg_err).__name__}: {_gg_err}")
 
     # v2.0.4.57: Fiyati olan BIST hisseleri icin temel analiz + tam Optima
     # Skoru hesapla. ONBELLEK TAMAMLAMASINDAN SONRA yapiliyor (yukarida) -

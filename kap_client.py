@@ -24,11 +24,13 @@ from typing import Optional
 # Simdi bu HAZIR, ONAYLI kaynak dogrudan buradan okunuyor - elle
 # yazilmis kucuk liste TAMAMEN TERK EDILDI.
 #
-# BILEREK OTOMATIK DEGIL: Bahri'nin acik talebi geregi, yeni halka arz
-# olan sirketler burada OTOMATIK belirmez - sadece KAP_BIST.xlsx'te
-# listelenenler kapsanir. Yeni bir sirket eklemek icin Bahri bu dosyayi
-# kendisi guncelleyip yukler (worker.py'nin BIST evren genislemesindeki
-# NTGAZ gibi otomatik-kesif mantigindan BILINCLI olarak AYRI tutuldu).
+# v2.0.7.378 (9 Ekim 2026, Bahri'nin talebi): onceki surumde yeni halka
+# arzlarin otomatik eklenmemesi BILINCLI idi; Bahri artik tersini istedi
+# ("yfinance gibi ikincil degil birincil kaynaktan alinsin"). Bu yuzden:
+#   1) ORZAX dahil 21 yeni hisse KAP_BIST.xlsx'e eklendi (KAP'in kendi listesinden),
+#   2) xlsx'te olmayan bir kod icin KAP'in resmi BIST listesine canli bakan
+#      slug_getir() yedegi eklendi (asagida) - gelecekteki yeni hisseler dosyayi
+#      elle guncellemeden KAP birincil verisini alir.
 def _kap_slug_map_yukle() -> dict:
     import os, glob
     result = {}
@@ -64,6 +66,37 @@ def _kap_slug_map_yukle() -> dict:
 
 
 KAP_SLUG_MAP = _kap_slug_map_yukle()
+
+# v2.0.7.378 - xlsx'te olmayan kodlar icin KAP'in resmi listesinden CANLI yedek arama.
+# Sonuc surec boyunca bellekte tutulur; liste cekilemezse 10 dk boyunca tekrar denenmez
+# (her hisse tiklamasinda KAP'i yormamak icin). Hata durumunda None doner -> yfinance'e dusulur.
+_CANLI_SLUG = {"harita": None, "son_deneme": 0.0}
+_CANLI_GERI_CEKILME_SN = 600
+
+
+def slug_getir(ticker: str) -> Optional[str]:
+    t = str(ticker or "").strip().upper()
+    if not t:
+        return None
+    if t in KAP_SLUG_MAP:
+        return KAP_SLUG_MAP[t]
+    import time as _time
+    if _CANLI_SLUG["harita"] is None:
+        if _time.time() - _CANLI_SLUG["son_deneme"] < _CANLI_GERI_CEKILME_SN:
+            return None
+        _CANLI_SLUG["son_deneme"] = _time.time()
+        try:
+            import kap_evren as _ke
+            h = {}
+            for k in _ke.kap_bist_listesini_cek(deneme=2):
+                for kod in k["kodlar"]:
+                    h.setdefault(kod, k["slug"])
+            _CANLI_SLUG["harita"] = h
+            print(f"[kap_client] KAP canli listeden {len(h)} kod icin yedek slug haritasi yuklendi.")
+        except Exception as e:
+            print(f"[kap_client] KAP canli liste yedegi alinamadi: {e}")
+            return None
+    return _CANLI_SLUG["harita"].get(t)
 
 KAP_HEADERS = {
     "User-Agent": (
@@ -222,7 +255,7 @@ def _fetch_kap(ticker: str) -> dict:
     var. Artik bu GERCEK, DOGRULANMIS sayfa cekilip pandas.read_html
     ile ayristiriliyor - JSON API varsayimi tamamen terk edildi.
     """
-    slug = KAP_SLUG_MAP.get(ticker.upper())
+    slug = slug_getir(ticker)
     if not slug:
         return {"_kap_available": False,
                 "_kap_note": "Veri kaynağı: yfinance"}
@@ -255,6 +288,36 @@ def _fetch_kap(ticker: str) -> dict:
     return result
 
 
+def _kap_birim_carpani(tablolar: list, result: dict) -> float:
+    """Ilk 'Sunum Para Birimi' satirindan carpan: TL -> 1, 1000TL -> 1000, 1000000TL -> 1000000. TL disi para birimi
+    (USD, EUR ...) tutarlari TL gibi gosterilmesin diye result['kap_para_birimi'] ile isaretlenir
+    ve carpan 1 kalir (donusum YAPILMAZ - kur uydurulmaz)."""
+    import re as _re
+    for df in tablolar:
+        if df.shape[1] < 2:
+            continue
+        ilk = df.iloc[:, 0].astype(str).str.strip()
+        e = df[ilk == "Sunum Para Birimi"]
+        if e.empty:
+            continue
+        satir = e.iloc[0]
+        for i in range(len(satir) - 1, 0, -1):
+            v = str(satir.iloc[i]).strip().upper().replace(" ", "")
+            if v in ("", "NAN"):
+                continue
+            m = _re.fullmatch(r"(\d{1,3}(?:\.?\d{3})*)?([A-Z]{2,4})", v)
+            if not m:
+                result["kap_para_birimi"] = v
+                return 1.0
+            kat = float(m.group(1).replace(".", "")) if m.group(1) else 1.0
+            if m.group(2) not in ("TL", "TRY"):
+                result["kap_para_birimi"] = v
+                return 1.0
+            return kat
+        break
+    return 1.0
+
+
 def _parse_kap_financials(tablolar: list, result: dict):
     """v2.0.7.66 - TAM YENIDEN YAZILDI: KAP'in GERCEK sayfa yapisi
     pandas.read_html() ile bir DataFrame LISTESI olarak gelir (JSON
@@ -277,6 +340,9 @@ def _parse_kap_financials(tablolar: list, result: dict):
         "Brüt Kâr (Zarar)":           "kap_gross_profit",
         "Net Dönem Kârı (Zararı)":    "kap_net_income",
     }
+    # v2.0.7.378 - "Sunum Para Birimi" satiri: TL / 1000TL / USD ... Bazi sirketler (orn. VEYAS)
+    # "1000TL" sunar; birim okunmazsa tutarlar 1000 kat kucuk gorunurdu.
+    carpan = _kap_birim_carpani(tablolar, result)
     for df in tablolar:
         if df.shape[1] < 2:
             continue
@@ -292,7 +358,7 @@ def _parse_kap_financials(tablolar: list, result: dict):
             for sutun_idx in range(len(satir) - 1, 0, -1):
                 deger = _safe_float_kap_tr(satir.iloc[sutun_idx])
                 if deger is not None:
-                    result[alan] = deger
+                    result[alan] = deger * carpan
                     break
 
 
@@ -312,7 +378,7 @@ def fetch_kap_fundamentals(ticker: str) -> dict:
     result.update(yf_data)
 
     # 2. KAP (slug haritasındaysa)
-    if ticker in KAP_SLUG_MAP:
+    if slug_getir(ticker):
         kap_data = _fetch_kap(ticker)
         result.update(kap_data)
     else:
@@ -380,6 +446,9 @@ def fundamentals_to_display(raw: dict) -> dict:
     # tutarli, acik bir ifade kullaniliyor.
     if not raw.get("_kap_available", True):
         yf["KAP Durumu"] = "Bilanço verisi bulunamadı (yfinance kullanılıyor)"
+    elif raw.get("kap_para_birimi"):
+        yf["KAP Para Birimi"] = (f"{raw['kap_para_birimi']} (KAP tutarları bu birimde, TL'ye "
+                                 f"çevrilmedi; yukarıdaki (KAP) satırlarındaki ₺ simgesi geçerli değil)")
 
     # Boş alanları kaldır
     return {k: v for k, v in yf.items() if v != "—"}
@@ -440,7 +509,7 @@ def score_from_fundamentals(raw: dict, current_price: float) -> float:
 
 def get_kap_url(ticker: str) -> Optional[str]:
     """KAP sayfası URL'sini döner."""
-    slug = KAP_SLUG_MAP.get(ticker.upper())
+    slug = slug_getir(ticker)
     if slug:
         return f"https://kap.org.tr/tr/sirket-finansal-bilgileri/{slug}"
     return None
