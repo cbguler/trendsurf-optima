@@ -118,6 +118,15 @@ def _optima_score(row) -> float:
     """v2.0.7.138 (Bahri'nin bulgusu — "başka hisseler de var mı?" taraması):
     fallback formül artık scoring.py'nin AYNI tek kaynağını kullanıyor
     (önceden 6. bir elle-tutulan kopyaydı)."""
+    # v2.0.7.380: tedbir/KAP UYARISI etiketi tasiyan satirda skor 0'dir (uygulamada da 0,0); 0'i "veri yok" sayip
+    # asagidaki yedek formulle yeniden hesaplamak (ASELS ornegi: 0 yerine 40 gostermek) yanlis olurdu.
+    try:
+        from uyari_katmani import tedbir_deger
+        if tedbir_deger(row) and "Optima_Skor" in row.index and pd.notna(row["Optima_Skor"]) \
+                and float(row["Optima_Skor"]) <= 0:
+            return 0.0
+    except Exception:
+        pass
     for col in ["Optima_Skor", "optima_skor", "OptimaSkoru"]:
         if col in row.index and pd.notna(row[col]):
             v = float(row[col])
@@ -141,6 +150,35 @@ def _sig_lbl(score: float) -> str:
     if score >= 60: return "KADEMELİ AL"
     if score >= 40: return "TUT İZLE"
     return "SAT"
+
+
+def _satir_bul(df_uni, ticker, cat=None):
+    """df_uni'de (Ticker[, Kategori]) satiri; yoksa None."""
+    try:
+        m = df_uni["Ticker"].astype(str) == str(ticker)
+        if cat is not None and "Kategori" in df_uni.columns:
+            m = m & (df_uni["Kategori"].astype(str) == str(cat))
+        r = df_uni[m]
+        return r.iloc[0] if not r.empty else None
+    except Exception:
+        return None
+
+
+def _sinyal_ve_renk(row, skor: float):
+    """(etiket, renk). v2.0.7.380: uygulamadaki tedbir/KAP etiketi e-postada da gorunur
+    (KAP UYARISI, KAP DIKKAT, ISLEME KAPALI...); sinirli veride (260 islem gunu alti) AL -> TUT IZLE.
+    Etiket yoksa e-postanin mevcut skor eslemesi (_sig_lbl/_sig_color) AYNEN kalir."""
+    try:
+        from uyari_katmani import tedbir_deger, veri_sinirli_mi, TEDBIR_SINIF, SINYAL_RENK
+        t = tedbir_deger(row)
+        if t:
+            return t, SINYAL_RENK.get(TEDBIR_SINIF[t], "#444444")
+        lbl, renk = _sig_lbl(skor), _sig_color(skor)
+        if veri_sinirli_mi(row) and lbl in ("GÜÇLÜ AL", "KADEMELİ AL"):
+            return "TUT İZLE", _sig_color(40.0)
+        return lbl, renk
+    except Exception:
+        return _sig_lbl(skor), _sig_color(skor)
 
 
 def _th(text, align="left", width=None):
@@ -222,8 +260,7 @@ def _build_opt_section(df_uni: pd.DataFrame, budget: float,
         lot    = s["lot"]
         gercek = s["gercek"]
         skor   = s["skor"]
-        sc     = _sig_color(skor)
-        sl     = _sig_lbl(skor)
+        sl, sc = _sinyal_ve_renk(_satir_bul(df_uni, row["Ticker"], cat), skor)
         ad_str = str(row.get("Ad", row["Ticker"]))[:38]
         grand_total += gercek
 
@@ -369,15 +406,9 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
         skor = 0.0
         if not match.empty:
             skor = _optima_score(match.iloc[0])
-        sc  = _sig_color(skor)
-        sl  = _sig_lbl(skor) if skor > 0 else "—"
-        try:   # v2.0.7.378: 260 islem gunu altindaki BIST hissesinde AL etiketi verilmez (uygulama ile ayni kural)
-            from scoring import sinirli_veri_mi as _svm
-            if not match.empty and _svm(cat, cur, match["Gecmis_Gun"].iloc[0] if "Gecmis_Gun" in match.columns else None) \
-                    and sl in ("GÜÇLÜ AL", "KADEMELİ AL"):
-                sl, sc = "TUT İZLE", _sig_color(40.0)
-        except Exception:
-            pass
+        sl, sc = _sinyal_ve_renk(match.iloc[0] if not match.empty else None, skor)
+        if skor <= 0 and sl in ("SAT",):
+            sl = "—"      # skoru olmayan (veri yok) pozisyon: eski davranis; tedbir etiketi ise skor 0 olsa da gosterilir
 
         pnl_pct = round((cur / mal - 1) * 100, 2) if mal > 0 and cur > 0 else 0.0
         toplam  = round(cur * adet, 2)
@@ -398,13 +429,13 @@ def _build_portfolio_section(portfolio: list, df_uni: pd.DataFrame) -> str:
           {_td(f'<span style="font-size:10px;color:#6c7a9c">{cat}</span>')}
           {_td(f"<b>{tkr}</b>", nowrap=True)}
           {_td(ad_name)}
-          {_td(f"<b>{skor:.0f}</b>" if skor > 0 else "—", "right")}
+          {_td(f"<b>{skor:.0f}</b>" if (skor > 0 or sl != "—") else "—", "right")}
           {_td(f"{_tr_num(cur, 4)}", "right", nowrap=True)}
           {_td(_format_birim(adet), "right", bold=True, nowrap=True)}
           {_td(toplam_cell, "right", nowrap=True)}
           {_td(f'<span style="background:{sc}20;color:{sc};padding:2px 6px;'
                f'border-radius:5px;font-size:10px;font-weight:700;'
-               f'white-space:nowrap">{_email_sig(sl) if skor > 0 else "—"}</span>',
+               f'white-space:nowrap">{_email_sig(sl) if sl != "—" else "—"}</span>',
                "center")}
         </tr>"""
 
@@ -541,7 +572,8 @@ def _email_sig(sig: str) -> str:
         "SAT":         "Sat",
         "NET SAT":     "Net<br>Sat",
     }
-    return mapping.get(sig, sig)
+    # v2.0.7.380: tedbir/KAP etiketleri (KAP UYARISI, KAP DIKKAT, ISLEME KAPALI...) iki kelimeliyse alt alta
+    return mapping.get(sig, str(sig).replace(" ", "<br>", 1))
 
 
 def send_report(df_uni: pd.DataFrame = None, portfolio: list = None,

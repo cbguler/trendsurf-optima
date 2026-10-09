@@ -362,6 +362,15 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# v2.0.7.380: piyasa tedbiri etiketi + KAP riski + SINIRLI VERI katmani (uygulamadaki load_universe ile
+# AYNI ortak modul). Burada yalniz skor sifirlama vardi; etiket e-postada AL kalabiliyordu.
+try:
+    from uyari_katmani import uyari_katmanini_uygula
+    df_uni = uyari_katmanini_uygula(df_uni)
+    print("[2b/5] Tedbir/KAP/sinirli veri katmani uygulandi.")
+except Exception as _uk_err:
+    print(f"[2b/5] Tedbir/KAP katmani atlandi: {_uk_err}")
+
 # ----------------------------------------------------------------------------
 # 3. Veri saglik kontrolu
 # ----------------------------------------------------------------------------
