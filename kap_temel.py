@@ -468,12 +468,14 @@ def oranlari_birlestir(kap: Optional[dict], yf: Optional[dict], fiyat: float, ku
                 _sayi(yf.get(k)) is not None for k in ("pb_ratio", "pe_ratio", "div_yield", "market_cap", "equity"))}
     fc, cur = yf.get("financial_currency"), yf.get("currency") or "TRY"
     tutarli = yahoo_tutarli_mi(yf, kap.get("pb"))
+    meta["piyasa_degeri"] = None      # TL; yalniz PD/DD KAP'tan geldiyse (asagida) doldurulur
 
     # ── PD/DD ──
     pb = None
     if kap.get("pb") is not None:
         pb = kap["pb"]
         meta["kaynak"], meta["donem"] = "KAP", kap.get("donem")
+        meta["piyasa_degeri"] = kap.get("piyasa_degeri")
     elif yf:
         ypb = _sayi(yf.get("pb_ratio"))
         defter = _sayi(yf.get("equity"))          # Yahoo bookValue: hisse basi, RAPOR para biriminde

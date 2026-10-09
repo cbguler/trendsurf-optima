@@ -475,7 +475,7 @@ def temel_satiri(row) -> dict:
             return None
     return {"pb": say(al("PB")), "pe": say(al("PE")), "dy": say(al("DY")),
             "kaynak": al("Temel_Kaynak"), "donem": al("Temel_Donem"), "fk_tur": al("Temel_FK_Tur"),
-            "fk_donem": al("Temel_FK_Donem"), "uyari": al("Temel_Uyari")}
+            "fk_donem": al("Temel_FK_Donem"), "uyari": al("Temel_Uyari"), "pd": say(al("Temel_PD"))}
 
 
 def kaynak_notu(raw: dict, temel: dict = None) -> str:
@@ -534,7 +534,7 @@ def fundamentals_to_display(raw: dict, temel: dict = None) -> dict:
     }
 
     # v2.0.7.381: Temel Skor'un kullandığı PD/DD ve F/K (KAP tabanlı) - Yahoo'nun aynı adlı satırlarının YERİNE
-    if temel and (temel.get("pb") is not None or temel.get("pe") is not None):
+    if temel and (temel.get("pb") is not None or temel.get("pe") is not None or temel.get("pd") is not None):
         kay = temel.get("kaynak") or ""
         d = temel.get("donem")
         yeni_pb = yeni_fk = None
@@ -562,6 +562,10 @@ def fundamentals_to_display(raw: dict, temel: dict = None) -> dict:
                 if yeni_pb: sirali[yeni_pb[0]] = yeni_pb[1]
             elif k == "İleriye Dön. F/K":
                 continue
+            elif k == "Piyasa Değeri" and kay == "KAP" and temel.get("pd"):
+                # v2.0.7.385: PD/DD'nin payı olan piyasa değeri (KAP pay adedi x fiyat) - Yahoo'nun pay adedi
+                # KAP'tan farklı olabilir (ORZAX: 246,4M vs 338,5M)
+                sirali["Piyasa Değeri (KAP pay adedi × fiyat)"] = _fmt_mil(temel["pd"])
             else:
                 sirali[k] = v
         yf = sirali
