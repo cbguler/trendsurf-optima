@@ -164,6 +164,10 @@ def optimize_portfolio(df_uni: pd.DataFrame, budget: float, risk_weights: dict,
             # icin otomatik portfoy onerisine de ALINMAZ (izleme listesi modunda kullanicinin secimi korunur).
             if not watchlist_mode and "Veri_Sinirli" in df_c.columns:
                 df_c = df_c[~df_c["Veri_Sinirli"].fillna(False).astype(bool)]
+        # v2.0.7.380: tedbir/KAP etiketi tasiyan varlik (KAP DIKKAT skoru yariya iner ama 60 ustunde kalabilir)
+        # AL gibi onerilmez (TUM kategoriler); izleme listesi modunda kullanicinin secimi etiketiyle gosterilir.
+        if not watchlist_mode and "Piyasa_Tedbiri" in df_c.columns:
+            df_c = df_c[df_c["Piyasa_Tedbiri"].fillna("").astype(str) == ""]
         if df_c.empty:
             sonuc["havuz_sayilari"][cat] = 0
             continue
