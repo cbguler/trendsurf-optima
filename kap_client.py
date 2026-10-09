@@ -230,6 +230,12 @@ def _fetch_yfinance(ticker: str) -> dict:
             "industry":       str(info.get("industry", "—")),
             "employees":      _v("fullTimeEmployees"),
             "description":    str(info.get("longBusinessSummary", ""))[:300],
+            # v2.0.7.381: Yahoo, sirketin RAPOR para birimi (financialCurrency) ile islem para birimini (currency)
+            # karistirabiliyor (THYAO: bilanco USD, fiyat TRY -> PD/DD 18,1). Bu iki alan olmadan tutarlilik
+            # kontrol edilemezdi.
+            "financial_currency": (str(info.get("financialCurrency")).upper() if info.get("financialCurrency") else None),
+            "currency":       (str(info.get("currency")).upper() if info.get("currency") else None),
+            "price":          _v("currentPrice") or _v("regularMarketPrice") or _v("previousClose"),
             "_source":        "yfinance",
         }
     except Exception as e:
@@ -271,8 +277,9 @@ def _fetch_kap(ticker: str) -> dict:
             # v2.0.7.66 - KRITIK: read_html'e HAM STRING verilirse pandas
             # bunu dosya YOLU saniyor (FileNotFoundError firlatiyor) -
             # io.StringIO ile sarmalamak SART. Yerel testle dogrulandi.
+            # v2.0.7.381: pandas.read_html yerine METIN tabanli okuyucu (sondaki sifiri kaybetme hatasi)
             try:
-                tablolar = _pd.read_html(_io.StringIO(r.text), flavor="lxml")
+                tablolar = _kap_tablolar_metin(r.text)
             except Exception:
                 tablolar = _pd.read_html(_io.StringIO(r.text))
             _parse_kap_financials(tablolar, result)
@@ -286,6 +293,37 @@ def _fetch_kap(ticker: str) -> dict:
         result["_kap_note"] = "Veri kaynağı: yfinance"
 
     return result
+
+
+def _kap_tablolar_metin(html: str) -> list:
+    """v2.0.7.381 - KAP sayfasindaki TUM <table>'lari METIN olarak (DataFrame, dtype=str) dondurur.
+
+    Neden pandas.read_html degil: read_html hucreleri SAYIYA cevirir; KAP'in '745.430' (= 745 bin 430,
+    Turkce binlik noktasi) hucresi 745.43 (float) olur, sondaki sifir kaybolur ve _safe_float_kap_tr bunu
+    74543 okurdu (10/100/1000 kat kucuk deger). Canli KAP sayfasinda dogrulandi (THYAO Hasilat 2024/12).
+    Burada metin oldugu gibi korunur; ilk satirda <th> varsa o satir sutun basligi olur (read_html ile ayni)."""
+    import pandas as _pd
+    import lxml.html as _lh
+    doc = _lh.fromstring(html)
+    sonuc = []
+    for tb in doc.xpath("//table"):
+        satirlar, baslik = [], None
+        for i, tr in enumerate(tb.xpath(".//tr")):
+            hucreler = tr.xpath("./th|./td")
+            if not hucreler:
+                continue
+            metin = [" ".join(h.text_content().split()) for h in hucreler]
+            if not satirlar and baslik is None and all(h.tag == "th" for h in hucreler):
+                baslik = metin
+                continue
+            satirlar.append(metin)
+        if not satirlar and baslik is None:
+            continue
+        n = max([len(r) for r in satirlar] + [len(baslik or [])])
+        satirlar = [r + [""] * (n - len(r)) for r in satirlar]
+        kolonlar = (baslik + [f"c{j}" for j in range(len(baslik), n)]) if baslik else list(range(n))
+        sonuc.append(_pd.DataFrame(satirlar, columns=kolonlar, dtype=str))
+    return sonuc
 
 
 import re as _re_donem
@@ -402,11 +440,71 @@ def fetch_kap_fundamentals(ticker: str) -> dict:
         result["_kap_available"] = False
         result["_kap_note"] = "Veri kaynağı: yfinance"
 
+    # 3. v2.0.7.381: Yahoo rapor para birimi (financialCurrency) fiyat para biriminden farklıysa (THYAO USD,
+    # DOCO EUR) Yahoo'nun F/K ve PD/DD'si fiyatla farklı para biriminde hesaplanmıştır -> kullanılmaz
+    # (ekrandaki ve skordaki PD/DD/F/K CSV'deki KAP tabanlı değerlerdir, bkz. temel_satiri()).
+    fc, cur = result.get("financial_currency"), result.get("currency") or "TRY"
+    if fc and fc != cur:
+        result["_para_uyumsuz"] = fc
+        for k in ("pe_ratio", "forward_pe", "pb_ratio"):
+            result[k] = None
+
     return result
 
 
-def fundamentals_to_display(raw: dict) -> dict:
-    """Ham veriyi ekrana uygun formata çevirir — Türkçe etiketler."""
+def temel_satiri(row) -> dict:
+    """CSV satırından (worker'ın KAP-öncelikli hesabı) Temel Skor girdilerini ve kaynak etiketlerini çıkarır.
+    Dönüş: {'pb','pe','dy','kaynak','donem','fk_tur'} - değerler yoksa None."""
+    def al(k):
+        try:
+            v = row.get(k)
+        except Exception:
+            return None
+        if v is None:
+            return None
+        try:
+            if v != v:
+                return None
+        except Exception:
+            pass
+        return v
+    def say(v):
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+    return {"pb": say(al("PB")), "pe": say(al("PE")), "dy": say(al("DY")),
+            "kaynak": al("Temel_Kaynak"), "donem": al("Temel_Donem"), "fk_tur": al("Temel_FK_Tur"),
+            "fk_donem": al("Temel_FK_Donem"), "uyari": al("Temel_Uyari")}
+
+
+def kaynak_notu(raw: dict, temel: dict = None) -> str:
+    """Detay sayfasındaki 'Kaynak:' alt yazısı (v2.0.7.381: KAP birincil)."""
+    kay = (temel or {}).get("kaynak") or ""
+    d = (temel or {}).get("donem")
+    if kay == "KAP":
+        n = f"KAP (PD/DD ve F/K, {d} bilançosu) + yfinance (temettü, piyasa verileri)" if d else "KAP + yfinance"
+    elif kay.startswith("yfinance"):
+        n = "yfinance (bu hisse için KAP verisinden oran hesaplanamadı)"
+    else:
+        n = "yfinance"
+        if raw.get("_kap_available"): n += " + KAP"
+        elif raw.get("_kap_note"):    n += f" | KAP: {raw['_kap_note']}"
+    if raw.get("_para_uyumsuz"):
+        n += f" | yfinance rapor para birimi {raw['_para_uyumsuz']}: tutar satırları o birimde"
+    if (temel or {}).get("uyari"):
+        n += f" | Not: {temel['uyari']}"
+    return n
+
+
+def fundamentals_to_display(raw: dict, temel: dict = None) -> dict:
+    """Ham veriyi ekrana uygun formata çevirir — Türkçe etiketler.
+    v2.0.7.381: `temel` (temel_satiri() çıktısı) verilirse PD/DD ve F/K satırları Temel Skor'un KULLANDIĞI
+    değerlerdir (KAP tabanlı, kaynak+dönem etiketli); Yahoo'nun rapor para birimi farklıysa (USD/EUR) Yahoo'nun
+    tutar satırları para birimiyle etiketlenir."""
+    fc = raw.get("_para_uyumsuz")
+    sfx = {"USD": " $", "EUR": " €"}.get(fc, f" {fc}") if fc else " ₺"
+    et = f", {fc}" if fc else ""
 
     # yfinance verileri
     yf = {
@@ -414,13 +512,13 @@ def fundamentals_to_display(raw: dict) -> dict:
         "F/K Oranı (İz. 12A)":  _fmt_ratio(raw.get("pe_ratio")),
         "İleriye Dön. F/K":     _fmt_ratio(raw.get("forward_pe")),
         "PD/DD Oranı":          _fmt_ratio(raw.get("pb_ratio")),
-        "Hisse Başı Kazanç":    _fmt_ratio(raw.get("eps"), " ₺"),
-        "Ciro (Yıllık)":        _fmt_mil(raw.get("revenue")),
-        "Net Kâr":              _fmt_mil(raw.get("net_income")),
-        "FAVÖK":                _fmt_mil(raw.get("ebitda")),
+        f"Hisse Başı Kazanç (yfinance{et})":    _fmt_ratio(raw.get("eps"), sfx),
+        f"Ciro (Yıllık, yfinance{et})":        _fmt_mil(raw.get("revenue"), sfx.strip()),
+        f"Net Kâr (yfinance{et})":              _fmt_mil(raw.get("net_income"), sfx.strip()),
+        f"FAVÖK (yfinance{et})":                _fmt_mil(raw.get("ebitda"), sfx.strip()),
         "Faaliyet Marjı":       _fmt_pct(raw.get("op_margin")),
         "Net Kâr Marjı":        _fmt_pct(raw.get("net_margin")),
-        "Özkaynak (Defter)":    _fmt_ratio(raw.get("equity"), " ₺/hisse"),
+        f"Özkaynak (Defter, yfinance{et})":    _fmt_ratio(raw.get("equity"), sfx + "/hisse"),
         "Cari Oran":            _fmt_ratio(raw.get("current_ratio")),
         "Asit-Test Oranı":      _fmt_ratio(raw.get("quick_ratio")),
         "Borç/Özkaynak":        _fmt_ratio(raw.get("debt_equity")),
@@ -434,6 +532,39 @@ def fundamentals_to_display(raw: dict) -> dict:
         "Sektör":               raw.get("sector", "—"),
         "Endüstri":             raw.get("industry", "—"),
     }
+
+    # v2.0.7.381: Temel Skor'un kullandığı PD/DD ve F/K (KAP tabanlı) - Yahoo'nun aynı adlı satırlarının YERİNE
+    if temel and (temel.get("pb") is not None or temel.get("pe") is not None):
+        kay = temel.get("kaynak") or ""
+        d = temel.get("donem")
+        yeni_pb = yeni_fk = None
+        if temel.get("pb") is not None:
+            yeni_pb = (f"PD/DD Oranı ({kay}{', ' + str(d) if d and kay == 'KAP' else ''})" if kay else "PD/DD Oranı",
+                       _fmt_ratio(temel["pb"]))
+        if temel.get("pe") is not None:
+            tur = temel.get("fk_tur")
+            if tur == "TTM":
+                fd = temel.get("fk_donem") or d
+                lab = f"F/K Oranı (KAP, iz. 12A, {fd})" if fd else "F/K Oranı (KAP, iz. 12A)"
+            elif tur == "YILLIK":
+                fd = temel.get("fk_donem")
+                lab = f"F/K Oranı (KAP, {fd} yıllık net kâr)" if fd else "F/K Oranı (KAP, son tam yıl net kârı)"
+            elif tur == "yfinance":
+                lab = "F/K Oranı (iz. 12A, yfinance)"
+            else:
+                lab = "F/K Oranı"
+            yeni_fk = (lab, _fmt_ratio(temel["pe"]))
+        sirali = {}
+        for k, v in yf.items():
+            if k == "F/K Oranı (İz. 12A)":
+                if yeni_fk: sirali[yeni_fk[0]] = yeni_fk[1]
+            elif k == "PD/DD Oranı":
+                if yeni_pb: sirali[yeni_pb[0]] = yeni_pb[1]
+            elif k == "İleriye Dön. F/K":
+                continue
+            else:
+                sirali[k] = v
+        yf = sirali
 
     # KAP ek verileri (varsa)
     kap_fields = {

@@ -873,7 +873,7 @@ def batch_bist(tickers):
     return result
 
 
-def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, retry_delay=15):
+def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, retry_delay=15, raw_out=None):
     """v2.0.4.57: Optima Skoru'nun temel analiz bileşeni (P/B, P/E, temettü
     verimi) icin yfinance'i tum BIST hisseleri icin paralel olarak
     cagirir. Bu, gecede BIR KEZ calisir (worker.py) - boylece Ana Sayfa/
@@ -926,6 +926,8 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, re
                     raw = _fut.result(timeout=15)
                 except _FutTimeout:
                     return (t, None, None, None)
+            if raw_out is not None:        # v2.0.7.381: ham Yahoo verisi (para birimi alanlariyla) KAP birlesimi icin
+                raw_out[t] = raw
             return (t, raw.get("pb_ratio"), raw.get("pe_ratio"), raw.get("div_yield"))
         except Exception:
             return (t, None, None, None)
@@ -955,11 +957,80 @@ def fetch_bist_fundamentals_parallel(tickers, max_workers=8, retry_workers=4, re
     return sonuc
 
 
+def _temel_icin_kurlar():
+    """USD/EUR -> TL kuru (yalniz USD/EUR raporlayan sirketlerin PD/DD ve F/K'sini ayni para biriminde
+    hesaplamak icin). Doviz satirlari bu adimdan SONRA uretildigi icin son CSV'den (en fazla 1 gun eski),
+    CSV'de yoksa yfinance'ten okunur. Okunamazsa {} - o durumda ilgili oranlar hesaplanmaz (kur uydurulmaz)."""
+    kurlar = {}
+    try:
+        if os.path.exists(CSV_PATH):
+            d = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+            for kod in ("USD", "EUR"):
+                x = d.loc[d["Ticker"] == kod + "TRY", "Son_Fiyat"]
+                if len(x) and float(x.iloc[-1]) > 0:
+                    kurlar[kod] = float(x.iloc[-1])
+    except Exception as e:
+        print(f"  [KAP-Temel] kur CSV'den okunamadi: {e}")
+    for kod in ("USD", "EUR"):
+        if kod in kurlar:
+            continue
+        try:
+            import yfinance as yf
+            h = yf.Ticker(kod + "TRY=X").history(period="5d")["Close"].dropna()
+            if len(h) and float(h.iloc[-1]) > 0:
+                kurlar[kod] = float(h.iloc[-1])
+        except Exception as e:
+            print(f"  [KAP-Temel] {kod}TRY kuru alinamadi: {type(e).__name__}")
+    return kurlar
+
+
+def fetch_bist_temel_kap_oncelikli(tickers, fiyatlar, kurlar, max_workers=6, log=print):
+    """v2.0.7.381 (Bahri, 9 Ekim 2026, THYAO Temel Skor 0/25): Optima Temel Skoru girdileri (PD/DD, F/K, temettu)
+    artik KAP'tan (birincil kaynak) hesaplanir; yfinance yalniz (a) temettu verimi, (b) KAP'ta verisi olmayan
+    hisseler icin PARA BIRIMI TUTARLIYSA yedek, (c) ara donemde iz. 12A F/K icin (KAP PD/DD ile dogrulanarak).
+    Bkz. kap_temel.py. Dondurur: ({ticker: (pb, pe, dy)}, {ticker: meta})."""
+    from concurrent.futures import ThreadPoolExecutor
+    import kap_temel
+    raw = {}
+    yahoo = fetch_bist_fundamentals_parallel(tickers, raw_out=raw)
+
+    def _kap(t):
+        try:
+            return t, kap_temel.hesapla(t, float(fiyatlar.get(t) or 0), fiyatlar, kurlar)
+        except Exception as e:      # tek hissenin hatasi tum geceyi durdurmasin
+            return t, {"notlar": [f"KAP hesap hatasi: {type(e).__name__}: {str(e)[:80]}"]}
+
+    log(f"  [KAP-Temel] {len(tickers)} hisse icin KAP PD/DD + F/K hesaplaniyor ({max_workers} worker)...")
+    kap = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        for t, r in ex.map(_kap, tickers):
+            kap[t] = r
+    sonuc, meta = {}, {}
+    n_kap = n_yf = n_yok = 0
+    for t in tickers:
+        pb, pe, dy, m = kap_temel.oranlari_birlestir(kap.get(t), raw.get(t), float(fiyatlar.get(t) or 0), kurlar)
+        sonuc[t], meta[t] = (pb, pe, dy), m
+        if m["kaynak"] == "KAP": n_kap += 1
+        elif m["kaynak"]: n_yf += 1
+        else: n_yok += 1
+    log(f"  [KAP-Temel] PD/DD kaynagi: KAP={n_kap}, yfinance(yedek)={n_yf}, hicbiri={n_yok}.")
+    # Yahoo'nun kendi PD/DD'si ile KAP'inki cok ayriysa gozle gorunur olsun (karar KAP'ta; sadece rapor)
+    ayrik = []
+    for t in tickers:
+        kp, yp = (kap.get(t) or {}).get("pb"), (raw.get(t) or {}).get("pb_ratio")
+        if kp and yp and not (0.6 <= yp / kp <= 1.6):
+            ayrik.append(f"{t}: KAP {kp:.2f} / Yahoo {yp:.2f}")
+    if ayrik:
+        log(f"  [KAP-Temel] KAP-Yahoo PD/DD uyusmazligi ({len(ayrik)} hisse; KAP kullanildi): "
+            + "; ".join(ayrik[:25]) + (" ..." if len(ayrik) > 25 else ""))
+    return sonuc, meta
+
+
 TEMEL_VERI_MAKS_YAS_GUN = 30
 
 
 def _temel_veri_birlestir(taze: dict, tickers, csv_path=None, bugun=None,
-                          maks_yas_gun: int = TEMEL_VERI_MAKS_YAS_GUN, log=print, tohum_yolu=None):
+                          maks_yas_gun: int = TEMEL_VERI_MAKS_YAS_GUN, log=print, tohum_yolu=None, dy_koru=None):
     """BIST temel verisi (PB/PE/DY): Yahoo bu gece bir hisse icin HIC veri vermediyse
     (uc alan da bos = cekim basarisiz) onceki CSV'deki degerleri korur.
 
@@ -1020,10 +1091,20 @@ def _temel_veri_birlestir(taze: dict, tickers, csv_path=None, bugun=None,
         log(f"  [Fundamentals] Tohum dosyasi okunamadi: {e}")
 
     sonuc, tarih = {}, {}
-    n_taze = n_korunan = n_yok = n_eski = 0
+    n_taze = n_korunan = n_yok = n_eski = n_dy_korunan = 0
     for t in tickers:
         v = taze.get(t, (None, None, None))
         if any(dolu(x) for x in v):
+            # v2.0.7.381: PD/DD ve F/K artik KAP'tan gelir; yfinance (temettu verimi kaynagi) bu gece hic
+            # yanit vermediyse temettu "yok" sanilmasin - onceki degeri (en fazla maks_yas_gun gun eski) koru.
+            if dy_koru and t in dy_koru and not dolu(v[2]):
+                _o = onceki.get(str(t))
+                if _o and dolu(_o[2]):
+                    _ts = pd.to_datetime(_o[3], errors="coerce")
+                    _gun = (_ts.date() if pd.notna(_ts) else bugun - timedelta(days=1))
+                    if (bugun - _gun).days <= maks_yas_gun:
+                        v = (v[0], v[1], float(_o[2]))
+                        n_dy_korunan += 1
             sonuc[t] = v
             tarih[t] = bugun.isoformat()
             n_taze += 1
@@ -1042,7 +1123,8 @@ def _temel_veri_birlestir(taze: dict, tickers, csv_path=None, bugun=None,
             n_yok += 1
         sonuc[t] = (None, None, None)
     log(f"  [Fundamentals] Birlestirme: taze={n_taze}, ONCEKI CSV'DEN KORUNAN={n_korunan}, "
-        f"hic veri yok={n_yok}, {maks_yas_gun} gunden eski (atildi)={n_eski}, tohumdan yararlanilan={n_tohum}.")
+        f"hic veri yok={n_yok}, {maks_yas_gun} gunden eski (atildi)={n_eski}, tohumdan yararlanilan={n_tohum}, "
+        f"temettu onceki degerden korunan={n_dy_korunan}.")
     return sonuc, tarih
 
 
@@ -1366,17 +1448,38 @@ def build():
     # ile hesaplanir. Bu, artik uygulamanin HER YERINDE (Ana Sayfa, BIST
     # listesi, Portfoyum, Detay sayfasi) okunacak TEK skor.
     _bist_priced = [r["Ticker"] for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0]
-    _fundamentals = fetch_bist_fundamentals_parallel(_bist_priced)
+    _fiyat_haritasi = {r["Ticker"]: float(r["Son_Fiyat"]) for r in all_rows
+                       if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0}
+    _kurlar = _temel_icin_kurlar()
+    _temel_meta = {}
     try:
-        _fundamentals, _temel_tarih = _temel_veri_birlestir(_fundamentals, _bist_priced)
+        _fundamentals, _temel_meta = fetch_bist_temel_kap_oncelikli(_bist_priced, _fiyat_haritasi, _kurlar)
+    except Exception as _kt_err:       # KAP katmani coksa eski (yalniz yfinance) yola don - gece derlemesi DURMAZ
+        print(f"  [KAP-Temel] atlandi, yfinance'e donuluyor: {type(_kt_err).__name__}: {_kt_err}")
+        _fundamentals = fetch_bist_fundamentals_parallel(_bist_priced)
+    try:
+        _fundamentals, _temel_tarih = _temel_veri_birlestir(
+            _fundamentals, _bist_priced,
+            dy_koru={t for t, m in _temel_meta.items() if not m.get('yf_ok', True)})
     except Exception as _tv_err:       # koruma basarisiz olsa bile gece derlemesi DURMAZ
         print(f"  [Fundamentals] Onceki degerleri koruma atlandi: {type(_tv_err).__name__}: {_tv_err}")
         _temel_tarih = {}
+    from datetime import datetime as _dt_, timezone as _tz_, timedelta as _td_
+    _bugun_iso = _dt_.now(_tz_(_td_(hours=3))).date().isoformat()
     for r in all_rows:
         if r["Kategori"] != "BIST":
             continue
         _pb, _pe, _dy = _fundamentals.get(r["Ticker"], (None, None, None))
         r["Temel_Tarihi"] = _temel_tarih.get(r["Ticker"])
+        _tm = _temel_meta.get(r["Ticker"]) or {}
+        r["Temel_Kaynak"] = _tm.get("kaynak") or None
+        r["Temel_Donem"] = _tm.get("donem")
+        r["Temel_FK_Tur"] = _tm.get("fk_tur")
+        r["Temel_FK_Donem"] = _tm.get("fk_donem")
+        r["Temel_Uyari"] = _tm.get("uyari")
+        # onceki derlemeden KORUNAN deger (bu gece taze cekilemedi): kaynak/donem bilgisi de eskidir
+        if r["Temel_Tarihi"] and not _tm.get("kaynak"):
+            r["Temel_Kaynak"] = "yfinance" if (not _temel_meta and r["Temel_Tarihi"] == _bugun_iso) else "onceki derleme"
         # v2.0.5.2: Fiyati olmayan (islem gormeyen) sembol notr varsayilanlarla
         # (RSI=50, Ret1M=0, Vol=30) 45 puan aliyordu - "veri yok" durumu
         # "vasat skor" gibi gorunuyordu. Islem gormeyen varligin skoru 0'dir.

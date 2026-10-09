@@ -51,7 +51,8 @@ etkilemez.
 | Döviz                      | canlidoviz.com (TL-doğrudan)              | Yahoo Finance (TL-doğrudan sorgu)      |
 | Kıymetli Madenler          | canlidoviz.com (gram bazlı, TL-doğrudan)  | *(bilinçli olarak tek kaynak — aşağıya bakınız)* |
 | Kriptoparalar               | BtcTurk (TL-doğrudan)                     | *(bilinçli olarak tek kaynak — aşağıya bakınız)* |
-| BIST Temel Analiz (F/K, PD/DD, Temettü Verimi) | KAP (Kamuyu Aydınlatma Platformu) | Yahoo Finance |
+| BIST Temel Analiz (F/K, PD/DD) | KAP (Kamuyu Aydınlatma Platformu) | Yahoo Finance |
+| BIST Temettü Verimi (Temel Skor'da) | Yahoo Finance | — |
 | Temettü Duyuruları          | KAP — şirketlerin resmi duyuruları        | *(bilinçli olarak tek kaynak — resmi duyuru olduğu için)* |
 | Halka Arz Bilgileri         | KAP — resmi halka arz belgeleri           | Statik yedek liste                     |
 

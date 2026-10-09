@@ -143,7 +143,8 @@ v2.0.7.295'te TAMAMEN GERİ ALINDI. Aşağıdaki tablo artık gerçek
 | Döviz                    | `borsapy.FX(...)` (canlidoviz.com üzerinden TRY-direkt)        | yfinance (`=X` suffix, DOĞRUDAN TRY paritesi sorgusu - çapraz kur DEĞİL) | —                        |
 | Değerli Madenler         | `borsapy.FX(...)` (canlidoviz.com, gram bazlı TRY-direkt)      | **Yok — bilinçli tek kaynak** (v2.0.7.295: çapraz kur yasağı, bkz. Bölüm 0) | —                        |
 | Kripto                   | `borsapy.Crypto(...)` (BtcTurk, TRY doğrudan)                  | **Yok — bilinçli tek kaynak** (v2.0.7.295: çapraz kur yasağı, bkz. Bölüm 0) | —                        |
-| Temel Analiz (BIST — F/K, PD/DD, Temettü Verimi) | `kap_client.py` → kap.org.tr                | yfinance `.info` (P/E, beta, temettü verimi)                 | —                                        |
+| Temel Analiz (BIST — F/K, PD/DD) | `kap_temel.py` → kap.org.tr (v2.0.7.381: PD/DD = fiyat × KAP Toplam Pay Adedi / ana ortaklık özkaynağı; F/K = ana ortaklık net kârı) | yfinance `.info` — yalnızca KAP'ta veri yoksa ve rapor para birimi fiyatla tutarlıysa | —                                        |
+| Temettü Verimi (BIST, Temel Skor girdisi) | yfinance `.info` (KAP'ta hazır oran yok)  | önceki gecenin değeri (en fazla 30 gün) | —                                        |
 | Temettü Duyuruları (BIST)| `temettu_client.py` → KAP "Kar Payı Dağıtımı" bildirimleri     | **Yok — bilinçli tek kaynak** (v2.0.7.229: yfinance'ten TAMAMEN vazgeçildi, doğruluk için — bkz. PROJE_NOTLARI) | —      |
 | Halka Arz / Fiyat Tespit | KAP RSC endpoint (Next.js, resmi/otoriter)                     | Endeksler.xlsx (statik yedek liste)                          | —                                        |
 | Fiyat Tespit Raporu (PDF okuma) | pdfplumber (metin katmanlı PDF)                          | Tesseract OCR — tur (taranmış/görüntü sayfalar için)          | —                                        |
