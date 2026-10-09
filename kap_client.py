@@ -288,6 +288,10 @@ def _fetch_kap(ticker: str) -> dict:
     return result
 
 
+import re as _re_donem
+_KAP_DONEM_RE = _re_donem.compile(r"\d{4}/\d{1,2}")
+
+
 def _kap_birim_carpani(tablolar: list, result: dict) -> float:
     """Ilk 'Sunum Para Birimi' satirindan carpan: TL -> 1, 1000TL -> 1000, 1000000TL -> 1000000. TL disi para birimi
     (USD, EUR ...) tutarlari TL gibi gosterilmesin diye result['kap_para_birimi'] ile isaretlenir
@@ -343,9 +347,16 @@ def _parse_kap_financials(tablolar: list, result: dict):
     # v2.0.7.378 - "Sunum Para Birimi" satiri: TL / 1000TL / USD ... Bazi sirketler (orn. VEYAS)
     # "1000TL" sunar; birim okunmazsa tutarlar 1000 kat kucuk gorunurdu.
     carpan = _kap_birim_carpani(tablolar, result)
+    # v2.0.7.379: her alanin KAP donemi (sutun basligi, orn. "2026/06"). Bilanco tablosunun basligi kendi
+    # sutunlarinda, gelir tablosu satirlari ise basligi onceki "KAR VEYA ZARAR..." tablosunda tasir.
+    donemler = {}
+    son_baslik = None
     for df in tablolar:
         if df.shape[1] < 2:
             continue
+        basliklar = [str(c).strip() for c in df.columns]
+        if any(_KAP_DONEM_RE.fullmatch(b) for b in basliklar):
+            son_baslik = basliklar
         ilk_sutun = df.iloc[:, 0].astype(str).str.strip()
         for etiket, alan in satir_etiket_map.items():
             if alan in result:
@@ -359,7 +370,13 @@ def _parse_kap_financials(tablolar: list, result: dict):
                 deger = _safe_float_kap_tr(satir.iloc[sutun_idx])
                 if deger is not None:
                     result[alan] = deger * carpan
+                    ref = basliklar if any(_KAP_DONEM_RE.fullmatch(b) for b in basliklar) else (
+                        son_baslik if son_baslik and len(son_baslik) == len(basliklar) else None)
+                    if ref and _KAP_DONEM_RE.fullmatch(ref[sutun_idx]):
+                        donemler[alan] = ref[sutun_idx]
                     break
+    if donemler:
+        result["kap_donemler"] = donemler
 
 
 # ─── ANA FONKSİYONLAR ────────────────────────────────────────
@@ -435,9 +452,12 @@ def fundamentals_to_display(raw: dict) -> dict:
         "kap_market_cap":        ("PD (KAP)", "₺"),
         "kap_paid_capital":      ("Ödenmiş Sermaye (KAP)", "₺"),
     }
+    donemler = raw.get("kap_donemler") or {}
     for field, (label, unit) in kap_fields.items():
         if raw.get(field) is not None:
-            yf[label] = _fmt_mil(raw[field])
+            d = donemler.get(field)
+            # v2.0.7.379: KAP dönemi etikette ("Ciro (KAP, 2026/06)") - yfinance satırları farklı dönem olabilir
+            yf[label.replace("(KAP)", f"(KAP, {d})") if d else label] = _fmt_mil(raw[field])
 
     # KAP durumu
     # v2.0.7.50 - DUZELTME: "_kap_note" alani duz "Veri kaynağı: yfinance"
