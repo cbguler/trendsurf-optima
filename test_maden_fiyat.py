@@ -50,8 +50,14 @@ def test_teknik_gosterge_varsayilanlari_veri_yok_isaretli():
     k = _maden_blogu()
     ok("p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0" in k, "RSI/Ret1M/Vol notr varsayilan")
     ok("_gecmis_veri_var = False" in k, "baslangicta 'gecmis veri yok'")
-    ok(not re.search(r"_gecmis_veri_var\s*=\s*True", _kod(k)), "worker maden blogunda 'gecmis veri var' True'ya cekilmez")
-    ok('"_gecmis_veri_yok": not _gecmis_veri_var' in k, "satir 'veri yok' bayragiyla yazilir (uygulama Turkiye gecmisiyle tazeler)")
+    # v389: True'ya cekme YALNIZ kendi Truncgil TL arsivinden hesaplanan ozet varsa (t in _arsiv_ozetleri)
+    kod = _kod(k)
+    ok(len(re.findall(r"_gecmis_veri_var\s*=\s*True", kod)) == 1, "'gecmis veri var' tek yerde True'ya cekilir")
+    ok(re.search(r"if t in _arsiv_ozetleri:\s*\n\s*_oz = _arsiv_ozetleri\[t\]\s*\n(?:.*\n){1}\s*_gecmis_veri_var = True", kod),
+       "True yalniz arsiv ozeti olan satirda")
+    ok("maden_arsiv" in kod and "yf." not in kod.split("maden_arsiv")[1].split("for t, yf_s in MADEN")[0],
+       "arsiv adimi yfinance kullanmaz")
+    ok('"_gecmis_veri_yok": not _gecmis_veri_var' in k, "satir 'veri yok' bayragiyla yazilir (arsiv ozeti yoksa; uygulama Turkiye gecmisiyle tazeler)")
 
 
 if __name__ == "__main__":
