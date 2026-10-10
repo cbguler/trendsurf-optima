@@ -1104,6 +1104,12 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     # (worker.py _detect_and_register_new_bist_listings, bkz. Oturum XII).
     # Baglanti/tablo erisilemezse SESSIZCE hicbir satir dusurulmez (fail-safe
     # - yanlis dusurmektense hic dusurmemek tercih edilir).
+    # v2.0.7.402: mezun olmadan ONCE tum adaylar (degerleriyle) kalici arsive yazilir.
+    try:
+        arsive_adaylari_yaz(df)
+    except Exception as e:
+        print(f"[upcoming-ipo] arsive yazma atlandi: {e}", flush=True)
+
     if not df.empty:
         try:
             _conn_bud = _supabase_conn()
@@ -1132,6 +1138,275 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
 
     _write_cache(df.to_dict("records"))
     return df
+
+
+# ══ v2.0.7.402: XHARZ tablosu icin halka arz DEGER ARSIVI ═══════════════════════════════════════════
+# Bahri'nin talebi: borsada islem gormeye baslayan halka arzlarin Arz Fiyati / Iskonto / Graham / Carpan
+# degerleri XHARZ tablosunda (bos da olsa) kalici gorunsun. `ipo_valuations` yalniz KAP bildirim numarasiyla
+# saklar; aday listeden dusunce (islem gormeye basladi) degerlerin hangi hisseye ait oldugu kayboluyordu.
+# Bu arsiv degerleri ANAHTAR bazli saklar: "T:<TICKER>" (bilinen hisse kodu) ya da "AD:<normallestirilmis
+# sirket adi>". Eslesme yalniz TAM esitlikle yapilir (yanlis eslesme yerine bos birakilir).
+IPO_ARSIV_ALANLAR = ("arz_fiyati", "iskonto_orani", "graham_degeri", "carpan_bazli_deger")
+_ARSIV_MEMO = {"ts": 0.0, "data": None}
+_ARSIV_MEMO_TTL = 600
+_FT_TICKER_MEMO = {"ts": 0.0, "data": None}
+_FT_TICKER_MEMO_TTL = 6 * 3600
+_TOHUM_YUKLENDI = {"ok": False}
+TOHUM_DOSYA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ipo_arsiv_tohum.json")
+
+_AD_EKLERI = {"AS", "A", "S", "ANONIM", "SIRKETI", "SIRKET"}
+
+
+def ad_anahtari(ad) -> str:
+    """Sirket adi -> karsilastirma anahtari ('AD:...'): Turkce harfler katlanir, noktalama ve 'A.S./Anonim
+    Sirketi' ekleri atilir. Bos/anlamsizsa bos string."""
+    if ad is None or (isinstance(ad, float) and pd.isna(ad)):
+        return ""
+    t = str(ad).translate(str.maketrans("İıŞşĞğÜüÖöÇç", "IiSsGgUuOoCc")).upper()
+    t = re.sub(r"[^A-Z0-9 ]+", " ", t.replace(".", ""))
+    kelimeler = [w for w in t.split() if w]
+    while kelimeler and kelimeler[-1] in _AD_EKLERI:
+        kelimeler.pop()
+    return ("AD:" + " ".join(kelimeler)) if len(kelimeler) >= 2 else ""
+
+
+def _ticker_anahtari(kod) -> str:
+    kod = str(kod or "").strip().upper()
+    return ("T:" + kod) if 2 <= len(kod) <= 8 and kod.isalnum() else ""
+
+
+def _arsiv_tablosunu_hazirla(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS ipo_xharz_degerler (
+        anahtar TEXT PRIMARY KEY, sirket TEXT, arz_fiyati NUMERIC, iskonto_orani NUMERIC,
+        graham_degeri NUMERIC, carpan_bazli_deger NUMERIC, fiyat_tespit_url TEXT, kaynak TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+
+
+def _arsiv_yaz(kayitlar: list):
+    """kayitlar: [{anahtar, sirket, arz_fiyati, iskonto_orani, graham_degeri, carpan_bazli_deger,
+    fiyat_tespit_url, kaynak}]. COALESCE: null asla dolu degeri ezmez. Fail-soft."""
+    kayitlar = [k for k in kayitlar if k.get("anahtar")]
+    if not kayitlar:
+        return
+    conn = _supabase_conn()
+    if conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        _arsiv_tablosunu_hazirla(cur)
+        cur.executemany("""
+            INSERT INTO ipo_xharz_degerler
+              (anahtar, sirket, arz_fiyati, iskonto_orani, graham_degeri, carpan_bazli_deger,
+               fiyat_tespit_url, kaynak, updated_at)
+            VALUES (%(anahtar)s, %(sirket)s, %(arz_fiyati)s, %(iskonto_orani)s, %(graham_degeri)s,
+                    %(carpan_bazli_deger)s, %(fiyat_tespit_url)s, %(kaynak)s, NOW())
+            ON CONFLICT (anahtar) DO UPDATE SET
+              sirket             = COALESCE(EXCLUDED.sirket,             ipo_xharz_degerler.sirket),
+              arz_fiyati         = COALESCE(EXCLUDED.arz_fiyati,         ipo_xharz_degerler.arz_fiyati),
+              iskonto_orani      = COALESCE(EXCLUDED.iskonto_orani,      ipo_xharz_degerler.iskonto_orani),
+              graham_degeri      = COALESCE(EXCLUDED.graham_degeri,      ipo_xharz_degerler.graham_degeri),
+              carpan_bazli_deger = COALESCE(EXCLUDED.carpan_bazli_deger, ipo_xharz_degerler.carpan_bazli_deger),
+              fiyat_tespit_url   = COALESCE(NULLIF(EXCLUDED.fiyat_tespit_url, ''), ipo_xharz_degerler.fiyat_tespit_url),
+              kaynak             = COALESCE(EXCLUDED.kaynak, ipo_xharz_degerler.kaynak),
+              updated_at         = NOW()
+        """, [{**{a: None for a in IPO_ARSIV_ALANLAR}, "sirket": None, "fiyat_tespit_url": "", "kaynak": None, **k}
+              for k in kayitlar])
+        conn.commit()
+        _ARSIV_MEMO["data"] = None
+        print(f"[upcoming-ipo] ipo_xharz_degerler: {len(kayitlar)} kayit UPSERT edildi.", flush=True)
+    except Exception as e:
+        print(f"[upcoming-ipo] ipo_xharz_degerler yazilamadi: {e}", flush=True)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _arsiv_oku() -> dict:
+    """{anahtar: {sirket, arz_fiyati, ...}} (10 dk memo). Hata -> bos dict (kolonlar bos kalir)."""
+    if _ARSIV_MEMO["data"] is not None and (time.time() - _ARSIV_MEMO["ts"]) < _ARSIV_MEMO_TTL:
+        return _ARSIV_MEMO["data"]
+    _tohumu_yukle()
+    conn = _supabase_conn()
+    if conn is None:
+        return _ARSIV_MEMO["data"] or {}
+    out = {}
+    try:
+        cur = conn.cursor()
+        _arsiv_tablosunu_hazirla(cur)
+        conn.commit()
+        cur.execute("SELECT anahtar, sirket, arz_fiyati, iskonto_orani, graham_degeri, carpan_bazli_deger, "
+                    "fiyat_tespit_url FROM ipo_xharz_degerler")
+        for r in cur.fetchall():
+            out[r[0]] = {"sirket": r[1],
+                         "arz_fiyati": float(r[2]) if r[2] is not None else None,
+                         "iskonto_orani": float(r[3]) if r[3] is not None else None,
+                         "graham_degeri": float(r[4]) if r[4] is not None else None,
+                         "carpan_bazli_deger": float(r[5]) if r[5] is not None else None,
+                         "fiyat_tespit_url": r[6] or ""}
+        _ARSIV_MEMO["data"], _ARSIV_MEMO["ts"] = out, time.time()
+    except Exception as e:
+        print(f"[upcoming-ipo] ipo_xharz_degerler okunamadi: {e}", flush=True)
+        return _ARSIV_MEMO["data"] or {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return out
+
+
+def _tohumu_yukle():
+    """Depodaki ipo_arsiv_tohum.json (7 Ekim'den once gorunen ve sonra listeden dusen adaylar; degerler o
+    gunlerin onbellegindendir) arsive BIR KEZ (surec basina) yazilir; COALESCE oldugu icin tekrar zararsiz."""
+    if _TOHUM_YUKLENDI["ok"]:
+        return
+    _TOHUM_YUKLENDI["ok"] = True
+    try:
+        with open(TOHUM_DOSYA, encoding="utf-8") as f:
+            tohum = json.load(f)
+    except Exception:
+        return
+    kayitlar = []
+    for t in tohum:
+        taban = {k: t.get(k) for k in IPO_ARSIV_ALANLAR}
+        taban.update({"sirket": t.get("sirket"), "fiyat_tespit_url": t.get("fiyat_tespit_url") or "", "kaynak": "tohum"})
+        for anahtar in (ad_anahtari(t.get("sirket")), _ticker_anahtari(t.get("ticker"))):
+            if anahtar:
+                kayitlar.append({**taban, "anahtar": anahtar})
+    _arsiv_yaz(kayitlar)
+
+
+def arsive_adaylari_yaz(df: pd.DataFrame):
+    """fetch_upcoming_ipos'tan: tum aday satirlari (mezun olmadan ONCE) arsive yazilir; boyle degerleri ve
+    sirket adi, aday borsaya girip listeden dusse de kalir."""
+    if df is None or df.empty:
+        return
+    kayitlar = []
+    for _, r in df.iterrows():
+        taban = {"arz_fiyati": _f(r.get("Arz_Fiyati")), "iskonto_orani": _f(r.get("Iskonto_Orani")),
+                 "graham_degeri": _f(r.get("Graham_Degeri")), "carpan_bazli_deger": _f(r.get("Carpan_Bazli_Deger")),
+                 "sirket": str(r.get("Sirket") or "") or None,
+                 "fiyat_tespit_url": str(r.get("Fiyat_Tespit_URL") or ""), "kaynak": "aday"}
+        anahtarlar = [ad_anahtari(r.get("Sirket"))]
+        for kod in re.split(r"[,\s]+", str(r.get("_related_kod") or "")):
+            anahtarlar.append(_ticker_anahtari(kod))
+        for a in anahtarlar:
+            if a:
+                kayitlar.append({**taban, "anahtar": a})
+    _arsiv_yaz(kayitlar)
+
+
+def _f(v):
+    try:
+        if v is None or pd.isna(v):
+            return None
+        return float(v)
+    except Exception:
+        return None
+
+
+def _ft_ticker_degerleri() -> dict:
+    """KAP Fiyat Tespit listesindeki (son ~30 bildirim) her hisse kodu icin {TICKER: {degerler, url}}; degerler
+    ipo_valuations (Supabase) ve yerel sonuc onbelleginden gelir. 6 saat memo. Bulunanlar arsive de yazilir."""
+    if _FT_TICKER_MEMO["data"] is not None and (time.time() - _FT_TICKER_MEMO["ts"]) < _FT_TICKER_MEMO_TTL:
+        return _FT_TICKER_MEMO["data"]
+    out = {}
+    try:
+        code_map, _ = _fetch_fiyat_tespit_map()
+        sonuclar = dict(_read_fiyat_tespit_sonuc_cache() or {})
+        for k, v in (_supabase_sonuclari_oku() or {}).items():
+            if isinstance(v, dict):
+                sonuclar[k] = {**(sonuclar.get(k) or {}), **{a: b for a, b in v.items() if b is not None}}
+        for kod, b in (code_map or {}).items():
+            res = sonuclar.get(str(b.get("disclosure_index")))
+            if not isinstance(res, dict):
+                continue
+            kayit = {"arz_fiyati": _f(res.get("arz_fiyati")), "iskonto_orani": _f(res.get("iskonto_orani")),
+                     "graham_degeri": _f(res.get("graham_degeri")),
+                     "carpan_bazli_deger": _f(res.get("carpan_bazli_deger")),
+                     "fiyat_tespit_url": b.get("url") or ""}
+            if any(kayit[a] is not None for a in IPO_ARSIV_ALANLAR):
+                out[kod] = kayit
+        _arsiv_yaz([{**v, "anahtar": _ticker_anahtari(k), "kaynak": "fiyat_tespit"} for k, v in out.items()
+                    if _ticker_anahtari(k)])
+    except Exception as e:
+        print(f"[upcoming-ipo] ft ticker degerleri atlandi: {e}", flush=True)
+    _FT_TICKER_MEMO["data"], _FT_TICKER_MEMO["ts"] = out, time.time()
+    return out
+
+
+IPO_DEGER_KOLONLARI = ["Arz_Fiyati", "Iskonto_Orani", "Graham_Degeri", "Carpan_Bazli_Deger", "Fiyat_Tespit_URL"]
+
+
+def xharz_ipo_degerlerini_ekle(df_xharz: pd.DataFrame, df_uni=None):
+    """XHARZ tablosuna Arz Fiyati / Iskonto / Graham / Carpan / Fiyat Tespit linki kolonlarini ekler (deger
+    yoksa bos: None / ""). Ayrica BIST evreninde islem goren, arsivde adi TAM eslesen ama XHARZ listesinde
+    HENUZ olmayan yeni halka arzlari (endeks revizyonu gecikmesi) ek satir olarak dondurur.
+    Doner: (df_xharz_kolonlu, df_ek_satirlar). Hata olursa kolonlar bos, ek satir yok."""
+    df = df_xharz.copy()
+    if "Durum" not in df.columns:
+        df["Durum"] = ""
+    for k in IPO_DEGER_KOLONLARI:
+        df[k] = "" if k == "Fiyat_Tespit_URL" else None
+    bos_ek = pd.DataFrame(columns=list(df.columns))
+    try:
+        arsiv = _arsiv_oku()
+        ft = _ft_ticker_degerleri()
+
+        def _bul(ticker, sirket):
+            t = str(ticker or "").strip().upper()
+            a = arsiv.get(_ticker_anahtari(t))
+            b = arsiv.get(ad_anahtari(sirket))
+            f = ft.get(t)
+            birlesik = {}
+            for kaynak in (b, a, f):          # sonraki (daha kesin) kaynak oncelikli
+                if kaynak:
+                    for alan in IPO_ARSIV_ALANLAR:
+                        if kaynak.get(alan) is not None:
+                            birlesik[alan] = kaynak[alan]
+                    if kaynak.get("fiyat_tespit_url"):
+                        birlesik["fiyat_tespit_url"] = kaynak["fiyat_tespit_url"]
+            return birlesik
+
+        esleme = {"arz_fiyati": "Arz_Fiyati", "iskonto_orani": "Iskonto_Orani",
+                  "graham_degeri": "Graham_Degeri", "carpan_bazli_deger": "Carpan_Bazli_Deger",
+                  "fiyat_tespit_url": "Fiyat_Tespit_URL"}
+        for i, r in df.iterrows():
+            for alan, kol in esleme.items():
+                v = _bul(r.get("Ticker"), r.get("Şirket")).get(alan)
+                if v is not None:
+                    df.at[i, kol] = v
+
+        # XHARZ'de olmayan ama arsivde adi eslesen, evrende islem goren yeni halka arzlar
+        if df_uni is not None and not df_uni.empty and "Ad" in df_uni.columns:
+            mevcut = set(df["Ticker"].astype(str).str.upper())
+            ek = []
+            bist = df_uni[df_uni["Kategori"] == "BIST"] if "Kategori" in df_uni.columns else df_uni
+            for _, u in bist.iterrows():
+                t = str(u.get("Ticker", "")).upper()
+                if t in mevcut or not t:
+                    continue
+                b = arsiv.get(ad_anahtari(u.get("Ad")))
+                if not b or not any(b.get(a) is not None for a in IPO_ARSIV_ALANLAR):
+                    continue
+                satir = {c: None for c in df.columns}
+                satir.update({"Ticker": t, "Şirket": str(u.get("Ad")), "Durum": "XHARZ dışı (yeni işlem görüyor)",
+                              "Fiyat_Tespit_URL": ""})
+                for c in ("Son_Fiyat", "RSI", "Ret1M", "Optima_Skor"):
+                    if c in u.index:
+                        satir[c] = u.get(c)
+                for alan, kol in esleme.items():
+                    v = _bul(t, u.get("Ad")).get(alan)
+                    if v is not None:
+                        satir[kol] = v
+                ek.append(satir)
+            if ek:
+                return df, pd.DataFrame(ek, columns=list(df.columns))
+    except Exception as e:
+        print(f"[upcoming-ipo] XHARZ deger kolonlari atlandi: {e}", flush=True)
+    return df, bos_ek
 
 
 def get_upcoming_ipo_summary() -> str:

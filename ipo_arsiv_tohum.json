@@ -1,0 +1,5 @@
+[
+ {"sirket": "Net Global Endüstriyel Yatırımlar A.Ş", "ticker": "NETGL", "arz_fiyati": 20.0, "iskonto_orani": 20.0, "graham_degeri": null, "carpan_bazli_deger": null, "fiyat_tespit_url": "https://www.kap.org.tr/tr/Bildirim/1659236"},
+ {"sirket": "İntetra Teknoloji ve Bilişim Hizmetleri A.Ş", "ticker": "INTET", "arz_fiyati": 53.6, "iskonto_orani": 20.0, "graham_degeri": 20.607317775451598, "carpan_bazli_deger": 73.69115395427077, "fiyat_tespit_url": "https://www.kap.org.tr/tr/Bildirim/1654263"},
+ {"sirket": "Bakırcı Gayrimenkul Yatırım Ortaklığı A.Ş", "ticker": "BKRGY", "arz_fiyati": 12.93, "iskonto_orani": 10.0, "graham_degeri": null, "carpan_bazli_deger": null, "fiyat_tespit_url": "https://www.kap.org.tr/tr/Bildirim/1654229"}
+]

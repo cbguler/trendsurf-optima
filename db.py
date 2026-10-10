@@ -961,6 +961,24 @@ def init_db():
         guncelleme_tarihi TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
 
+    # v2.0.7.402 (10 Ekim 2026, Bahri'nin talebi - "islem gormeye baslayan halka arzlarin Arz Fiyati/Iskonto/
+    # Graham/Carpan degerleri XHARZ tablosunda kalici gorunsun"): `ipo_valuations` yalniz KAP bildirim
+    # numarasiyla saklar (sirket/ticker yok); bir halka arz borsaya girince "Yaklasan Halka Arzlar" listesinden
+    # dusuyor ve degerleri hangi hisseye ait oldugu bilinmez hale geliyordu. Bu tablo degerleri anahtar bazli
+    # (T:<TICKER> veya AD:<normallestirilmis sirket adi>) tutar. Kullanici verisi degil, kamuya acik KAP verisi.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS ipo_xharz_degerler (
+        anahtar            TEXT PRIMARY KEY,
+        sirket             TEXT,
+        arz_fiyati         NUMERIC,
+        iskonto_orani      NUMERIC,
+        graham_degeri      NUMERIC,
+        carpan_bazli_deger NUMERIC,
+        fiyat_tespit_url   TEXT,
+        kaynak             TEXT,
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
+
     # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
     # abonelerin uygulama kullanim istatistiklerini gormek): her SAYFA
     # DEGISIKLIGINDE (her tiklamada DEGIL - bkz. app.py'deki kayit
@@ -1079,7 +1097,8 @@ def init_db():
     for _rls_tablo in ("beklenti_otomatik_tespit", "kullanici_tespit_karari",
                        "haber_islenmis", "haber_akisi", "ai_cagri_butcesi",
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
-                       "ipo_valuations", "sayfa_ziyaretleri"):
+                       "ipo_valuations", "sayfa_ziyaretleri",
+                       "ipo_xharz_degerler"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
