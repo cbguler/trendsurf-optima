@@ -648,6 +648,43 @@ def rsi14(s, p: int = 14) -> float:
     return round(100 - (100 / (1 + g.iloc[-1] / ll)), 1)
 
 
+# v2.0.7.391 (Bahri, 10 Ekim 2026 - TEFAS volatilitesi gercek getirilerden): "Vol" eskiden fonun TEFAS risk
+# degerinden (1-7) sabit bir tahmindi (3/7/12/18/25/33/42). Optima Skoru'nun Volatilite bileseni (15 puan) bu
+# tahmini kullaniyordu. Artik gercek gunluk NAV getirilerinin yillandirilmis standart sapmasi; yeterli veri
+# yoksa risk sinifi tahmini KALIR ve "Vol_Kaynak" = "RISK_SINIFI" ile acikca isaretlenir (uydurma yok).
+VOL_KAYNAK_KOLONU = "Vol_Kaynak"
+VOL_KAYNAK_GERCEK = "GERCEK"
+VOL_KAYNAK_RISK = "RISK_SINIFI"
+VOL_MIN_GETIRI = 30          # en az bu kadar gunluk getiri (~6 hafta islem gunu); ~95 takvim gunluk pencere ~63 verir
+VOL_YILLIK_GUN = 252
+# Veri kalitesi (canli TEFAS verisinde olculdu, 2054 fonun 52'sinde): TEFAS bazen yer tutucu fiyat yayinliyor
+# (55,47 -> 0,01 -> 48,55 gibi; 0,0 / 1,0) ve tek gunluk +%485.000 'getiri' volatiliteyi milyonlara cikariyor.
+# Bir fon turunde gunluk +-%50'yi asan getiri fiyat HATASIDIR (gercek bir gunluk getiri degil). Boyle bir gunu
+# olan fonun serisi guvenilmez sayilir: gercek volatilite HESAPLANMAZ (None), risk sinifi tahmini kalir ve
+# "Vol_Kaynak" ile isaretlenir. Hatali gunu sessizce atip kalan seriyi kullanmak da, seriyi kirpmak da YAPILMAZ.
+VOL_MAKS_GUNLUK_GETIRI = 0.5
+
+
+def gercek_volatilite(fiyat_serisi, min_getiri: int = VOL_MIN_GETIRI):
+    """Gunluk NAV serisinden yillik volatilite (%): ardisik pozitif fiyatlarin gunluk getirisinin std'si x sqrt(252).
+    Yetersiz veri (min_getiri'nden az getiri) veya hesaplanamazsa None -> cagiran risk sinifi tahminini korur."""
+    try:
+        s = pd.to_numeric(pd.Series(fiyat_serisi), errors="coerce").dropna()
+        s = s[s > 0].sort_index()
+        r = s.pct_change().dropna()
+        r = r[np.isfinite(r)]
+        if len(r) < int(min_getiri):
+            return None
+        if float(r.abs().max()) > VOL_MAKS_GUNLUK_GETIRI:
+            return None                       # fiyat hatasi/yer tutucu suphesi: seri guvenilmez
+        sd = float(r.std())
+        if not np.isfinite(sd):
+            return None
+        return round(sd * (VOL_YILLIK_GUN ** 0.5) * 100, 1)
+    except Exception:
+        return None
+
+
 def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=print):
     """TEFAS satirlarinin Ret1M/Ret3M/RSI degerlerini GERCEK gunluk fiyatlardan
     yeniden hesaplar (pytefas toplu sorgu, fund_code VERILMEDEN), Ret6M/Ret1Y/Ret3Y/
@@ -671,6 +708,7 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
     else:
         df_t[GETIRI_TARIHI_KOLONU] = None   # onceki degerler gecerli sayilmaz: yeniden dogrulanacak
     df_t[NAV_DURUMU_KOLONU] = ""            # v2.0.7.371: her turda yeniden belirlenir
+    df_t[VOL_KAYNAK_KOLONU] = VOL_KAYNAK_RISK   # v2.0.7.391: gercek volatilite hesaplananlar asagida GERCEK olur
 
     parcalar, son_fiyat_tarihi = [], {}
     for kind in ["YAT", "EMK", "BYF"]:
@@ -694,9 +732,12 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
         d["fiyat"] = pd.to_numeric(d["fiyat"], errors="coerce")
         d = d.dropna(subset=["ticker", "tarih", "fiyat"]).sort_values(["ticker", "tarih"])
 
-        r1, r3, rsi, tarih = {}, {}, {}, {}
+        r1, r3, rsi, tarih, volr = {}, {}, {}, {}, {}
         for ticker, grp in d.groupby("ticker"):
             s = grp.set_index("tarih")["fiyat"]
+            _v = gercek_volatilite(s)             # v2.0.7.391: Ret1M hesaplanamasa bile volatilite bagimsiz
+            if _v is not None:
+                volr[ticker] = _v
             if len(s) < 15:                       # RSI(14) icin yeterli veri yok
                 continue
             son = float(s.iloc[-1])
@@ -716,7 +757,12 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
         df_t.loc[m, "Ret3M"] = tk.map(r3).combine_first(df_t.loc[m, "Ret3M"])
         df_t.loc[m, "RSI"] = tk.map(rsi).combine_first(df_t.loc[m, "RSI"])
         df_t.loc[m, GETIRI_TARIHI_KOLONU] = tk.map(tarih)
+        if "Vol" in df_t.columns:                 # v2.0.7.391: gercek volatilite (yoksa risk sinifi tahmini kalir)
+            _vm = tk.map(volr)
+            df_t.loc[m, "Vol"] = _vm.combine_first(pd.to_numeric(df_t.loc[m, "Vol"], errors="coerce"))
+            df_t.loc[m & df_t["Ticker"].astype(str).isin(volr), VOL_KAYNAK_KOLONU] = VOL_KAYNAK_GERCEK
         son_fiyat_tarihi.update(tarih)
+        log(f"[getiri] {kind}: {len(volr)} fon icin GERCEK volatilite hesaplandi (min {VOL_MIN_GETIRI} getiri).")
         log(f"[getiri] {kind}: {len(r1)} fon icin GERCEK Ret1M/Ret3M/RSI hesaplandi "
             f"({d['ticker'].nunique()} fon, {len(d)} satir).")
         parcalar.append(d)
