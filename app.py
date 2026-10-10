@@ -1437,6 +1437,96 @@ def _uyari_rozet_html(etiket, aciklama=""):
             f'white-space:nowrap;">{_html.escape(etiket)}</span>')
 
 
+# v2.0.7.403 (Bahri'nin talebi): Halka Arz XHARZ tablosu st.dataframe'den ozel HTML tabloya cevrildi - baslik
+# metni iki satira bolunebilir, sirket adi sutunu yok (adi ticker hucresinin ustune gelince gorunur), sutun
+# genislikleri sabit yuzde (table-layout:fixed) -> yatay kaydirma gerekmez; yalniz dikey kaydirma (sabit baslik).
+_XH_SUTUNLAR = [
+    # (alan, baslik (iki satir icin <br>), genislik %, hizalama, tur)
+    ("Ticker", "Hisse<br>Kodu", 7, "left", "ticker"),
+    ("Son_Fiyat", "Fiyat<br>(₺)", 8, "right", "num4"),
+    ("RSI", "RSI<br>(14)", 5, "right", "num1"),
+    ("Ret1M", "1 Aylık<br>Getiri (%)", 7, "right", "num2"),
+    ("Optima_Skor", "Optima<br>Skor", 6, "right", "num1"),
+    ("Arz_Fiyati", "Arz<br>Fiyatı (₺)", 7, "right", "num2"),
+    ("Iskonto_Orani", "İskonto<br>(%)", 6, "right", "num2"),
+    ("Graham_Degeri", "Graham<br>Değeri (₺)", 8, "right", "num2"),
+    ("Carpan_Bazli_Deger", "Çarpan Bazlı<br>Değer (₺)", 9, "right", "num2"),
+    ("Uyari", "Uyarı", 17, "left", "uyari"),
+    ("Fiyat_Tespit_URL", "Fiyat Tespit<br>Raporu", 10, "center", "link:Rapor"),
+    ("KAP_URL", "KAP<br>Bildirimi", 10, "center", "link:Görüntüle"),
+]
+_XH_BASLIK_IPUCU = {
+    "Arz_Fiyati": "KAP Fiyat Tespit Raporu'ndan; bulunamazsa boş",
+    "Iskonto_Orani": "Halka arz iskontosu; bulunamazsa boş",
+    "Graham_Degeri": "Bağımsız, muhafazakar taban değer: √(22,5 × hisse başı kâr × hisse başı özkaynak); hesaplanamadıysa boş",
+    "Carpan_Bazli_Deger": "EBITDA × sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünür; hesaplanamadıysa boş",
+    "Uyari": "SPK tedbiri / KAP uyarısı (KAP UYARISI, KAP DİKKAT, İŞLEME KAPALI...) veya KAP BİLGİ (geri alım vb.)",
+}
+
+
+def _xharz_tablo_html(df):
+    """XHARZ tablosu -> HTML (iki satirli basliklar, sirket adi sutunu yok, yatay kaydirma yok)."""
+    import html as _h
+    sutunlar = [c for c in _XH_SUTUNLAR if c[0] in df.columns]
+
+    def _bos(v):
+        return v is None or (isinstance(v, float) and pd.isna(v)) or str(v) == ""
+
+    thead = "".join(
+        f'<th style="width:{w}%;" title="{_h.escape(_XH_BASLIK_IPUCU.get(alan, ""))}">{baslik}</th>'
+        for alan, baslik, w, _al, _t in sutunlar)
+    satirlar = []
+    for _, r in df.iterrows():
+        hucreler = []
+        for alan, _b, _w, hiza, tur in sutunlar:
+            v = r.get(alan)
+            if tur == "ticker":
+                ad = _h.escape(str(r.get("Şirket", "") or ""))
+                dis = str(r.get("Durum", "") or "").startswith("XHARZ dışı")
+                yildiz = '<sup title="XHARZ listesine henüz alınmamış, işlem gören yeni halka arz">*</sup>' if dis else ""
+                ic = f'<span title="{ad}"><b>{_h.escape(str(v or ""))}</b>{yildiz}</span>'
+            elif tur.startswith("num"):
+                ic = "" if _bos(v) else fmt_tr(float(v), int(tur[3:]))
+            elif tur == "uyari":
+                t = "" if _bos(v) else str(v)
+                renk = ""
+                if t:
+                    tu = t.upper()
+                    if "DİKKAT" in tu or "DIKKAT" in tu:
+                        renk = "color:#b45309;font-weight:700;"
+                    elif "BİLGİ" in tu or "BILGI" in tu:
+                        renk = "color:#1f4e79;font-weight:600;"
+                    else:
+                        renk = "color:#8e1b10;font-weight:700;"
+                ic = f'<span style="{renk}">{_h.escape(t)}</span>'
+            else:  # link
+                etiket = tur.split(":", 1)[1]
+                ic = (f'<a href="{_h.escape(str(v))}" target="_blank" rel="noopener">{etiket}</a>'
+                      if isinstance(v, str) and v.startswith("http") else "")
+            sinif = ' class="xh-uyari"' if tur == "uyari" else ""
+            hucreler.append(f'<td{sinif} style="text-align:{hiza};">{ic}</td>')
+        satirlar.append("<tr>" + "".join(hucreler) + "</tr>")
+    css = """
+    <style>
+    .xh-wrap { width:100%; max-height:640px; overflow-y:auto; overflow-x:hidden; border:1px solid #e3e7ec; border-radius:6px; }
+    table.xh-tablo { width:100%; border-collapse:collapse; table-layout:fixed; font-size:13.5px; }
+    table.xh-tablo th { position:sticky; top:0; z-index:1; background:#0d2b4e; color:#fff; text-align:center; padding:8px 4px;
+                        font-weight:600; font-size:12.5px; line-height:1.3; white-space:normal; }
+    table.xh-tablo td { padding:7px 6px; border-bottom:1px solid #e3e7ec; color:#1a1a1a; line-height:1.35; white-space:nowrap; }
+    table.xh-tablo td.xh-uyari { white-space:normal; word-wrap:break-word; }
+    table.xh-tablo tr:nth-child(even) td { background:#f7f9fb; }
+    /* Telefon/dar ekran: 12 sutun fiziksel olarak sigmaz; yalniz burada yatay kaydirma acilir (masaustunde yok). */
+    @media (max-width: 820px) {
+        .xh-wrap { overflow-x:auto; }
+        table.xh-tablo { min-width:720px; font-size:12px; }
+        table.xh-tablo th { font-size:11px; padding:6px 3px; }
+        table.xh-tablo td { padding:5px 4px; }
+    }
+    </style>"""
+    return (css + '<div class="xh-wrap"><table class="xh-tablo"><thead><tr>' + thead + "</tr></thead><tbody>"
+            + "".join(satirlar) + "</tbody></table></div>")
+
+
 def _uyari_ozeti_goster(tickerlar, harita, sinirli_goster=True):
     """Tablo ustunde ozet: gorunen hisselerden uyarisi olanlari listeler. Hic yoksa hicbir sey cizmez.
     v2.0.7.401: sinirli_goster=False -> "Sinirli veri" seridi cizilmez (Halka Arz sayfasi: orada hisselerin
@@ -8447,67 +8537,13 @@ elif page=="Halka Arz":
     _uyari_ozeti_goster(df_show["Ticker"].tolist(), _ha_uyari, sinirli_goster=False)
 
     # ── Tablo ───────────────────────────────────────────────
-    display_cols = []
-    col_cfg = {}
-
-    display_cols.append("Ticker")
-    display_cols.append("Şirket")
-
-    if "Son_Fiyat" in df_show.columns:
-        display_cols.append("Son_Fiyat")
-        col_cfg["Son_Fiyat"] = st.column_config.NumberColumn("Fiyat (₺)", format="%.4f")
-
-    if "RSI" in df_show.columns:
-        display_cols.append("RSI")
-        col_cfg["RSI"] = st.column_config.NumberColumn("RSI", format="%.1f")
-
-    if "Ret1M" in df_show.columns:
-        display_cols.append("Ret1M")
-        col_cfg["Ret1M"] = st.column_config.NumberColumn("1A Getiri %", format="%.2f")
-
-    if "Optima_Skor" in df_show.columns:
-        display_cols.append("Optima_Skor")
-        col_cfg["Optima_Skor"] = st.column_config.NumberColumn("Optima Skor", format="%.1f")
-
-    # v2.0.7.402: halka arz degerleri (Fiyat Tespit Raporu'ndan; yoksa bos) - kalici sutunlar
-    for _c in ("Arz_Fiyati", "Iskonto_Orani", "Graham_Degeri", "Carpan_Bazli_Deger"):
-        display_cols.append(_c)
-    col_cfg["Arz_Fiyati"] = st.column_config.TextColumn("Arz Fiyatı (₺)", help="Fiyat Tespit Raporu'ndan; bulunamazsa boş")
-    col_cfg["Iskonto_Orani"] = st.column_config.TextColumn("İskonto (%)", help="Halka arz iskontosu; bulunamazsa boş")
-    col_cfg["Graham_Degeri"] = st.column_config.TextColumn("Graham Değeri (₺)", help="Bağımsız, muhafazakar taban değer: √(22,5 × hisse başı kâr × hisse başı özkaynak); hesaplanamadıysa boş")
-    col_cfg["Carpan_Bazli_Deger"] = st.column_config.TextColumn("Çarpan Bazlı Değer (₺)", help="EBITDA x sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünür; hesaplanamadıysa boş")
-    display_cols.append("Uyari")
-    col_cfg["Uyari"] = st.column_config.TextColumn(
-        "Uyarı", help="SPK tedbiri / KAP uyarısı (KAP UYARISI, KAP DİKKAT, İŞLEME KAPALI...) veya KAP BİLGİ (geri alım vb.)")
-    display_cols.append("Fiyat_Tespit_URL")
-    col_cfg["Fiyat_Tespit_URL"] = st.column_config.LinkColumn("Fiyat Tespit", display_text="Rapor")
-    display_cols.append("KAP_URL")
-    col_cfg["KAP_URL"] = st.column_config.LinkColumn("KAP", display_text="Görüntüle")
-
-    tablo_df = df_show[[c for c in display_cols if c in df_show.columns]].reset_index(drop=True)
-    # v2.0.7.60 - Bahri'nin bulgusu: bu tablo da Ingilizce NumberColumn
-    # format kullaniyordu, sistem geneli Turkce format taramasinda bulundu.
-    if "Son_Fiyat" in tablo_df.columns:
-        tablo_df["Son_Fiyat"] = tablo_df["Son_Fiyat"].apply(lambda v: fmt_tr(v,4))
-        col_cfg["Son_Fiyat"] = st.column_config.TextColumn("Fiyat (₺)")
-    if "RSI" in tablo_df.columns:
-        tablo_df["RSI"] = tablo_df["RSI"].apply(lambda v: fmt_tr(v,1))
-        col_cfg["RSI"] = st.column_config.TextColumn("RSI")
-    if "Ret1M" in tablo_df.columns:
-        tablo_df["Ret1M"] = tablo_df["Ret1M"].apply(lambda v: fmt_tr(v,2))
-        col_cfg["Ret1M"] = st.column_config.TextColumn("1A Getiri %")
-    if "Optima_Skor" in tablo_df.columns:
-        tablo_df["Optima_Skor"] = tablo_df["Optima_Skor"].apply(lambda v: fmt_tr(v,1))
-        col_cfg["Optima_Skor"] = st.column_config.TextColumn("Optima Skor")
-    for _c, _nd in (("Arz_Fiyati", 2), ("Iskonto_Orani", 2), ("Graham_Degeri", 2), ("Carpan_Bazli_Deger", 2)):
-        if _c in tablo_df.columns:
-            tablo_df[_c] = tablo_df[_c].apply(lambda v, _nd=_nd: "" if v is None or (isinstance(v, float) and pd.isna(v)) else fmt_tr(v, _nd))
-    if "Fiyat_Tespit_URL" in tablo_df.columns:
-        tablo_df["Fiyat_Tespit_URL"] = tablo_df["Fiyat_Tespit_URL"].apply(lambda v: v if isinstance(v, str) and v else None)
-    st.dataframe(tablo_df, width='stretch', hide_index=True, column_config=col_cfg)
-    st.caption("Arz Fiyatı, İskonto, Graham ve Çarpan Bazlı Değer sütunları KAP Fiyat Tespit Raporu'ndan otomatik çıkarılır; "
-               "rapor bulunamadığında ya da değer hesaplanamadığında hücre boş kalır. 'XHARZ dışı' satırlar, borsada işlem "
-               "görmeye başlamış ama endeks listesine henüz alınmamış yeni halka arzlardır. Tavsiye değildir.")
+    # v2.0.7.403: ozel HTML tablo (bkz. _xharz_tablo_html): iki satirli basliklar, sirket adi sutunu yok,
+    # sabit yuzde genislikler, yatay kaydirma yok.
+    st.markdown(_xharz_tablo_html(df_show.reset_index(drop=True)), unsafe_allow_html=True)
+    st.caption("Şirket adı için hisse koduna fare ile gelin. Arz Fiyatı, İskonto, Graham ve Çarpan Bazlı Değer sütunları KAP Fiyat "
+               "Tespit Raporu'ndan otomatik çıkarılır; rapor bulunamadığında ya da değer hesaplanamadığında hücre boş kalır. "
+               "* işaretli hisseler, borsada işlem görmeye başlamış ama XHARZ listesine henüz alınmamış yeni halka arzlardır. "
+               "Tavsiye değildir.")
 
     # ── CSV indir ────────────────────────────────────────────
     csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
