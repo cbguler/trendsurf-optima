@@ -8391,6 +8391,19 @@ elif page=="Halka Arz":
         )
         st.stop()
 
+    # v2.0.7.402 (Bahri'nin talebi): Arz Fiyati / Iskonto / Graham / Carpan sutunlari XHARZ tablosunda KALICI
+    # (degeri olmayan hucre bos). Ek olarak, endeks revizyonu gecikmesi yuzunden XHARZ listesinde HENUZ olmayan
+    # ama islem goren ve arsivde adi tam eslesen yeni halka arzlar tabloya eklenir (ozet metrikler yalniz
+    # gercek XHARZ uyelerini sayar).
+    try:
+        from upcoming_ipo_client import xharz_ipo_degerlerini_ekle
+        df_ipo, _df_ha_ek = xharz_ipo_degerlerini_ekle(df_ipo, df_uni)
+    except Exception:
+        _df_ha_ek = pd.DataFrame()
+        for _k in ("Arz_Fiyati", "Iskonto_Orani", "Graham_Degeri", "Carpan_Bazli_Deger", "Fiyat_Tespit_URL"):
+            if _k not in df_ipo.columns:
+                df_ipo[_k] = None
+
     # ── Özet metrikler ──────────────────────────────────────
     n_fiyatli = len(df_ipo[df_ipo.get("Son_Fiyat", pd.Series([0]*len(df_ipo))).fillna(0) > 0]) if "Son_Fiyat" in df_ipo.columns else 0
     m1, m2, m3, m4 = st.columns(4)
@@ -8405,6 +8418,8 @@ elif page=="Halka Arz":
 
     # ── Filtre ──────────────────────────────────────────────
     df_show = df_ipo.copy()
+    if _df_ha_ek is not None and not _df_ha_ek.empty:
+        df_show = pd.concat([df_show, _df_ha_ek], ignore_index=True)
     if ha_ara:
         mask = (
             df_show["Ticker"].str.upper().str.contains(ha_ara.upper(), na=False) |
@@ -8454,9 +8469,18 @@ elif page=="Halka Arz":
         display_cols.append("Optima_Skor")
         col_cfg["Optima_Skor"] = st.column_config.NumberColumn("Optima Skor", format="%.1f")
 
+    # v2.0.7.402: halka arz degerleri (Fiyat Tespit Raporu'ndan; yoksa bos) - kalici sutunlar
+    for _c in ("Arz_Fiyati", "Iskonto_Orani", "Graham_Degeri", "Carpan_Bazli_Deger"):
+        display_cols.append(_c)
+    col_cfg["Arz_Fiyati"] = st.column_config.TextColumn("Arz Fiyatı (₺)", help="Fiyat Tespit Raporu'ndan; bulunamazsa boş")
+    col_cfg["Iskonto_Orani"] = st.column_config.TextColumn("İskonto (%)", help="Halka arz iskontosu; bulunamazsa boş")
+    col_cfg["Graham_Degeri"] = st.column_config.TextColumn("Graham Değeri (₺)", help="Bağımsız, muhafazakar taban değer: √(22,5 × hisse başı kâr × hisse başı özkaynak); hesaplanamadıysa boş")
+    col_cfg["Carpan_Bazli_Deger"] = st.column_config.TextColumn("Çarpan Bazlı Değer (₺)", help="EBITDA x sektör medyan çarpanı, net borç düşülüp hisse sayısına bölünür; hesaplanamadıysa boş")
     display_cols.append("Uyari")
     col_cfg["Uyari"] = st.column_config.TextColumn(
         "Uyarı", help="SPK tedbiri / KAP uyarısı (KAP UYARISI, KAP DİKKAT, İŞLEME KAPALI...) veya KAP BİLGİ (geri alım vb.)")
+    display_cols.append("Fiyat_Tespit_URL")
+    col_cfg["Fiyat_Tespit_URL"] = st.column_config.LinkColumn("Fiyat Tespit", display_text="Rapor")
     display_cols.append("KAP_URL")
     col_cfg["KAP_URL"] = st.column_config.LinkColumn("KAP", display_text="Görüntüle")
 
@@ -8475,7 +8499,15 @@ elif page=="Halka Arz":
     if "Optima_Skor" in tablo_df.columns:
         tablo_df["Optima_Skor"] = tablo_df["Optima_Skor"].apply(lambda v: fmt_tr(v,1))
         col_cfg["Optima_Skor"] = st.column_config.TextColumn("Optima Skor")
+    for _c, _nd in (("Arz_Fiyati", 2), ("Iskonto_Orani", 2), ("Graham_Degeri", 2), ("Carpan_Bazli_Deger", 2)):
+        if _c in tablo_df.columns:
+            tablo_df[_c] = tablo_df[_c].apply(lambda v, _nd=_nd: "" if v is None or (isinstance(v, float) and pd.isna(v)) else fmt_tr(v, _nd))
+    if "Fiyat_Tespit_URL" in tablo_df.columns:
+        tablo_df["Fiyat_Tespit_URL"] = tablo_df["Fiyat_Tespit_URL"].apply(lambda v: v if isinstance(v, str) and v else None)
     st.dataframe(tablo_df, width='stretch', hide_index=True, column_config=col_cfg)
+    st.caption("Arz Fiyatı, İskonto, Graham ve Çarpan Bazlı Değer sütunları KAP Fiyat Tespit Raporu'ndan otomatik çıkarılır; "
+               "rapor bulunamadığında ya da değer hesaplanamadığında hücre boş kalır. 'XHARZ dışı' satırlar, borsada işlem "
+               "görmeye başlamış ama endeks listesine henüz alınmamış yeni halka arzlardır. Tavsiye değildir.")
 
     # ── CSV indir ────────────────────────────────────────────
     csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
