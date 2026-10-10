@@ -1,0 +1,30 @@
+{
+"kaynak": "Truncgil today.json - Selling (TL), gece worker kaydi; capraz fiyat yok",
+"seriler": {
+"ALTIN_TRY": {
+"2026-10-10": 6644.78
+},
+"ATA_ALTIN": {
+"2026-10-10": 44721.47
+},
+"CEYREK_ALTIN": {
+"2026-10-10": 10816.51
+},
+"CUMHURIYET_ALTIN": {
+"2026-10-10": 44569.0
+},
+"GUMUS_TRY": {
+"2026-10-10": 96.37
+},
+"PLATIN_TRY": {
+"2026-10-10": 2680.54
+},
+"TAM_ALTIN": {
+"2026-10-10": 43133.73
+},
+"YARIM_ALTIN": {
+"2026-10-10": 21633.02
+}
+},
+"surum": 1
+}
