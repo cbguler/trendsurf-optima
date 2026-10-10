@@ -1437,8 +1437,10 @@ def _uyari_rozet_html(etiket, aciklama=""):
             f'white-space:nowrap;">{_html.escape(etiket)}</span>')
 
 
-def _uyari_ozeti_goster(tickerlar, harita):
-    """Tablo ustunde ozet: gorunen hisselerden uyarisi olanlari listeler. Hic yoksa hicbir sey cizmez."""
+def _uyari_ozeti_goster(tickerlar, harita, sinirli_goster=True):
+    """Tablo ustunde ozet: gorunen hisselerden uyarisi olanlari listeler. Hic yoksa hicbir sey cizmez.
+    v2.0.7.401: sinirli_goster=False -> "Sinirli veri" seridi cizilmez (Halka Arz sayfasi: orada hisselerin
+    cogu zaten yenidir, genc varlik kurali o sayfada uygulanmaz)."""
     import html as _html
     uyarili, bilgili, sinirli = [], [], []
     for t in tickerlar:
@@ -1466,7 +1468,7 @@ def _uyari_ozeti_goster(tickerlar, harita):
             + _html.escape(", ".join(t for t, _, _ in bilgili)) +
             ' (geri alım vb.; tek başına risk sayılmaz)</div>',
             unsafe_allow_html=True)
-    if sinirli:
+    if sinirli and sinirli_goster:
         gosterilen = ", ".join(sinirli[:15]) + (f" ve {len(sinirli) - 15} diğeri" if len(sinirli) > 15 else "")
         st.markdown(
             '<div style="border:2px solid #b45309;border-left:10px solid #b45309;background:#fef3c7;'
@@ -8421,10 +8423,13 @@ elif page=="Halka Arz":
         st.stop()
 
     # v2.0.7.376: tedbir/KAP uyarisi (Uyari sutunu + ustte ozet)
-    _ha_uyari = _uyari_haritasi(df_uni)
+    # v2.0.7.401 (Bahri'nin talebi): Halka Arz sayfasinda GENC VARLIK (260 islem gunu SINIRLI VERI) kisiti yok -
+    # XHARZ uyeleri zaten yeni sirketlerdir. Tedbir/KAP uyarilari aynen gosterilir; yalniz SINIRLI VERI etiketi
+    # bu sayfada ne sutunda ne seritte cikar. (Kural BIST/Optimizer/e-posta gibi diger yerlerde degismedi.)
+    _ha_uyari = {k: v for k, v in _uyari_haritasi(df_uni).items() if v[0] != "SINIRLI VERİ"}
     df_show = df_show.copy()
     df_show["Uyari"] = df_show["Ticker"].astype(str).str.upper().map(lambda t: _ha_uyari.get(t, ("", ""))[0])
-    _uyari_ozeti_goster(df_show["Ticker"].tolist(), _ha_uyari)
+    _uyari_ozeti_goster(df_show["Ticker"].tolist(), _ha_uyari, sinirli_goster=False)
 
     # ── Tablo ───────────────────────────────────────────────
     display_cols = []
