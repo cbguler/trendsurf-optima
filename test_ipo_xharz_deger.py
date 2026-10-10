@@ -136,7 +136,7 @@ def test_tohum_ve_kaynak_baglantilari():
     dbs = open("db.py", encoding="utf-8").read()
     ok("CREATE TABLE IF NOT EXISTS ipo_xharz_degerler" in dbs and '"ipo_xharz_degerler"' in dbs, "db.py: tablo + RLS listesi")
     app = open("app.py", encoding="utf-8").read()
-    ok("xharz_ipo_degerlerini_ekle(df_ipo, df_uni)" in app and '"Graham_Degeri"' in app and "Çarpan Bazlı Değer (₺)" in app, "app.py sutunlari")
+    ok("xharz_ipo_degerlerini_ekle(df_ipo, df_uni)" in app and '"Graham_Degeri"' in app and "_xharz_tablo_html(df_show" in app and "Çarpan Bazlı<br>Değer (₺)" in app, "app.py sutunlari")
 
 
 if __name__ == "__main__":
