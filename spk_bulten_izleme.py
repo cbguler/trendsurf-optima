@@ -51,6 +51,7 @@ ILK_CALISMA_GUN = int(os.environ.get("SPK_ILK_CALISMA_GUN", "14") or 14)   # bun
 MAKS_BULTEN = int(os.environ.get("SPK_MAKS_BULTEN", "8") or 8)             # bir calismada en fazla
 GUNLUK_AI_BUTCESI = 120                                                    # haber_izleme.py ile PAYLASILAN gunluk limit
 AI_MAKS_KARAKTER = 9000
+GERCEK_TESHIS_BULTEN = 3     # --groq-test: en yeni kac gercek bulten AI'a gonderilsin
 SIRKET_ORANI_ESIGI = 0.8        # sirketin evrendeki fonlarinin >=%80'i listedeyse sirket-seviyesi kural
 SIRKET_MIN_FON = 3
 MAKS_FON_ADAYI = 25             # bir bultende en fazla bu kadar tekil-fon adayi
@@ -381,6 +382,85 @@ def _hata_govdesi(e) -> str:
         return ""
 
 
+def _groq_yuk(prompt: str) -> dict:
+    """Groq istegi govdesi (ai_cagir_gercek ve --groq-test AYNI yukü kullanir)."""
+    return {"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"}, "temperature": 0.2,
+            "max_completion_tokens": 4000}
+
+
+def groq_teshis() -> int:
+    """v2.0.7.395: Groq 400 nedenini gormek icin. Gercek istekle AYNI yuk, ama kucuk ornek metinle:
+    (A) kisa JSON istegi, (B) gercek AI_PROMPT + kisa ornek alinti. Her biri icin HTTP kodu ve govde loglanir.
+    Veritabanina yazmaz, butce harcamaz. Dondurur: 0 (ikisi de 200) | 1."""
+    import requests
+    qk = os.environ.get("GROQ_API_KEY", "")
+    if not qk:
+        log("GROQ_API_KEY yok - teshis yapilamadi.")
+        return 1
+    ornek = "SPK Kurulu karari: ORNEK FON A.S. unvanli sirketin islem yapmasi yasaklanmistir. (test metni)"
+    denemeler = [("A kisa JSON istegi", 'Su JSON\'u aynen dondur: {"kararlar":[]}'),
+                 ("B gercek prompt + kisa metin", AI_PROMPT.format(metin=ornek))]
+    sonuc = 0
+    for ad, prompt in denemeler:
+        try:
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                              headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
+                              json=_groq_yuk(prompt), timeout=60)
+            log(f"Groq teshis [{ad}]: HTTP {r.status_code} | prompt {len(prompt)} karakter | govde: {r.text[:700]}")
+            if r.status_code != 200:
+                sonuc = 1
+        except Exception as e:
+            log(f"Groq teshis [{ad}]: {type(e).__name__}: {str(e)[:200]}")
+            sonuc = 1
+    # (C) GERCEK bultenler: AI'a giden metin (AI penceresi) bu bultenlerden uretilir. Sorun yalniz uzun gercek
+    # metinde cikiyorsa (A ve B 200 donerken) burada gorunur. Her bulten icin HTTP kodu, prompt uzunlugu,
+    # finish_reason, token kullanimi ve icerigin gecerli JSON olup olmadigi loglanir.
+    try:
+        liste = sorted(bulten_listesi_cek(date.today().year), key=lambda b: b["tarih"], reverse=True)[:GERCEK_TESHIS_BULTEN]
+    except Exception as e:
+        log(f"Groq teshis [C gercek bulten]: bulten listesi alinamadi ({type(e).__name__}: {str(e)[:150]})")
+        return 1
+    for b in liste:
+        try:
+            metin = pdf_metni_cek(b["url"])
+            if not metin or len(metin) < 150:
+                log(f"Groq teshis [C {b['no']}]: bulten metni alinamadi/cok kisa.")
+                continue
+            duz, n = _hizala(metin)
+            pencere = _ai_pencereleri(duz, n)
+            if not pencere:
+                log(f"Groq teshis [C {b['no']}]: AI penceresi bos (AI cagrilmazdi), atlandi.")
+                continue
+            prompt = AI_PROMPT.format(metin=pencere)
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                              headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
+                              json=_groq_yuk(prompt), timeout=90)
+            ek = ""
+            if r.status_code == 200:
+                try:
+                    j = r.json()
+                    icerik = (j["choices"][0]["message"].get("content") or "").strip()
+                    try:
+                        json.loads(icerik)
+                        gecerli = "evet"
+                    except Exception:
+                        gecerli = "HAYIR"
+                    ek = (f" | finish_reason={j['choices'][0].get('finish_reason')} | usage={j.get('usage')}"
+                          f" | icerik gecerli JSON: {gecerli} | icerik: {icerik[:200]}")
+                except Exception as e:
+                    ek = f" | yanit ayristirilamadi: {type(e).__name__}"
+            else:
+                sonuc = 1
+                ek = f" | govde: {r.text[:700]}"
+            log(f"Groq teshis [C {b['no']}]: HTTP {r.status_code} | pencere {len(pencere)} karakter | "
+                f"prompt {len(prompt)} karakter{ek}")
+        except Exception as e:
+            log(f"Groq teshis [C {b['no']}]: {type(e).__name__}: {str(e)[:200]}")
+            sonuc = 1
+    return sonuc
+
+
 def ai_cagir_gercek(prompt: str, db_mod=None):
     """Gemini, olmazsa Groq (haber_izleme.py ile AYNI uc noktalar/modeller/anahtar adlari ve
     PAYLASILAN gunluk butce). Dondurur: JSON dict | None (anahtar yok/butce bitti/hata).
@@ -419,9 +499,7 @@ def ai_cagir_gercek(prompt: str, db_mod=None):
         try:
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions",
                                  headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
-                                 json={"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": prompt}],
-                                       "response_format": {"type": "json_object"}, "temperature": 0.2,
-                                       "max_completion_tokens": 4000}, timeout=60)
+                                 json=_groq_yuk(prompt), timeout=60)
             resp.raise_for_status()
             if db_mod is not None:
                 db_mod.ai_cagri_kaydet(1)
@@ -693,7 +771,10 @@ if __name__ == "__main__":
     ap.add_argument("--kuru", action="store_true", help="veritabanina YAZMAZ, sadece ne bulacagini gosterir")
     ap.add_argument("--yil", type=int)
     ap.add_argument("--bugun", help="YYYY-MM-DD (test)")
+    ap.add_argument("--groq-test", action="store_true", help="yalniz Groq 400 teshisi (DB'ye yazmaz)")
     a = ap.parse_args()
+    if a.groq_test:
+        sys.exit(groq_teshis())
     try:
         s = calistir(yil=a.yil, kuru=a.kuru, bugun=date.fromisoformat(a.bugun) if a.bugun else None)
     except Exception as e:
