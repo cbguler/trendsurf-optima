@@ -381,6 +381,40 @@ def _hata_govdesi(e) -> str:
         return ""
 
 
+def _groq_yuk(prompt: str) -> dict:
+    """Groq istegi govdesi (ai_cagir_gercek ve --groq-test AYNI yukü kullanir)."""
+    return {"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"}, "temperature": 0.2,
+            "max_completion_tokens": 4000}
+
+
+def groq_teshis() -> int:
+    """v2.0.7.395: Groq 400 nedenini gormek icin. Gercek istekle AYNI yuk, ama kucuk ornek metinle:
+    (A) kisa JSON istegi, (B) gercek AI_PROMPT + kisa ornek alinti. Her biri icin HTTP kodu ve govde loglanir.
+    Veritabanina yazmaz, butce harcamaz. Dondurur: 0 (ikisi de 200) | 1."""
+    import requests
+    qk = os.environ.get("GROQ_API_KEY", "")
+    if not qk:
+        log("GROQ_API_KEY yok - teshis yapilamadi.")
+        return 1
+    ornek = "SPK Kurulu karari: ORNEK FON A.S. unvanli sirketin islem yapmasi yasaklanmistir. (test metni)"
+    denemeler = [("A kisa JSON istegi", 'Su JSON\'u aynen dondur: {"kararlar":[]}'),
+                 ("B gercek prompt + kisa metin", AI_PROMPT.format(metin=ornek))]
+    sonuc = 0
+    for ad, prompt in denemeler:
+        try:
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                              headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
+                              json=_groq_yuk(prompt), timeout=60)
+            log(f"Groq teshis [{ad}]: HTTP {r.status_code} | prompt {len(prompt)} karakter | govde: {r.text[:700]}")
+            if r.status_code != 200:
+                sonuc = 1
+        except Exception as e:
+            log(f"Groq teshis [{ad}]: {type(e).__name__}: {str(e)[:200]}")
+            sonuc = 1
+    return sonuc
+
+
 def ai_cagir_gercek(prompt: str, db_mod=None):
     """Gemini, olmazsa Groq (haber_izleme.py ile AYNI uc noktalar/modeller/anahtar adlari ve
     PAYLASILAN gunluk butce). Dondurur: JSON dict | None (anahtar yok/butce bitti/hata).
@@ -419,9 +453,7 @@ def ai_cagir_gercek(prompt: str, db_mod=None):
         try:
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions",
                                  headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
-                                 json={"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": prompt}],
-                                       "response_format": {"type": "json_object"}, "temperature": 0.2,
-                                       "max_completion_tokens": 4000}, timeout=60)
+                                 json=_groq_yuk(prompt), timeout=60)
             resp.raise_for_status()
             if db_mod is not None:
                 db_mod.ai_cagri_kaydet(1)
@@ -693,7 +725,10 @@ if __name__ == "__main__":
     ap.add_argument("--kuru", action="store_true", help="veritabanina YAZMAZ, sadece ne bulacagini gosterir")
     ap.add_argument("--yil", type=int)
     ap.add_argument("--bugun", help="YYYY-MM-DD (test)")
+    ap.add_argument("--groq-test", action="store_true", help="yalniz Groq 400 teshisi (DB'ye yazmaz)")
     a = ap.parse_args()
+    if a.groq_test:
+        sys.exit(groq_teshis())
     try:
         s = calistir(yil=a.yil, kuru=a.kuru, bugun=date.fromisoformat(a.bugun) if a.bugun else None)
     except Exception as e:
