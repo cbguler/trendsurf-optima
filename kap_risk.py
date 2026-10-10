@@ -70,6 +70,28 @@ KURALLAR = {
     "GERI_ALINAN_SATIS":  (SEVIYE_BILGI, 30, "Geri alınan payların elden çıkarılması"),
 }
 
+# v2.0.7.398 (Bahri'nin istegi, backlog 7): "pay geri alimi" varsayilan olarak BILGI'dir (skor/sinyal
+# degismez; ENERY ornegi: bildirim olumlu/notr). Anahtar ACIKSA geri alim ORTA sayilir: skor x0,5 ve
+# "KAP DIKKAT" etiketi (14 gun). Anahtar: ortam degiskeni KAP_GERI_ALIM_SKOR_DUSUR = 1/true/evet/acik
+# (GitHub: Settings > Secrets and variables > Actions > Variables; kap_risk_tarama.yml okur). Degisiklik
+# bir sonraki taramada (cron ~15 dk) uygulanir: riskler her seferinde arsivden sifirdan hesaplanir.
+GERI_ALIM_ANAHTAR_ENV = "KAP_GERI_ALIM_SKOR_DUSUR"
+_ACIK_DEGERLER = {"1", "true", "evet", "acik", "açık", "on", "yes"}
+
+
+def geri_alim_skor_dusur_acik() -> bool:
+    import os
+    return str(os.environ.get(GERI_ALIM_ANAHTAR_ENV, "") or "").strip().lower() in _ACIK_DEGERLER
+
+
+def kural_bilgisi(kural: str) -> tuple:
+    """KURALLAR[kural] -> (seviye, pencere gun, ad). GERI_ALIM icin anahtar acikse seviye ORTA."""
+    seviye, pencere, ad = KURALLAR[kural]
+    if kural == "GERI_ALIM" and geri_alim_skor_dusur_acik():
+        return (SEVIYE_ORTA, pencere, "Pay geri alımı (ayar gereği skor düşürüldü; bildirim kendisi risk değil)")
+    return (seviye, pencere, ad)
+
+
 K_VBTS = "BISTECH Pay Piyasası Alım Satım Sistemi Duyurusu"
 K_SPK_TEDBIR = "Sermaye Piyasası Kurulu Tedbir Kararı"
 K_SIRA = "Pay İşlem Sırası Kapatma / Açma"
@@ -298,7 +320,7 @@ def riskleri_hesapla(bildirimler, bugun: datetime.date = None) -> dict:
 
     sonuc = {}
     for (ticker, kural), (b, bitis, ozet) in en_yeni.items():
-        seviye, pencere, ad = KURALLAR[kural]
+        seviye, pencere, ad = kural_bilgisi(kural)
         t = b["tarih"]
         gonderim = t.date() if isinstance(t, datetime.datetime) else t
         son = bitis if bitis else gonderim + datetime.timedelta(days=pencere)
