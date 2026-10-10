@@ -1055,15 +1055,15 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 
             try:
                 df = c.fetch(start=start, end=end, kind=try_kind, fund_code=ticker)
             except TefasRateLimitError as _e_rate:
-                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: HIZ SINIRI - "
+                print(f"[tefas-hist] {ticker}/{try_kind}: HIZ SINIRI - "
                       f"{_e_rate} - diger turler denenmeden vazgeciliyor.", flush=True)
                 break
             except Exception as _e_fetch:
-                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: c.fetch() HATASI - "
+                print(f"[tefas-hist] {ticker}/{try_kind}: c.fetch() HATASI - "
                       f"{type(_e_fetch).__name__}: {_e_fetch}", flush=True)
                 continue
             if df.empty:
-                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: c.fetch() BOS DataFrame dondu.", flush=True)
+                print(f"[tefas-hist] {ticker}/{try_kind}: c.fetch() BOS DataFrame dondu.", flush=True)
                 continue
             # Sütun normalize
             col_price = next((c2 for c2 in df.columns
@@ -1071,7 +1071,7 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 
             col_date  = next((c2 for c2 in df.columns
                               if c2.lower() in ("date","tarih")), None)
             if not col_price or not col_date:
-                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: price/date sutunu "
+                print(f"[tefas-hist] {ticker}/{try_kind}: price/date sutunu "
                       f"bulunamadi. Gelen sutunlar: {df.columns.tolist()}", flush=True)
                 continue
             df = df.rename(columns={col_price: "Close", col_date: "date"})
@@ -1080,16 +1080,15 @@ def _fetch_tefas_hist_cached(ticker: str, kind: str, period: str, _surum: int = 
             df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
             df = df.dropna(subset=["Close"])
             if len(df) < 5:
-                print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: temizlik sonrasi "
+                print(f"[tefas-hist] {ticker}/{try_kind}: temizlik sonrasi "
                       f"sadece {len(df)} satir kaldi (<5, yetersiz).", flush=True)
                 continue
-            print(f"[tefas-hist-TESHIS] {ticker}/{try_kind}: BASARILI, {len(df)} satir.", flush=True)
             df["Open"]  = df["Close"].shift(1).fillna(df["Close"])
             df["High"]  = df[["Open","Close"]].max(axis=1)
             df["Low"]   = df[["Open","Close"]].min(axis=1)
             return df[["Open","High","Low","Close"]]
     except Exception as _e_disi:
-        print(f"[tefas-hist-TESHIS] {ticker}: DIS try/except HATASI - "
+        print(f"[tefas-hist] {ticker}: DIS try/except HATASI - "
               f"{type(_e_disi).__name__}: {_e_disi}", flush=True)
     # v2.0.7.343 (3 Ekim 2026, Bahri'nin bulgusu - v2.0.7.341'in surum
     # etiketi sayesinde ILU/HOY/HTS/CVL duzeldi ama BAG HALA eski
@@ -1166,11 +1165,9 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
                 else:
                     _yeterli = len(_da) >= 20
                 if _taze and _yeterli:
-                    print(f"[tefas-hist-TESHIS] {ticker}: KALICI ARSIVDEN {len(_da)} satir "
-                          f"({period}) - pytefas'a gidilmedi.", flush=True)
                     return _da
         except Exception as _arsiv_okuma_err:
-            print(f"[tefas-hist-TESHIS] {ticker}: arsiv okuma hatasi - {_arsiv_okuma_err}", flush=True)
+            print(f"[tefas-hist] {ticker}: arsiv okuma hatasi - {_arsiv_okuma_err}", flush=True)
         # v2.0.7.364: arsiv bu istegi karsilayamadiysa (bos/bayat/hata) pytefas'a SADECE
         # hafif bir sorgu gider ("3 Ay"a kadar): tek-fon 6 ay/1 yil/5 yil sorgusu TEFAS'ta
         # yavas/hiz-sinirli (canli olculdu) - uzun periyot isteniyorsa bile eldeki en iyi
@@ -1180,8 +1177,6 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
         try:
             cache_hist = _load_tefas_cache(ticker, _pt_period)
             if cache_hist is not None and not cache_hist.empty and len(cache_hist) >= 5:
-                print(f"[tefas-hist-TESHIS] {ticker}: YEREL DISK ONBELLEGINDEN "
-                      f"donduruldu ({len(cache_hist)} satir) - pytefas HIC denenmedi.", flush=True)
                 return cache_hist
         except Exception:
             pass
@@ -1198,8 +1193,6 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
             pass
         # 2b. pytefas basarisiz: elimizdeki KISMI arsiv, sentetikten her zaman iyidir
         if _df_arsiv_kismi is not None and len(_df_arsiv_kismi) >= 5:
-            print(f"[tefas-hist-TESHIS] {ticker}: pytefas basarisiz, KISMI ARSIV "
-                  f"({len(_df_arsiv_kismi)} satir) kullaniliyor.", flush=True)
             return _df_arsiv_kismi
         # 3. Sentetik fallback
         try:
