@@ -32,7 +32,8 @@ def test_maden_blogunda_yfinance_yok():
     ok("* usdtry_rate" not in k and "*usdtry_rate" not in k, "USD x kur cevrimi yok")
     ok("ONS_TO_GRAM" not in k, "ons yardimcisi yok")
     # blokta kalan tek yfinance cagrisi USDTRY=X kuru (Bigpara'nin kripto yolu icin; maden fiyatina girmez)
-    ok(re.findall(r'_yf2\.download\("([^"]+)"', k) in ([], ["USDTRY=X"]), "yfinance yalniz USDTRY=X kuru icin")
+    ok("_yf2" not in k and "yfinance" not in k and "USDTRY=X" not in k,
+       "maden blogunda yfinance HIC yok (v390: USDTRY kuru da kalkti - kripto USD x kur yolu silindi)")
 
 
 def test_fiyat_yalniz_turkiye_kaynagi_veya_onceki_csv():
