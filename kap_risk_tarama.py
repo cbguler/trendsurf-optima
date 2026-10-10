@@ -44,10 +44,13 @@ import kap_risk
 
 KAP_LISTE_URL = "https://www.kap.org.tr/tr/api/disclosure/members/byCriteria"
 KAP_DETAY_URL = "https://www.kap.org.tr/tr/Bildirim/{}"
+KAP_FON_LISTE_URL = "https://www.kap.org.tr/tr/api/disclosure/funds/byCriteria"   # v2.0.7.399 (canli dogrulandi 10 Ekim 2026)
 KAP_UST_SINIR = 2000          # KAP tek yanitta en fazla bu kadar kayit doner
 ARSIV_GUN = 130               # arsiv saklama (en uzun risk penceresi 120 gun)
 ILK_YUKLEME_GUN = 130
 ARTIMLI_GUN = 4
+FON_GUN = 4                  # fon bildirimleri: her calismada son N gun (gunluk istek; hafta sonu + ust uste binme)
+FON_ILK_YUKLEME_GUN = 60      # elle geriye yukleme onerisi (--fon-gun 60); fon riskleri en fazla 180 gun
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/124.0 Safari/537.36",
@@ -147,6 +150,67 @@ def liste_cek(ist: Istemci, bas: datetime.date, bit: datetime.date) -> list:
     return veri
 
 
+def normallestir_fon(x: dict) -> dict:
+    """KAP FON listesi kaydi -> kap_risk bildirim sozlugu (gonderen kodu "F:KOD")."""
+    kod = (x.get("fundCode") or "").strip().upper()
+    return {
+        "id": int(x["disclosureIndex"]),
+        "tarih": _tarihi_coz(x["publishDate"]),
+        "gonderen": (x.get("kapTitle") or "").strip(),
+        "konu": (x.get("subject") or "").strip(),
+        "ozet": re.sub(r"\s+", " ", (x.get("summary") or "")).strip(),
+        "gonderen_kodlar": [kap_risk.fon_anahtari(kod)] if kod else [],
+        "ilgili_kodlar": [],
+        "metin": "",
+    }
+
+
+def fon_liste_cek(ist: Istemci, gun: datetime.date) -> list:
+    """Tek gunun TUM fon bildirimleri. KAP en yeniyi once verir ve tek yanit en fazla 2000 kayittir; yogun
+    gunlerde (donem sonu raporlari) eski kayitlar kesilebilir, ama tarama sik calistigi icin yeni bildirimler
+    yakalanir (ilk geriye yukleme icin sinirlama NOTLARDA)."""
+    govde = {"fromDate": gun.isoformat(), "toDate": gun.isoformat(), "mkkMemberOidList": [],
+             "inactiveMkkMemberOidList": [], "disclosureClass": "", "subjectList": [], "isLate": "",
+             "term": "", "year": "", "fromSrc": False, "srcCategory": "", "discIndex": []}
+    r = ist.istek("POST", KAP_FON_LISTE_URL, json=govde,
+                  headers={"Content-Type": "application/json", "Accept": "application/json"})
+    try:
+        veri = r.json()
+    except Exception as e:
+        raise KapHata(f"fon listesi JSON degil: {e}")
+    if not isinstance(veri, list):
+        raise KapHata(f"beklenmeyen fon liste yaniti: {str(veri)[:120]}")
+    if len(veri) >= KAP_UST_SINIR:
+        print(f"[kap_risk_tarama] UYARI: fon listesi {gun} icin {len(veri)} kayit (tavan) - bu gunun eski bildirimleri eksik olabilir.")
+    return veri
+
+
+def fon_bildirimlerini_topla(ist: Istemci, gun: int, bugun: datetime.date, mevcut: set) -> list:
+    """Son `gun` gunun fon bildirimleri -> arsivde olmayan, ilgili (tasfiye/karsilik/yan hesap adayi) bildirimler;
+    metni gerekenlerin metni cekilir. KAP fon ucu hata verirse HISSE sonuclari etkilenmez (cagiran yakalar)."""
+    yeni, toplam = [], 0
+    for i in range(max(1, gun)):
+        d = bugun - datetime.timedelta(days=i)
+        for x in fon_liste_cek(ist, d):
+            toplam += 1
+            try:
+                b = normallestir_fon(x)
+            except Exception:
+                continue
+            if b["id"] in mevcut or not b["gonderen_kodlar"] or not kap_risk.ilgili_mi(b):
+                continue
+            yeni.append(b)
+            mevcut.add(b["id"])
+    print(f"[kap_risk_tarama] fon listesi: {toplam} bildirim tarandi, {len(yeni)} yeni ilgili fon bildirimi.")
+    for b in yeni:
+        if kap_risk.metin_gerekli_mi(b):
+            try:
+                b["metin"] = metin_cek(ist, b["id"])
+            except KapHata as e:
+                print(f"[kap_risk_tarama] fon {b['id']} metni alinamadi ({e}); basliktan siniflandirilacak.")
+    return yeni
+
+
 def detay_metni(html: str) -> str:
     """/tr/Bildirim/{no} sayfasindan bildirim metni. Metin sayfaya kacisli HTML (\\u003c ...) gomulu."""
     t = (html or "").replace("\\u003c", "<").replace("\\u003e", ">").replace('\\"', '"') \
@@ -211,6 +275,10 @@ def calistir(args) -> int:
         gun = args.gun or (ARTIMLI_GUN if mevcut else ILK_YUKLEME_GUN)
         print(f"[kap_risk_tarama] arsiv: {len(mevcut)} bildirim; son {gun} gun cekilecek.")
         yeni = bildirimleri_topla(ist, gun, bugun, mevcut)
+        try:
+            yeni += fon_bildirimlerini_topla(ist, getattr(args, "fon_gun", None) or FON_GUN, bugun, mevcut)
+        except KapHata as e:
+            print(f"[kap_risk_tarama] FON bildirimleri alinamadi ({e}) - fon riskleri arsivdeki kayitlardan hesaplanir.")
         if yaz:
             for b in yeni:
                 db.kap_risk_bildirim_ekle(b)
@@ -251,6 +319,8 @@ def main(argv=None):
     ap.add_argument("--cikti", default="", help="sonucu JSON dosyasina yaz")
     ap.add_argument("--gun", type=int, default=0, help="kac gun geriye cekilecek (0 = otomatik)")
     ap.add_argument("--bekle", type=float, default=1.0, help="istekler arasi bekleme (sn)")
+    ap.add_argument("--fon-gun", type=int, default=0, dest="fon_gun",
+                    help=f"fon bildirimleri icin kac gun geriye (0 = {FON_GUN}); ilk geriye yukleme icin {FON_ILK_YUKLEME_GUN}")
     return calistir(ap.parse_args(argv))
 
 

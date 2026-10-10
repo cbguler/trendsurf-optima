@@ -160,8 +160,21 @@ def uyari_katmanini_uygula(df):
                         df.loc[_m, "Piyasa_Tedbiri"] = _sin
                         df.loc[_m, "Tedbir_Aciklama"] = (
                             "KAP bildirimi: " + _kap.loc[_m, "KAP_Aciklama"] + ". " + _not)
-                        _sk = pd.to_numeric(df.loc[_m, "Optima_Skor"], errors="coerce")
-                        df.loc[_m, "Optima_Skor"] = _sk * (0.0 if _sev == SEVIYE_AGIR else 0.5)
+                        if _sev == SEVIYE_AGIR:
+                            # v2.0.7.399: TEFAS'ta CSV skoru bos (sayfa hesaplar) -> NaN x 0 = NaN olurdu; acikca 0
+                            df.loc[_m, "Optima_Skor"] = 0.0
+                        else:
+                            _sk = pd.to_numeric(df.loc[_m, "Optima_Skor"], errors="coerce")
+                            # v2.0.7.399: bos skorlu TEFAS fonu icin once ayni formulle skoru uret, sonra x0,5
+                            _eksik = _sk.isna() & (df.loc[_m, "Kategori"].astype(str).str.upper() == "TEFAS") \
+                                     & (pd.to_numeric(df.loc[_m, "Son_Fiyat"], errors="coerce").fillna(0) > 0)
+                            if _eksik.any():
+                                from scoring import optima_score as _os_kap
+                                _sk[_eksik] = [
+                                    _os_kap(float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
+                                            vol=float(r.get("Vol", 30) or 30))
+                                    for r in df.loc[_m].loc[_eksik].to_dict("records")]
+                            df.loc[_m, "Optima_Skor"] = (_sk * 0.5).round(1)
                 print(f"[kap-risk] {int(_kap_var.sum())} hisse KAP risk uyarisi kapsaminda "
                       f"({int((_kap['KAP_Seviye'] == SEVIYE_AGIR).sum())} agir).")
     except Exception as _kr_err:

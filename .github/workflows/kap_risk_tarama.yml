@@ -17,6 +17,11 @@ name: KAP Risk Tarama (Tum BIST)
 
 on:
   workflow_dispatch:
+    inputs:
+      fon_gun:
+        description: "Fon bildirimleri icin kac gun geriye taransin (bos = 4; ilk kurulumda 60 yazin)"
+        type: string
+        default: ""
 
 concurrency:
   group: kap-risk-tarama
@@ -43,9 +48,10 @@ jobs:
           pip install requests psycopg2-binary pandas --quiet
 
       - name: KAP risk taramasi
-        run: python kap_risk_tarama.py
+        run: python kap_risk_tarama.py ${FON_GUN:+--fon-gun "$FON_GUN"}
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
           PYTHONUNBUFFERED: "1"
+          FON_GUN: ${{ github.event.inputs.fon_gun }}
           # v2.0.7.398: pay geri alimi skor dusurme anahtari (repo Variable; bos/tanimsiz = KAPALI)
           KAP_GERI_ALIM_SKOR_DUSUR: ${{ vars.KAP_GERI_ALIM_SKOR_DUSUR }}
