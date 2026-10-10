@@ -7809,6 +7809,17 @@ elif page in CAT:
     df_cat = df_cat.sort_values(["_fiyatli","Optima_Skor"], ascending=[False,False])
     df_cat = df_cat.drop(columns=["_fiyatli"])
 
+    # v2.0.7.389: canlidoviz erisilemediginde madenlerin teknik gostergeleri kendi Truncgil TL arsivimizden
+    # hesaplanir; kaynak degisimi gizlenmez.
+    if cat_code == "MADEN":
+        try:
+            _arsiv_k = _ld_status().get("maden_arsiv_kullanilan") or []
+        except Exception:
+            _arsiv_k = []
+        if _arsiv_k:
+            st.caption(f"Geçmiş veri kaynağı geçici olarak (canlidoviz erişilemedi) kendi Truncgil TL kayıtlarımızdır: "
+                       f"{len(_arsiv_k)} varlık için RSI / 1A getiri / skor bu kayıtlardan hesaplandı.")
+
     # Özet metrikler
     m1,m2,m3,m4=st.columns(4)
     fiyatli=df_cat[df_cat["Son_Fiyat"]>0]

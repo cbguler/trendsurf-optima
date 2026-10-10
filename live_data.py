@@ -357,7 +357,49 @@ def _hacim_dd_duzeltmesi_maden(close_series, volume_series, ret1m):
     return score_adj, dd_adj
 
 
+_BP_TO_MADEN = {v: k for k, v in _MADEN_TO_BP.items()}
+# v2.0.7.389: canlidoviz erisilemedigi icin kendi arsivimizden (maden_arsiv.py) hesaplanan varliklar
+# (Admin / durum raporunda gosterilir; kaynak degisimi gizlenmez).
+_MADEN_ARSIV_KULLANILAN = set()
+
+
+def _maden_arsiv_ozeti(bp_code: str) -> tuple:
+    """canlidoviz basarisiz olunca: kendi Truncgil TL arsivimizden (son, rsi, ret1m, skor).
+
+    Yeterli birikim (>=22 nokta ve ~30 gun oncesi nokta) yoksa ya da arsivin son noktasi eskiyse
+    (None, 50.0, 0.0, None) -> 'veri yok'. Iki kaynak ASLA tek seride birlestirilmez.
+    """
+    bos = (None, 50.0, 0.0, None)
+    try:
+        import maden_arsiv as _ma
+        ticker = _BP_TO_MADEN.get(bp_code)
+        if ticker not in _ma.ARSIV_KEYLERI:
+            return bos          # kapsam disi (ornegin Truncgil'in 9 fiyat-yalniz turu zaten buraya gelmez)
+        oz = _ma.ozet(_ma.seri(_ma.yukle(), ticker))
+        if oz is None:
+            print(f"  [live_data] MADEN arsiv yetersiz ({ticker}) - veri yok")
+            return bos
+        if _ma.son_fiyat(_ma.yukle(), ticker) is None:
+            print(f"  [live_data] MADEN arsiv ESKI ({ticker}, son nokta {oz['son_tarih']}) - veri yok")
+            return bos
+        _MADEN_ARSIV_KULLANILAN.add(ticker)
+        print(f"  [live_data] MADEN canlidoviz YOK -> kendi TL arsivi ({ticker}, {oz['n']} nokta, son {oz['son_tarih']})")
+        return (oz["son"], oz["rsi"], oz["ret1m"], oz["skor"])
+    except Exception as e:
+        print(f"  [live_data] MADEN arsiv hatasi ({bp_code}): {type(e).__name__}: {e}")
+        return bos
+
+
 def _fetch_maden_history_summary(bp_code: str) -> tuple:
+    """canlidoviz (borsapy) gecmisi; erisilemezse kendi TL arsivimiz (v2.0.7.389). Ikisi birlestirilmez."""
+    sonuc = _fetch_maden_history_canlidoviz(bp_code)
+    if sonuc[0] is not None:
+        _MADEN_ARSIV_KULLANILAN.discard(_BP_TO_MADEN.get(bp_code))
+        return sonuc
+    return _maden_arsiv_ozeti(bp_code)
+
+
+def _fetch_maden_history_canlidoviz(bp_code: str) -> tuple:
     """Bir madenin 1 aylik tarihcesinden anlik fiyat, RSI, Ret1M, tam skor dondur.
 
     Returns: (son_fiyat, rsi, ret1m, full_skor) - hata olursa (None, 50.0, 0.0, None)
@@ -419,9 +461,21 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
             if not bp_code:
                 continue
             son, rsi, ret1m, full_skor = _fetch_maden_history_summary(bp_code)
-            # Fiyat yoksa satiri ekleme (anlamsiz olur)
+            _veri_yok = False
             if son is None or son <= 0:
-                continue
+                # v2.0.7.389: canlidoviz da arsiv ozeti de yok. Arsivde yeterince taze bir Truncgil TL
+                # fiyati varsa satir YINE eklenir ama teknik gosterge uretilmez ("veri yok", skor bos);
+                # fiyat bile yoksa satiri ekleme (anlamsiz olur). Capraz fiyat/uydurma yok.
+                try:
+                    import maden_arsiv as _ma
+                    _sf = _ma.son_fiyat(_ma.yukle(), ticker)
+                except Exception:
+                    _sf = None
+                if not _sf:
+                    continue
+                son, rsi, ret1m, full_skor = _sf[1], 50.0, 0.0, None
+                _veri_yok = True
+                print(f"  [live_data] MADEN {ticker}: yalniz Truncgil arsiv fiyati ({_sf[0]}), teknik veri yok")
             row = {
                 "Ticker":     ticker,
                 "Ad":         ad,
@@ -455,6 +509,8 @@ def extend_maden_universe(df: pd.DataFrame) -> pd.DataFrame:
                 # kullanilir - boylece bu 5 sikke de Detay sayfasiyla AYNI
                 # sayiyi gosterir. Yoksa (nadir) NaN kalir, eski davranis.
                 "Optima_Skor": float(full_skor) if full_skor is not None else float("nan"),
+                # v2.0.7.389: bayrak ACIKCA yazilir (eksik sutun ""/0.0 ile dolar ve "veri var" sanilirdi)
+                "_gecmis_veri_yok": bool(_veri_yok),
             }
             yeni_satirlar.append(row)
 
@@ -1017,7 +1073,32 @@ def get_maden_history(ticker: str, period: str = "1mo") -> pd.DataFrame:
         return pd.DataFrame()
     try:
         h = _borsapy_zaman_asimili(lambda: bp.FX(bp_code).history(period=period, interval="1d"), timeout=10)
-        return _normalize_ohlc(h)
+        out = _normalize_ohlc(h)
+        if not out.empty:
+            return out
+    except Exception:
+        pass
+    return _maden_arsiv_grafik(ticker.upper(), period)
+
+
+def _maden_arsiv_grafik(ticker: str, period: str) -> pd.DataFrame:
+    """v2.0.7.389: canlidoviz erisilemezse kendi Truncgil TL arsivimizden grafik verisi.
+
+    Arsivde gunde TEK fiyat var (gercek acilis/yuksek/dusuk degil): Open=High=Low=Close ayni fiyat.
+    Bos donerse cagiran 'veri yok' gosterir. Kaynaklar birlestirilmez."""
+    try:
+        import maden_arsiv as _ma
+        s = _ma.seri(_ma.yukle(), ticker)
+        if s.empty:
+            return pd.DataFrame()
+        _GUN = {"1mo": 31, "3mo": 92, "6mo": 183, "1y": 366, "5y": 1827}
+        s = s[s.index >= s.index[-1] - pd.Timedelta(days=_GUN.get(period, 31))]
+        if len(s) < 2:
+            return pd.DataFrame()
+        out = pd.DataFrame({"Open": s, "High": s, "Low": s, "Close": s})
+        out.attrs["kaynak"] = "Truncgil TL arsivi (gunluk tek fiyat)"
+        _MADEN_ARSIV_KULLANILAN.add(ticker)
+        return out
     except Exception:
         return pd.DataFrame()
 
@@ -1067,5 +1148,6 @@ def status_summary() -> dict:
         "borsapy_hata":       BORSAPY_ERROR,
         "doviz_ticker_sayi":  len(_DOVIZ_TO_BP),
         "maden_ticker_sayi":  len(_MADEN_TO_BP),
+        "maden_arsiv_kullanilan": sorted(_MADEN_ARSIV_KULLANILAN),
         "haric_tutulan_emtia": sorted(EXCLUDED_USD_COMMODITIES),
     }

@@ -1776,6 +1776,21 @@ def build():
     except Exception as _bp_err:
         print(f"  [Bigpara] Atlanıyor: {_bp_err}")
 
+    # v2.0.7.389 (Bahri, 10 Ekim 2026 - canlidoviz kesintisine dayaniklilik): Truncgil'in bugunku TL satis fiyati
+    # kendi arsivimize (maden_tl_gecmis.json) eklenir. Yalniz canlidoviz gecmisi olan 8 varlik; Truncgil'in diger 9
+    # fiyat-yalniz turu (18 Temmuz 2026 karari) arsive GIRMEZ. Capraz fiyat yok; alinamazsa nokta eklenmez.
+    _arsiv_ozetleri = {}
+    try:
+        import maden_arsiv as _ma
+        _ma.gece_guncelle()
+        _a = _ma.yukle()
+        for _t in _ma.ARSIV_KEYLERI:
+            _oz = _ma.ozet(_ma.seri(_a, _t))
+            if _oz:
+                _arsiv_ozetleri[_t] = _oz
+    except Exception as _ma_err:
+        print(f"  [maden_arsiv] Atlaniyor: {_ma_err}")
+
     for t, yf_s in MADEN:
         p, rsi, ret, vol_v = 0.0, 50.0, 0.0, 25.0
         _gecmis_veri_var = False
@@ -1804,6 +1819,13 @@ def build():
                     print(f"    [cache] {t} maden fiyati CSV'den alindi.")
             except Exception:
                 pass
+
+        # v2.0.7.389: teknik gostergeler YALNIZ kendi Truncgil TL arsivimizden (yeterli birikim varsa); aksi halde
+        # "veri yok". Uygulamada canlidoviz erisilebilirse o (daha uzun gecmis) bunun uzerine yazar.
+        if t in _arsiv_ozetleri:
+            _oz = _arsiv_ozetleri[t]
+            rsi, ret, vol_v = _oz["rsi"], _oz["ret1m"], _oz["vol"]
+            _gecmis_veri_var = True
 
         all_rows.append({"Ticker": t, "Ad": MADEN_ADLAR.get(t, t),
                          "Kategori": "MADEN", "Son_Fiyat": p,
