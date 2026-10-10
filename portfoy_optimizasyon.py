@@ -158,6 +158,10 @@ def optimize_portfolio(df_uni: pd.DataFrame, budget: float, risk_weights: dict,
             df_c, _uyari = _tefas_tazelik_suz(df_c)
             if _uyari:
                 sonuc["uyarilar"].append(_uyari)
+            # v2.0.7.392: genc fon (~1 yildan kisa gecmis) icin AL sinyali uretilmedigi icin otomatik portfoy onerisine alinmaz
+            # (izleme listesi modunda kullanicinin secimi korunur).
+            if not watchlist_mode and "Veri_Sinirli" in df_c.columns:
+                df_c = df_c[~df_c["Veri_Sinirli"].fillna(False).astype(bool)]
         else:
             df_c = df_uni[(df_uni["Kategori"] == cat) & (df_uni["Son_Fiyat"] > 0)].copy()
             # v2.0.7.378: 260 islem gunu altindaki (SINIRLI VERI) hisse icin AL sinyali uretilmedigi

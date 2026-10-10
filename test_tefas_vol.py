@@ -121,7 +121,8 @@ def test_skora_etkisi_belgelenmis():
 
 def test_worker_yedek_yolu_vol_kolonlarini_tasir():
     src = open("worker.py", encoding="utf-8").read()
-    ok('"Getiri_Tarihi", "Vol", "Vol_Kaynak"]' in src, "gercek getiri hesaplanamazsa onceki CSV'nin Vol/Vol_Kaynak degerleri korunur")
+    satir = next(l for l in src.splitlines() if l.strip().startswith("_kol = [") and "Getiri_Tarihi" in l)
+    ok('"Vol"' in satir and '"Vol_Kaynak"' in satir, "gercek getiri hesaplanamazsa onceki CSV'nin Vol/Vol_Kaynak degerleri korunur")
 
 
 if __name__ == "__main__":

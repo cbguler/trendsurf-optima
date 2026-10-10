@@ -1362,7 +1362,7 @@ def build():
                     _prev = pd.read_csv(CSV_PATH, on_bad_lines="skip")
                     _prev = (_prev[_prev["Kategori"] == "TEFAS"]
                              .drop_duplicates(subset=["Ticker"], keep="last").set_index("Ticker"))
-                    _kol = ["Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y", "RSI", "Getiri_Tarihi", "Vol", "Vol_Kaynak"]
+                    _kol = ["Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y", "RSI", "Getiri_Tarihi", "Vol", "Vol_Kaynak", "Genc_Fon"]
                     for _c in _kol:
                         if _c in _prev.columns:
                             df_t[_c] = df_t["Ticker"].map(_prev[_c])

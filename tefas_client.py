@@ -657,6 +657,14 @@ VOL_KAYNAK_GERCEK = "GERCEK"
 VOL_KAYNAK_RISK = "RISK_SINIFI"
 VOL_MIN_GETIRI = 30          # en az bu kadar gunluk getiri (~6 hafta islem gunu); ~95 takvim gunluk pencere ~63 verir
 VOL_YILLIK_GUN = 252
+
+# v2.0.7.392 (Bahri, 10 Ekim 2026 - genc fon kurali): ~1 yildan genc TEFAS fonu "genc" sayilir. Olcut: kalici fiyat
+# arsivinde, son NAV tarihinden 365 gun once (+-10 gun) hic fiyati olmayan, ama bugun fiyati olan fon. (CSV'deki Ret1Y
+# bos olan fonlarla ayni kume; canli CSV'de 95 fon, 26 Mayis Excel'inde 1 yillik getirisi bos olanlarla 94'u ortusuyor.)
+# GUVENCE: arsive ulasilamadiysa ya da arsiv bu tarihte fonlarin yarisindan azini kapsiyorsa "genc" kararinin
+# dayanagi yoktur -> Genc_Fon BOS (bilinmiyor) birakilir; kimse yanlislikla genc sayilmaz.
+GENC_FON_KOLONU = "Genc_Fon"
+GENC_FON_MIN_KAPSAM = 0.5
 # Veri kalitesi (canli TEFAS verisinde olculdu, 2054 fonun 52'sinde): TEFAS bazen yer tutucu fiyat yayinliyor
 # (55,47 -> 0,01 -> 48,55 gibi; 0,0 / 1,0) ve tek gunluk +%485.000 'getiri' volatiliteyi milyonlara cikariyor.
 # Bir fon turunde gunluk +-%50'yi asan getiri fiyat HATASIDIR (gercek bir gunluk getiri degil). Boyle bir gunu
@@ -685,6 +693,24 @@ def gercek_volatilite(fiyat_serisi, min_getiri: int = VOL_MIN_GETIRI):
         return None
 
 
+def genc_fon_isaretle(fiyat_simdi, eski_fiyat, min_kapsam: float = GENC_FON_MIN_KAPSAM):
+    """Her fon icin True (genc: bugun fiyati var, ~1 yil oncesinde yok) / False (1 yil oncesi fiyati var) /
+    None (bugun fiyati yok -> bilinmiyor). Arsiv bu tarihte fiyatli fonlarin `min_kapsam` oranindan azini
+    kapsiyorsa (arsiv eksik/ulasilamadi) tum seri icin None doner: o durumda 'genc' demenin dayanagi yoktur."""
+    simdi = pd.to_numeric(fiyat_simdi, errors="coerce")
+    eski = pd.to_numeric(eski_fiyat, errors="coerce")
+    fiyatli = simdi > 0
+    if int(fiyatli.sum()) == 0:
+        return None
+    kapsam = float(((eski > 0) & fiyatli).sum()) / float(fiyatli.sum())
+    if kapsam < float(min_kapsam):
+        return None
+    out = pd.Series([None] * len(simdi), index=simdi.index, dtype=object)
+    out[fiyatli & (eski > 0)] = False
+    out[fiyatli & ~(eski > 0)] = True
+    return out
+
+
 def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=print):
     """TEFAS satirlarinin Ret1M/Ret3M/RSI degerlerini GERCEK gunluk fiyatlardan
     yeniden hesaplar (pytefas toplu sorgu, fund_code VERILMEDEN), Ret6M/Ret1Y/Ret3Y/
@@ -709,6 +735,7 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
         df_t[GETIRI_TARIHI_KOLONU] = None   # onceki degerler gecerli sayilmaz: yeniden dogrulanacak
     df_t[NAV_DURUMU_KOLONU] = ""            # v2.0.7.371: her turda yeniden belirlenir
     df_t[VOL_KAYNAK_KOLONU] = VOL_KAYNAK_RISK   # v2.0.7.391: gercek volatilite hesaplananlar asagida GERCEK olur
+    df_t[GENC_FON_KOLONU] = None             # v2.0.7.392: arsiv yeterliyse asagida True/False olur, aksi halde BOS (bilinmiyor)
 
     parcalar, son_fiyat_tarihi = [], {}
     for kind in ["YAT", "EMK", "BYF"]:
@@ -788,6 +815,13 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
                 getiri = ((fiyat_simdi / eski - 1) * 100).round(2)
                 getiri = getiri.where((eski > 0) & (fiyat_simdi > 0))
                 df_t[kol_adi] = getiri          # hesaplanamayanlar (fon o tarihte yoktu) BOS
+                if kol_adi == "Ret1Y":
+                    genc = genc_fon_isaretle(fiyat_simdi, eski)
+                    if genc is not None:
+                        df_t[GENC_FON_KOLONU] = genc
+                        log(f"[getiri] Genc fon (1 yildan kisa gecmis): {int((genc == True).sum())} fon.")
+                    else:
+                        log("[getiri] Genc fon kurali atlandi: arsiv 1 yil oncesini yeterince kapsamiyor (kimse genc sayilmadi).")
                 log(f"[getiri] {kol_adi}: {int(getiri.notna().sum())} fon icin arsivden hesaplandi.")
                 ozet["uzun_vade"] = True
         except Exception as e:
