@@ -1684,7 +1684,8 @@ def build():
         _row_k = {
             "Ticker": t, "Ad": KRIPTO_ADLAR.get(t, t),
             "Kategori": "KRIPTO", "Son_Fiyat": p,
-            "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
+            # v2.0.7.393: YF_Symbol bos - fiyat BtcTurk TRY cifti, Yahoo (USD) sembolu kullanilmiyor/yaniltici
+            "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": "",
         }
         if full_skor is not None:
             _row_k["Optima_Skor"] = full_skor
@@ -1818,7 +1819,8 @@ def build():
 
         all_rows.append({"Ticker": t, "Ad": MADEN_ADLAR.get(t, t),
                          "Kategori": "MADEN", "Son_Fiyat": p,
-                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": yf_s,
+                         # v2.0.7.393: YF_Symbol bos - fiyat Truncgil/canlidoviz TL, ons vadeli (GC=F) sembolu kullanilmiyor/yaniltici
+                         "RSI": rsi, "Ret1M": ret, "Vol": vol_v, "YF_Symbol": "",
                          # v2.0.7.69 - bkz. DOVIZ dongusundeki ayni bayragin
                          # yorumu: Bigpara'dan gelen Gram Altin/Gumus gibi
                          # varliklar da SIRF fiyat var diye "veri var"
