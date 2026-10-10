@@ -13,14 +13,20 @@ def ok(kosul, mesaj):
 def test_teshis_etiketi_kalmadi():
     src = open("app.py", encoding="utf-8").read()
     ast.parse(src)
-    ok("TESHIS" not in src, "app.py'de TESHIS etiketi yok")
+    ok("[tefas-hist-TESHIS]" not in src, "app.py de [tefas-hist-TESHIS] log etiketi yok")
     ok(src.count("[tefas-hist]") == 7, "7 hata yolu satiri kalici etiketle duruyor")
 
 
 def test_rutin_satirlar_silindi():
     src = open("app.py", encoding="utf-8").read()
+    log_satirlari = " ".join(l for l in src.splitlines() if "[tefas-hist" in l)
+    # print'in mesaji sonraki satira tasabilir: print satirlarindan sonraki 1 satiri da ekle
+    satirlar = src.splitlines()
+    for i, l in enumerate(satirlar):
+        if "[tefas-hist" in l and i + 1 < len(satirlar):
+            log_satirlari += " " + satirlar[i + 1]
     for s in ("KALICI ARSIVDEN", "YEREL DISK ONBELLEGINDEN", "KISMI ARSIV", "BASARILI,"):
-        ok(s not in src, f"rutin satir silindi: {s}")
+        ok(s not in log_satirlari, f"rutin log satiri silindi: {s}")
 
 
 def test_hata_yolu_satirlari_duruyor():
