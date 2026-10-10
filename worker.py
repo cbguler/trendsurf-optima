@@ -1751,25 +1751,14 @@ def build():
     # hesaplanir (live_data.refresh_fx_maden_kripto). Kaynak yoksa "veri yok" (_gecmis_veri_yok), uydurma yok.
     # Not: v2.0.7.387'deki `yf` import duzeltmesi bu blokla birlikte gereksiz kaldi (blok silindi).
 
-    # USDTRY kuru — döviz bölümünden al, yoksa yfinance'den çek
-    try:
-        usdtry_rows = [r for r in all_rows if r.get("Ticker") == "USDTRY"]
-        usdtry_rate = float(usdtry_rows[-1]["Son_Fiyat"]) if usdtry_rows else 0.0
-    except Exception:
-        usdtry_rate = 0.0
-    if usdtry_rate <= 0:
-        try:
-            import yfinance as _yf2
-            _s = _yf2.download("USDTRY=X", period="5d", progress=False, auto_adjust=True)
-            usdtry_rate = float(_s["Close"].dropna().iloc[-1]) if not _s.empty else 38.0
-        except Exception:
-            usdtry_rate = 38.0
+    # v2.0.7.390: USDTRY kuru burada artik GEREKMEZ - Bigpara'nin kripto USD x kur yolu kaldirildi (kripto yalniz
+    # BtcTurk TL paritesinden gelir). Maden fiyati zaten dogrudan TL.
 
     # Bigpara'dan maden TL fiyatlarını çek (birincil kaynak)
     bp_maden = {}
     try:
         from bigpara_client import fetch_all_bigpara
-        bp_maden = fetch_all_bigpara(usdtry=usdtry_rate)
+        bp_maden = fetch_all_bigpara()
         bp_ok = sum(1 for k in ["ALTIN_TRY","GUMUS_TRY","PLATIN_TRY"] if bp_maden.get(k, 0) > 0)
         if bp_ok:
             print(f"  [Bigpara] {bp_ok} maden fiyati Bigpara'dan alindi.")

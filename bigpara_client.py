@@ -1,7 +1,11 @@
 """
 bigpara_client.py — TrendSurf Optima
-Bigpara.com'dan maden ve kripto TL bazlı fiyatları çeker.
-Yedek kaynak olarak worker.py tarafından kullanılır.
+Truncgil (birincil) + Bigpara/doviz.com (yedek) ile maden TL fiyatlarını çeker.
+worker.py tarafından kullanılır.
+
+v2.0.7.390 (Bahri, 10 Ekim 2026: "kur çevrimi politikamıza aykırı, kesinlikle kalkmalı"): KRIPTO bölümü
+(Bigpara USD fiyatı x USDTRY) TAMAMEN kaldırıldı. Kripto fiyatı yalnız BtcTurk TL paritesinden gelir
+(worker.py + live_data, borsapy). Bu modülde USD -> TL çevrimi YOK.
 """
 
 import os, json, time, re
@@ -32,23 +36,6 @@ HEADERS = {
 MADEN_PAGES = {
     "ALTIN_TRY":    "https://bigpara.hurriyet.com.tr/altin/gram-altin-fiyati/",
     "GUMUS_TRY":    "https://bigpara.hurriyet.com.tr/altin/gumus-fiyatlari/",
-}
-
-# Kripto sayfaları
-KRIPTO_PAGES = {
-    "BTC":  "https://bigpara.hurriyet.com.tr/kripto-para/bitcoin-fiyati/",
-    "ETH":  "https://bigpara.hurriyet.com.tr/kripto-para/ethereum-fiyati/",
-    "BNB":  "https://bigpara.hurriyet.com.tr/kripto-para/bnb-fiyati/",
-    "SOL":  "https://bigpara.hurriyet.com.tr/kripto-para/solana-fiyati/",
-    "XRP":  "https://bigpara.hurriyet.com.tr/kripto-para/xrp-fiyati/",
-    "ADA":  "https://bigpara.hurriyet.com.tr/kripto-para/cardano-fiyati/",
-    "DOGE": "https://bigpara.hurriyet.com.tr/kripto-para/dogecoin-fiyati/",
-    "AVAX": "https://bigpara.hurriyet.com.tr/kripto-para/avalanche-fiyati/",
-    "LINK": "https://bigpara.hurriyet.com.tr/kripto-para/chainlink-fiyati/",
-    "LTC":  "https://bigpara.hurriyet.com.tr/kripto-para/litecoin-fiyati/",
-    "DOT":  "https://bigpara.hurriyet.com.tr/kripto-para/polkadot-fiyati/",
-    "ATOM": "https://bigpara.hurriyet.com.tr/kripto-para/cosmos-fiyati/",
-    "TRX":  "https://bigpara.hurriyet.com.tr/kripto-para/tron-fiyati/",
 }
 
 # ── Cache ──────────────────────────────────────────────────────────────────────
@@ -194,85 +181,6 @@ def _fetch_maden_bigpara() -> dict:
         val = _fetch_price_from_page(MADEN_PAGES["GUMUS_TRY"], min_val=50.0)
     if 50 < val < 1000:
         result["GUMUS_TRY"] = round(val, 4)
-
-    return result
-
-# ── Kripto fiyatları ──────────────────────────────────────────────────────────
-
-def _fetch_kripto_bigpara(usdtry: float = 38.0) -> dict:
-    """
-    Bigpara kripto sayfalarından TL fiyatları çeker.
-    Eğer sayfa USD fiyatı veriyorsa USDTRY ile çarpar.
-    """
-    result = {}
-
-    # BTC: milyonlar mertebesinde TL fiyatı
-    try:
-        r = requests.get(KRIPTO_PAGES["BTC"], headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            nums = re.findall(r'(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{2,4})?)', r.text)
-            for n in nums:
-                val = _safe_float(n)
-                if 1_000_000 < val < 20_000_000:  # BTC TL aralığı
-                    result["BTC"] = round(val, 2)
-                    break
-            if "BTC" not in result:
-                # USD fiyatı × USDTRY dene
-                for n in nums:
-                    val = _safe_float(n)
-                    if 50_000 < val < 500_000:  # BTC USD aralığı
-                        result["BTC"] = round(val * usdtry, 2)
-                        break
-    except Exception:
-        pass
-
-    # ETH
-    try:
-        r = requests.get(KRIPTO_PAGES["ETH"], headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            nums = re.findall(r'(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{2,4})?)', r.text)
-            for n in nums:
-                val = _safe_float(n)
-                if 50_000 < val < 5_000_000:  # ETH TL aralığı
-                    result["ETH"] = round(val, 2)
-                    break
-                elif 1_000 < val < 20_000:  # USD aralığı
-                    result["ETH"] = round(val * usdtry, 2)
-                    break
-    except Exception:
-        pass
-
-    # Diğer kriptolar (daha küçük değerler)
-    small_cryptos = {
-        "BNB": (500, 2000),   # USD aralığı
-        "SOL": (100, 1000),
-        "XRP": (0.1, 20),
-        "ADA": (0.1, 5),
-        "DOGE": (0.05, 2),
-        "AVAX": (5, 200),
-        "LINK": (5, 200),
-        "LTC": (50, 500),
-        "DOT": (2, 100),
-        "ATOM": (2, 100),
-        "TRX": (0.01, 1),
-    }
-    for ticker, (usd_min, usd_max) in small_cryptos.items():
-        if ticker not in KRIPTO_PAGES:
-            continue
-        try:
-            r = requests.get(KRIPTO_PAGES[ticker], headers=HEADERS, timeout=8)
-            if r.status_code == 200:
-                nums = re.findall(r'(\d+(?:[.,]\d+)?)', r.text)
-                for n in nums:
-                    val = _safe_float(n)
-                    if usd_min < val < usd_max:
-                        result[ticker] = round(val * usdtry, 4)
-                        break
-                    elif usd_min * usdtry < val < usd_max * usdtry:
-                        result[ticker] = round(val, 4)
-                        break
-        except Exception:
-            pass
 
     return result
 
@@ -443,34 +351,19 @@ def fetch_truncgil_doviz() -> dict:
         return {}
 
 
-def fetch_truncgil_usdtry() -> float:
-    """Truncgil'den USD/TRY satis kurunu ceker (kripto TL cevrimi vb. icin
-    gerektiginde kullanilabilir, yfinance'e alternatif/yedek)."""
-    try:
-        r = requests.get(TRUNCGIL_URL, headers=HEADERS, timeout=10)
-        if r.status_code != 200:
-            return 0.0
-        data = r.json()
-        if "USD" in data:
-            return _safe_float_tr(data["USD"].get("Selling"))
-    except Exception:
-        pass
-    return 0.0
-
-
-def fetch_all_bigpara(force_refresh: bool = False, usdtry: float = 38.0) -> dict:
+def fetch_all_bigpara(force_refresh: bool = False) -> dict:
     """
     Truncgil (birincil, tum 4 maden tek istekte) + Bigpara/doviz.com
-    (yedek, sadece Truncgil'in getiremedigi icin) + kripto TL fiyatlarini
-    ceker.
-    Returns: {"ALTIN_TRY": 6250.5, "BTC": 3800000.0, ...}
+    (yedek, sadece Truncgil'in getiremedigi icin) maden TL fiyatlarini ceker.
+    Kripto BURADA YOK (v2.0.7.390): BtcTurk TL paritesi worker/live_data'dan gelir.
+    Returns: {"ALTIN_TRY": 6250.5, "GUMUS_TRY": 96.37, ...}
     """
     if not force_refresh:
         cached = _read_cache()
         if cached:
             return cached
 
-    print("  [Truncgil/Bigpara] Maden ve kripto TL fiyatlari cekiliyor...")
+    print("  [Truncgil/Bigpara] Maden TL fiyatlari cekiliyor...")
     result = {}
 
     truncgil_maden = fetch_truncgil_maden()
@@ -494,16 +387,13 @@ def fetch_all_bigpara(force_refresh: bool = False, usdtry: float = 38.0) -> dict
                 result[t] = platin[t]
                 print(f"  [doviz.com] {t}: yedek kaynaktan alindi")
 
-    kripto = _fetch_kripto_bigpara(usdtry=usdtry)
-    result.update(kripto)
-
     ok = len([v for k, v in result.items() if isinstance(v, float) and v > 0])
     print(f"  [Bigpara] {ok} varlik fiyati alindi: {list(result.keys())}")
 
     _write_cache(result)
     return result
 
-def enrich_worker_maden(all_rows: list, bigpara_data: dict, usdtry: float) -> list:
+def enrich_worker_maden(all_rows: list, bigpara_data: dict) -> list:
     """
     worker.py'deki maden satırlarını Bigpara TL fiyatlarıyla günceller.
     Sadece yfinance'den fiyat gelemediyse (Son_Fiyat == 0) devreye girer.
@@ -522,35 +412,8 @@ def enrich_worker_maden(all_rows: list, bigpara_data: dict, usdtry: float) -> li
             print(f"    [Bigpara] {ticker}: {bp_p:.4f} TL")
     return all_rows
 
-def enrich_worker_kripto(all_rows: list, bigpara_data: dict, usdtry: float) -> list:
-    """
-    worker.py'deki kripto satırlarını Bigpara TL fiyatlarıyla günceller.
-    Sadece yfinance'den fiyat gelemediyse devreye girer.
-    """
-    for r in all_rows:
-        if r.get("Kategori") != "KRIPTO":
-            continue
-        ticker = r.get("Ticker", "")
-        cur_p  = float(r.get("Son_Fiyat", 0))
-        if cur_p > 0:
-            continue
-        bp_p = bigpara_data.get(ticker, 0.0)
-        if isinstance(bp_p, (int, float)) and bp_p > 0:
-            r["Son_Fiyat"] = bp_p
-            r["_bigpara"]  = True
-            print(f"    [Bigpara] {ticker}: {bp_p:.4f} TL")
-    return all_rows
-
 if __name__ == "__main__":
-    import os, sys
-    # USDTRY'yi yfinance'den al
-    try:
-        import yfinance as yf
-        _s = yf.download("USDTRY=X", period="2d", progress=False, auto_adjust=True)
-        usdtry = float(_s["Close"].dropna().iloc[-1]) if not _s.empty else 38.0
-    except Exception:
-        usdtry = 38.0
-    print(f"Bigpara test... (USDTRY: {usdtry:.4f})")
-    data = fetch_all_bigpara(force_refresh=True, usdtry=usdtry)
+    print("Bigpara/Truncgil maden testi...")
+    data = fetch_all_bigpara(force_refresh=True)
     for k, v in data.items():
         print(f"  {k}: {v:,.4f} TL")
