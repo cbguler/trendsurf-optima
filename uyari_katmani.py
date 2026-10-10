@@ -40,7 +40,25 @@ def veri_sinirli_mi(row) -> bool:
         return False
 
 
+GENC_FON_SKOR_CARPANI = 0.5   # v2.0.7.392 (Bahri'nin karari): genc fonun Optima Skoru yariya iner
+
+
+def genc_fon_mu(row) -> bool:
+    """TEFAS satirinda Genc_Fon == True (CSV'den gelen deger bool ya da 'True' metni olabilir). Bilinmiyor/bos = False."""
+    try:
+        if str(row.get("Kategori")) != "TEFAS":
+            return False
+        v = row.get("Genc_Fon")
+    except Exception:
+        return False
+    return v is True or str(v).strip().lower() == "true"
+
+
 def veri_sinirli_aciklama(row) -> str:
+    if genc_fon_mu(row):
+        return ("Genç fon: yaklaşık bir yıldan kısa fiyat geçmişi var. Getiri, RSI ve volatilite kısa bir geçmişe "
+                "dayandığı için Optima Skor düşük güvenilirliktedir; skor yarıya indirilmiştir ve AL sinyali "
+                "üretilmez, en fazla TUT İZLE verilir.")
     try:
         g = int(float(row.get("Gecmis_Gun")))
     except Exception:
@@ -163,4 +181,30 @@ def uyari_katmanini_uygula(df):
             df["Gecmis_Gun"] = pd.NA
     except Exception as _vs_err:
         print(f"[veri-sinirli] atlandi: {_vs_err}")
+
+    # v2.0.7.392 (Bahri'nin karari, 10 Ekim 2026): ~1 yildan genc TEFAS fonu icin (2) uyari seridi + AL siniri
+    # (SINIRLI VERI bayragi) VE (3) Optima Skoru yariya iner. TEFAS'in CSV'de skoru yoktur (sayfa hesaplar); burada
+    # ayni formulle (RSI, Ret1M, Vol) hesaplanip carpilir ki liste/detay/Ana Sayfa/e-posta ayni sayiyi gorsun.
+    # Tedbirli fon zaten 0'dir (0 x 0,5 = 0). Genc_Fon bos/bilinmiyorsa HICBIR sey yapilmaz.
+    try:
+        if "Genc_Fon" in df.columns:
+            _gf = pd.Series([genc_fon_mu(r) for r in df.to_dict("records")], index=df.index)
+            _gf &= pd.to_numeric(df["Son_Fiyat"], errors="coerce").fillna(0) > 0
+            if _gf.any():
+                from scoring import optima_score as _os
+                df.loc[_gf, "Veri_Sinirli"] = True
+                if "Optima_Skor" not in df.columns:
+                    df["Optima_Skor"] = pd.NA
+                _sk = pd.to_numeric(df["Optima_Skor"], errors="coerce")
+                _eksik = _gf & _sk.isna()
+                if _eksik.any():
+                    _sk[_eksik] = [
+                        _os(float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
+                            vol=float(r.get("Vol", 30) or 30))
+                        for r in df.loc[_eksik].to_dict("records")]
+                _sk[_gf] = (_sk[_gf] * GENC_FON_SKOR_CARPANI).round(1)
+                df["Optima_Skor"] = _sk
+                print(f"[genc-fon] {int(_gf.sum())} genc TEFAS fonu: SINIRLI VERI + skor x{GENC_FON_SKOR_CARPANI}.")
+    except Exception as _gf_err:
+        print(f"[genc-fon] atlandi: {_gf_err}")
     return df
