@@ -68,6 +68,10 @@ KURALLAR = {
     "PAZAR_DEGISIKLIGI":  (SEVIYE_BILGI, 45, "Pay piyasası/pazar değişikliği (yön belirlenemedi)"),
     "GERI_ALIM":          (SEVIYE_BILGI, 14, "Pay geri alımı (genelde nötr/olumlu; risk değil)"),
     "GERI_ALINAN_SATIS":  (SEVIYE_BILGI, 30, "Geri alınan payların elden çıkarılması"),
+    # v2.0.7.399: FON bildirimleri (KAP fonlar ucu). Anahtar "F:KOD" (hisse kodlariyla cakismasin).
+    "FON_TASFIYE":        (SEVIYE_AGIR, 180, "Fon tasfiye kararı"),
+    "FON_KARSILIK":       (SEVIYE_ORTA, 60, "Fon portföyündeki bir kıymet için karşılık ayrıldı (itfa/kupon ödenmedi)"),
+    "FON_YAN_HESAP":      (SEVIYE_ORTA, 90, "Fon yan hesap (side pocket) oluşturdu"),
 }
 
 # v2.0.7.398 (Bahri'nin istegi, backlog 7): "pay geri alimi" varsayilan olarak BILGI'dir (skor/sinyal
@@ -122,15 +126,78 @@ def _vbts_ozeti_mi(ozet: str) -> bool:
     return "volatilite bazlı" in o or "vbts" in o or "brüt takas" in o or "tek fiyat" in o
 
 
+# ───────────────────────────── FON bildirimleri (v2.0.7.399) ─────────────────────────────
+FON_ONEK = "F:"
+K_FON_TASFIYE = "Fon Tasfiye Duyurusu"
+# Metni incelenecek fon bildirim konulari (geri kalan ~%99'u rutin rapor: gider, portfoy dagilimi, komisyon...)
+FON_METIN_KONULARI = {"Genel Açıklama", "Özel Durum Açıklaması (Genel)", "Fonlara İlişkin Duyuru"}
+_FON_ADAY_RX = re.compile(r"karşılık|yan hesap|side pocket|temerrüt|tasfiye", re.IGNORECASE)
+_FON_KARSILIK_RX = re.compile(r"karşılık\s+ayr", re.IGNORECASE)
+# "karsilik ayrilmasina gerek yoktur / ayrilmayacaktir" gibi OLUMSUZLAMA risk degildir
+_FON_KARSILIK_YOK_RX = re.compile(
+    r"karşılık\s+ayr[ıi]lma(?:y|dı|mı|ma[sz])|karşılık[^.]{0,60}(?:gerek|ihtiyaç)[^.]{0,20}(?:yok|bulunma|duyulma)",
+    re.IGNORECASE)
+_FON_YAN_HESAP_RX = re.compile(r"yan hesap|side pocket", re.IGNORECASE)
+_FON_YAN_HESAP_OLUSTU_RX = re.compile(r"oluştur|oluştu", re.IGNORECASE)
+
+
+def fon_anahtari(kod: str) -> str:
+    return FON_ONEK + str(kod or "").strip().upper()
+
+
+def _fon_mu(b: dict) -> bool:
+    gk = b.get("gonderen_kodlar") or []
+    return bool(gk) and all(str(k).startswith(FON_ONEK) for k in gk)
+
+
+def _fon_ilgili_mi(b: dict) -> bool:
+    konu = (b.get("konu") or "").strip()
+    if konu == K_FON_TASFIYE:
+        return True
+    return konu in FON_METIN_KONULARI and bool(_FON_ADAY_RX.search(_kucuk_fon(b.get("ozet"))))
+
+
+def _kucuk_fon(s) -> str:
+    return _kucuk(s)
+
+
+def _fon_siniflandir(b: dict) -> list:
+    konu = (b.get("konu") or "").strip()
+    ozet = re.sub(r"\s+", " ", str(b.get("ozet") or "")).strip()
+    metin = b.get("metin") or ""
+    gk = list(b.get("gonderen_kodlar") or [])
+    out = []
+    if konu == K_FON_TASFIYE:
+        for k in dict.fromkeys(gk):
+            out.append((k, "FON_TASFIYE", None, ozet or konu))
+        return out
+    if konu not in FON_METIN_KONULARI:
+        return out
+    tam = _kucuk(ozet + " " + metin)
+    kural = None
+    if _FON_YAN_HESAP_RX.search(tam) and _FON_YAN_HESAP_OLUSTU_RX.search(tam):
+        kural = "FON_YAN_HESAP"
+    elif _FON_KARSILIK_RX.search(tam) and not _FON_KARSILIK_YOK_RX.search(tam):
+        kural = "FON_KARSILIK"
+    if kural:
+        for k in dict.fromkeys(gk):
+            out.append((k, kural, None, ozet or konu))
+    return out
+
+
 def metin_gerekli_mi(b: dict) -> bool:
     """Bu bildirimin tam metni (ek istek) gerekli mi? SADECE VBTS (asama + bitis tarihi). Diger turler KAP'in
     kisa basligiyla (ozet) siniflanir: sermaye bildirimlerinin sayfa metni tutarsiz yapida (canli denendi) ve
     ozet turu zaten soyluyor ('Bedelsiz Sermaye Artirimi...', 'Tahsisli ...')."""
+    if _fon_mu(b):
+        return (b.get("konu") or "").strip() in FON_METIN_KONULARI and _fon_ilgili_mi(b)
     return (b.get("konu") or "") == K_VBTS and _vbts_ozeti_mi(b.get("ozet"))
 
 
 def ilgili_mi(b: dict) -> bool:
     """Bildirim risk uretebilecek turde mi (saklanmaya deger)?"""
+    if _fon_mu(b):
+        return _fon_ilgili_mi(b)
     konu = b.get("konu") or ""
     if konu == K_VBTS:
         return _vbts_ozeti_mi(b.get("ozet"))
@@ -244,6 +311,8 @@ def _kendi_konkordato_mu(ozet: str) -> bool:
 
 def siniflandir(b: dict) -> list:
     """Tek bildirim -> [(ticker, kural, bitis_date|None, ozet_metin)]. Risk degilse []."""
+    if _fon_mu(b):
+        return _fon_siniflandir(b)
     konu = str(b.get("konu") or "").strip()
     ozet = str(b.get("ozet") or "").strip()
     ol = _kucuk(ozet)
@@ -367,16 +436,20 @@ def aciklama_metni(riskler) -> str:
 def kap_isaretle(df, riskler_tickera):
     """df (Ticker, Kategori) icin {KAP_Seviye, KAP_Aciklama, KAP_Bilgi, KAP_Carpan} dondurur.
     riskler_tickera: {TICKER: [risk,...]}. SADECE Kategori == 'BIST' satirlari degerlendirilir.
-    KAP_Seviye: AGIR/ORTA/'' (BILGI tek basina seviye vermez, sadece KAP_Bilgi'ye yazilir)."""
+    KAP_Seviye: AGIR/ORTA/'' (BILGI tek basina seviye vermez, sadece KAP_Bilgi'ye yazilir).
+    v2.0.7.399: BIST hisseleri ticker ile, TEFAS fonlari "F:KOD" ile eslesir."""
     import pandas as pd
     cikti = pd.DataFrame({"KAP_Seviye": "", "KAP_Aciklama": "", "KAP_Bilgi": "", "KAP_Carpan": 1.0},
                          index=df.index)
     if df is None or df.empty or not riskler_tickera:
         return cikti
-    bist = df["Kategori"].astype(str).str.upper() == "BIST"
+    kat = df["Kategori"].astype(str).str.upper()
+    hedef = (kat == "BIST") | (kat == "TEFAS")
     tk = df["Ticker"].astype(str).str.upper()
-    for idx in df.index[bist]:
-        riskler = riskler_tickera.get(tk.at[idx])
+    for idx in df.index[hedef]:
+        # v2.0.7.399: TEFAS fonlari "F:KOD" anahtariyla aranir (hisse kodlariyla cakismaz)
+        anahtar = (FON_ONEK + tk.at[idx]) if kat.at[idx] == "TEFAS" else tk.at[idx]
+        riskler = riskler_tickera.get(anahtar)
         if not riskler:
             continue
         sev = en_siddetli(riskler)
