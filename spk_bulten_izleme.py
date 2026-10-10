@@ -51,6 +51,7 @@ ILK_CALISMA_GUN = int(os.environ.get("SPK_ILK_CALISMA_GUN", "14") or 14)   # bun
 MAKS_BULTEN = int(os.environ.get("SPK_MAKS_BULTEN", "8") or 8)             # bir calismada en fazla
 GUNLUK_AI_BUTCESI = 120                                                    # haber_izleme.py ile PAYLASILAN gunluk limit
 AI_MAKS_KARAKTER = 9000
+GERCEK_TESHIS_BULTEN = 3     # --groq-test: en yeni kac gercek bulten AI'a gonderilsin
 SIRKET_ORANI_ESIGI = 0.8        # sirketin evrendeki fonlarinin >=%80'i listedeyse sirket-seviyesi kural
 SIRKET_MIN_FON = 3
 MAKS_FON_ADAYI = 25             # bir bultende en fazla bu kadar tekil-fon adayi
@@ -411,6 +412,51 @@ def groq_teshis() -> int:
                 sonuc = 1
         except Exception as e:
             log(f"Groq teshis [{ad}]: {type(e).__name__}: {str(e)[:200]}")
+            sonuc = 1
+    # (C) GERCEK bultenler: AI'a giden metin (AI penceresi) bu bultenlerden uretilir. Sorun yalniz uzun gercek
+    # metinde cikiyorsa (A ve B 200 donerken) burada gorunur. Her bulten icin HTTP kodu, prompt uzunlugu,
+    # finish_reason, token kullanimi ve icerigin gecerli JSON olup olmadigi loglanir.
+    try:
+        liste = sorted(bulten_listesi_cek(date.today().year), key=lambda b: b["tarih"], reverse=True)[:GERCEK_TESHIS_BULTEN]
+    except Exception as e:
+        log(f"Groq teshis [C gercek bulten]: bulten listesi alinamadi ({type(e).__name__}: {str(e)[:150]})")
+        return 1
+    for b in liste:
+        try:
+            metin = pdf_metni_cek(b["url"])
+            if not metin or len(metin) < 150:
+                log(f"Groq teshis [C {b['no']}]: bulten metni alinamadi/cok kisa.")
+                continue
+            duz, n = _hizala(metin)
+            pencere = _ai_pencereleri(duz, n)
+            if not pencere:
+                log(f"Groq teshis [C {b['no']}]: AI penceresi bos (AI cagrilmazdi), atlandi.")
+                continue
+            prompt = AI_PROMPT.format(metin=pencere)
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                              headers={"Authorization": f"Bearer {qk}", "Content-Type": "application/json"},
+                              json=_groq_yuk(prompt), timeout=90)
+            ek = ""
+            if r.status_code == 200:
+                try:
+                    j = r.json()
+                    icerik = (j["choices"][0]["message"].get("content") or "").strip()
+                    try:
+                        json.loads(icerik)
+                        gecerli = "evet"
+                    except Exception:
+                        gecerli = "HAYIR"
+                    ek = (f" | finish_reason={j['choices'][0].get('finish_reason')} | usage={j.get('usage')}"
+                          f" | icerik gecerli JSON: {gecerli} | icerik: {icerik[:200]}")
+                except Exception as e:
+                    ek = f" | yanit ayristirilamadi: {type(e).__name__}"
+            else:
+                sonuc = 1
+                ek = f" | govde: {r.text[:700]}"
+            log(f"Groq teshis [C {b['no']}]: HTTP {r.status_code} | pencere {len(pencere)} karakter | "
+                f"prompt {len(prompt)} karakter{ek}")
+        except Exception as e:
+            log(f"Groq teshis [C {b['no']}]: {type(e).__name__}: {str(e)[:200]}")
             sonuc = 1
     return sonuc
 

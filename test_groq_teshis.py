@@ -45,8 +45,13 @@ def test_yuk_ortak_ve_dogru():
     ok(y["messages"] == [{"role": "user", "content": "merhaba json"}], "mesaj")
 
 
+def _liste_yok(s):
+    s.bulten_listesi_cek = lambda yil: []
+
+
 def test_teshis_iki_istek_ve_govde_loglar():
     import spk_bulten_izleme as s
+    _liste_yok(s)
     os.environ["GROQ_API_KEY"] = "anahtar-test"
     cagrilar = []
     govde = '{"error":{"message":"Failed to generate JSON","code":"json_validate_failed"}}'
@@ -68,6 +73,7 @@ def test_teshis_iki_istek_ve_govde_loglar():
 
 def test_ikisi_200_cikis_0_ve_anahtar_yok():
     import spk_bulten_izleme as s
+    _liste_yok(s)
     os.environ["GROQ_API_KEY"] = "x"
     sys.modules["requests"] = _sahte_requests([_Yanit(200, "{}"), _Yanit(200, "{}")], [])
     with contextlib.redirect_stdout(io.StringIO()):
@@ -75,6 +81,46 @@ def test_ikisi_200_cikis_0_ve_anahtar_yok():
     os.environ["GROQ_API_KEY"] = ""
     with contextlib.redirect_stdout(io.StringIO()):
         ok(s.groq_teshis() == 1, "anahtar yok -> 1")
+
+
+def test_gercek_bulten_adimi_C():
+    import spk_bulten_izleme as s
+    from datetime import date
+    os.environ["GROQ_API_KEY"] = "x"
+    liste = [{"no": "2026/70", "tarih": date(2026, 10, 9), "url": "u70"},
+             {"no": "2026/69", "tarih": date(2026, 10, 2), "url": "u69"},
+             {"no": "2026/68", "tarih": date(2026, 9, 25), "url": "u68"},
+             {"no": "2026/67", "tarih": date(2026, 9, 18), "url": "u67"}]
+    s.bulten_listesi_cek = lambda yil: liste
+    metinler = {"u70": "x" * 200,                                                   # AI penceresi bos
+                "u69": ("SPK Kurulunun karari: ORNEK FON isleme kapatilmistir tasfiye. " * 6),
+                "u68": ""}
+    s.pdf_metni_cek = lambda url: metinler.get(url, "")
+    s._ai_pencereleri = lambda duz, n: "PENCERE METNI " * 50 if "ORNEK" in duz else ""
+    cagrilar = []
+    govde400 = '{"error":{"message":"json_validate_failed","code":"json_validate_failed","failed_generation":"{"}}'
+    ok_yanit = _Yanit(200, '{"choices":[{"message":{"content":"{\\"kararlar\\":[]}"},"finish_reason":"stop"}],'
+                           '"usage":{"completion_tokens":1200,"total_tokens":3000}}')
+    sys.modules["requests"] = _sahte_requests([_Yanit(200, "{}"), _Yanit(200, "{}"), _Yanit(400, govde400)], cagrilar)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        kod = s.groq_teshis()
+    cikti = buf.getvalue()
+    ok(kod == 1, "C adiminda 400 -> cikis 1")
+    ok(len(cagrilar) == 3, "A, B ve yalniz AI penceresi dolu OLAN bir gercek bulten (3 istek)")
+    ok("[C 2026/70]" in cikti and "AI penceresi bos" in cikti, "pencere bos bulten atlandi ve loglandi")
+    ok("[C 2026/68]" in cikti and "alinamadi" in cikti, "metni alinamayan bulten loglandi")
+    ok("[C 2026/69]: HTTP 400" in cikti and "json_validate_failed" in cikti, "gercek bultende 400 govdesi loglandi")
+    ok("2026/67" not in cikti, "yalniz en yeni 3 bulten denenir")
+    ok("PENCERE METNI" in cagrilar[2]["yuk"]["messages"][0]["content"], "C: gercek pencere AI_PROMPT icinde gonderildi")
+    # 200 yolu: finish_reason, usage ve JSON gecerliligi loglanir
+    sys.modules["requests"] = _sahte_requests([_Yanit(200, "{}"), _Yanit(200, "{}"), ok_yanit], [])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        kod = s.groq_teshis()
+    c2 = buf.getvalue()
+    ok(kod == 0, "hepsi 200 -> cikis 0")
+    ok("finish_reason=stop" in c2 and "completion_tokens" in c2 and "gecerli JSON: evet" in c2, "200: finish_reason/usage/gecerlilik loglandi")
 
 
 def test_normal_cagri_ayni_yuku_kullanir():
