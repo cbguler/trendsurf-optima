@@ -226,6 +226,10 @@ if DB_OK:
     kontrol("veritabaninda RLS acik", len(rls) == 2 and all(r[1] for r in rls), rls)
     conn.close()
 
+# v410: temettu_client.py bs4 ister; workflow bunu kurmali (409 logunda "No module named 'bs4'" goruldu)
+_yml = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".github/workflows/kap_risk_tarama.yml"), encoding="utf-8").read()
+kontrol("workflow: beautifulsoup4 kurulur (temettu ayrintisi icin)", "beautifulsoup4" in _yml)
+
 print()
 if BASARISIZ:
     print(f"{len(BASARISIZ)} BASARISIZ:", BASARISIZ)
