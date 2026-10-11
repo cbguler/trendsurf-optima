@@ -30,7 +30,7 @@ concurrency:
 jobs:
   tara:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Kodu indir
@@ -55,3 +55,16 @@ jobs:
           FON_GUN: ${{ github.event.inputs.fon_gun }}
           # v2.0.7.398: pay geri alimi skor dusurme anahtari (repo Variable; bos/tanimsiz = KAPALI)
           KAP_GERI_ALIM_SKOR_DUSUR: ${{ vars.KAP_GERI_ALIM_SKOR_DUSUR }}
+
+      # v2.0.7.405: KAP taramasindan HEMEN SONRA anlik bildirim e-postalari (KAP uyarisi, SPK tedbiri, halka arz,
+      # XHARZ girisi, temettu). Tarama basarisiz olsa bile calisir (halka arz/temettu KAP'tan bagimsiz cekilir);
+      # bildirim hatasi taramayi basarisiz saymaz. e-posta ayari yapmis TUM abonelere gider.
+      - name: Anlik bildirim e-postalari
+        if: always()
+        continue-on-error: true
+        run: python bildirim_eposta.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          PYTHONUNBUFFERED: "1"

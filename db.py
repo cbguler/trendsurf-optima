@@ -979,6 +979,29 @@ def init_db():
         updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )""")
 
+    # v2.0.7.405 (11 Ekim 2026, Bahri'nin talebi - anlik e-posta bildirimi): bildirim_eposta.py olaylari
+    # (KAP uyarisi, SPK tedbiri, halka arz, XHARZ girisi, temettu bildirimi) burada tekil anahtarla tutar;
+    # ilk_tohum = kurulumda sessizce kaydedilen (mail GONDERILMEYEN) eski olaylar. bildirim_eposta_gonderim,
+    # (kullanici, olay) basina bir kez mail rezervasyonudur (tekrar gonderimi onler). Kamuya acik veri + kullanici
+    # kimligi icerdigi icin ikisi de RLS listesinde.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS bildirim_eposta_olay (
+        anahtar     TEXT PRIMARY KEY,
+        tur         TEXT NOT NULL,
+        baslik      TEXT,
+        ozet        TEXT,
+        url         TEXT,
+        ilk_tohum   BOOLEAN NOT NULL DEFAULT FALSE,
+        olay_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS bildirim_eposta_gonderim (
+        user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        olay_anahtari  TEXT NOT NULL,
+        gonderim_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, olay_anahtari)
+    )""")
+
     # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
     # abonelerin uygulama kullanim istatistiklerini gormek): her SAYFA
     # DEGISIKLIGINDE (her tiklamada DEGIL - bkz. app.py'deki kayit
@@ -1098,7 +1121,8 @@ def init_db():
                        "haber_islenmis", "haber_akisi", "ai_cagri_butcesi",
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
                        "ipo_valuations", "sayfa_ziyaretleri",
-                       "ipo_xharz_degerler"):
+                       "ipo_xharz_degerler", "bildirim_eposta_olay",
+                       "bildirim_eposta_gonderim"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
