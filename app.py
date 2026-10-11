@@ -1437,6 +1437,67 @@ def _uyari_rozet_html(etiket, aciklama=""):
             f'white-space:nowrap;">{_html.escape(etiket)}</span>')
 
 
+# v2.0.7.406 (Bahri'nin talebi): Arz Fiyati renklendirmesi iki Halka Arz tablosunda (Yaklasan + XHARZ) ORTAK ve
+# altindaki "Nasil okunur" notu belirgin kutu. Kural (yeni degil, 2.0.4.x'ten beri ayni): Arz Fiyati, Graham Degeri
+# ile Carpan Bazli Degerin alt-ust sinirina gore konumlanir.
+ARZ_RENKLER = {"alt": "#e6f4ea", "icinde": "#fff8e1", "ust": "#fdeaea"}
+
+
+def arz_konumu(arz, graham, carpan):
+    """Arz Fiyati'nin Graham/Carpan degerlerine gore konumu: 'alt' (her ikisinin de altinda), 'icinde' (ikisinin
+    arasinda), 'ust' (ikisinin de ustunde) ya da None (Arz Fiyati yok ya da iki degerden hicbiri yok).
+    Yalniz BIR deger varsa alt=ust=o deger: altindaysa 'alt', ustundeyse 'ust', tam esitse 'icinde'."""
+    def _gecerli(v):
+        try:
+            return v is not None and not pd.isna(v)
+        except Exception:
+            return False
+    degerler = [float(v) for v in (graham, carpan) if _gecerli(v)]
+    if not degerler or not _gecerli(arz):
+        return None
+    alt, ust = min(degerler), max(degerler)
+    arz = float(arz)
+    if arz < alt:
+        return "alt"
+    if arz > ust:
+        return "ust"
+    return "icinde"
+
+
+def halka_arz_nasil_okunur_html(ek_html=""):
+    """Halka Arz tablolarinin altindaki belirgin aciklama kutusu (renk anlami + Graham/Carpan yontemi + sinirlar)."""
+    def _chip(anahtar, etiket):
+        return (f'<span style="display:inline-block;background:{ARZ_RENKLER[anahtar]};border:1px solid #9aa5b1;'
+                f'border-radius:4px;padding:1px 10px;font-weight:700;color:#1a1a1a;">{etiket}</span>')
+    return (
+        '<div style="border:2px solid #0d2b4e;border-left:10px solid #0d2b4e;background:#f1f6fb;border-radius:8px;'
+        'padding:14px 18px;margin:12px 0 8px 0;color:#1a1a1a;font-size:15px;line-height:1.55;">'
+        '<div style="font-weight:800;font-size:17px;color:#0d2b4e;margin-bottom:6px;">Nasıl okunur: Arz Fiyatı değerlendirmesi</div>'
+        '<div style="margin-bottom:8px;"><b>Arz Fiyatı</b> hücresinin rengi, aracı kurumun belirlediği arz fiyatının '
+        'TrendSurf Optima\'nın hesapladığı iki bağımsız değere göre nerede durduğunu gösterir. Karşılaştırılan, '
+        'borsadaki güncel fiyat değil <b>Arz Fiyatı</b>\'dır.</div>'
+        '<ul style="margin:0 0 8px 20px;padding:0;">'
+        f'<li>{_chip("alt", "Yeşil")} Arz Fiyatı, <b>iki değerin de altında</b>: iki modele göre görece iskontolu.</li>'
+        f'<li style="margin-top:4px;">{_chip("icinde", "Sarı")} Arz Fiyatı, <b>iki değerin arasında</b> '
+        '(iki sınırdan birine eşit olması dahil): iki model arasında, net bir sonuç yok.</li>'
+        f'<li style="margin-top:4px;">{_chip("ust", "Kırmızı")} Arz Fiyatı, <b>iki değerin de üstünde</b>: iki modele göre görece pahalı.</li>'
+        '<li style="margin-top:4px;"><b>Renksiz</b> hücre: Arz Fiyatı yok ya da Graham ve Çarpan Bazlı Değer\'in ikisi de hesaplanamadı. '
+        'Yalnız biri varsa Arz Fiyatı sadece o değerle kıyaslanır (altındaysa yeşil, üstündeyse kırmızı).</li>'
+        '</ul>'
+        '<div style="font-weight:700;margin-top:6px;">İki değer nasıl hesaplanır</div>'
+        '<ul style="margin:2px 0 8px 20px;padding:0;">'
+        '<li><b>Graham Değeri</b> (muhafazakar taban değer): √(22,5 × hisse başı kâr × hisse başı özkaynak).</li>'
+        '<li style="margin-top:4px;"><b>Çarpan Bazlı Değer</b>: şirket EBITDA\'sı × sektör medyan çarpanı, '
+        'net borç düşülür, hisse sayısına bölünür.</li>'
+        '</ul>'
+        '<div style="background:#fff3cd;border:1px solid #e0b84a;border-radius:6px;padding:8px 12px;margin:8px 0;">'
+        '<b>Uyarı:</b> Bu bir alım tavsiyesi ya da "bu fiyatın altından al" önerisi değildir. Renk, yalnızca '
+        'modellerin arz fiyatıyla karşılaştırmasıdır; iki model de kendi varsayımlarına bağlıdır ve gerçek değeri '
+        'garanti etmez. Kâr veya özkaynak negatifse ya da Fiyat Tespit Raporu\'nun biçimi izin vermiyorsa Graham hesaplanamaz ve hücre boş kalır.</div>'
+        + (f'<div style="margin-top:6px;">{ek_html}</div>' if ek_html else "") +
+        '</div>')
+
+
 # v2.0.7.403 (Bahri'nin talebi): Halka Arz XHARZ tablosu st.dataframe'den ozel HTML tabloya cevrildi - baslik
 # metni iki satira bolunebilir, sirket adi sutunu yok (adi ticker hucresinin ustune gelince gorunur), sutun
 # genislikleri sabit yuzde (table-layout:fixed) -> yatay kaydirma gerekmez; yalniz dikey kaydirma (sabit baslik).
@@ -1480,6 +1541,7 @@ def _xharz_tablo_html(df):
         hucreler = []
         for alan, _b, _w, hiza, tur in sutunlar:
             v = r.get(alan)
+            arz_stil = ""
             if tur == "ticker":
                 ad = _h.escape(str(r.get("Şirket", "") or ""))
                 dis = str(r.get("Durum", "") or "").startswith("XHARZ dışı")
@@ -1487,6 +1549,10 @@ def _xharz_tablo_html(df):
                 ic = f'<span title="{ad}"><b>{_h.escape(str(v or ""))}</b>{yildiz}</span>'
             elif tur.startswith("num"):
                 ic = "" if _bos(v) else fmt_tr(float(v), int(tur[3:]))
+                if alan == "Arz_Fiyati":
+                    _k = arz_konumu(v, r.get("Graham_Degeri"), r.get("Carpan_Bazli_Deger"))
+                    if _k:
+                        arz_stil = f"background:{ARZ_RENKLER[_k]} !important;font-weight:700;"
             elif tur == "uyari":
                 t = "" if _bos(v) else str(v)
                 renk = ""
@@ -1504,7 +1570,7 @@ def _xharz_tablo_html(df):
                 ic = (f'<a href="{_h.escape(str(v))}" target="_blank" rel="noopener">{etiket}</a>'
                       if isinstance(v, str) and v.startswith("http") else "")
             sinif = ' class="xh-uyari"' if tur == "uyari" else ""
-            hucreler.append(f'<td{sinif} style="text-align:{hiza};">{ic}</td>')
+            hucreler.append(f'<td{sinif} style="text-align:{hiza};{arz_stil}">{ic}</td>')
         satirlar.append("<tr>" + "".join(hucreler) + "</tr>")
     css = """
     <style>
@@ -8321,23 +8387,9 @@ elif page=="Halka Arz":
             return f"{v:,.2f}{suffix}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         def _arz_renk(arz, graham, carpan):
-            """Arz Fiyati'nin bagimsiz Graham/Carpan degerlerine gore nerede
-            durdugunu renkle gosterir (yesil: altinda/iskontolu, sari: aralik
-            icinde, kirmizi: ustunde/pahali). Tavsiye degildir - sadece
-            karsilastirmadir. Not: Referans Araligi ayri bir sutun olarak
-            gosterilmiyor cunku zaten Graham Degeri ve Carpan Bazli Deger
-            sutunlari yan yana - okuyucu iki sayiyi dogrudan karsilastirabilir,
-            ayri bir sutun gereksiz tekrar oluyordu."""
-            degerler = [v for v in (graham, carpan) if v is not None and not pd.isna(v)]
-            if not degerler or arz is None or (isinstance(arz, float) and pd.isna(arz)):
-                return ""
-            alt, ust = min(degerler), max(degerler)
-            if arz < alt:
-                return "background-color:#e6f4ea;"  # yesilimsi - referansin altinda
-            elif arz > ust:
-                return "background-color:#fdeaea;"  # kirmizimsi - referansin ustunde
-            else:
-                return "background-color:#fff8e1;"  # sarimsi - aralik icinde
+            """Arz Fiyati renkleri (v2.0.7.406: ortak arz_konumu); aciklama kutusu halka_arz_nasil_okunur_html."""
+            k = arz_konumu(arz, graham, carpan)
+            return f"background-color:{ARZ_RENKLER[k]};" if k else ""
 
         _basliklar = [
             ("Tarih", "9%"), ("Kod", "7%"), ("Şirket", "18%"), ("Durum", "15%"),
@@ -8412,34 +8464,13 @@ elif page=="Halka Arz":
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown(
-            "<div style='color:#333333; font-size:14px; line-height:1.5; margin-top:10px;'>"
-            "<b>Nasıl okunur:</b> Arz Fiyatı hücresindeki renk, o fiyatın "
-            "<b>Graham Değeri</b> ile <b>Çarpan Bazlı Değer</b>'in alt-üst "
-            "sınırına göre nerede durduğunu gösterir — "
-            "<span style='background-color:#e6f4ea;'>yeşil</span>: Arz Fiyatı "
-            "her ikisinin de altında (iki bağımsız modele göre görece "
-            "iskontolu), <span style='background-color:#fff8e1;'>sarı</span>: "
-            "ikisinin arasında, <span style='background-color:#fdeaea;'>kırmızı</span>: "
-            "ikisinin de üstünde (görece pahalı). Bu bir alım tavsiyesi ya da "
-            "\"bu fiyatın altından al\" önerisi değildir — sadece TrendSurf "
-            "Optima'nın kendi bağımsız modellerinin aracı kurumun arz "
-            "fiyatıyla karşılaştırmasıdır; iki model de kendi varsayımlarına "
-            "bağlıdır ve gerçek değeri garanti etmez."
-            "<br><br>"
-            "Diğer notlar: Şirket bazlı getiri tahmini sunulmaz. Arz Fiyatı / "
-            "İskonto sütunları Fiyat Tespit Raporu PDF'inden otomatik olarak "
-            "çıkarılır; bazı raporlarda format farkı nedeniyle boş kalabilir. "
-            "İskonto oranı yalnızca aracı kurumun hesapladığı değere göre "
-            "uygulanan indirim yüzdesidir — arz sonrası fiyat performansını "
-            "göstermez. \"Fiyat Tespit Raporu\" sütunundaki link, KAP'ın resmi "
-            "belgesine götürür (henüz yayınlanmamışsa boş görünür). Detaylı "
-            "bilgi için <a href='https://www.kap.org.tr/tr/bildirim-sorgu' "
-            "target='_blank'>KAP Bildirim Sorgulama</a> sayfasını ziyaret "
-            "edebilirsiniz."
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(halka_arz_nasil_okunur_html(
+            "<b>Diğer notlar:</b> Şirket bazlı getiri tahmini sunulmaz. Arz Fiyatı ve İskonto sütunları Fiyat Tespit "
+            "Raporu PDF'inden otomatik çıkarılır; bazı raporlarda biçim farkı nedeniyle boş kalabilir. İskonto oranı "
+            "yalnızca aracı kurumun hesapladığı değere göre uygulanan indirim yüzdesidir, arz sonrası fiyat performansını "
+            "göstermez. \"Fiyat Tespit Raporu\" sütunundaki bağlantı KAP'ın resmi belgesine götürür (henüz "
+            "yayınlanmamışsa boş görünür). Ayrıntı için <a href='https://www.kap.org.tr/tr/bildirim-sorgu' "
+            "target='_blank'>KAP Bildirim Sorgulama</a> sayfasına bakabilirsiniz."), unsafe_allow_html=True)
     else:
         st.info("Şu anda takip edilen yeni halka arz başvurusu bulunmuyor.")
 
@@ -8540,10 +8571,11 @@ elif page=="Halka Arz":
     # v2.0.7.403: ozel HTML tablo (bkz. _xharz_tablo_html): iki satirli basliklar, sirket adi sutunu yok,
     # sabit yuzde genislikler, yatay kaydirma yok.
     st.markdown(_xharz_tablo_html(df_show.reset_index(drop=True)), unsafe_allow_html=True)
-    st.caption("Şirket adı için hisse koduna fare ile gelin. Arz Fiyatı, İskonto, Graham ve Çarpan Bazlı Değer sütunları KAP Fiyat "
-               "Tespit Raporu'ndan otomatik çıkarılır; rapor bulunamadığında ya da değer hesaplanamadığında hücre boş kalır. "
-               "* işaretli hisseler, borsada işlem görmeye başlamış ama XHARZ listesine henüz alınmamış yeni halka arzlardır. "
-               "Tavsiye değildir.")
+    st.markdown(halka_arz_nasil_okunur_html(
+        "<b>Tablo notları:</b> Şirket adı için hisse koduna fare ile gelin. Arz Fiyatı, İskonto, Graham ve Çarpan Bazlı "
+        "Değer sütunları KAP Fiyat Tespit Raporu'ndan otomatik çıkarılır; rapor bulunamadığında ya da değer "
+        "hesaplanamadığında hücre boş kalır. <b>*</b> işaretli hisseler, borsada işlem görmeye başlamış ama XHARZ "
+        "listesine henüz alınmamış yeni halka arzlardır."), unsafe_allow_html=True)
 
     # ── CSV indir ────────────────────────────────────────────
     csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")

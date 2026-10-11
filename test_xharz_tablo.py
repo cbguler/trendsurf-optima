@@ -24,9 +24,9 @@ def _yukle():
     for n in TREE.body:
         if isinstance(n, ast.FunctionDef) and n.name == "fmt_tr":
             exec(compile(ast.Module([n], []), "app.py", "exec"), ns)
-        if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in ("_XH_SUTUNLAR", "_XH_BASLIK_IPUCU"):
+        if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in ("_XH_SUTUNLAR", "_XH_BASLIK_IPUCU", "ARZ_RENKLER"):
             exec(compile(ast.Module([n], []), "app.py", "exec"), ns)
-        if isinstance(n, ast.FunctionDef) and n.name == "_xharz_tablo_html":
+        if isinstance(n, ast.FunctionDef) and n.name in ("_xharz_tablo_html", "arz_konumu"):
             exec(compile(ast.Module([n], []), "app.py", "exec"), ns)
     return ns
 
