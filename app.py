@@ -1473,17 +1473,27 @@ def halka_arz_nasil_okunur_html(ek_html=""):
         '<div style="border:2px solid #0d2b4e;border-left:10px solid #0d2b4e;background:#f1f6fb;border-radius:8px;'
         'padding:14px 18px;margin:12px 0 8px 0;color:#1a1a1a;font-size:15px;line-height:1.55;">'
         '<div style="font-weight:800;font-size:17px;color:#0d2b4e;margin-bottom:6px;">Nasıl okunur: Arz Fiyatı değerlendirmesi</div>'
-        '<div style="margin-bottom:8px;"><b>Arz Fiyatı</b> hücresinin rengi, aracı kurumun belirlediği arz fiyatının '
-        'TrendSurf Optima\'nın hesapladığı iki bağımsız değere göre nerede durduğunu gösterir. Karşılaştırılan, '
-        'borsadaki güncel fiyat değil <b>Arz Fiyatı</b>\'dır.</div>'
+        '<div style="margin-bottom:8px;"><b>Arz Fiyatı</b> hücresinin rengi, arz fiyatını tablodaki iki hesaplanmış sayıyla '
+        'karşılaştırır: <b>Graham Değeri</b> ve <b>Çarpan Bazlı Değer</b>. Bu iki sayı, şirketin hisse başına değerinin '
+        'TrendSurf Optima tarafından yapılmış iki ayrı tahminidir. Karşılaştırılan borsadaki güncel fiyat değil, '
+        'aracı kurumun belirlediği <b>Arz Fiyatı</b>\'dır.</div>'
         '<ul style="margin:0 0 8px 20px;padding:0;">'
-        f'<li>{_chip("alt", "Yeşil")} Arz Fiyatı, <b>iki değerin de altında</b>: iki modele göre görece iskontolu.</li>'
-        f'<li style="margin-top:4px;">{_chip("icinde", "Sarı")} Arz Fiyatı, <b>iki değerin arasında</b> '
-        '(iki sınırdan birine eşit olması dahil): iki model arasında, net bir sonuç yok.</li>'
-        f'<li style="margin-top:4px;">{_chip("ust", "Kırmızı")} Arz Fiyatı, <b>iki değerin de üstünde</b>: iki modele göre görece pahalı.</li>'
-        '<li style="margin-top:4px;"><b>Renksiz</b> hücre: Arz Fiyatı yok ya da Graham ve Çarpan Bazlı Değer\'in ikisi de hesaplanamadı. '
-        'Yalnız biri varsa Arz Fiyatı sadece o değerle kıyaslanır (altındaysa yeşil, üstündeyse kırmızı).</li>'
+        f'<li>{_chip("alt", "Yeşil")} Arz Fiyatı, <b>Graham Değeri\'nden de Çarpan Bazlı Değer\'den de düşük</b>. '
+        'Yani iki hesaba göre de şirket arz fiyatından daha değerli görünüyor; arz fiyatı görece <b>ucuz</b>.</li>'
+        f'<li style="margin-top:4px;">{_chip("icinde", "Sarı")} Arz Fiyatı, <b>Graham Değeri ile Çarpan Bazlı Değer\'in '
+        'arasında</b> (ikisinden küçük olandan yüksek, büyük olandan düşük; birine eşit olması da buraya girer). '
+        'İki hesap birbirinden farklı sonuç verdiği için net bir yorum çıkmıyor.</li>'
+        f'<li style="margin-top:4px;">{_chip("ust", "Kırmızı")} Arz Fiyatı, <b>Graham Değeri\'nden de Çarpan Bazlı '
+        'Değer\'den de yüksek</b>. Yani iki hesaba göre de şirket arz fiyatından daha az değerli görünüyor; arz fiyatı '
+        'görece <b>pahalı</b>.</li>'
+        '<li style="margin-top:4px;"><b>Renksiz</b> hücre: Arz Fiyatı yok ya da Graham Değeri ile Çarpan Bazlı Değer\'in '
+        'ikisi de hesaplanamadı. Yalnız biri hesaplanabildiyse Arz Fiyatı sadece onunla kıyaslanır (düşükse yeşil, '
+        'yüksekse kırmızı).</li>'
         '</ul>'
+        '<div style="background:#ffffff;border:1px solid #c9d3de;border-radius:6px;padding:8px 12px;margin:0 0 8px 0;">'
+        '<b>Örnek:</b> Graham Değeri 20 TL, Çarpan Bazlı Değer 30 TL olsun. Arz Fiyatı 15 TL ise '
+        f'{_chip("alt", "Yeşil")} (ikisinden de düşük), 25 TL ise {_chip("icinde", "Sarı")} (20 ile 30 arasında), '
+        f'35 TL ise {_chip("ust", "Kırmızı")} (ikisinden de yüksek) görünür.</div>'
         '<div style="font-weight:700;margin-top:6px;">İki değer nasıl hesaplanır</div>'
         '<ul style="margin:2px 0 8px 20px;padding:0;">'
         '<li><b>Graham Değeri</b> (muhafazakar taban değer): √(22,5 × hisse başı kâr × hisse başı özkaynak).</li>'
@@ -1541,18 +1551,26 @@ def _xharz_tablo_html(df):
         hucreler = []
         for alan, _b, _w, hiza, tur in sutunlar:
             v = r.get(alan)
-            arz_stil = ""
+            arz_stil, arz_ipucu = "", ""
             if tur == "ticker":
                 ad = _h.escape(str(r.get("Şirket", "") or ""))
                 dis = str(r.get("Durum", "") or "").startswith("XHARZ dışı")
                 yildiz = '<sup title="XHARZ listesine henüz alınmamış, işlem gören yeni halka arz">*</sup>' if dis else ""
                 ic = f'<span title="{ad}"><b>{_h.escape(str(v or ""))}</b>{yildiz}</span>'
             elif tur.startswith("num"):
-                ic = "" if _bos(v) else fmt_tr(float(v), int(tur[3:]))
+                _dec = int(tur[3:])
+                if _dec == 4 and not _bos(v) and abs(float(v)) >= 10000:
+                    _dec = 2  # cok buyuk fiyatlar (orn. 4.950.000,00) sutuna sigsin
+                ic = "" if _bos(v) else fmt_tr(float(v), _dec)
                 if alan == "Arz_Fiyati":
                     _k = arz_konumu(v, r.get("Graham_Degeri"), r.get("Carpan_Bazli_Deger"))
                     if _k:
-                        arz_stil = f"background:{ARZ_RENKLER[_k]} !important;font-weight:700;"
+                        arz_stil = f"background-color:{ARZ_RENKLER[_k]};font-weight:700;"
+                        _g, _c = r.get("Graham_Degeri"), r.get("Carpan_Bazli_Deger")
+                        _yaz = {"alt": "ikisinden de düşük (yeşil)", "icinde": "ikisinin arasında (sarı)",
+                                "ust": "ikisinden de yüksek (kırmızı)"}[_k]
+                        arz_ipucu = ("Graham " + ("yok" if _bos(_g) else fmt_tr(float(_g), 2)) + " TL, Çarpan Bazlı "
+                                     + ("yok" if _bos(_c) else fmt_tr(float(_c), 2)) + " TL: Arz Fiyatı " + _yaz)
             elif tur == "uyari":
                 t = "" if _bos(v) else str(v)
                 renk = ""
@@ -1570,7 +1588,8 @@ def _xharz_tablo_html(df):
                 ic = (f'<a href="{_h.escape(str(v))}" target="_blank" rel="noopener">{etiket}</a>'
                       if isinstance(v, str) and v.startswith("http") else "")
             sinif = ' class="xh-uyari"' if tur == "uyari" else ""
-            hucreler.append(f'<td{sinif} style="text-align:{hiza};{arz_stil}">{ic}</td>')
+            _tt = f' title="{_h.escape(arz_ipucu)}"' if arz_ipucu else ""
+            hucreler.append(f'<td{sinif}{_tt} style="text-align:{hiza};{arz_stil}">{ic}</td>')
         satirlar.append("<tr>" + "".join(hucreler) + "</tr>")
     css = """
     <style>
