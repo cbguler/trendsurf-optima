@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   radar:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # v2.0.7.101 - 15 -> 20 dakika: Playwright kurulumu + gercek tarayici
     # ile uyandirma adimlarina yer acmak icin.
     timeout-minutes: 20

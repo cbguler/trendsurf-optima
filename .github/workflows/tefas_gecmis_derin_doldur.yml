@@ -28,7 +28,7 @@ on:
 
 jobs:
   derin_doldur:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # v2.0.7.358 (guncelleme): script'e parcalar arasi bekleme + artan
     # geri-cekilmeli yeniden deneme eklendi (hiz sinirina karsi daha
     # sabirli) - en kotu senaryoda sure uzayabilir, 45 -> 90 dakika.
