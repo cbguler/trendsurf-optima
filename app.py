@@ -274,6 +274,46 @@ from peak_alert_emailer import send_peak_alert
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# v2.0.7.412 - ANLIK BILDIRIM E-POSTASINDAN CIKMA (mailin altindaki baglanti)
+# URL: <uygulama>/?abonelik_iptal=<kullanici_id>.<imza>  (imza: abonelik.py). Baglanti acmak tek basina iptal etmez
+# (mail tarayicilari onceden acabilir); onay dugmesi gerekir. Giris gerektirmez; ayni sayfadan tekrar abone olunabilir.
+# ════════════════════════════════════════════════════════════════════════════
+_abn_token = st.query_params.get("abonelik_iptal", "")
+if _abn_token:
+    import abonelik as _abn
+    import db as _abn_db
+    _sp_a, _col_a, _sp_b = st.columns([1, 1.6, 1])
+    with _col_a:
+        st.subheader("Anlık Bildirim E-postaları")
+        try:
+            _abn_uid = _abn.token_dogrula(_abn_token, _abn.anahtar_al())
+        except Exception:
+            _abn_uid = None
+        if not _abn_uid:
+            st.error("Bu bağlantı geçersiz. Lütfen e-postadaki bağlantının tamamını kullanın.")
+        else:
+            _abn_cikmis = _abn_db.bildirim_iptal_var(_abn_uid)
+            if _abn_cikmis:
+                st.success("Anlık bildirim e-postalarından çıkarıldınız.")
+                st.caption("KAP uyarıları, SPK tedbirleri, halka arz ve temettü bildirimleri artık e-posta ile gönderilmeyecek. "
+                           "Günlük rapor e-postalarınız bu işlemden etkilenmez.")
+                if st.button("Tekrar abone ol", key="abn_tekrar"):
+                    if _abn_db.bildirim_iptal_sil(_abn_uid):
+                        st.rerun()
+                    else:
+                        st.error("İşlem yapılamadı, lütfen biraz sonra tekrar deneyin.")
+            else:
+                st.write("KAP uyarıları, SPK tedbirleri, halka arz ve temettü bildirimlerinin anlık e-postasını almayı bırakmak istiyor musunuz? "
+                         "Günlük rapor e-postalarınız etkilenmez.")
+                if st.button("Anlık bildirimlerden çık", key="abn_cik", type="primary"):
+                    if _abn_db.bildirim_iptal_yaz(_abn_uid):
+                        st.rerun()
+                    else:
+                        st.error("İşlem yapılamadı, lütfen biraz sonra tekrar deneyin.")
+    st.stop()
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # HTTP TRIGGER ENDPOINT (v1.8 - Asama 2)
 # URL: https://trendsurf-optima.streamlit.app/?trigger=email&token=<SECRET>
 # cron-job.org bu URL'i hafta ici 09:00 ve 12:00 TRT'de hit eder.
