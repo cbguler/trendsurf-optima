@@ -1001,6 +1001,13 @@ def init_db():
         gonderim_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (user_id, olay_anahtari)
     )""")
+    # v2.0.7.412: anlik bildirim e-postalarindan CIKAN kullanicilar (mailin altindaki baglanti). email_settings'e
+    # dokunulmaz (o tablo gunluk rapor saatleri icin ve db.py'de degil); satir varsa bildirim_eposta.py mail atmaz.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS bildirim_eposta_iptal (
+        user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        iptal_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
 
     # v2.0.7.407 (11 Ekim 2026, Bahri'nin talebi): Getiri Kiyaslamasi'ndaki Mevduat/Tahvil/Repo oranlarinin GUNLUK
     # arsivi (faiz_arsiv.py yazar, app.py okur). Kamuya acik piyasa verisi, kullanici verisi degil.
@@ -1134,7 +1141,7 @@ def init_db():
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
                        "ipo_valuations", "sayfa_ziyaretleri",
                        "ipo_xharz_degerler", "bildirim_eposta_olay",
-                       "bildirim_eposta_gonderim", "faiz_arsiv"):
+                       "bildirim_eposta_gonderim", "faiz_arsiv", "bildirim_eposta_iptal"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -2370,6 +2377,43 @@ def faiz_arsiv_kayit_sayisi(seri: str) -> int:
     except Exception as e:
         print(f"[db] faiz_arsiv_kayit_sayisi hata: {e}", file=sys.stderr)
         return 0
+
+
+def bildirim_iptal_var(user_id: int) -> bool:
+    """v2.0.7.412: kullanici anlik bildirim e-postalarindan cikmis mi."""
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT 1 FROM bildirim_eposta_iptal WHERE user_id=?", (int(user_id),)).fetchone()
+        conn.close()
+        return bool(row)
+    except Exception as e:
+        print(f"[db] bildirim_iptal_var hata: {e}", file=sys.stderr)
+        return False
+
+
+def bildirim_iptal_yaz(user_id: int) -> bool:
+    try:
+        conn = get_conn()
+        conn.execute("INSERT INTO bildirim_eposta_iptal (user_id) VALUES (?) ON CONFLICT DO NOTHING", (int(user_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] bildirim_iptal_yaz hata: {e}", file=sys.stderr)
+        return False
+
+
+def bildirim_iptal_sil(user_id: int) -> bool:
+    """Tekrar abone ol."""
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM bildirim_eposta_iptal WHERE user_id=?", (int(user_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] bildirim_iptal_sil hata: {e}", file=sys.stderr)
+        return False
 
 
 def haber_akisi_temizle(gun: int = 7):

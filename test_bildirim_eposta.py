@@ -89,6 +89,29 @@ u._fetch_kap_html = lambda params: None
 kontrol("izahname_listesi_hafif: hicbiri cekilemezse None", u.izahname_listesi_hafif() is None)
 u._fetch_kap_html, u._extract_disclosure_json = orijinal_fetch, orijinal_ext
 
+
+# ---------------------------------------------------------------- v412: abonelik baglantisi, XTMTU filtresi
+import abonelik as ab
+_k = ab.anahtar_al("postgresql://u:p@h/db")
+_t = ab.token_uret(101, _k)
+kontrol("abonelik: token dogrulanir", ab.token_dogrula(_t, _k) == 101, _t)
+kontrol("abonelik: baska anahtarla gecersiz", ab.token_dogrula(_t, ab.anahtar_al("postgresql://baska/db")) is None)
+kontrol("abonelik: kullanici no degistirilirse gecersiz", ab.token_dogrula("102." + _t.split(".")[1], _k) is None)
+kontrol("abonelik: bozuk/bos token None", all(ab.token_dogrula(x, _k) is None for x in ("", None, "abc", "1.", ".x", "0.aa", "-5.aa")))
+kontrol("abonelik: baglanti bicimi", ab.baglanti_uret(101, _k).startswith(ab.UYGULAMA_URL + "/?abonelik_iptal=101."))
+_h, _x = be.govde_olustur([{"tur": "risk", "anahtar": "a", "baslik": "B", "ozet": "", "url": ""}], abonelik_url="https://u/?abonelik_iptal=1.ab")
+kontrol("govde: abonelik baglantisi html ve metinde", "abonelikten çıkın" in _h and "abonelik_iptal=1.ab" in _h and "abonelik_iptal=1.ab" in _x)
+_h2, _x2 = be.govde_olustur([{"tur": "risk", "anahtar": "a", "baslik": "B", "ozet": "", "url": ""}])
+kontrol("govde: baglanti verilmezse eklenmez", "abonelik" not in _h2 and "abonelik" not in _x2)
+
+_ham = [{"disclosureIndex": 1, "stockCodes": "AAA"}, {"disclosureIndex": 2, "stockCodes": "BBB", "relatedStocks": "CCC"},
+        {"disclosureIndex": 3, "stockCodes": "ZZZ"}]
+_tm = be.temettu_olaylari(_ham, izinli_kodlar={"AAA", "CCC"})
+kontrol("temettu: yalniz izinli (XTMTU) kodlar", [e["anahtar"] for e in _tm] == ["TEMETTU:1", "TEMETTU:2"], _tm)
+kontrol("temettu: baslik izinli kodu gosterir", "CCC" in _tm[1]["baslik"] and "BBB" not in _tm[1]["baslik"], _tm[1]["baslik"])
+kontrol("temettu: kisitlama yoksa hepsi", len(be.temettu_olaylari(_ham)) == 3)
+kontrol("temettu: pencere ~6 ay", be.TEMETTU_GERI_GUN == 183)
+
 # ---------------------------------------------------------------- veritabani
 DB_URL = os.environ.get("TEST_DB_URL", "postgresql://postgres@127.0.0.1:54329/postgres")
 try:
@@ -217,6 +240,46 @@ if DB_OK:
     # kuru mod
     s9 = be.calistir(conn, turler=("risk",), gonderici=sahte, kuru=True)
     kontrol("kuru mod: kayit/gonderim yok", s9["gonderilen"] == 0)
+
+
+    # ---- v412: kapsam degisimi sessiz, cikan kullanici mail almaz, mailde cikis baglantisi
+    # canli durumu taklit: v405-v411 donemi temettu baslangici var, kapsam isareti YOK
+    conn.execute("DELETE FROM bildirim_eposta_olay WHERE anahtar LIKE ?", ("__KAPSAM__:%",))
+    conn.commit()
+    gonderilen.clear()
+    s_k = be.calistir(conn, turler=("temettu",), gonderici=sahte, kaynaklar={"temettu": be.temettu_olaylari(
+        [{"disclosureIndex": 77, "stockCodes": "TTT"}, {"disclosureIndex": 90, "stockCodes": "AAA"}, {"disclosureIndex": 91, "stockCodes": "BBB"}])})
+    kontrol("kapsam: baslangic isareti olsa bile yeni kapsamda ilk eslesme SESSIZ", s_k["yeni"] == 0 and not gonderilen, (s_k, gonderilen))
+    kontrol("kapsam: eski kayitlar tohum olarak yazildi, isaret konuldu",
+            conn.execute("SELECT COUNT(*) FROM bildirim_eposta_olay WHERE anahtar IN ('TEMETTU:90','TEMETTU:91') AND ilk_tohum=TRUE").fetchone()[0] == 2
+            and conn.execute("SELECT COUNT(*) FROM bildirim_eposta_olay WHERE anahtar=?", ("__KAPSAM__:temettu:" + be.TEMETTU_KAPSAM,)).fetchone()[0] == 1)
+    s_k2 = be.calistir(conn, turler=("temettu",), gonderici=sahte, kaynaklar={"temettu": be.temettu_olaylari(
+        [{"disclosureIndex": 90, "stockCodes": "AAA"}, {"disclosureIndex": 92, "stockCodes": "DDD"}])})
+    kontrol("kapsam: sonraki gercek yeni olay mail olur", s_k2["yeni"] == 1 and len(gonderilen) == 2, (s_k2, len(gonderilen)))
+
+    conn.execute("INSERT INTO bildirim_eposta_iptal (user_id) VALUES (101)")
+    conn.commit()
+    kontrol("iptal: cikan kullanici alici listesinde yok", sorted(a[1] for a in be.alicilari_oku(conn)) == ["b@x.com"])
+    kontrol("iptal: db yardimcilari", db.bildirim_iptal_var(101) and not db.bildirim_iptal_var(102))
+    db.bildirim_iptal_sil(101)
+    kontrol("iptal: tekrar abone olunca listede", sorted(a[1] for a in be.alicilari_oku(conn)) == ["a@x.com", "b@x.com"])
+    kontrol("iptal: yaz/sil dongusu", db.bildirim_iptal_yaz(102) and db.bildirim_iptal_var(102) and db.bildirim_iptal_sil(102) and not db.bildirim_iptal_var(102))
+
+    linkli = []
+
+    def sahte_linkli(to, konu, h, t, abonelik_url=None):
+        linkli.append((to, abonelik_url, h, t))
+        return True
+
+    conn.execute("INSERT INTO bildirim_eposta_olay (anahtar, tur, baslik, ozet, url, ilk_tohum) "
+                 "VALUES ('RISK:LINK:K:1','risk','LINKTEST','','',FALSE)")
+    conn.commit()
+    be.calistir(conn, turler=("risk",), gonderici=sahte_linkli, kaynaklar={"risk": []})
+    _anh = ab.anahtar_al()
+    kontrol("mail: her aliciya kendi cikis baglantisi", len(linkli) == 2 and all(
+        ab.token_dogrula(u.split("abonelik_iptal=")[1], _anh) == {"a@x.com": 101, "b@x.com": 102}[to] for to, u, _, _ in linkli), linkli and [(x[0], x[1]) for x in linkli])
+    kontrol("mail: baglanti govdede de var", all(("abonelik_iptal=" in h and "abonelik_iptal=" in t) for _, _, h, t in linkli))
+    kontrol("db.py: iptal tablosu RLS listesinde", '"bildirim_eposta_iptal"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
 
     # DDL: RLS listesi
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read()

@@ -26,11 +26,13 @@ import smtplib
 import argparse
 import datetime
 import html as _html
+import abonelik as _abonelik
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 RETRY_SAAT = 6
-TEMETTU_GERI_GUN = 10
+TEMETTU_GERI_GUN = 183          # v2.0.7.412: ~6 ay (temettu bildirimleri donemlere yayilir; eskiden 10 gun)
+TEMETTU_KAPSAM = "XTMTU-183G"   # kapsam degisince ilk eslesme sessiz tohumlanir (eski kayitlar mail olmasin)
 TEMETTU_DETAY_LIMIT = 15
 TURLER = ("risk", "tedbir", "halkaarz", "xharz", "temettu")
 TUR_BASLIK = {
@@ -146,10 +148,12 @@ def xharz_olaylari(xharz_satirlari):
     return sonuc
 
 
-def temettu_olaylari(ham_kayitlar, detay_getir=None, limit=TEMETTU_DETAY_LIMIT, bilinen=None):
+def temettu_olaylari(ham_kayitlar, detay_getir=None, limit=TEMETTU_DETAY_LIMIT, bilinen=None, izinli_kodlar=None):
     """ham_kayitlar: temettu_client._kar_payi_ham_kayitlar() ciktisi (ya da None).
     detay_getir(idx, ticker) -> {"brut_tl","ex_date",...}: sadece `bilinen` anahtar kumesinde OLMAYAN
-    (yani gercekten yeni) olaylar icin ve en fazla `limit` kez cagrilir."""
+    (yani gercekten yeni) olaylar icin ve en fazla `limit` kez cagrilir.
+    izinli_kodlar (v2.0.7.412): verilirse YALNIZ bu hisse kodlarindan en az biri bildirimde gecen kayitlar alinir
+    (XTMTU uyeleri); bos/None ise kisitlama yok."""
     if ham_kayitlar is None:
         return None
     import re
@@ -162,6 +166,10 @@ def temettu_olaylari(ham_kayitlar, detay_getir=None, limit=TEMETTU_DETAY_LIMIT, 
         kodlar = [c.strip().upper() for c in re.split(r"[,\s]+", f"{rec.get('stockCodes') or ''},{rec.get('relatedStocks') or ''}")
                   if 2 <= len(c.strip()) <= 8]
         kodlar = list(dict.fromkeys(kodlar))
+        if izinli_kodlar is not None:
+            kodlar = [k for k in kodlar if k in izinli_kodlar]
+            if not kodlar:
+                continue
         kod = kodlar[0] if kodlar else ""
         anahtar = f"TEMETTU:{idx}"
         ozet = (rec.get("summary") or rec.get("title") or "Kar Payı Dağıtım İşlemlerine İlişkin Bildirim")
@@ -191,27 +199,34 @@ def temettu_olaylari(ham_kayitlar, detay_getir=None, limit=TEMETTU_DETAY_LIMIT, 
 # ---------------------------------------------------------------------------
 # Veritabani: olay kaydi, baslangic, alicilar, rezervasyon
 # ---------------------------------------------------------------------------
-def kaydet_ve_yeni_olaylar(conn, tur: str, adaylar):
+def kaydet_ve_yeni_olaylar(conn, tur: str, adaylar, kapsam: str = None):
     """adaylar None ise (kaynak okunamadi) -> ([], False). Ilk calismada sessizce kaydeder -> ([], True).
-    Aksi halde veritabaninda olmayan olaylari kaydeder ve dondurur."""
+    Aksi halde veritabaninda olmayan olaylari kaydeder ve dondurur.
+    kapsam (v2.0.7.412): turun kaynak kapsami (ornek hisse listesi/gun penceresi). Bu kapsam icin ilk kez
+    calisiyorsa (tur daha once baska kapsamla baslamis olsa bile) mevcut adaylar SESSIZCE tohumlanir: kapsam
+    genislerken eski kayitlar yeni olay sanilip mail olmaz."""
     if adaylar is None:
         return [], False
     mevcut = {r[0] for r in conn.execute(
         "SELECT anahtar FROM bildirim_eposta_olay WHERE tur=?", (tur,)).fetchall()}
     ilk = _baslangic_anahtari(tur) not in mevcut
+    kapsam_anahtari = f"__KAPSAM__:{tur}:{kapsam}" if kapsam else None
+    kapsam_yeni = bool(kapsam_anahtari) and kapsam_anahtari not in mevcut
     yeni = [a for a in adaylar if a["anahtar"] not in mevcut]
-    if ilk:
+    if ilk or kapsam_yeni:
         for a in yeni:
             conn.execute(
                 "INSERT INTO bildirim_eposta_olay (anahtar, tur, baslik, ozet, url, ilk_tohum) "
                 "VALUES (?,?,?,?,?,TRUE) ON CONFLICT DO NOTHING",
                 (a["anahtar"], tur, a["baslik"], a["ozet"], a["url"]))
-        conn.execute(
-            "INSERT INTO bildirim_eposta_olay (anahtar, tur, baslik, ozet, url, ilk_tohum) "
-            "VALUES (?,?,?,?,?,TRUE) ON CONFLICT DO NOTHING",
-            (_baslangic_anahtari(tur), tur, "baslangic", "", ""))
+        for m in [_baslangic_anahtari(tur)] + ([kapsam_anahtari] if kapsam_anahtari else []):
+            conn.execute(
+                "INSERT INTO bildirim_eposta_olay (anahtar, tur, baslik, ozet, url, ilk_tohum) "
+                "VALUES (?,?,?,?,?,TRUE) ON CONFLICT DO NOTHING",
+                (m, tur, "baslangic", "", ""))
         conn.commit()
-        print(f"[bildirim_eposta] {tur}: ilk calisma - {len(yeni)} mevcut olay sessizce kaydedildi (mail yok).")
+        neden = "ilk calisma" if ilk else f"kapsam degisti ({kapsam})"
+        print(f"[bildirim_eposta] {tur}: {neden} - {len(yeni)} mevcut olay sessizce kaydedildi (mail yok).")
         return [], True
     kesin = []
     for a in yeni:
@@ -228,12 +243,13 @@ def kaydet_ve_yeni_olaylar(conn, tur: str, adaylar):
 
 
 def alicilari_oku(conn):
-    """email_settings kaydi olan, aktif kullanicilar -> [(user_id, email)]."""
+    """email_settings kaydi olan, aktif, anlik bildirimden CIKMAMIS kullanicilar -> [(user_id, email)]."""
     try:
         rows = conn.execute(
             "SELECT u.id, u.email FROM email_settings es JOIN users u ON u.id = es.user_id "
             "WHERE u.email IS NOT NULL AND u.email <> '' "
-            "AND COALESCE(u.is_active::text, '1') IN ('1','true','t')").fetchall()
+            "AND COALESCE(u.is_active::text, '1') IN ('1','true','t') "
+            "AND NOT EXISTS (SELECT 1 FROM bildirim_eposta_iptal i WHERE i.user_id = u.id)").fetchall()
         rows = _demetler(rows)
     except Exception as e:
         print(f"[bildirim_eposta] alici listesi okunamadi: {e}")
@@ -290,8 +306,8 @@ def konu_olustur(olaylar) -> str:
     return "TrendSurf Optima - " + ", ".join(parca)
 
 
-def govde_olustur(olaylar):
-    """(html, duz_metin)"""
+def govde_olustur(olaylar, abonelik_url=None):
+    """(html, duz_metin). abonelik_url verilirse mailin altina \"abonelikten cik\" baglantisi eklenir."""
     gruplar = {}
     for o in olaylar:
         gruplar.setdefault(o["tur"], []).append(o)
@@ -317,13 +333,16 @@ def govde_olustur(olaylar):
         + "".join(html_parca) +
         f"<p style='margin-top:22px;font-size:12px;color:#777;'>Kaynak: KAP (Kamuyu Aydınlatma Platformu) ve onaylanmış SPK tedbir listesi. "
         f"Bu e-posta yatırım tavsiyesi değildir. Detaylar: <a href='{UYGULAMA_URL}'>{UYGULAMA_URL}</a></p>"
-        "</body></html>")
+        + (f"<p style='font-size:12px;color:#777;'>Bu anlık bildirimleri almak istemiyorsanız "
+           f"<a href='{_html.escape(abonelik_url)}' style='color:#777;'>abonelikten çıkın</a>.</p>" if abonelik_url else "")
+        + "</body></html>")
     txt = "TrendSurf Optima - Yeni bildirimler\n" + "\n".join(txt_parca) + \
-          "\n\nKaynak: KAP ve onaylanmış SPK tedbir listesi. Yatırım tavsiyesi değildir.\n"
+          "\n\nKaynak: KAP ve onaylanmış SPK tedbir listesi. Yatırım tavsiyesi değildir.\n" + \
+          (f"\nBu anlık bildirimleri almak istemiyorsanız abonelikten çıkın: {abonelik_url}\n" if abonelik_url else "")
     return html, txt
 
 
-def smtp_gonder(to: str, konu: str, html: str, txt: str) -> bool:
+def smtp_gonder(to: str, konu: str, html: str, txt: str, abonelik_url: str = None) -> bool:
     """Gercek gonderim (peak_alert_emailer ile ayni SMTP ayarlari: env SMTP_USER/SMTP_PASS)."""
     from peak_alert_emailer import _get_smtp_config
     cfg = _get_smtp_config()
@@ -334,6 +353,8 @@ def smtp_gonder(to: str, konu: str, html: str, txt: str) -> bool:
     msg["Subject"] = konu
     msg["From"] = cfg["smtp_user"]
     msg["To"] = to
+    if abonelik_url:
+        msg["List-Unsubscribe"] = f"<{abonelik_url}>"
     msg.attach(MIMEText(txt, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     with smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"], timeout=30) as s:
@@ -371,13 +392,20 @@ def kaynaklari_topla(conn, turler):
     if "temettu" in turler:
         try:
             import temettu_client as _t
+            xtmtu = {str(r.get("Ticker", "")).strip().upper() for r in (_t._fetch_xtmtu_from_kap() or [])}
+            xtmtu.discard("")
+            if not xtmtu:
+                # uye listesi alinamadiysa kisitlamadan bildirim uretmek yerine bu turu atla (baslangic bozulmaz)
+                raise RuntimeError("XTMTU uye listesi alinamadi")
             ham = _t._kar_payi_ham_kayitlar(TEMETTU_GERI_GUN)
+            if ham is not None and len(ham) >= 2000:
+                print("[bildirim_eposta] UYARI: temettu bildirim listesi 2000 kayit tavaninda - eski kayitlar eksik olabilir.")
             bilinen = {r[0] for r in conn.execute(
                 "SELECT anahtar FROM bildirim_eposta_olay WHERE tur='temettu'").fetchall()}
             detay_cache = {}
             sonuc["temettu"] = temettu_olaylari(
                 ham, detay_getir=lambda idx, kod: _t._kar_payi_detay_getir(idx, kod, detay_cache),
-                bilinen=bilinen)
+                bilinen=bilinen, izinli_kodlar=xtmtu)
         except Exception as e:
             print(f"[bildirim_eposta] temettu kaynagi hatasi: {e}")
             sonuc["temettu"] = None
@@ -395,11 +423,21 @@ def calistir(conn, turler=TURLER, gonderici=smtp_gonder, kaynaklar=None, kuru=Fa
         if kuru:
             print(f"[bildirim_eposta] (kuru) {tur}: {0 if kaynaklar[tur] is None else len(kaynaklar[tur])} aday")
             continue
-        yeni, _ = kaydet_ve_yeni_olaylar(conn, tur, kaynaklar[tur])
+        yeni, _ = kaydet_ve_yeni_olaylar(conn, tur, kaynaklar[tur], kapsam=TEMETTU_KAPSAM if tur == "temettu" else None)
         toplam_yeni += len(yeni)
     sonuc = {"yeni": toplam_yeni, "gonderilen": 0, "basarisiz": 0}
     if kuru:
         return sonuc
+    try:
+        _anahtar = _abonelik.anahtar_al()
+    except Exception as e:
+        _anahtar = None
+        print(f"[bildirim_eposta] abonelik anahtari yok, mailde cikis baglantisi olmayacak: {e}")
+    try:
+        import inspect
+        _url_kabul = "abonelik_url" in inspect.signature(gonderici).parameters
+    except Exception:
+        _url_kabul = False
     for uid, email in alicilari_oku(conn):
         bekleyen = bekleyen_olaylar(conn, uid)
         if not bekleyen:
@@ -407,9 +445,13 @@ def calistir(conn, turler=TURLER, gonderici=smtp_gonder, kaynaklar=None, kuru=Fa
         kazanilan = rezerve_et(conn, uid, bekleyen)
         if not kazanilan:
             continue
-        html, txt = govde_olustur(kazanilan)
+        url = _abonelik.baglanti_uret(uid, _anahtar) if _anahtar else None
+        html, txt = govde_olustur(kazanilan, abonelik_url=url)
         try:
-            ok = gonderici(email, konu_olustur(kazanilan), html, txt)
+            if url and _url_kabul:
+                ok = gonderici(email, konu_olustur(kazanilan), html, txt, abonelik_url=url)
+            else:
+                ok = gonderici(email, konu_olustur(kazanilan), html, txt)
         except Exception as e:
             print(f"[bildirim_eposta] gonderim hatasi (user={uid}): {e}")
             ok = False
