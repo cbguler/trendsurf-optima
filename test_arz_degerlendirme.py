@@ -55,7 +55,16 @@ ok(R["alt"] in hucre(0), "XHARZ: yesil hucre")
 ok(R["icinde"] in hucre(1), "XHARZ: sari hucre")
 ok(R["ust"] in hucre(2), "XHARZ: kirmizi hucre")
 ok("background" not in hucre(3), "XHARZ: degerler yoksa renksiz")
+ok("!important" not in html and "background-color:" + R["icinde"] in hucre(1),
+   "Streamlit filtresi !important/background kisaltmasini siliyordu: background-color kullanilir")
+ok("Graham 20,00 TL, Çarpan Bazlı 30,00 TL: Arz Fiyatı ikisinin arasında (sarı)" in hucre(1), "hucre ipucu iki degeri yazar")
 ok("background" not in hucre(4), "XHARZ: arz fiyati yoksa renksiz")
+
+# cok buyuk fiyat 2 ondalik (sutuna sigsin), normal fiyat 4 ondalik
+df2 = pd.DataFrame([{"Ticker": "BIG", "Şirket": "B", "Durum": "", "Son_Fiyat": 4950000.0, "Uyari": ""},
+                    {"Ticker": "SML", "Şirket": "S", "Durum": "", "Son_Fiyat": 50.1, "Uyari": ""}])
+h2 = NS["_xharz_tablo_html"](df2)
+ok("4.950.000,00<" in h2 and "50,1000<" in h2, "buyuk fiyat 2, normal fiyat 4 ondalik")
 
 # Aciklama kutusu
 kutu = NS["halka_arz_nasil_okunur_html"]("<b>Ek</b>")
@@ -64,6 +73,12 @@ ok(all(R[k] in kutu for k in R), "uc renk kutuda")
 ok("Yeşil" in kutu and "Sarı" in kutu and "Kırmızı" in kutu, "renk adlari")
 ok("tavsiyesi" in kutu and "<b>Ek</b>" in kutu, "uyari ve ek not")
 ok(all(ord(ch) < 0x2600 for ch in kutu), "emoji yok")
+ok("Örnek:" in kutu and "15 TL" in kutu and "25 TL" in kutu and "35 TL" in kutu, "sayisal ornek")
+ok("ucuz" in kutu and "pahalı" in kutu, "sade anlatim")
+ok("Graham Değeri\'nden de Çarpan Bazlı Değer\'den de düşük".replace("\\'", "'") in kutu
+   and "Graham Değeri ile Çarpan Bazlı Değer'in arasında" in kutu
+   and "Çarpan Bazlı Değer'den de yüksek" in kutu, "her maddede iki degerin adi yazili")
+ok("iki değerin de" not in kutu and "iki sınırdan" not in kutu and "iki tahmin" not in kutu, "eski anlasilmaz ifadeler kalkti")
 ok("border:2px solid" in kutu and "font-size:15px" in kutu, "belirgin kutu stili")
 
 # sayfa baglantisi: iki tablo da ayni kutuyu kullanir, eski soluk not yok
