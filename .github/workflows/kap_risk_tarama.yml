@@ -49,7 +49,7 @@ jobs:
         run: |
           pip install --upgrade pip --quiet
           # kap_risk_tarama.py streamlit/pandas'a bagimli DEGIL; db.py psycopg2 ister.
-          pip install requests psycopg2-binary pandas evds --quiet
+          pip install requests psycopg2-binary pandas evds beautifulsoup4 --quiet
 
       - name: KAP risk taramasi
         run: python kap_risk_tarama.py ${FON_GUN:+--fon-gun "$FON_GUN"}
