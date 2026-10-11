@@ -166,14 +166,16 @@ def _bugun_trt() -> datetime.date:
     return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date()
 
 
-def calistir(db_mod, mevduat_fn=mevduat_cek, tahvil_fn=tahvil2y_cek, repo_fn=repo_gecmis_cek, simdi=None) -> dict:
-    """Her seri icin: son guncelleme YENILEME_SAAT'ten yeniyse atla; degilse kaynaktan cek ve arsive yaz.
+def calistir(db_mod, mevduat_fn=mevduat_cek, tahvil_fn=tahvil2y_cek, repo_fn=repo_gecmis_cek, simdi=None, zorla=False) -> dict:
+    """Her seri icin: son guncelleme YENILEME_SAAT'ten yeniyse atla (zorla=True ise hep cek); degilse kaynaktan cek ve arsive yaz.
     Donus: {seri: 'yazildi N' | 'atlandi' | 'HATA: ...'}"""
     simdi = simdi or datetime.datetime.now(datetime.timezone.utc)
     bugun = _bugun_trt()
     sonuc = {}
 
     def _taze(seri):
+        if zorla:
+            return False
         son = db_mod.faiz_arsiv_son_guncelleme(seri)
         return son is not None and (simdi - son) < datetime.timedelta(hours=YENILEME_SAAT)
 
@@ -201,14 +203,20 @@ def calistir(db_mod, mevduat_fn=mevduat_cek, tahvil_fn=tahvil2y_cek, repo_fn=rep
     return sonuc
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--zorla", action="store_true", help="6 saatlik tazelik kontrolunu atla, her kaynagi simdi cek")
+    a = ap.parse_args(argv)
     import db
     db.toplu_mod_ac()
     try:
         db.init_db()
-        sonuc = calistir(db)
+        sonuc = calistir(db, zorla=a.zorla)
         for k, v in sonuc.items():
             print(f"[faiz_arsiv] {k}: {v}")
+        for k in SERILER:
+            print(f"[faiz_arsiv] arsiv durumu {k}: {db.faiz_arsiv_kayit_sayisi(k)} kayit, son yazim {db.faiz_arsiv_son_guncelleme(k)}")
         return 0
     except Exception as e:
         print(f"[faiz_arsiv] HATA: {e}")

@@ -817,6 +817,121 @@ def _extract_disclosure_json(html_text: str) -> list:
 
 # ── Ana fonksiyon ──────────────────────────────────────────────────────────────
 
+def _izahname_satiri(rec: dict, cat: dict) -> Optional[dict]:
+    """KAP izahname bildirim kaydi -> yeni halka arz satiri (dict) ya da None (halka arz degil).
+
+    v2.0.7.405: fetch_upcoming_ipos() icindeki satir-ici siniflandirma AYNEN buraya tasindi; boylece
+    bildirim_eposta.py PDF/fiyat isi yapmadan AYNI kuralla hafif liste cikarabilir (iki yerde farkli
+    kural olmasin)."""
+    d = rec.get("disclosureBasic", {})
+    kod_raw = d.get("stockCode", "") or ""
+    summary = d.get("summary", "") or ""
+    summary_lower = summary.lower()
+
+    # v2.0.4.2 (2 Temmuz 2026): 131 kayitlik gercek "Onaylanan" verisiyle
+    # kalibre edildi. Onceki kural ("Halka Arz Basvurusu" ifadesi) sadece
+    # "Onayina Sunulan" (basvuru) asamasinda gecerliydi - GOLDA, ISVEA,
+    # ORZAX, EKIM, BETAE gibi "Onaylanan" asamasindaki gercek yeni IPO'lar
+    # bu ifadeyi HIC kullanmiyor, bunun yerine sadece "[Sirket Adi] A.S.
+    # ...Izahnamesi" diyor (cogu zaman bir araci kurum - INFO, HALKI, VKY,
+    # TSKB - uzerinden bildiriliyor, kendi stockCode'u degil).
+    #
+    # Kural (iki kategori icin de gecerli, 15/15 gercek ornekte dogrulandi):
+    #   1) "Halka Arz Başvurusu" / "Pay Halka Arz" ifadesi varsa -> YENI IPO
+    #   2) "Sermaye Artır..." ifadesi varsa (1'de degilse) -> MEVCUT sirket
+    #   3) "Varant" / "Sertifika" ifadesi varsa -> MEVCUT sirket (kendi
+    #      varant/sertifika ihraci, capraz kontrol degil)
+    #   4) Ozette "A.S." / "AS" (sirket unvani) geciyorsa VE 3 degilse -> YENI IPO
+    #   5) Digerleri -> belirsiz, guvenli tarafta kal, ELE
+    has_warrant = "varant" in summary_lower or "sertifika" in summary_lower
+    has_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
+    has_ipo_phrase = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
+                      or "pay halka arz" in summary_lower
+    has_company_suffix = bool(re.search(r'a\.?ş\.?\b', summary_lower)) \
+                          or bool(re.search(r'a\.?o\.?\b', summary_lower))
+
+    if has_ipo_phrase:
+        is_new_ipo = True
+    elif has_capital_increase:
+        is_new_ipo = False
+    elif has_company_suffix and not has_warrant:
+        is_new_ipo = True
+    else:
+        is_new_ipo = False
+
+    if not is_new_ipo:
+        return None
+
+    idx = d.get("disclosureIndex", "")
+    related = d.get("relatedStocks", "") or ""
+
+    # v2.0.4.2: Ozette gecen sirket adini cikar (araci kurum uzerinden
+    # bildirilen IPO'larda "Sirket" alani yanlislikla araci kurumun
+    # adini gosterirdi - orn. EKIM'in bildirimi VAKIF YATIRIM üzerinden
+    # yapiliyor ama kullaniciya "EKIM" gostermek daha anlamli).
+    display_company = d.get("companyTitle", "")
+    # v2.0.5.7: Sonlandirici olarak "A.S." yaninda "Anonim Sirketi" de
+    # kabul edilir. Onceki regex sadece A.S. aradigi icin, unvani
+    # "... Anonim Sirketi" ile biten sirketlerde (orn. Saat ve Saat)
+    # ilk A.S.'yi ta duyuru metnindeki "Borsa Istanbul A.S"de bulup
+    # aradaki her seyi isim saniyordu.
+    name_match = re.search(
+        r'^([A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü\s\.\'&,-]*?'
+        r'(?:[Aa]\.?[Şş]\.?|Anonim Şirket(?:i)?|[Aa]\.?[Oo]\.?))\b', summary)
+    if name_match:
+        candidate = name_match.group(1).strip()
+        # v2.0.5.7: Duyuru kaliplarindan tasan kuyruklari kes
+        # (orn. "... A.S. Paylarinin Halka Arzina Iliskin ...")
+        candidate = re.split(
+            r'\s+(?:Paylar[ıi]n[ıi]n|Pay\s+Halka|Halka\s+Arz[ıi]na)\b',
+            candidate)[0].strip()
+        # Cok kisa veya anlamsiz eslesmeleri (orn. sadece "A.Ş.") ele
+        if len(candidate) > 8:
+            display_company = candidate
+
+    return {
+        "Tarih":     d.get("publishDate", ""),
+        "Kod":       kod_raw,
+        "Sirket":    display_company,
+        "Konu":      d.get("title", ""),
+        "Ozet":      summary,
+        "Durum":     cat["durum_label"],
+        "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
+        "_dedup_key": f"{kod_raw}|{related}",
+        # v2.0.7.237: relatedStocks AYRICA saklanıyor - "Kod" alanı
+        # (stockCode) çoğu zaman şirketin KENDİ ticker'ı değil,
+        # aracı kurumun genel kodu (ör. "TSK, TSKB" = TSKB'nin TÜM
+        # müşterileri için aynı) - bu tek başına iki farklı şirketi
+        # (Kapeks/Bewen gibi) ayırt edemiyor. relatedStocks ise
+        # şirkete ÖZEL kodu (ör. "KPEKS", "BEWEN") içeriyor -
+        # Fiyat Tespit Raporu eşleştirmesinde ikisi BİRLİKTE
+        # kullanılacak (bkz. _en_iyi_eslesme).
+        "_related_kod": related,
+    }
+
+
+def izahname_listesi_hafif() -> Optional[list]:
+    """v2.0.7.405: KAP izahname kategorilerinden (basvuru + onaylandi) yeni halka arz bildirimlerini
+    PDF/fiyat tespiti YAPMADAN listeler (2 istek). Her eleman: _izahname_satiri() ciktisi + "disclosure_index".
+    Hicbir kategori cekilemezse None (bos liste = gercekten kayit yok)."""
+    sonuc, basarili = [], False
+    for cat in KAP_CATEGORIES:
+        html_text = _fetch_kap_html(cat["params"])
+        if not html_text:
+            continue
+        basarili = True
+        for rec in _extract_disclosure_json(html_text):
+            satir = _izahname_satiri(rec, cat)
+            if satir is None:
+                continue
+            idx = (rec.get("disclosureBasic", {}) or {}).get("disclosureIndex", "")
+            if not idx:
+                continue
+            satir["disclosure_index"] = str(idx)
+            sonuc.append(satir)
+    return sonuc if basarili else None
+
+
 def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
     """
     Yaklasan halka arzlari (henuz BIST evreninde olmayan, izahname surecindeki
@@ -856,91 +971,9 @@ def fetch_upcoming_ipos(force_refresh: bool = False) -> pd.DataFrame:
             continue
 
         for rec in raw_records:
-            d = rec.get("disclosureBasic", {})
-            kod_raw = d.get("stockCode", "") or ""
-            summary = d.get("summary", "") or ""
-            summary_lower = summary.lower()
-
-            # v2.0.4.2 (2 Temmuz 2026): 131 kayitlik gercek "Onaylanan" verisiyle
-            # kalibre edildi. Onceki kural ("Halka Arz Basvurusu" ifadesi) sadece
-            # "Onayina Sunulan" (basvuru) asamasinda gecerliydi - GOLDA, ISVEA,
-            # ORZAX, EKIM, BETAE gibi "Onaylanan" asamasindaki gercek yeni IPO'lar
-            # bu ifadeyi HIC kullanmiyor, bunun yerine sadece "[Sirket Adi] A.S.
-            # ...Izahnamesi" diyor (cogu zaman bir araci kurum - INFO, HALKI, VKY,
-            # TSKB - uzerinden bildiriliyor, kendi stockCode'u degil).
-            #
-            # Kural (iki kategori icin de gecerli, 15/15 gercek ornekte dogrulandi):
-            #   1) "Halka Arz Başvurusu" / "Pay Halka Arz" ifadesi varsa -> YENI IPO
-            #   2) "Sermaye Artır..." ifadesi varsa (1'de degilse) -> MEVCUT sirket
-            #   3) "Varant" / "Sertifika" ifadesi varsa -> MEVCUT sirket (kendi
-            #      varant/sertifika ihraci, capraz kontrol degil)
-            #   4) Ozette "A.S." / "AS" (sirket unvani) geciyorsa VE 3 degilse -> YENI IPO
-            #   5) Digerleri -> belirsiz, guvenli tarafta kal, ELE
-            has_warrant = "varant" in summary_lower or "sertifika" in summary_lower
-            has_capital_increase = "sermaye artır" in summary_lower or "sermaye artir" in summary_lower
-            has_ipo_phrase = "halka arz başvuru" in summary_lower or "halka arz basvuru" in summary_lower \
-                              or "pay halka arz" in summary_lower
-            has_company_suffix = bool(re.search(r'a\.?ş\.?\b', summary_lower)) \
-                                  or bool(re.search(r'a\.?o\.?\b', summary_lower))
-
-            if has_ipo_phrase:
-                is_new_ipo = True
-            elif has_capital_increase:
-                is_new_ipo = False
-            elif has_company_suffix and not has_warrant:
-                is_new_ipo = True
-            else:
-                is_new_ipo = False
-
-            if not is_new_ipo:
-                continue
-
-            idx = d.get("disclosureIndex", "")
-            related = d.get("relatedStocks", "") or ""
-
-            # v2.0.4.2: Ozette gecen sirket adini cikar (araci kurum uzerinden
-            # bildirilen IPO'larda "Sirket" alani yanlislikla araci kurumun
-            # adini gosterirdi - orn. EKIM'in bildirimi VAKIF YATIRIM üzerinden
-            # yapiliyor ama kullaniciya "EKIM" gostermek daha anlamli).
-            display_company = d.get("companyTitle", "")
-            # v2.0.5.7: Sonlandirici olarak "A.S." yaninda "Anonim Sirketi" de
-            # kabul edilir. Onceki regex sadece A.S. aradigi icin, unvani
-            # "... Anonim Sirketi" ile biten sirketlerde (orn. Saat ve Saat)
-            # ilk A.S.'yi ta duyuru metnindeki "Borsa Istanbul A.S"de bulup
-            # aradaki her seyi isim saniyordu.
-            name_match = re.search(
-                r'^([A-ZÇĞİÖŞÜ][\wÇĞİÖŞÜçğıöşü\s\.\'&,-]*?'
-                r'(?:[Aa]\.?[Şş]\.?|Anonim Şirket(?:i)?|[Aa]\.?[Oo]\.?))\b', summary)
-            if name_match:
-                candidate = name_match.group(1).strip()
-                # v2.0.5.7: Duyuru kaliplarindan tasan kuyruklari kes
-                # (orn. "... A.S. Paylarinin Halka Arzina Iliskin ...")
-                candidate = re.split(
-                    r'\s+(?:Paylar[ıi]n[ıi]n|Pay\s+Halka|Halka\s+Arz[ıi]na)\b',
-                    candidate)[0].strip()
-                # Cok kisa veya anlamsiz eslesmeleri (orn. sadece "A.Ş.") ele
-                if len(candidate) > 8:
-                    display_company = candidate
-
-            all_new_rows.append({
-                "Tarih":     d.get("publishDate", ""),
-                "Kod":       kod_raw,
-                "Sirket":    display_company,
-                "Konu":      d.get("title", ""),
-                "Ozet":      summary,
-                "Durum":     cat["durum_label"],
-                "Detay_URL": KAP_DETAIL_URL.format(disclosure_index=idx) if idx else "",
-                "_dedup_key": f"{kod_raw}|{related}",
-                # v2.0.7.237: relatedStocks AYRICA saklanıyor - "Kod" alanı
-                # (stockCode) çoğu zaman şirketin KENDİ ticker'ı değil,
-                # aracı kurumun genel kodu (ör. "TSK, TSKB" = TSKB'nin TÜM
-                # müşterileri için aynı) - bu tek başına iki farklı şirketi
-                # (Kapeks/Bewen gibi) ayırt edemiyor. relatedStocks ise
-                # şirkete ÖZEL kodu (ör. "KPEKS", "BEWEN") içeriyor -
-                # Fiyat Tespit Raporu eşleştirmesinde ikisi BİRLİKTE
-                # kullanılacak (bkz. _en_iyi_eslesme).
-                "_related_kod": related,
-            })
+            satir = _izahname_satiri(rec, cat)
+            if satir is not None:
+                all_new_rows.append(satir)
 
         print(f"[upcoming-ipo] '{cat['key']}' kategorisi: {len(raw_records)} bildirim tarandi", flush=True)
 
