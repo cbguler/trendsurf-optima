@@ -113,6 +113,47 @@ repo_cagri.clear()
 fa.calistir(db, lambda: (44.0, None), lambda: (39.59, None), repo_fn, simdi=NOW + datetime.timedelta(hours=20))
 ok(repo_cagri == [fa.REPO_NORMAL_GUN], "yeterli repo kaydi varsa kisa pencere")
 
+# ---- v409: zorla = tazelik kontrolunu atlar
+db.son = {k: NOW for k in fa.SERILER}
+zc = []
+sz = fa.calistir(db, lambda: zc.append("m") or (44.5, None), lambda: zc.append("t") or (39.7, None),
+                 lambda g: zc.append("r") or ([(datetime.date(2026, 10, 10), 39.5)], None),
+                 simdi=NOW + datetime.timedelta(minutes=5), zorla=True)
+ok(sorted(zc) == ["m", "r", "t"] and all(v.startswith("yazildi") for v in sz.values()), f"zorla=True taze olsa da ceker {sz}")
+zc.clear()
+sn = fa.calistir(db, lambda: zc.append("m") or (44.5, None), lambda: zc.append("t") or (39.7, None),
+                 lambda g: zc.append("r") or ([], "x"), simdi=NOW + datetime.timedelta(minutes=10))
+ok(zc == [] and set(sn.values()) == {"atlandi"}, "zorla yokken taze seri atlanir")
+
+# main() --zorla bayragi calistir'a iletilir ve arsiv durumu satirlari yazilir
+import io
+import contextlib
+import types
+
+
+class _SahteDbMod(SahteDb):
+    def toplu_mod_ac(self): pass
+    def toplu_mod_kapat(self): pass
+    def init_db(self): pass
+
+
+_sm = _SahteDbMod()
+_sm.son = {k: NOW for k in fa.SERILER}
+_gor = []
+_orj_calistir = fa.calistir
+fa.calistir = lambda dbm_, **kw: _gor.append(kw.get("zorla")) or {"mevduat": "atlandi", "tahvil2y": "atlandi", "repo": "atlandi"}
+sys.modules["db"] = _sm
+try:
+    cikti = io.StringIO()
+    with contextlib.redirect_stdout(cikti):
+        rc = fa.main(["--zorla"])
+        rc2 = fa.main([])
+finally:
+    fa.calistir = _orj_calistir
+    del sys.modules["db"]
+ok(rc == 0 and rc2 == 0 and _gor == [True, False], "main: --zorla bayragi iletilir")
+ok("arsiv durumu mevduat" in cikti.getvalue() and "arsiv durumu repo" in cikti.getvalue(), "main: arsiv durumu satirlari")
+
 # ---- uygulama/workflow/db baglantilari
 SRC = open("app.py", encoding="utf-8").read()
 ok("faiz_arsiv_oku" in SRC and "birikim_serisi" in SRC, "app.py arsivi okur")

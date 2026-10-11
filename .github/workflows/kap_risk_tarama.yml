@@ -22,6 +22,10 @@ on:
         description: "Fon bildirimleri icin kac gun geriye taransin (bos = 4; ilk kurulumda 60 yazin)"
         type: string
         default: ""
+      faiz_zorla:
+        description: "Faiz arsivi 6 saatlik tazelik kontrolunu atlasin, mevduat/tahvil/repo simdi cekilsin"
+        type: boolean
+        default: false
 
 concurrency:
   group: kap-risk-tarama
@@ -75,7 +79,7 @@ jobs:
       - name: Faiz arsivi (mevduat / tahvil / repo)
         if: always()
         continue-on-error: true
-        run: python faiz_arsiv.py
+        run: python faiz_arsiv.py ${{ github.event.inputs.faiz_zorla == 'true' && '--zorla' || '' }}
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}

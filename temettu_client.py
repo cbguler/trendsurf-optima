@@ -126,21 +126,15 @@ def _write_kar_payi_detay_cache(cache: dict):
         pass
 
 
-def _fetch_kar_payi_map() -> dict:
-    """Son 12 ayın (kayan pencere) 'Kar Payı Dağıtımı' bildirimlerini
-    KAP'ın GERÇEK detaylı sorgulama API'sinden (byCriteria, JSON POST)
-    çeker, her ticker kodu icin EN GUNCEL bildirimin disclosure_index'ini
-    dondurur: {"TBORG": {"disclosure_index": 1654862, "tarih": "..."}, ...}
-
-    v2.0.7.230: Bahri'nin Chrome DevTools ile yakaladigi gercek API -
-    v2.0.7.229'daki GET tabanli yontemin "son 30 gunle sinirli" sorununu
-    tamamen cozdu (canli testte 1233 kayit, XTMTU'nun 25/25 uyesi
-    bulundu - onceki yontemde 0/25)."""
+def _kar_payi_ham_kayitlar(geri_gun: int):
+    """KAP "Kar Payi Dagitimi" bildirimlerini (byCriteria, JSON POST) son `geri_gun` gun icin HAM liste
+    olarak dondurur; erisilemez/beklenmeyen yanitta None (bos liste = gercekten bildirim yok).
+    v2.0.7.405: _fetch_kar_payi_map() ile bildirim_eposta.py ayni sorguyu paylassin diye ayrildi."""
     try:
         import requests
         from datetime import datetime, timedelta
         bugun = datetime.now()
-        baslangic = bugun - timedelta(days=KAP_KAR_PAYI_GERI_GUN)
+        baslangic = bugun - timedelta(days=geri_gun)
         payload = {
             "fromDate": baslangic.strftime("%Y-%m-%d"),
             "toDate": bugun.strftime("%Y-%m-%d"),
@@ -160,11 +154,33 @@ def _fetch_kar_payi_map() -> dict:
         if r.status_code != 200:
             print(f"[temettu_client] KAP byCriteria HTTP durumu: {r.status_code}",
                   flush=True)
-            return {}
+            return None
         raw_records = r.json()
         if not isinstance(raw_records, list):
-            return {}
+            return None
+        return raw_records
+    except Exception as e:
+        print(f"[temettu_client] Kar Payı Dağıtımı ham sorgu hatasi: {e}", flush=True)
+        return None
 
+
+def _fetch_kar_payi_map() -> dict:
+    """Son 12 ayın (kayan pencere) 'Kar Payı Dağıtımı' bildirimlerini
+    KAP'ın GERÇEK detaylı sorgulama API'sinden (byCriteria, JSON POST)
+    çeker, her ticker kodu icin EN GUNCEL bildirimin disclosure_index'ini
+    dondurur: {"TBORG": {"disclosure_index": 1654862, "tarih": "..."}, ...}
+
+    v2.0.7.230: Bahri'nin Chrome DevTools ile yakaladigi gercek API -
+    v2.0.7.229'daki GET tabanli yontemin "son 30 gunle sinirli" sorununu
+    tamamen cozdu (canli testte 1233 kayit, XTMTU'nun 25/25 uyesi
+    bulundu - onceki yontemde 0/25)."""
+    from datetime import datetime, timedelta
+    bugun = datetime.now()
+    baslangic = bugun - timedelta(days=KAP_KAR_PAYI_GERI_GUN)
+    raw_records = _kar_payi_ham_kayitlar(KAP_KAR_PAYI_GERI_GUN)
+    if raw_records is None:
+        return {}
+    try:
         code_map = {}
         for rec in raw_records:
             idx = rec.get("disclosureIndex")
