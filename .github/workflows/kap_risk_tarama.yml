@@ -45,7 +45,7 @@ jobs:
         run: |
           pip install --upgrade pip --quiet
           # kap_risk_tarama.py streamlit/pandas'a bagimli DEGIL; db.py psycopg2 ister.
-          pip install requests psycopg2-binary pandas --quiet
+          pip install requests psycopg2-binary pandas evds --quiet
 
       - name: KAP risk taramasi
         run: python kap_risk_tarama.py ${FON_GUN:+--fon-gun "$FON_GUN"}
@@ -67,4 +67,16 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          PYTHONUNBUFFERED: "1"
+
+      # v2.0.7.407: Getiri Kiyaslamasi icin gunluk faiz arsivi (mevduat: hesapkurdu.com, 2 yillik tahvil: doviz.com,
+      # repo: TCMB EVDS gunluk gecmis). Kaynak basina 6 saatte bir gercek istek atar, digerlerinde hafif atlar.
+      # EVDS_API_KEY GitHub Secrets'ta tanimli olmali (yoksa yalniz repo atlanir, log'da yazar).
+      - name: Faiz arsivi (mevduat / tahvil / repo)
+        if: always()
+        continue-on-error: true
+        run: python faiz_arsiv.py
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
           PYTHONUNBUFFERED: "1"
