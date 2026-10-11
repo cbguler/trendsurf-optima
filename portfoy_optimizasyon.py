@@ -29,13 +29,16 @@ from scoring import optima_score as _optima_score_fn
 STRATEJILER = ("kuresel", "kategori_guvenceli")
 
 # Kullanıcıya gösterilen ad/açıklamalar TEK yerde (uygulama + e-posta aynı metni kullanır)
+# v2.0.7.404 (Bahri'nin talebi): seçenek adları "Optimal Dağılım" ve "Kategorik Dağılım" oldu
+# (önceki adlar PROJE_NOTLARI'nda). Kayıtlı tercih ETİKETLE değil kodla
+# ('kuresel' | 'kategori_guvenceli') saklandığı için kullanıcı ayarları etkilenmez.
 STRATEJI_ETIKET = {
-    "kuresel": "En yüksek skorlular",
-    "kategori_guvenceli": "Her kategoriden skorlular",
+    "kuresel": "Optimal Dağılım",
+    "kategori_guvenceli": "Kategorik Dağılım",
 }
 STRATEJI_SECENEK = {
-    "kuresel": "En yüksek skorlular",
-    "kategori_guvenceli": "Her kategoriden skorlular",
+    "kuresel": "Optimal Dağılım",
+    "kategori_guvenceli": "Kategorik Dağılım",
 }
 STRATEJI_ACIKLAMA = {
     "kuresel": ("Tüm kategoriler birlikte yarışır ve en yüksek Optima skorlu "
