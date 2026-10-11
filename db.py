@@ -979,6 +979,41 @@ def init_db():
         updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )""")
 
+    # v2.0.7.405 (11 Ekim 2026, Bahri'nin talebi - anlik e-posta bildirimi): bildirim_eposta.py olaylari
+    # (KAP uyarisi, SPK tedbiri, halka arz, XHARZ girisi, temettu bildirimi) burada tekil anahtarla tutar;
+    # ilk_tohum = kurulumda sessizce kaydedilen (mail GONDERILMEYEN) eski olaylar. bildirim_eposta_gonderim,
+    # (kullanici, olay) basina bir kez mail rezervasyonudur (tekrar gonderimi onler). Kamuya acik veri + kullanici
+    # kimligi icerdigi icin ikisi de RLS listesinde.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS bildirim_eposta_olay (
+        anahtar     TEXT PRIMARY KEY,
+        tur         TEXT NOT NULL,
+        baslik      TEXT,
+        ozet        TEXT,
+        url         TEXT,
+        ilk_tohum   BOOLEAN NOT NULL DEFAULT FALSE,
+        olay_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS bildirim_eposta_gonderim (
+        user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        olay_anahtari  TEXT NOT NULL,
+        gonderim_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, olay_anahtari)
+    )""")
+
+    # v2.0.7.407 (11 Ekim 2026, Bahri'nin talebi): Getiri Kiyaslamasi'ndaki Mevduat/Tahvil/Repo oranlarinin GUNLUK
+    # arsivi (faiz_arsiv.py yazar, app.py okur). Kamuya acik piyasa verisi, kullanici verisi degil.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS faiz_arsiv (
+        seri        TEXT NOT NULL,
+        tarih       DATE NOT NULL,
+        oran        DOUBLE PRECISION NOT NULL,
+        kaynak      TEXT,
+        guncelleme  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (seri, tarih)
+    )""")
+
     # v2.0.7.254 (5 Eylul 2026, Bahri'nin talebi - Admin Paneli'nde
     # abonelerin uygulama kullanim istatistiklerini gormek): her SAYFA
     # DEGISIKLIGINDE (her tiklamada DEGIL - bkz. app.py'deki kayit
@@ -1098,7 +1133,8 @@ def init_db():
                        "haber_islenmis", "haber_akisi", "ai_cagri_butcesi",
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
                        "ipo_valuations", "sayfa_ziyaretleri",
-                       "ipo_xharz_degerler"):
+                       "ipo_xharz_degerler", "bildirim_eposta_olay",
+                       "bildirim_eposta_gonderim", "faiz_arsiv"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -2266,6 +2302,74 @@ def enag_oranlari_getir() -> dict:
         oran = r["aylik_oran"] if isinstance(r, dict) else r[1]
         sonuc[yil_ay] = float(oran)
     return sonuc
+
+
+def faiz_arsiv_yaz(seri: str, kayitlar, kaynak: str = "") -> int:
+    """v2.0.7.407: [(date, oran)] kayitlarini faiz_arsiv'e upsert eder (ayni gun tekrar yazilirsa guncellenir).
+    Yazilan satir sayisini doner; hata olursa 0."""
+    kayitlar = list(kayitlar or [])
+    if not kayitlar:
+        return 0
+    try:
+        conn = get_conn()
+        for d, oran in kayitlar:
+            conn.execute(
+                "INSERT INTO faiz_arsiv (seri, tarih, oran, kaynak, guncelleme) VALUES (?,?,?,?,NOW()) "
+                "ON CONFLICT (seri, tarih) DO UPDATE SET oran=EXCLUDED.oran, kaynak=EXCLUDED.kaynak, guncelleme=NOW()",
+                (seri, d, float(oran), kaynak))
+        conn.commit()
+        conn.close()
+        return len(kayitlar)
+    except Exception as e:
+        print(f"[db] faiz_arsiv_yaz hata: {e}", file=sys.stderr)
+        return 0
+
+
+def faiz_arsiv_oku(baslangic=None) -> dict:
+    """v2.0.7.407: {seri: [(date, oran), ...]} (tarihe gore sirali). baslangic verilirse o tarihten ONCEKI son kayit da
+    dahil edilir (o gunun gecerli orani bilinsin). Hata/bos tablo -> {}."""
+    try:
+        conn = get_conn()
+        sonuc = {}
+        for seri in ("mevduat", "tahvil2y", "repo"):
+            if baslangic is not None:
+                rows = conn.execute(
+                    "SELECT tarih, oran FROM faiz_arsiv WHERE seri=? AND tarih >= COALESCE("
+                    "(SELECT MAX(tarih) FROM faiz_arsiv WHERE seri=? AND tarih <= ?), ?) ORDER BY tarih",
+                    (seri, seri, baslangic, baslangic)).fetchall()
+            else:
+                rows = conn.execute("SELECT tarih, oran FROM faiz_arsiv WHERE seri=? ORDER BY tarih", (seri,)).fetchall()
+            kayit = [(r[0], float(r[1])) for r in rows]
+            if kayit:
+                sonuc[seri] = kayit
+        conn.close()
+        return sonuc
+    except Exception as e:
+        print(f"[db] faiz_arsiv_oku hata: {e}", file=sys.stderr)
+        return {}
+
+
+def faiz_arsiv_son_guncelleme(seri: str):
+    """v2.0.7.407: serinin en son yazildigi an (tz-aware datetime) ya da None."""
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT MAX(guncelleme) FROM faiz_arsiv WHERE seri=?", (seri,)).fetchone()
+        conn.close()
+        return row[0] if row and row[0] is not None else None
+    except Exception as e:
+        print(f"[db] faiz_arsiv_son_guncelleme hata: {e}", file=sys.stderr)
+        return None
+
+
+def faiz_arsiv_kayit_sayisi(seri: str) -> int:
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT COUNT(*) FROM faiz_arsiv WHERE seri=?", (seri,)).fetchone()
+        conn.close()
+        return int(row[0]) if row else 0
+    except Exception as e:
+        print(f"[db] faiz_arsiv_kayit_sayisi hata: {e}", file=sys.stderr)
+        return 0
 
 
 def haber_akisi_temizle(gun: int = 7):

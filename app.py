@@ -5604,14 +5604,43 @@ def _kiyaslama_gunluk_serileri(portfolio):
             if float(_s.iloc[0]) > 0:
                 _sonuc[_ad] = (_s / float(_s.iloc[0]) - 1) * 100
 
-    # 4) Mevduat / Tahvil / Repo - TCMB EVDS'ten tam otomatik, basit
-    # faizle (oran x gun/365) dogrusal birikim.
-    _evds_oranlar = _evds_referans_oranlari_cek()
+    # 4) Mevduat / Devlet Tahvili / Repo.
+    # v2.0.7.407 (Bahri'nin talebi - "duzenli guncellensin"): oranlar artik faiz_arsiv tablosundan GUNLUK
+    # olarak okunur (faiz_arsiv.py her ~15 dk tetiklemede 6 saatte bir yazar); birikim o gunun oraniyla
+    # hesaplanir, gecmis cizgi oran degisince geriye donuk degismez. "Devlet Tahvili" artik gercek TR 2 yillik
+    # gosterge tahvil faizi (doviz.com); eski kaynak TLREF aslinda Repo ile ayni gecelik orandi.
+    # Arsivde bir seri yoksa (ilk kurulum/DB sorunu) ESKI davranis: guncel canli oran tum doneme sabit.
+    from faiz_arsiv import birikim_serisi as _birikim
+    try:
+        from db import faiz_arsiv_oku as _faiz_arsiv_oku
+        _arsiv = _faiz_arsiv_oku(_baslangic)
+    except Exception:
+        _arsiv = {}
     _gun_sayilari = np.array([(d.date() - _baslangic).days for d in _gun_araligi], dtype=float)
-    for _ad, _key in (("Vadeli Mevduat", "mevduat"), ("Devlet Tahvili", "tahvil"), ("Repo", "repo")):
-        _oran, _hata = _evds_oranlar.get(_key, (None, "bilinmeyen seri"))
+    _canli_kaynak = {
+        "mevduat": lambda: _evds_referans_oranlari_cek()["mevduat"],
+        "tahvil2y": lambda: _evds_referans_oranlari_cek()["tahvil2y"],
+        "repo": lambda: _evds_referans_oranlari_cek()["repo"],
+    }
+    for _ad, _key in (("Vadeli Mevduat", "mevduat"), ("Devlet Tahvili", "tahvil2y"), ("Repo", "repo")):
+        _kayit = _arsiv.get(_key)
+        if _kayit:
+            _bir, _ilk, _sabit_gun = _birikim(_kayit, _gun_araligi)
+            _bir.attrs["kaynak_notu"] = (
+                f"{_ad}: arşivde {len(_kayit)} günlük kayıt, ilk kayıt {_ilk.strftime('%d.%m.%Y')}"
+                + (f"; bundan önceki {_sabit_gun} gün için ilk kayıtlı oran sabit varsayıldı (ölçülmüş geçmiş değil)"
+                   if _sabit_gun > 0 else ""))
+            _sonuc[_ad] = _bir
+            continue
+        try:
+            _oran, _hata = _canli_kaynak[_key]()
+        except Exception as _e_canli:
+            _oran, _hata = None, str(_e_canli)
         if _oran and _oran > 0:
-            _sonuc[_ad] = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
+            _bir = pd.Series(_oran / 365 * _gun_sayilari, index=_gun_araligi)
+            _bir.attrs["kaynak_notu"] = (f"{_ad}: arşiv henüz boş; güncel oran (%{_oran:.2f}) tüm döneme sabit "
+                                          "uygulandı (tahmin)")
+            _sonuc[_ad] = _bir
 
     # v2.0.7.318 (16 Eylül 2026, Bahri'nin AÇIK talimatı - "Asla ve
     # katta sahte TÜİK verilerinin bu uygulamada yer almasını
@@ -5693,40 +5722,10 @@ def _evds_seri_cek(seri_kodu, gun_geriye=120):
 
 
 def _en_yuksek_vadeli_mevduat_cek():
-    """v2.0.7.131 (Bahri'nin talebi, 10 Ağustos 2026): "Banka mevduatı,
-    bankaların vadeli mevduata verdikleri EN YÜKSEK faiz gözetilerek
-    hesaplanmalı" - TCMB EVDS'deki TP.MT210AGS.TRY.MT01 bir AĞIRLIKLI
-    ORTALAMA, en yüksek değil, o yüzden bu amaca uymuyordu.
-
-    Araştırma: hesap.com'un "en çok kazandıran mevduat" bölümü Cloudflare
-    bot korumasıyla engelleniyordu (doğrudan test edildi - 403 + "Just a
-    moment" sayfası). hesapkurdu.com/mevduat ise ENGELSİZ ve sunucu
-    tarafında render ediliyor (Next.js SSR) - oranlar
-    '<td class="Table_td__xlSfc">% 46,00</td>' bicimindeki HTML'de
-    doğrudan mevcut, JS calistirmaya gerek yok.
-
-    Sayfadaki TÜM bankaların oranlarını çeker, EN YÜKSEĞİNİ döner -
-    (değer, hata_detayı) tuple'ı."""
-    try:
-        import requests, re as _re_evm
-        _headers = {
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/124.0.0.0 Safari/537.36"),
-            "Accept": "text/html,application/xhtml+xml,*/*",
-        }
-        _r = requests.get("https://www.hesapkurdu.com/mevduat",
-                          headers=_headers, timeout=15)
-        if _r.status_code != 200:
-            return None, f"hesapkurdu.com HTTP {_r.status_code}"
-        _oranlar = _re_evm.findall(
-            r'Table_td__xlSfc">%\s*<!-- -->\s*([\d]+,[\d]+)</td>', _r.text)
-        if not _oranlar:
-            return None, "hesapkurdu.com sayfa yapısı değişmiş olabilir (oran bulunamadı)"
-        _en_yuksek = max(float(o.replace(",", ".")) for o in _oranlar)
-        return round(_en_yuksek, 2), None
-    except Exception as _e:
-        return None, f"{type(_e).__name__}: {_e}"
+    """v2.0.7.407: asil uygulama faiz_arsiv.mevduat_cek'e tasindi (hesapkurdu.com, 32 gun vadeli tekliflerin
+    EN YUKSEGI; v2.0.7.131 karari). (deger, hata) doner."""
+    from faiz_arsiv import mevduat_cek
+    return mevduat_cek()
 
 
 def _enflasyon_gunluk_seri(aylik_oranlar: dict, gun_araligi, baslangic):
@@ -5789,13 +5788,13 @@ def _enflasyon_gunluk_seri(aylik_oranlar: dict, gun_araligi, baslangic):
 
 @st.cache_data(ttl=21600, show_spinner=False)
 def _evds_referans_oranlari_cek():
-    """v2.0.7.131 - Mevduat (en yüksek, hesapkurdu.com) + Tahvil/Repo
-    (TCMB EVDS) TEK seferde çekilir (6 saat cache - bu oranlar günde en
-    fazla 1 kez güncelleniyor, sık sorgulamaya gerek yok).
-    {"mevduat": (deger,hata), "tahvil": (...), "repo": (...)} döner."""
+    """Arsiv BOSKEN kullanilan canli yedek (6 saat cache): mevduat (hesapkurdu.com en yuksek), tahvil2y
+    (doviz.com TR 2 yillik), repo (TCMB EVDS TP.AOFOBAP). {"mevduat": (deger,hata), ...}.
+    v2.0.7.407: tahvil artik TLREF degil gercek 2 yillik gosterge tahvil faizi."""
+    from faiz_arsiv import mevduat_cek, tahvil2y_cek
     return {
-        "mevduat": _en_yuksek_vadeli_mevduat_cek(),
-        "tahvil": _evds_seri_cek("TP.BISTTLREF.ORAN", gun_geriye=10),
+        "mevduat": mevduat_cek(),
+        "tahvil2y": tahvil2y_cek(),
         "repo": _evds_seri_cek("TP.AOFOBAP", gun_geriye=10),
     }
 
@@ -5908,15 +5907,16 @@ def _render_karsilastirma(_cur_user, portfolio):
     )
     st.caption(f"Bugün itibarıyla — {_ozet}")
     st.caption(
-        "Vadeli Mevduat, hesapkurdu.com'daki bankaların 32 gün vadeli "
-        "tekliflerinden EN YÜKSEK orana göre; Tahvil/Repo, TCMB EVDS'ten "
-        "(sırasıyla BIST TLREF gecelik referans faiz oranı, BIST gecelik "
-        "repo ağırlıklı ortalama faiz oranı) çekilen güncel oranlarla basit "
-        "faizle (oran × gün/365) hesaplanır - gerçek bir işlemin (stopaj, "
-        "minimum vade vb.) tam yerine geçmez. Kısa dönemli getiriler "
-        "piyasa koşullarına bağlıdır, tek bir dönemden genel bir sonuç "
-        "çıkarmak yanıltıcı olabilir."
+        "Vadeli Mevduat: hesapkurdu.com'daki bankaların 32 gün vadeli tekliflerinden EN YÜKSEK oran. "
+        "Devlet Tahvili: Türkiye 2 yıllık gösterge tahvil faizi (doviz.com). Repo: TCMB EVDS BIST gecelik repo "
+        "ağırlıklı ortalama faiz oranı. Oranlar her gün arşive kaydedilir ve getiri, o günün oranıyla basit faiz "
+        "(oran × gün/365) olarak birikir - gerçek bir işlemin (stopaj, minimum vade vb.) tam yerine geçmez. "
+        "Kısa dönemli getiriler piyasa koşullarına bağlıdır, tek bir dönemden genel bir sonuç çıkarmak "
+        "yanıltıcı olabilir."
     )
+    _faiz_notlari = [s_.attrs.get("kaynak_notu") for s_ in _seriler.values() if s_.attrs.get("kaynak_notu")]
+    if _faiz_notlari:
+        st.caption("Oran arşivi — " + " | ".join(_faiz_notlari))
 
     # v2.0.7.313 (16 Eylül 2026, Bahri'nin talebi - "portföyümün getirisi
     # enflasyonun altında mı üstünde mi olduğunu görmem gerekli"): grafik
