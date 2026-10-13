@@ -469,12 +469,77 @@ def get_conn() -> _CompatConn:
 # ============================================================================
 # init_db - PostgreSQL tablolarini olustur
 # ============================================================================
+INIT_DB_DENEME = 4
+
+
+def _kilitlenme_mi(e) -> bool:
+    """PostgreSQL deadlock (40P01) / serialization hatasi mi - init_db bunlarda guvenle yeniden denenebilir."""
+    return (getattr(e, "pgcode", None) in ("40P01", "40001")
+            or type(e).__name__ in ("DeadlockDetected", "SerializationFailure")
+            or "deadlock detected" in str(e).lower())
+
+
+class _InitDbKilitlenme(BaseException):
+    """init_db'nin ICINDEKI `except Exception` bloklari (12 adet, hatayi yutup devam ederler) kilitlenmeyi
+    YUTMASIN diye BILEREK BaseException: kilitlenen islem zaten iptal edilmistir, devam eden sonraki komutlar
+    "current transaction is aborted" ile sessizce atlanir ve init_db yarim kalirdi."""
+
+
 def init_db():
-    """Tablolari olustur (yoksa). PostgreSQL syntax."""
+    """Tablolari olustur (yoksa). PostgreSQL syntax.
+
+    v2.0.7.414 (13 Ekim 2026, KAP Bildirim Izleme kirmizi hata e-postasi): init_db() HER workflow'un ve
+    uygulamanin basinda calisir ve `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` sutun olsa bile tabloya
+    AccessExclusiveLock alir. Iki is ayni anda init_db calistirinca (ornek: KAP Bildirim Izleme + KAP Risk Tarama
+    ayni dakikada) tablolari ters sirada kilitleyip PostgreSQL "deadlock detected" ile birini oldurdu
+    (psycopg2.errors.DeadlockDetected, db.py: ALTER TABLE portfolio ... purchase_date). init_db tamamen IDEMPOTENT
+    (CREATE/ALTER IF NOT EXISTS) oldugu icin kilitlenmede islem geri alinip rastgele kisa beklemeyle bastan denenir
+    (en fazla INIT_DB_DENEME kez); baska bir hata yeniden denenmez."""
+    import random
+    import time
+    global _toplu_baglanti_onbellek
+    for deneme in range(1, INIT_DB_DENEME + 1):
+        try:
+            return _init_db_bir_kez()
+        except (Exception, _InitDbKilitlenme) as e:
+            asil = e.__cause__ if isinstance(e, _InitDbKilitlenme) and e.__cause__ is not None else e
+            if not _kilitlenme_mi(asil) or deneme >= INIT_DB_DENEME:
+                raise asil
+            ozet = (str(asil).splitlines() or [""])[0]
+        # bekleme except bloguna GIRMEZ: blok bitince istisna ve onun tuttugu (acik, kilit tutan) baglanti
+        # birakilir; bekleme sirasinda kilitler baska islemleri engellemesin
+        if _toplu_baglanti_onbellek is not None:
+            try:
+                _toplu_baglanti_onbellek.rollback()
+            except Exception:
+                pass
+        bekle = round(random.uniform(1.0, 3.0) * deneme, 1)
+        print(f"[db] init_db kilitlenme (deadlock) - {deneme}/{INIT_DB_DENEME}. deneme basarisiz, "
+              f"{bekle} sn sonra yeniden denenecek: {ozet}", file=sys.stderr)
+        time.sleep(bekle)
+
+
+def _kilit_imleci():
+    """Kilitlenmeyi _InitDbKilitlenme'ye ceviren psycopg2 imleci (yalniz init_db kullanir)."""
+    import psycopg2.extensions
+
+    class _Imlec(psycopg2.extensions.cursor):
+        def execute(self, query, vars=None):
+            try:
+                return super().execute(query, vars)
+            except Exception as e:
+                if _kilitlenme_mi(e):
+                    raise _InitDbKilitlenme(str(e)) from e
+                raise
+    return _Imlec
+
+
+def _init_db_bir_kez():
+    """init_db'nin tek denemelik govdesi (bkz. init_db)."""
     print("[db] init_db basliyor...", file=sys.stderr)
     conn = get_conn()
     print("[db] get_conn OK, tablolari olusturuyorum...", file=sys.stderr)
-    c = conn._conn.cursor()
+    c = conn._conn.cursor(cursor_factory=_kilit_imleci())
 
     # users tablosu
     c.execute("""
