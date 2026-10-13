@@ -15,7 +15,9 @@ import hashlib
 import hmac
 import os
 
-UYGULAMA_URL = "https://trendsurf-optima.streamlit.app"
+# DOGRU adres TIRESIZ: trendsurfoptima.streamlit.app (v2.0.7.332/170 notlari). Tireli "trendsurf-optima" ESKI adrestir ve
+# Streamlit "You do not have access to this app or it does not exist" sayfasini gosterir (v405'te yanlis yazilmisti).
+UYGULAMA_URL = "https://trendsurfoptima.streamlit.app"
 
 
 def anahtar_al(db_url: str = None) -> bytes:
