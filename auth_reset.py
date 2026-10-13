@@ -121,7 +121,7 @@ def _send_reset_email(to_email: str, full_name: str, token: str):
     # Streamlit Cloud > Manage app > Settings > Secrets'a
     # `APP_URL = "https://<güncel-adresin>.streamlit.app"` satırını
     # ekle - subdomain'i her değiştirdiğinde bu satırı da güncelle.
-    _VARSAYILAN_APP_URL = "https://trendsurf-optima.streamlit.app"
+    _VARSAYILAN_APP_URL = "https://trendsurfoptima.streamlit.app"   # v2.0.7.413: tireli adres eskiydi
     try:
         import streamlit as st
         base_url = st.secrets.get("APP_URL", _VARSAYILAN_APP_URL)

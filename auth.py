@@ -70,7 +70,7 @@ def _notify_admin_yeni_kayit(email: str, full_name: str):
         # adrese giderdi). Artık `auth_reset.py`'deki AYNI desenle
         # `st.secrets["APP_URL"]`'den okunuyor - subdomain değişse bile
         # tek bir yerden (Secrets) güncellenir, koda dokunmaya gerek yok.
-        _app_url = st.secrets.get("APP_URL", "https://trendsurf-optima.streamlit.app") + "/?go=admin"
+        _app_url = st.secrets.get("APP_URL", "https://trendsurfoptima.streamlit.app") + "/?go=admin"
         _html = f"""
         <div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;
                     max-width:480px;margin:auto;padding:8px;">

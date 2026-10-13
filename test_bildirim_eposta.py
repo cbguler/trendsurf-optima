@@ -104,6 +104,14 @@ kontrol("govde: abonelik baglantisi html ve metinde", "abonelikten çıkın" in 
 _h2, _x2 = be.govde_olustur([{"tur": "risk", "anahtar": "a", "baslik": "B", "ozet": "", "url": ""}])
 kontrol("govde: baglanti verilmezse eklenmez", "abonelik" not in _h2 and "abonelik" not in _x2)
 
+# v413: dogru uygulama adresi (tiresiz) - tireli adres eski, "app yok" sayfasi gosteriyordu
+_kok = os.path.dirname(os.path.abspath(__file__))
+kontrol("uygulama adresi tiresiz ve tek kaynak", ab.UYGULAMA_URL == "https://trendsurfoptima.streamlit.app" and be.UYGULAMA_URL == ab.UYGULAMA_URL)
+kontrol("abonelik baglantisi dogru alan adini kullanir", ab.baglanti_uret(5, _k).startswith("https://trendsurfoptima.streamlit.app/?abonelik_iptal=5."))
+for _f in ("abonelik.py", "bildirim_eposta.py", "auth.py", "auth_reset.py"):
+    _kod = "\n".join(l for l in open(os.path.join(_kok, _f), encoding="utf-8").read().splitlines() if not l.strip().startswith("#"))
+    kontrol(f"{_f}: kod satirlarinda eski tireli adres yok", 'https://trendsurf-optima.streamlit.app' not in _kod)
+
 _ham = [{"disclosureIndex": 1, "stockCodes": "AAA"}, {"disclosureIndex": 2, "stockCodes": "BBB", "relatedStocks": "CCC"},
         {"disclosureIndex": 3, "stockCodes": "ZZZ"}]
 _tm = be.temettu_olaylari(_ham, izinli_kodlar={"AAA", "CCC"})
@@ -280,6 +288,34 @@ if DB_OK:
         ab.token_dogrula(u.split("abonelik_iptal=")[1], _anh) == {"a@x.com": 101, "b@x.com": 102}[to] for to, u, _, _ in linkli), linkli and [(x[0], x[1]) for x in linkli])
     kontrol("mail: baglanti govdede de var", all(("abonelik_iptal=" in h and "abonelik_iptal=" in t) for _, _, h, t in linkli))
     kontrol("db.py: iptal tablosu RLS listesinde", '"bildirim_eposta_iptal"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
+
+
+    # ---- v413: KAP uyari mailinde KAP bildirim baglantisi
+    _t1 = datetime.datetime(2026, 10, 13, 14, 55, 0)
+    _t2 = datetime.datetime(2026, 10, 13, 14, 56, 0)
+    for idx, yt, konu, gk, ik in ((5001, _t1, "Finansal Rapor Ek Süre Taleplerine İlişkin SPK Değerlendirmesi", "TRKNT", ""),
+                                  (5002, _t2, "Fon Tasfiye Duyurusu", "F:LNK", ""),
+                                  (5003, _t2, "Konu Z", "AMBIG", ""), (5004, _t2, "Konu Z", "AMBIG, XYZ", ""),
+                                  (5005, _t1, "Konu Y", "BASKA", "ILGILI1, ILGILI2")):
+        conn.execute("INSERT INTO kap_risk_bildirim (disclosure_index, yayin_tarihi, gonderen, konu, ozet, gonderen_kodlar, ilgili_kodlar) "
+                     "VALUES (?,?,?,?,?,?,?)", (idx, yt, "g", konu, "o", gk, ik))
+    for tk, kural, yt, konu in (("TRKNT", "KR1", _t1, "Finansal Rapor Ek Süre Taleplerine İlişkin SPK Değerlendirmesi"),
+                                ("F:LNK", "FON_TASFIYE", _t2, "Fon Tasfiye Duyurusu"), ("AMBIG", "KR2", _t2, "Konu Z"),
+                                ("YOKTUR", "KR3", _t1, "Konu Yok"), ("ILGILI2", "KR4", _t1, "Konu Y")):
+        conn.execute("INSERT INTO kap_risk_uyari (ticker, kural, seviye, ad, baslik, gonderim_tarihi, bitis_tarihi, ozet) "
+                     "VALUES (?,?,'ORTA','ad',?,?,DATE '2026-12-31','o')", (tk, kural, konu, yt))
+    conn.commit()
+    _ro = {e["anahtar"].split(":")[1]: e["url"] for e in be.risk_olaylari(conn)}
+    kontrol("risk: tek eslesen bildirimin KAP baglantisi", _ro.get("TRKNT") == "https://www.kap.org.tr/tr/Bildirim/5001", _ro.get("TRKNT"))
+    kontrol("risk: fon uyarisi (F:) icin baglanti", _ro.get("F") == "https://www.kap.org.tr/tr/Bildirim/5002", _ro)
+    kontrol("risk: ilgili kodlardan da eslesir", _ro.get("ILGILI2") == "https://www.kap.org.tr/tr/Bildirim/5005", _ro.get("ILGILI2"))
+    kontrol("risk: birden fazla aday -> baglanti BOS (tahmin yok)", _ro.get("AMBIG") == "", _ro.get("AMBIG"))
+    kontrol("risk: eslesen bildirim yok -> baglanti bos", _ro.get("YOKTUR") == "", _ro.get("YOKTUR"))
+    _h3, _x3 = be.govde_olustur([e for e in be.risk_olaylari(conn) if e["anahtar"].startswith("RISK:TRKNT")])
+    kontrol("risk: mailde baslik KAP baglantisi olur", "href='https://www.kap.org.tr/tr/Bildirim/5001'" in _h3 and "Bildirim/5001" in _x3)
+    conn.execute("DELETE FROM kap_risk_uyari WHERE ticker IN ('TRKNT','F:LNK','AMBIG','YOKTUR','ILGILI2')")
+    conn.execute("DELETE FROM kap_risk_bildirim WHERE disclosure_index IN (5001,5002,5003,5004,5005)")
+    conn.commit()
 
     # DDL: RLS listesi
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read()

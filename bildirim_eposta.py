@@ -43,7 +43,7 @@ TUR_BASLIK = {
     "temettu": "Temettü",
 }
 SEVIYE_ETIKET = {"AGIR": "Ağır", "ORTA": "Orta"}
-UYGULAMA_URL = "https://trendsurf-optima.streamlit.app"
+UYGULAMA_URL = _abonelik.UYGULAMA_URL   # tek kaynak (abonelik.py)
 
 
 def _baslangic_anahtari(tur: str) -> str:
@@ -79,6 +79,7 @@ def risk_olaylari(conn):
     except Exception as e:
         print(f"[bildirim_eposta] risk okunamadi: {e}")
         return None
+    kap_linkleri = _risk_kap_linkleri(conn, rows)
     sonuc = []
     for ticker, kural, seviye, ad, baslik, gtar, btar, ozet in rows:
         etiket = SEVIYE_ETIKET.get(seviye, seviye)
@@ -87,8 +88,37 @@ def risk_olaylari(conn):
             "anahtar": f"RISK:{ticker}:{kural}:{_tarih_anahtari(gtar)}",
             "baslik": f"{_kod_goster(ticker)} - {ad or kural} ({etiket} seviye)",
             "ozet": (ozet or baslik or "")[:400],
-            "url": "",
+            "url": kap_linkleri.get((ticker, kural), ""),
         })
+    return sonuc
+
+
+def _risk_kap_linkleri(conn, rows) -> dict:
+    """{(ticker, kural): KAP bildirim adresi}. kap_risk_uyari satiri, kap_risk_bildirim arsivindeki bildirimden uretilir
+    (kap_risk.riskleri_hesapla: gonderim_tarihi = bildirimin yayin_tarihi, baslik = konu). Eslestirme: ayni yayin
+    tarihi + ayni konu + ticker, bildirimin gonderen/ilgili kodlari arasinda. TAM BIR bildirim bulunursa baglanti
+    verilir; bulunamaz ya da birden fazla ise baglanti BOS kalir (tahmin edilmez)."""
+    import re
+    try:
+        tarihler = sorted({r[5] for r in rows if r[5] is not None})
+        if not tarihler:
+            return {}
+        yer = ",".join("?" for _ in tarihler)
+        arsiv = _demetler(conn.execute(
+            "SELECT disclosure_index, yayin_tarihi, konu, gonderen_kodlar, ilgili_kodlar "
+            f"FROM kap_risk_bildirim WHERE yayin_tarihi IN ({yer})", tuple(tarihler)).fetchall())
+    except Exception as e:
+        print(f"[bildirim_eposta] KAP bildirim baglantilari okunamadi (baglantisiz devam): {e}")
+        return {}
+    dizin = {}
+    for idx, yt, konu, gk, ik in arsiv:
+        kodlar = {k.strip().upper() for k in re.split(r"[,\s;]+", f"{gk or ''},{ik or ''}") if k.strip()}
+        dizin.setdefault((yt, konu), []).append((idx, kodlar))
+    sonuc = {}
+    for ticker, kural, seviye, ad, baslik, gtar, btar, ozet in rows:
+        adaylar = {idx for idx, kodlar in dizin.get((gtar, baslik), []) if str(ticker).upper() in kodlar}
+        if len(adaylar) == 1:
+            sonuc[(ticker, kural)] = f"https://www.kap.org.tr/tr/Bildirim/{next(iter(adaylar))}"
     return sonuc
 
 
