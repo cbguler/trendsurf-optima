@@ -40,9 +40,6 @@ def veri_sinirli_mi(row) -> bool:
         return False
 
 
-GENC_FON_SKOR_CARPANI = 0.5   # v2.0.7.392 (Bahri'nin karari): genc fonun Optima Skoru yariya iner
-
-
 def genc_fon_mu(row) -> bool:
     """TEFAS satirinda Genc_Fon == True (CSV'den gelen deger bool ya da 'True' metni olabilir). Bilinmiyor/bos = False."""
     try:
@@ -54,17 +51,71 @@ def genc_fon_mu(row) -> bool:
     return v is True or str(v).strip().lower() == "true"
 
 
+def yas_kademesi_satir(row):
+    """v2.0.7.415: satirin yas kademesi - 0 (1 yildan genc), 1 (1-2 yil), 2 (2-3 yil), 3 (3 yil+) ya da None (bilinmiyor
+    / kapsam disi). TEFAS: worker'in arsivden yazdigi 'Yas_Kademe' (yoksa eski 'Genc_Fon'=True -> 0). BIST/KRIPTO:
+    'Gecmis_Gun'dan (BIST islem gunu, KRIPTO takvim gunu; esikler scoring.YAS_ESIKLERI)."""
+    from scoring import yas_kademesi
+    try:
+        kat = str(row.get("Kategori"))
+        if kat == "TEFAS":
+            v = row.get("Yas_Kademe")
+            try:
+                k = int(float(v))
+                if 0 <= k <= 3:
+                    return k
+            except (TypeError, ValueError):
+                pass
+            return 0 if genc_fon_mu(row) else None
+        return yas_kademesi(kat, row.get("Gecmis_Gun"))
+    except Exception:
+        return None
+
+
+def yas_kesinti_mi(row) -> bool:
+    """Yas kademesi 1 veya 2 (1-3 yillik varlik): skor eksildi ama AL siniri/SINIRLI VERI seridi yok."""
+    try:
+        return int(float(row.get("Yas_Kademe"))) in (1, 2)
+    except (TypeError, ValueError):
+        return False
+
+
+def _yuzde(k) -> int:
+    from scoring import yas_carpani
+    return int(round((1.0 - yas_carpani(k)) * 100))
+
+
 def veri_sinirli_aciklama(row) -> str:
-    if genc_fon_mu(row):
+    """Kademe 0 (1 yildan genc) aciklamasi."""
+    pct = _yuzde(0)
+    if str(row.get("Kategori")) == "TEFAS" or genc_fon_mu(row):
         return ("Genç fon: yaklaşık bir yıldan kısa fiyat geçmişi var. Getiri, RSI ve volatilite kısa bir geçmişe "
-                "dayandığı için Optima Skor düşük güvenilirliktedir; skor yarıya indirilmiştir ve AL sinyali "
+                f"dayandığı için Optima Skor düşük güvenilirliktedir; skor %{pct} düşürülmüştür ve AL sinyali "
                 "üretilmez, en fazla TUT İZLE verilir.")
     try:
         g = int(float(row.get("Gecmis_Gun")))
     except Exception:
         return ""
+    if str(row.get("Kategori")) == "KRIPTO":
+        return (f"Genç kripto varlık: BtcTurk'te {g} günlük fiyat geçmişi var (365 günden az, yaklaşık bir yıl). "
+                f"Optima Skor kısa bir teknik geçmişe dayandığı için %{pct} düşürülmüştür; AL sinyali üretilmez, "
+                "en fazla TUT İZLE verilir.")
     return (f"Yeni halka arz / kısa geçmiş: {g} işlem günü fiyat geçmişi var (260'tan az, yaklaşık bir yıl). "
-            f"Optima Skor kısa bir teknik geçmişe dayanır; bu nedenle AL sinyali üretilmez, en fazla TUT İZLE verilir.")
+            f"Optima Skor kısa bir teknik geçmişe dayandığı için %{pct} düşürülmüştür; AL sinyali üretilmez, "
+            "en fazla TUT İZLE verilir.")
+
+
+def yas_kesinti_aciklama(row) -> str:
+    """Kademe 1-2 (1-3 yillik varlik) aciklamasi."""
+    try:
+        k = int(float(row.get("Yas_Kademe")))
+    except (TypeError, ValueError):
+        return ""
+    if k not in (1, 2):
+        return ""
+    return (f"Görece genç varlık: fiyat geçmişi {k} ile {k + 1} yıl arasında. Kısa geçmiş skorun güvenilirliğini "
+            f"azalttığı için Optima Skor %{_yuzde(k)} düşürülmüştür (1 yıl altı %{_yuzde(0)}, 1-2 yıl %{_yuzde(1)}, "
+            f"2-3 yıl %{_yuzde(2)}, 3 yıl ve üzeri kesinti yok). Sinyal etiketi bu düşük skora göre verilir.")
 
 
 def get_signal_row(row, score, rsi, trend):
@@ -180,44 +231,43 @@ def uyari_katmanini_uygula(df):
     except Exception as _kr_err:
         print(f"[kap-risk] atlandi: {_kr_err}")
 
-    # v2.0.7.378 (9 Ekim 2026, Bahri'nin karari): BIST hissesi 260 islem gununden az fiyat gecmisine sahipse
-    # SINIRLI VERI bayragi (uyari seridi + AL sinyali siniri). Gecmis_Gun worker'dan gelir; yoksa/bilinmiyorsa
-    # bayrak YOK. Skor degistirilmez.
+    # v2.0.7.415 (14 Ekim 2026, Bahri'nin karari): YAS KADEMESI (BIST + KRIPTO + TEFAS, tek kural).
+    # Kademe 0 (1 yildan genc): skor x0,70 + SINIRLI VERI bayragi (uyari seridi + AL sinyali siniri);
+    # kademe 1 (1-2 yil): x0,80; kademe 2 (2-3 yil): x0,90; kademe 3 / bilinmeyen: dokunulmaz.
+    # (378: BIST 260 gun siniri yalniz sinyali sinirliyordu; 392: genc fon x0,5. Ikisi bu kuralda birlesti.)
+    # Yas bilgisi worker'dan gelir (Gecmis_Gun: BIST islem gunu / KRIPTO takvim gunu; Yas_Kademe: TEFAS arsivi).
+    # TEFAS'in CSV'de skoru yoktur (sayfa hesaplar); burada ayni formulle (RSI, Ret1M, Vol) hesaplanip carpilir ki
+    # liste/detay/Ana Sayfa/e-posta ayni sayiyi gorsun. Tedbirli/KAP UYARISI skoru zaten 0'dir (0 x k = 0).
     df["Veri_Sinirli"] = False
+    df["Yas_Kesinti"] = 0
     try:
-        from scoring import sinirli_veri_mi as _svm
+        from scoring import yas_carpani as _yc, optima_score as _os
         if "Gecmis_Gun" in df.columns:
             df["Gecmis_Gun"] = pd.to_numeric(df["Gecmis_Gun"], errors="coerce")
-            df["Veri_Sinirli"] = [
-                _svm(k, p, g) for k, p, g in zip(df["Kategori"], df["Son_Fiyat"], df["Gecmis_Gun"])]
         else:
             df["Gecmis_Gun"] = pd.NA
-    except Exception as _vs_err:
-        print(f"[veri-sinirli] atlandi: {_vs_err}")
-
-    # v2.0.7.392 (Bahri'nin karari, 10 Ekim 2026): ~1 yildan genc TEFAS fonu icin (2) uyari seridi + AL siniri
-    # (SINIRLI VERI bayragi) VE (3) Optima Skoru yariya iner. TEFAS'in CSV'de skoru yoktur (sayfa hesaplar); burada
-    # ayni formulle (RSI, Ret1M, Vol) hesaplanip carpilir ki liste/detay/Ana Sayfa/e-posta ayni sayiyi gorsun.
-    # Tedbirli fon zaten 0'dir (0 x 0,5 = 0). Genc_Fon bos/bilinmiyorsa HICBIR sey yapilmaz.
-    try:
-        if "Genc_Fon" in df.columns:
-            _gf = pd.Series([genc_fon_mu(r) for r in df.to_dict("records")], index=df.index)
-            _gf &= pd.to_numeric(df["Son_Fiyat"], errors="coerce").fillna(0) > 0
-            if _gf.any():
-                from scoring import optima_score as _os
-                df.loc[_gf, "Veri_Sinirli"] = True
-                if "Optima_Skor" not in df.columns:
-                    df["Optima_Skor"] = pd.NA
-                _sk = pd.to_numeric(df["Optima_Skor"], errors="coerce")
-                _eksik = _gf & _sk.isna()
-                if _eksik.any():
-                    _sk[_eksik] = [
-                        _os(float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0),
-                            vol=float(r.get("Vol", 30) or 30))
-                        for r in df.loc[_eksik].to_dict("records")]
-                _sk[_gf] = (_sk[_gf] * GENC_FON_SKOR_CARPANI).round(1)
-                df["Optima_Skor"] = _sk
-                print(f"[genc-fon] {int(_gf.sum())} genc TEFAS fonu: SINIRLI VERI + skor x{GENC_FON_SKOR_CARPANI}.")
-    except Exception as _gf_err:
-        print(f"[genc-fon] atlandi: {_gf_err}")
+        _fiyat_var = pd.to_numeric(df["Son_Fiyat"], errors="coerce").fillna(0) > 0
+        _kd = pd.Series([yas_kademesi_satir(r) for r in df.to_dict("records")], index=df.index, dtype=object)
+        _kd = _kd.where(_fiyat_var, None)
+        df["Yas_Kademe"] = pd.to_numeric(_kd, errors="coerce")
+        _k0 = df["Yas_Kademe"] == 0
+        df["Veri_Sinirli"] = _k0.fillna(False).astype(bool)
+        _kes = df["Yas_Kademe"].isin([0, 1, 2])
+        if _kes.any():
+            if "Optima_Skor" not in df.columns:
+                df["Optima_Skor"] = pd.NA
+            _sk = pd.to_numeric(df["Optima_Skor"], errors="coerce")
+            _eksik = _kes & _sk.isna() & (df["Kategori"].astype(str) == "TEFAS")
+            if _eksik.any():
+                _sk[_eksik] = [
+                    _os(float(r.get("RSI", 50) or 50), float(r.get("Ret1M", 0) or 0), vol=float(r.get("Vol", 30) or 30))
+                    for r in df.loc[_eksik].to_dict("records")]
+            _carp = df["Yas_Kademe"].map(lambda k: _yc(k) if pd.notna(k) else 1.0).astype(float)
+            _sk = (_sk * _carp.where(_kes, 1.0)).round(1)
+            df["Optima_Skor"] = _sk
+            df["Yas_Kesinti"] = df["Yas_Kademe"].map(lambda k: _yuzde(k) if pd.notna(k) and int(k) in (0, 1, 2) else 0).astype(int)
+            _dag = {int(k): int((df["Yas_Kademe"] == k).sum()) for k in (0, 1, 2)}
+            print(f"[yas-kademe] skor kesintisi uygulandi (kademe 0/1/2 satir sayisi): {_dag}.")
+    except Exception as _yk_err:
+        print(f"[yas-kademe] atlandi: {_yk_err}")
     return df

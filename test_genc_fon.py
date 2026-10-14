@@ -1,4 +1,4 @@
-"""v2.0.7.392: genc TEFAS fonu (~1 yildan kisa gecmis): SINIRLI VERI uyarisi + AL siniri + Optima Skor x0,5.
+"""v2.0.7.392: genc TEFAS fonu (~1 yildan kisa gecmis): SINIRLI VERI uyarisi + AL siniri + Optima Skor x0,70 (v415: kademeli yas kesintisi).
 Calistir: python3 test_genc_fon.py (ag/veritabani kullanilmaz)"""
 import sys, types, warnings
 warnings.filterwarnings("ignore")
@@ -39,7 +39,7 @@ def _df():
         f("ESKI", False, skor=80.0),        # genc degil
         f("BLNM", None, skor=80.0),         # bilinmiyor (bos) -> dokunulmaz
         f("NOPR", True, skor=80.0, fiyat=0.0),  # fiyati yok
-        f("HSSE", True, skor=80.0, kat="BIST", gun=500.0),   # BIST'te Genc_Fon anlamsiz
+        f("HSSE", True, skor=80.0, kat="BIST", gun=900.0),   # BIST'te Genc_Fon anlamsiz
     ])
 
 
@@ -51,9 +51,9 @@ def test_katman_bayrak_ve_skor():
     finally:
         _db_geri(db, orj)
     ham = round(optima_score(50.0, 6.0, vol=10.0), 1)
-    ok(bool(d.loc["GNC1", "Veri_Sinirli"]) and d.loc["GNC1", "Optima_Skor"] == round(ham * 0.5, 1),
-       f"skoru bos genc fon: formulle hesaplanip yariya iner ({ham} -> {d.loc['GNC1','Optima_Skor']})")
-    ok(bool(d.loc["GNC2", "Veri_Sinirli"]) and d.loc["GNC2", "Optima_Skor"] == 40.0, "CSV metni 'True' da taninir; 80 -> 40")
+    ok(bool(d.loc["GNC1", "Veri_Sinirli"]) and d.loc["GNC1", "Optima_Skor"] == round(ham * 0.7, 1),
+       f"skoru bos genc fon: formulle hesaplanip x0,70 olur ({ham} -> {d.loc['GNC1','Optima_Skor']})")
+    ok(bool(d.loc["GNC2", "Veri_Sinirli"]) and d.loc["GNC2", "Optima_Skor"] == 56.0, "CSV metni 'True' da taninir; 80 -> 56")
     ok(not d.loc["ESKI", "Veri_Sinirli"] and d.loc["ESKI", "Optima_Skor"] == 80.0, "genc olmayan fon aynen kalir")
     ok(not d.loc["BLNM", "Veri_Sinirli"] and d.loc["BLNM", "Optima_Skor"] == 80.0, "Genc_Fon bos (bilinmiyor) -> hicbir sey yapilmaz")
     ok(not d.loc["NOPR", "Veri_Sinirli"] and d.loc["NOPR", "Optima_Skor"] == 80.0, "fiyati olmayan fon isaretlenmez")
@@ -79,7 +79,7 @@ def test_sinyal_siniri_ve_aciklama():
     ok(U.get_signal_row(d.loc["GNC2"], 90, 50, "YUKSELIS") == ("TUT İZLE", "sig-t"), "genc fon: AL -> TUT IZLE")
     ok(U.get_signal_row(d.loc["ESKI"], 90, 50, "YUKSELIS")[0] == "GÜÇLÜ AL", "genc olmayan fon: sinyal degismez")
     a = U.veri_sinirli_aciklama(d.loc["GNC2"])
-    ok("Genç fon" in a and "yarıya" in a and "AL sinyali" in a, "TEFAS'a ozgu aciklama metni")
+    ok("Genç fon" in a and "%30 düşürülmüştür" in a and "AL sinyali" in a, "TEFAS'a ozgu aciklama metni")
     ok("Yeni halka arz" not in a, "halka arz metni TEFAS'ta cikmaz")
     ok("Yeni halka arz" in U.veri_sinirli_aciklama(pd.Series({"Kategori": "BIST", "Gecmis_Gun": 66.0})),
        "BIST aciklamasi degismedi")
@@ -94,7 +94,7 @@ def test_tedbirli_genc_fon_sifir_kalir():
         d = U.uyari_katmanini_uygula(_df()).set_index("Ticker")
     finally:
         db.get_aktif_piyasa_tedbirleri, db.get_aktif_kap_riskleri = orj
-    ok(d.loc["GNC2", "Optima_Skor"] == 0.0, "tedbirli genc fon: skor 0 (0 x 0,5 = 0)")
+    ok(d.loc["GNC2", "Optima_Skor"] == 0.0, "tedbirli genc fon: skor 0 (0 x 0,7 = 0)")
 
 
 def test_optimizer_genc_fonu_almaz_izleme_listesinde_tutar():
@@ -168,7 +168,7 @@ def test_toplu_guncelleme_genc_fon_kolonu():
 
 def test_worker_yedek_yolu_ve_workflow():
     src = open("worker.py", encoding="utf-8").read()
-    ok('"Vol_Kaynak", "Genc_Fon"]' in src, "gercek getiri hesaplanamazsa onceki Genc_Fon korunur")
+    ok('"Vol_Kaynak", "Genc_Fon", "Yas_Kademe"]' in src, "gercek getiri hesaplanamazsa onceki Genc_Fon korunur")
 
 
 if __name__ == "__main__":

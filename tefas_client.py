@@ -711,6 +711,41 @@ def genc_fon_isaretle(fiyat_simdi, eski_fiyat, min_kapsam: float = GENC_FON_MIN_
     return out
 
 
+YAS_KADEME_KOLONU = "Yas_Kademe"
+YAS_KADEME_GUNLERI = (365, 730, 1095)    # v2.0.7.415: 1, 2, 3 yil (takvim gunu; arsivde o tarihte fiyat var mi)
+
+
+def fon_yas_kademesi(fiyat_simdi, eskiler, min_kapsam: float = GENC_FON_MIN_KAPSAM):
+    """v2.0.7.415: her fon icin yas kademesi - 0 (1 yildan genc), 1 (1-2 yil), 2 (2-3 yil), 3 (3 yil ve uzeri) ya da
+    None (bilinmiyor). `eskiler`: [1 yil, 2 yil, 3 yil] onceki fiyat serileri (ticker'a gore hizali, bos/NaN = fiyat yok).
+    Bir esikte fiyat var diye daha derin esikteki fiyat eksikligi 'genc' anlamina gelmez: daha derin bir tarihte fiyati
+    olan fon, daha sig tarihlerde de 'var' sayilir (arsiv bosluklari yuzunden yanlis genc isaretlenmez).
+    GUVENCE (genc_fon_isaretle ile ayni): bir esikte arsiv, bugun fiyati olan fonlarin `min_kapsam` oranindan azini
+    kapsiyorsa o esik ve daha derinleri 'bilinmiyor' (None) sayilir - dayanagi olmayan kesinti uygulanmaz."""
+    simdi = pd.to_numeric(fiyat_simdi, errors="coerce")
+    fiyatli = simdi > 0
+    n = int(fiyatli.sum())
+    out = pd.Series([None] * len(simdi), index=simdi.index, dtype=object)
+    if n == 0:
+        return out
+    var = [(pd.to_numeric(e, errors="coerce") > 0) for e in eskiler]
+    # derin tarihte fiyati olan, sig tarihlerde de var sayilir
+    for i in range(len(var) - 2, -1, -1):
+        var[i] = var[i] | var[i + 1]
+    yeterli = [float((v & fiyatli).sum()) / float(n) >= float(min_kapsam) for v in var]
+    for idx in simdi.index[fiyatli]:
+        kademe = len(var)                   # hepsi var -> en ust kademe
+        for i, v in enumerate(var):
+            if not yeterli[i]:
+                kademe = None               # bu esik icin dayanak yok
+                break
+            if not bool(v.loc[idx]):
+                kademe = i
+                break
+        out.loc[idx] = kademe
+    return out
+
+
 def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=print):
     """TEFAS satirlarinin Ret1M/Ret3M/RSI degerlerini GERCEK gunluk fiyatlardan
     yeniden hesaplar (pytefas toplu sorgu, fund_code VERILMEDEN), Ret6M/Ret1Y/Ret3Y/
@@ -735,6 +770,7 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
         df_t[GETIRI_TARIHI_KOLONU] = None   # onceki degerler gecerli sayilmaz: yeniden dogrulanacak
     df_t[NAV_DURUMU_KOLONU] = ""            # v2.0.7.371: her turda yeniden belirlenir
     df_t[VOL_KAYNAK_KOLONU] = VOL_KAYNAK_RISK   # v2.0.7.391: gercek volatilite hesaplananlar asagida GERCEK olur
+    df_t[YAS_KADEME_KOLONU] = None           # v2.0.7.415: arsiv yeterliyse asagida 0-3 olur, aksi halde BOS
     df_t[GENC_FON_KOLONU] = None             # v2.0.7.392: arsiv yeterliyse asagida True/False olur, aksi halde BOS (bilinmiyor)
 
     parcalar, son_fiyat_tarihi = [], {}
@@ -805,13 +841,18 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
             son_gun = max(pd.to_datetime(list(son_fiyat_tarihi.values())))
             fiyat_simdi = pd.to_numeric(df_t["Son_Fiyat"], errors="coerce")
             tk_all = df_t["Ticker"].astype(str)
-            for kol_adi, gun in (("Ret6M", 182), ("Ret1Y", 365), ("Ret3Y", 1095), ("Ret5Y", 1825)):
+            _yas_eskiler = {}                      # v2.0.7.415: 365/730/1095 gun onceki fiyatlar (yas kademesi)
+            for kol_adi, gun in (("Ret6M", 182), ("Ret1Y", 365), ("Ret2Y_YAS", 730), ("Ret3Y", 1095), ("Ret5Y", 1825)):
                 hedef = (son_gun - pd.Timedelta(days=gun)).strftime("%Y-%m-%d")
                 gecmis = _db.tefas_arsiv_fiyatlari(hedef, tolerans_gun=10)
                 if gecmis is None:
                     log(f"[getiri] {kol_adi}: arsive ulasilamadi - bos birakildi (bayat Excel degeri gosterilmez).")
                     continue
                 eski = tk_all.map(gecmis)
+                if gun in YAS_KADEME_GUNLERI:
+                    _yas_eskiler[gun] = eski
+                if kol_adi == "Ret2Y_YAS":          # yalniz yas kademesi icin; CSV'ye getiri kolonu yazilmaz
+                    continue
                 getiri = ((fiyat_simdi / eski - 1) * 100).round(2)
                 getiri = getiri.where((eski > 0) & (fiyat_simdi > 0))
                 df_t[kol_adi] = getiri          # hesaplanamayanlar (fon o tarihte yoktu) BOS
@@ -824,6 +865,14 @@ def gercek_getiri_rsi_guncelle(df_t: pd.DataFrame, derinlik_gun: int = 95, log=p
                         log("[getiri] Genc fon kurali atlandi: arsiv 1 yil oncesini yeterince kapsamiyor (kimse genc sayilmadi).")
                 log(f"[getiri] {kol_adi}: {int(getiri.notna().sum())} fon icin arsivden hesaplandi.")
                 ozet["uzun_vade"] = True
+            # v2.0.7.415: yas kademesi - uc esigin de arsiv sorgusu basariliysa hesaplanir (biri eksikse BOS: bilinmiyor)
+            if all(g in _yas_eskiler for g in YAS_KADEME_GUNLERI):
+                _k = fon_yas_kademesi(fiyat_simdi, [_yas_eskiler[g] for g in YAS_KADEME_GUNLERI])
+                df_t[YAS_KADEME_KOLONU] = _k
+                _dag = {int(v): int((_k == v).sum()) for v in (0, 1, 2, 3)}
+                log(f"[getiri] Yas kademesi (0:<1y, 1:1-2y, 2:2-3y, 3:3y+): {_dag}, bilinmeyen: {int(_k.isna().sum())}.")
+            else:
+                log("[getiri] Yas kademesi atlandi: arsivden 1/2/3 yillik fiyatlardan biri alinamadi.")
         except Exception as e:
             log(f"[getiri] Uzun vadeli getiriler atlandi: {type(e).__name__}: {str(e)[:120]}")
 

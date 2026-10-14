@@ -23,8 +23,9 @@ def test_esik_ve_bayrak():
     ok(S.sinirli_veri_mi("BIST", 10.0, float("nan")) is False, "NaN -> bayrak yok")
     ok(S.sinirli_veri_mi("BIST", 10.0, 0) is False, "0 = bilinmiyor")
     ok(S.sinirli_veri_mi("BIST", 0.0, 50) is False, "fiyati olmayan -> bayrak yok")
-    ok(S.sinirli_veri_mi("KRIPTO", 5.0, 50) is False, "yalniz BIST")
-    ok(S.sinirli_veri_mi("TEFAS", 5.0, 50) is False, "yalniz BIST (TEFAS)")
+    ok(S.sinirli_veri_mi("KRIPTO", 5.0, 50) is True, "v415: KRIPTO da (365 gunden az)")
+    ok(S.sinirli_veri_mi("KRIPTO", 5.0, 365) is False and S.sinirli_veri_mi("KRIPTO", 5.0, 364) is True, "kripto esigi 365 takvim gunu")
+    ok(S.sinirli_veri_mi("TEFAS", 5.0, 50) is False, "TEFAS kademesi arsivden gelir, Gecmis_Gun ile degil")
     ok(S.gecmis_gun_say(pd.Series([1.0, None, 2.0, float("nan"), 3.0])) == 3, "NaN'siz gun sayisi")
 
 
@@ -130,16 +131,16 @@ def test_worker_gecmis_gun():
     orj = _s.modules.get("yfinance")
     _s.modules["yfinance"] = sahte_yf
     try:
-        s = worker._gecmis_gun_hesapla(["AAA", "BBB", "CCC"], {"CCC": 400.0})
+        s = worker._gecmis_gun_hesapla(["AAA", "BBB", "CCC"], {"CCC": 800.0})
         ok(s["AAA"] == 40 and s["BBB"] == 300, "gun sayilari dogru")
-        ok(s["CCC"] == 400, "onceden >=260 olan korunur")
-        ok(all("CCC.IS" not in c for c in cagrilar), "onceden >=260 olan tekrar sorgulanmaz")
+        ok(s["CCC"] == 800, "onceden >=780 (3 yil) olan korunur")
+        ok(all("CCC.IS" not in c for c in cagrilar), "onceden >=780 olan tekrar sorgulanmaz")
 
         def patla(*a, **k):
             raise RuntimeError("yahoo")
         sahte_yf.download = patla
-        s = worker._gecmis_gun_hesapla(["AAA", "CCC"], {"AAA": 33.0, "CCC": 400.0})
-        ok(s == {"AAA": 33, "CCC": 400}, "indirme hatasinda onceki degerler korunur, uydurma yok")
+        s = worker._gecmis_gun_hesapla(["AAA", "CCC"], {"AAA": 33.0, "CCC": 800.0})
+        ok(s == {"AAA": 33, "CCC": 800}, "indirme hatasinda onceki degerler korunur, uydurma yok")
         s = worker._gecmis_gun_hesapla(["AAA"], {})
         ok(s == {}, "hata + onceki yok -> bilinmiyor (bos)")
     finally:
