@@ -151,7 +151,10 @@ jobs:
             # update_data.yml'de yasanan "non-fast-forward"/"divergent
             # branches" hatalarinin (v2.0.7.85/97) AYNISI burada da
             # olabilirdi - bu workflow push oncesi HIC pull yapmiyordu.
-            git pull --no-edit --no-rebase origin main
+            # v2.0.7.416: catisma olursa (ornek: Veri Guncelle isi ayni sirada tam CSV'yi pushladiysa) KARSI
+            # TARAFIN (tam uretimin) surumu kazanir (-X theirs); bu is yalniz TEFAS satirlarini kismen
+            # gunceller, bir sonraki calismada (30 dk) yeniden yazar. Boylece kirmizi hata ve veri kaybi olmaz.
+            git pull --no-edit --no-rebase -X theirs origin main
             git push origin main
             echo "TEFAS CSV pushlandi"
           fi

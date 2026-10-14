@@ -132,7 +132,14 @@ jobs:
             # gelmisti. Artik "--no-rebase" ile birlestirme stratejisi
             # ACIKCA belirtiliyor - runner'in global git config'inden
             # BAGIMSIZ, HER ZAMAN calisir.
-            git pull --no-edit --no-rebase origin main
+            # v2.0.7.416 (14 Ekim 2026, Bahri'nin logu - Veri Guncelle, elle, 20:31 TRT): worker.py ~6 dk surerken
+            # "TEFAS aksam guncelleme" (30 dk'da bir) ayni optimized_universe.csv'yi main'e yazdi ->
+            # "CONFLICT (content): Merge conflict in optimized_universe.csv", is kirmizi bitti ve worker'in
+            # urettigi (yas kademesi dahil) veri pushlanamadi. Bu is CSV'yi bastan, TUM kategoriler icin
+            # uretir (TEFAS fiyatlari dahil, kendi cekimiyle) - catismada kendi surumumuz kazanir
+            # (-X ours: yalniz catisan parcalar icin; catismayan dosyalar normal birlesir). Kisa surede
+            # eskiyen TEFAS fiyatlari bir sonraki aksam guncellemesinde yenilenir.
+            git pull --no-edit --no-rebase -X ours origin main
             git push origin main
             echo "CSV pushlandi"
           fi
