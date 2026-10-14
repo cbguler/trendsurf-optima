@@ -185,7 +185,7 @@ def test_uyari_katmani_tefas_fon():
         {"Ticker": "OKF", "Ad": "F3", "Kategori": "TEFAS", "Son_Fiyat": 1.0, "RSI": 55.0, "Ret1M": 4.0, "Vol": 8.0,
          "Optima_Skor": None, "Gecmis_Gun": None},
         {"Ticker": "BTEH", "Ad": "H", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 80.0, "Gecmis_Gun": 500.0},
+         "Optima_Skor": 80.0, "Gecmis_Gun": 900.0},
     ])
     from scoring import optima_score
     ham = optima_score(55.0, 4.0, vol=8.0)

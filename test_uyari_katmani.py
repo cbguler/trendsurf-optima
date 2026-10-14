@@ -20,15 +20,15 @@ def ok(kosul, mesaj):
 def _df():
     return pd.DataFrame([
         {"Ticker": "AAA", "Ad": "A", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 85.0, "Gecmis_Gun": 500.0},
+         "Optima_Skor": 85.0, "Gecmis_Gun": 900.0},
         {"Ticker": "KAPA", "Ad": "K", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 85.0, "Gecmis_Gun": 500.0},
+         "Optima_Skor": 85.0, "Gecmis_Gun": 900.0},
         {"Ticker": "KAPO", "Ad": "K2", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 90.0, "Gecmis_Gun": 500.0},
+         "Optima_Skor": 90.0, "Gecmis_Gun": 900.0},
         {"Ticker": "YENI", "Ad": "Y", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 85.0, "Gecmis_Gun": 66.0},
+         "Optima_Skor": 95.0, "Gecmis_Gun": 66.0},
         {"Ticker": "TDBR", "Ad": "T", "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0, "Vol": 30.0,
-         "Optima_Skor": 85.0, "Gecmis_Gun": 500.0},
+         "Optima_Skor": 85.0, "Gecmis_Gun": 900.0},
         {"Ticker": "FON1", "Ad": "BIR FON", "Kategori": "TEFAS", "Son_Fiyat": 1.0, "RSI": 50.0, "Ret1M": 5.0,
          "Vol": 5.0, "Optima_Skor": 85.0, "Gecmis_Gun": None},
     ])
@@ -62,7 +62,7 @@ def test_katman_davranisi():
     ok(d.loc["TDBR", "Piyasa_Tedbiri"] != "" and d.loc["TDBR", "Optima_Skor"] == 0.0, "tedbirli: etiket + skor 0")
     ok(d.loc["KAPA", "Piyasa_Tedbiri"] == "KAP UYARISI" and d.loc["KAPA", "Optima_Skor"] == 0.0, "KAP UYARISI: skor 0")
     ok(d.loc["KAPO", "Piyasa_Tedbiri"] == "KAP DİKKAT" and d.loc["KAPO", "Optima_Skor"] == 45.0, "KAP DIKKAT: skor x0.5")
-    ok(bool(d.loc["YENI", "Veri_Sinirli"]) and d.loc["YENI", "Optima_Skor"] == 85.0, "66 gun -> sinirli, skor degismez")
+    ok(bool(d.loc["YENI", "Veri_Sinirli"]) and d.loc["YENI", "Optima_Skor"] == 66.5, "66 gun -> sinirli, skor x0,70 (95 -> 66,5)")
     ok(not d.loc["FON1", "Veri_Sinirli"], "TEFAS asla sinirli veri degil")
 
 

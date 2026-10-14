@@ -1385,6 +1385,7 @@ from scoring import _teknik_alt_skor, _temel_alt_skor, optima_score, get_signal,
 # v2.0.7.380: tedbir/KAP/SINIRLI VERI mantigi ve etiket secimi ortak modulde (e-posta yollari da kullanir).
 from uyari_katmani import (TEDBIR_SINIF as _TEDBIR_SINIF, tedbir_deger as _tedbir_deger,
                            veri_sinirli_mi as _veri_sinirli_mi, veri_sinirli_aciklama as _veri_sinirli_aciklama,
+                           yas_kesinti_mi as _yas_kesinti_mi, yas_kesinti_aciklama as _yas_kesinti_aciklama,
                            get_signal_row)
 
 
@@ -1417,6 +1418,18 @@ def _tedbir_serit_goster(row):
             'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">'
             '<span>SINIRLI VERİ</span></div>'
             f'<div style="font-size:15px;font-weight:600;line-height:1.4;">{_html.escape(_veri_sinirli_aciklama(row))}'
+            '</div></div>',
+            unsafe_allow_html=True)
+    if _yas_kesinti_mi(row):
+        # v2.0.7.415: 1-3 yillik varlik - skor kademeli eksildi (AL siniri yok); sade, daha az baskin amber serit
+        st.markdown(
+            '<div style="display:flex;align-items:flex-start;gap:12px;border:1px solid #b45309;'
+            'border-left:8px solid #b45309;background:#fffbeb;padding:10px 14px;border-radius:8px;'
+            'margin:8px 0 12px 0;color:#5a2d02;">'
+            '<div class="uyari-rozet" style="background:#b45309;font-weight:800;font-size:12px;'
+            'letter-spacing:0.5px;padding:3px 9px;border-radius:6px;white-space:nowrap;">'
+            '<span>YAŞ KESİNTİSİ</span></div>'
+            f'<div style="font-size:14px;font-weight:600;line-height:1.4;">{_html.escape(_yas_kesinti_aciklama(row))}'
             '</div></div>',
             unsafe_allow_html=True)
     if bilgi:

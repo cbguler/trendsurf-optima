@@ -103,8 +103,17 @@ def get_signal(score, rsi, trend):
 
 # v2.0.7.378 (9 Ekim 2026, Bahri'nin karari): BIST hissesinin fiyat gecmisi 260 islem gununden
 # (yaklasik bir yil) azsa Optima Skor kisa bir teknik gecmise dayanir: uyari seridi + AL sinyali siniri.
-# Skorun kendisi DEGISMEZ; yalniz sinyal etiketi "KADEMELI AL / GUCLU AL" yerine "TUT IZLE" olur.
+# v2.0.7.415 (14 Ekim 2026, Bahri'nin karari): YAS KADEMESI - BIST, KRIPTO ve TEFAS icin ortak kural.
+#   Kademe 0: 1 yildan genc   -> Optima Skor x0,70 (%30 eksilir) + uyari seridi + AL sinyali siniri
+#   Kademe 1: 1-2 yil         -> Optima Skor x0,80 (%20 eksilir)
+#   Kademe 2: 2-3 yil         -> Optima Skor x0,90 (%10 eksilir)
+#   Kademe 3: 3 yil ve uzeri  -> kesinti yok
+# "Bir yil": BIST'te 260 islem gunu (hafta sonu islem yok), KRIPTO'da 365 takvim gunu (7/24 islem),
+# TEFAS'ta 365 takvim gunu (kalici fiyat arsivinde o tarihte fiyat var mi diye bakilir; bkz. tefas_client).
+# Skor eksilince sinyal etiketi de onu izler (get_signal skoru esiklerle karsilastirir).
 GECMIS_GUN_ESIK = 260
+YAS_ESIKLERI = {"BIST": (260, 520, 780), "KRIPTO": (365, 730, 1095)}
+YAS_CARPANLARI = (0.70, 0.80, 0.90)      # kademe 0, 1, 2; kademe 3 = 1,00
 _AL_ETIKETLERI = ("GÜÇLÜ AL", "KADEMELİ AL")
 
 
@@ -116,16 +125,42 @@ def gecmis_gun_say(close) -> int:
         return 0
 
 
+def yas_kademesi(kategori, gecmis_gun):
+    """BIST/KRIPTO icin gecmis gun sayisindan kademe (0,1,2,3). Kategori kapsam disiysa (TEFAS dahil: onun kademesi
+    arsivden gelir) ya da gun sayisi bilinmiyorsa/0 ise None - bilinmeyen veri kesinti sebebi sayilmaz."""
+    esik = YAS_ESIKLERI.get(str(kategori))
+    if esik is None:
+        return None
+    try:
+        g = float(gecmis_gun)
+    except (TypeError, ValueError):
+        return None
+    if not g > 0:
+        return None
+    for i, e in enumerate(esik):
+        if g < e:
+            return i
+    return 3
+
+
+def yas_carpani(kademe) -> float:
+    """Kademeye gore Optima Skor carpani; kademe None/3 -> 1,0."""
+    try:
+        k = int(kademe)
+    except (TypeError, ValueError):
+        return 1.0
+    return YAS_CARPANLARI[k] if 0 <= k < len(YAS_CARPANLARI) else 1.0
+
+
 def sinirli_veri_mi(kategori, son_fiyat, gecmis_gun) -> bool:
-    """Yalniz BIST, fiyati olan ve gecmis gun sayisi BILINEN (>0) satir icin: gun < GECMIS_GUN_ESIK.
+    """BIST/KRIPTO, fiyati olan ve gecmis gun sayisi BILINEN (>0) satir icin: kademe 0 (1 yildan genc).
     Bilinmiyorsa (NaN/None/0/kolon yok) False - bilinmeyen veri uyari sebebi sayilmaz."""
     try:
-        if str(kategori) != "BIST" or not float(son_fiyat) > 0:
+        if not float(son_fiyat) > 0:
             return False
-        g = float(gecmis_gun)
-        return 0 < g < GECMIS_GUN_ESIK
     except (TypeError, ValueError):
         return False
+    return yas_kademesi(kategori, gecmis_gun) == 0
 
 
 def sinyal_sinirla(lbl, cls, sinirli):

@@ -1266,21 +1266,69 @@ def single_full(yf_sym, label="", period="1y"):
 # bu 8 parite icin de dogrudan canlidoviz'in gercek Turkiye fiyatini
 # (Harem/serbest piyasa) ilk once deniyor.
 
+def _kripto_gecmis_gun_hesapla(pariteler, onceki, getir=None, bugun=None, log=print):
+    """v2.0.7.415: kripto varligin BtcTurk'teki ilk fiyat kaydindan bugune TAKVIM GUNU sayisi (7/24 islem oldugu icin
+    bir yil = 365 gun). pariteler: {ticker: BtcTurk parite kodu}. onceki: {ticker: gun} son CSV'den.
+    Onceden >= 3 yil (1095 gun) olan varlik bir daha sorgulanmaz (gecmis kisalmaz). Sorgu basarisizsa onceki deger
+    (varsa) korunur, yoksa sonuca KONMAZ -> uygulama 'bilinmiyor' sayar, kesinti uygulamaz (uydurma yok).
+    NOT: bu, varligin gercek cikis tarihi degil BtcTurk'te islem gormeye basladigi tarihtir.
+    getir(parite, baslangic_dt) -> kapanis serisi (test icin enjekte edilir)."""
+    from datetime import datetime, timedelta
+    from concurrent.futures import ThreadPoolExecutor
+    from scoring import YAS_ESIKLERI
+    tam = YAS_ESIKLERI["KRIPTO"][-1]
+    bugun = bugun or datetime.now()
+    sonuc = {t: int(g) for t, g in onceki.items() if t in pariteler and g and g > 0}
+    sorgula = [t for t in pariteler if sonuc.get(t, 0) < tam]
+    log(f"  [kripto-yas] {len(sorgula)}/{len(pariteler)} varlik icin ilk fiyat tarihi sorgulaniyor...")
+    if getir is None:
+        import borsapy as bp
+
+        def getir(parite, bas):
+            h = bp.Crypto(parite).history(start=bas, interval="1d")
+            if h is None or h.empty or "Close" not in h.columns:
+                return None
+            return pd.to_numeric(h["Close"], errors="coerce")
+    baslangic = bugun - timedelta(days=tam + 60)      # 3 yildan fazlasi gorulurse tam yas olarak sayilir
+
+    def _tek(t):
+        try:
+            c = getir(pariteler[t], baslangic)
+            if c is None:
+                return t, None
+            c = c.dropna()
+            c = c[c > 0]
+            if c.empty:
+                return t, None
+            ilk = pd.Timestamp(c.index.min()).to_pydatetime().replace(tzinfo=None)
+            return t, max(1, (bugun - ilk).days)
+        except Exception:
+            return t, None
+
+    if sorgula:
+        with ThreadPoolExecutor(max_workers=min(10, len(sorgula))) as ex:
+            for t, g in ex.map(_tek, sorgula):
+                if g:
+                    sonuc[t] = int(g)
+    return sonuc
+
+
 def _gecmis_gun_hesapla(tickers, onceki):
-    """v2.0.7.378: BIST hisselerinin yfinance'taki islem gunu sayisi (en fazla 2 yil bakilir).
+    """v2.0.7.378: BIST hisselerinin yfinance'taki islem gunu sayisi (v415: en fazla 5 yil bakilir; 780 gun = 3 yil yeterli).
     onceki: {ticker: gun} son CSV'den. Onceden >= esik olan hisse bir daha sorgulanmaz (gecmis
     kisalmaz). Bir parti basarisiz olursa o hisseler icin onceki deger (varsa) korunur, yoksa
     sonuca konmaz -> uygulama 'bilinmiyor' sayar, uyari uretmez (uydurma yok)."""
     import yfinance as yf
-    from scoring import GECMIS_GUN_ESIK, gecmis_gun_say
+    from scoring import YAS_ESIKLERI, gecmis_gun_say
+    _tam_yas = YAS_ESIKLERI["BIST"][-1]          # v2.0.7.415: 3 yil (780 islem gunu) ve uzeri bir daha sorgulanmaz
     sonuc = {t: int(g) for t, g in onceki.items() if t in set(tickers) and g and g > 0}
-    sorgula = [t for t in tickers if sonuc.get(t, 0) < GECMIS_GUN_ESIK]
+    sorgula = [t for t in tickers if sonuc.get(t, 0) < _tam_yas]
     print(f"  [gecmis-gun] {len(sorgula)}/{len(tickers)} hisse icin islem gunu sayisi hesaplaniyor...")
     for i in range(0, len(sorgula), 100):
         parca = sorgula[i:i + 100]
         syms = [f"{t}.IS" for t in parca]
         try:
-            raw = yf.download(syms, period="2y", progress=False, auto_adjust=True, group_by="ticker")
+            raw = yf.download(syms, period="5y", progress=False, auto_adjust=True, group_by="ticker")
             for t, sym in zip(parca, syms):
                 try:
                     sub = raw if len(syms) == 1 else (
@@ -1362,7 +1410,7 @@ def build():
                     _prev = pd.read_csv(CSV_PATH, on_bad_lines="skip")
                     _prev = (_prev[_prev["Kategori"] == "TEFAS"]
                              .drop_duplicates(subset=["Ticker"], keep="last").set_index("Ticker"))
-                    _kol = ["Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y", "RSI", "Getiri_Tarihi", "Vol", "Vol_Kaynak", "Genc_Fon"]
+                    _kol = ["Ret1M", "Ret3M", "Ret6M", "Ret1Y", "Ret3Y", "Ret5Y", "RSI", "Getiri_Tarihi", "Vol", "Vol_Kaynak", "Genc_Fon", "Yas_Kademe"]
                     for _c in _kol:
                         if _c in _prev.columns:
                             df_t[_c] = df_t["Ticker"].map(_prev[_c])
@@ -1692,6 +1740,24 @@ def build():
         all_rows.append(_row_k)
     ok_k = sum(1 for r in all_rows if r["Kategori"] == "KRIPTO" and r["Son_Fiyat"] > 0)
     print(f"  {ok_k}/{len(_kripto_evren_al())} kripto fiyati alindi (dogrudan TL, BtcTurk/borsapy).")
+
+    # v2.0.7.415: kripto yasi (BtcTurk'te ilk fiyat tarihi) -> Gecmis_Gun; uygulama yas kademesine gore skoru eksiltir.
+    try:
+        _onceki_kg = {}
+        if os.path.exists(CSV_PATH):
+            _dk = pd.read_csv(CSV_PATH, on_bad_lines="skip")
+            if "Gecmis_Gun" in _dk.columns:
+                _dk = _dk[_dk["Kategori"] == "KRIPTO"]
+                _onceki_kg = {str(t): float(g) for t, g in zip(_dk["Ticker"], _dk["Gecmis_Gun"]) if pd.notna(g)}
+        _kg = _kripto_gecmis_gun_hesapla(
+            {r["Ticker"]: _kripto_bp_kod(r["Ticker"]) for r in all_rows
+             if r["Kategori"] == "KRIPTO" and r["Son_Fiyat"] > 0}, _onceki_kg)
+        for r in all_rows:
+            if r["Kategori"] == "KRIPTO":
+                r["Gecmis_Gun"] = _kg.get(r["Ticker"])
+        print(f"  [kripto-yas] {len(_kg)} kripto icin yas biliniyor.")
+    except Exception as _ky_err:     # bu bilgi eksik kalsa da gece derlemesi DURMAZ
+        print(f"  [kripto-yas] atlandi: {type(_ky_err).__name__}: {_ky_err}")
 
     # ── 4. Maden + Döviz ─────────────────────────────────────
     MADEN_ADLAR = {
