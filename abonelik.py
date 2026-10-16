@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 TrendSurf Optima - anlik bildirim e-postalarindan cikma baglantisi (abonelik.py)
-v2.0.7.412 (11 Ekim 2026, Bahri'nin talebi): her mailin altinda "abonelikten cik" baglantisi.
+v2.0.7.412 (11 Ekim 2026, Bahri'nin talebi; anahtar v417'de veritabanina tasindi): her mailin altinda "abonelikten cik" baglantisi.
 
 Baglanti: <UYGULAMA>/?abonelik_iptal=<kullanici_id>.<imza>
   imza = HMAC-SHA256(anahtar, "bildirim-iptal:<kullanici_id>") ilk 32 hex karakter.
-  anahtar = SHA256("bildirim-iptal-anahtari:" + SUPABASE_DB_URL). Yeni bir secret gerekmez: hem GitHub workflow'u
-  (mail uretir) hem Streamlit uygulamasi (baglantiyi acar) bu degere zaten sahiptir; DB adresini bilmeyen biri
-  baska bir kullanici icin gecerli baglanti uretemez.
+  anahtar = SHA256("bildirim-iptal-anahtari-v2:" + <uygulama_anahtar tablosundaki rastgele deger>) (v417; v412'deki
+  SUPABASE_DB_URL'den turetme iki tarafta farkli metin cikinca "gecersiz baglanti" verdi). Hem GitHub workflow'u (mail
+  uretir) hem Streamlit uygulamasi (baglantiyi acar) ayni veritabanini okur; tablo RLS'lidir, disaridan okunamaz.
 Baglanti acmak tek basina abonelik iptal ETMEZ (e-posta tarayicilari baglantilari onceden acabilir): uygulama
 bir onay dugmesi gosterir.
 """
@@ -20,18 +20,21 @@ import os
 UYGULAMA_URL = "https://trendsurfoptima.streamlit.app"
 
 
+ANAHTAR_AD = "abonelik-imza"
+
+
 def anahtar_al(db_url: str = None) -> bytes:
-    """db_url verilmezse SUPABASE_DB_URL ortam degiskeni, o da yoksa db modulunun cozumledigi adres."""
-    u = db_url or os.environ.get("SUPABASE_DB_URL", "")
-    if not u:
-        try:
-            import db
-            u = db._get_db_url() or ""
-        except Exception:
-            u = ""
-    if not u:
-        raise RuntimeError("abonelik anahtari uretilemedi: veritabani adresi yok")
-    return hashlib.sha256(("bildirim-iptal-anahtari:" + u).encode("utf-8")).digest()
+    """Imza anahtari. v2.0.7.417: veritabanindaki 'uygulama_anahtar' satirindan (GitHub workflow'u ve Streamlit
+    uygulamasi ayni veritabanini okur; v412'de SUPABASE_DB_URL metninden turetilen anahtar iki tarafta farkli
+    cikti ve baglanti 'gecersiz' dedi). Satir yoksa rastgele uretilip yazilir. db_url verilirse (yalniz testler /
+    eski bicim) anahtar o metinden turetilir. Veritabanina ulasilamazsa RuntimeError (cagiran mailde baglanti koymaz)."""
+    if db_url:
+        return hashlib.sha256(("bildirim-iptal-anahtari:" + db_url).encode("utf-8")).digest()
+    import db
+    deger = db.uygulama_anahtari_al(ANAHTAR_AD)
+    if not deger:
+        raise RuntimeError("abonelik anahtari alinamadi: veritabanina ulasilamadi")
+    return hashlib.sha256(("bildirim-iptal-anahtari-v2:" + deger).encode("utf-8")).digest()
 
 
 def _imza(anahtar: bytes, user_id: int) -> str:
