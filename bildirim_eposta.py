@@ -494,10 +494,48 @@ def calistir(conn, turler=TURLER, gonderici=smtp_gonder, kaynaklar=None, kuru=Fa
     return sonuc
 
 
+def deneme_gonder(conn, eposta: str, gonderici=None) -> bool:
+    """v2.0.7.418: TEK bir kayitli kullaniciya (users.email, buyuk/kucuk harf fark etmez) TEST e-postasi gonderir:
+    gercek bildirim akisina (olay/gonderim/iptal tablolari) DOKUNMAZ, baska kimseye mail gitmez; mailde gercek
+    'abonelikten cik' baglantisi ve KAP adresi vardir. Kayitli kullanici yoksa False (mail gonderilmez)."""
+    gonderici = gonderici or smtp_gonder
+    em = str(eposta or "").strip().lower()
+    if not em:
+        print("[bildirim_eposta] deneme: e-posta adresi bos.")
+        return False
+    rows = _demetler(conn.execute(
+        "SELECT id, email FROM users WHERE LOWER(email) = ? AND COALESCE(is_active::text, '1') IN ('1','true','t')",
+        (em,)).fetchall())
+    if not rows:
+        print(f"[bildirim_eposta] deneme: {eposta} adresli aktif kullanici yok - mail gonderilmedi.")
+        return False
+    uid, adres = rows[0]
+    try:
+        url = _abonelik.baglanti_uret(uid, _abonelik.anahtar_al())
+    except Exception as e:
+        print(f"[bildirim_eposta] deneme: abonelik baglantisi uretilemedi: {e}")
+        return False
+    olay = [{"tur": "risk", "anahtar": "DENEME", "baslik": "Deneme bildirimi (gercek bir KAP bildirimi degildir)",
+             "ozet": "Bu bir test e-postasidir. Asagidaki baglantilari deneyebilirsiniz.",
+             "url": "https://www.kap.org.tr"}]
+    html, txt = govde_olustur(olay, abonelik_url=url)
+    konu = "TrendSurf Optima - TEST: bildirim e-postasi denemesi"
+    try:
+        import inspect
+        kabul = "abonelik_url" in inspect.signature(gonderici).parameters
+    except Exception:
+        kabul = False
+    ok = gonderici(adres, konu, html, txt, abonelik_url=url) if kabul else gonderici(adres, konu, html, txt)
+    print(f"[bildirim_eposta] deneme e-postasi {'gonderildi' if ok else 'GONDERILEMEDI'}: kullanici {uid}.")
+    return bool(ok)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tur", default=",".join(TURLER), help="virgulle: " + ",".join(TURLER))
     ap.add_argument("--kuru", action="store_true", help="kaydetme/gonderme yok, sadece say")
+    ap.add_argument("--deneme", default="", metavar="EPOSTA",
+                    help="yalniz bu kayitli kullaniciya TEST e-postasi gonder (gercek akisa dokunmaz)")
     a = ap.parse_args(argv)
     turler = tuple(t for t in a.tur.split(",") if t in TURLER)
     import db
@@ -505,6 +543,8 @@ def main(argv=None) -> int:
     try:
         db.init_db()
         conn = db.get_conn()
+        if a.deneme:
+            return 0 if deneme_gonder(conn, a.deneme) else 1
         sonuc = calistir(conn, turler, kuru=a.kuru)
         print(f"[bildirim_eposta] Bitti: {sonuc}")
         return 0

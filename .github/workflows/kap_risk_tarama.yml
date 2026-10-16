@@ -26,6 +26,10 @@ on:
         description: "Faiz arsivi 6 saatlik tazelik kontrolunu atlasin, mevduat/tahvil/repo simdi cekilsin"
         type: boolean
         default: false
+      deneme_eposta:
+        description: "Bos birakin. Doluysa: yalniz bu kayitli e-posta adresine TEST bildirimi gonderilir (abonelikten cik baglantisini denemek icin)"
+        type: string
+        default: ""
 
 concurrency:
   group: kap-risk-tarama
@@ -71,6 +75,18 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          PYTHONUNBUFFERED: "1"
+
+      # v2.0.7.418: test e-postasi (yalniz "deneme_eposta" girilmisse) - gercek bildirim akisina dokunmaz
+      - name: Deneme e-postasi
+        if: ${{ github.event.inputs.deneme_eposta != '' }}
+        continue-on-error: true
+        run: python bildirim_eposta.py --deneme "$DENEME_EPOSTA"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          DENEME_EPOSTA: ${{ github.event.inputs.deneme_eposta }}
           PYTHONUNBUFFERED: "1"
 
       # v2.0.7.407: Getiri Kiyaslamasi icin gunluk faiz arsivi (mevduat: hesapkurdu.com, 2 yillik tahvil: doviz.com,
