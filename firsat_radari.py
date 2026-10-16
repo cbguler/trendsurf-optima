@@ -29,6 +29,11 @@ CALISMA SEKLI
              Ayni varlik icin ayni gun ayni tur alarm TEKRARLANMAZ
              (radar_alerts tablosu, ON CONFLICT DO NOTHING).
 
+v2.0.7.419: ALARM SKORU = UYGULAMADA GORUNEN SKOR. intraday_scores'a HAM skor yazilir
+(uygulama okuyup bindirir, sonra uyari_katmani'ni kendisi uygular); alarm degerlendirmesi
+ise ayni katmanin etkin carpaniyla (yas kademesi, tedbir, KAP) yapilir. SINIRLI VERI
+(kademe 0) varliklar alarm uretmez.
+
 GEREKLI SUPABASE TABLOLARI (bir kez SQL Editor'de calistir):
 ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS intraday_scores (
@@ -427,8 +432,65 @@ def _upsert(conn, sonuc):
 SICRAMA_TAZELIK_SAAT = 6.0  # BIST'te sicrama kiyasi icin onceki olcumun azami yasi
 
 
-def _radar_tetikleyicileri(sonuc, onceki, ad_map):
+def _katman_carpanlari(df_uni, sonuc, katman=None):
+    """v2.0.7.419 (16 Ekim 2026, Bahri'nin karari: "Radar da uygulamayla ayni skoru
+    kullansin"): uygulamanin gorecegi skor ile radarin alarm skoru AYNI olsun diye
+    varlik basina TEK bir etkin carpan uretir.
+
+    Uygulama intraday_scores'taki HAM skoru okuyup bindirir, ardindan
+    uyari_katmani.uyari_katmanini_uygula (tedbir 0, KAP UYARISI 0 / DIKKAT x0,5,
+    yas kademesi x0,70/0,80/0,90) uygular. Burada ayni fonksiyon, her satirda skor
+    100 olan bir kopyaya uygulanir; sonuc/100 = o varligin etkin carpani.
+    Boylece ayri bir formul YAZILMAZ, kurallar tek yerde (uyari_katmani) kalir.
+
+    Donus: (carpan, sinirli)
+      carpan  : {(kategori, ticker): etkin carpan}  (tedbirli/KAP UYARISI = 0.0)
+      sinirli : {(kategori, ticker)} kademe 0 (SINIRLI VERI) - uygulamada AL vermez,
+                radar alarmindan da haric tutulur.
+    Katman calismazsa / hata verirse ({}, set()) doner: alarm mantigi ESKI (ham skor)
+    davranisina duser, alarm kaybolmaz.
+    NOT: intraday_scores'a yazilan skor HAM kalir (uygulama yaz-sonra-katman uyguluyor;
+    duzeltilmis skor yazilirsa yas kesintisi IKI KEZ uygulanirdi)."""
+    try:
+        if katman is None:
+            from uyari_katmani import uyari_katmanini_uygula as katman
+        anahtarlar = {(str(v.get("kategori")), str(t)) for t, v in sonuc.items()}
+        if not anahtarlar:
+            return {}, set()
+        d = df_uni.copy()
+        d["Ticker"] = d["Ticker"].astype(str)
+        d["Kategori"] = d["Kategori"].astype(str)
+        # katman zaten uygulanmis df'e ikinci kez dokunmaz - CSV'de kalinti varsa temizle
+        d = d.drop(columns=[c for c in ("Piyasa_Tedbiri", "Tedbir_Aciklama", "KAP_Bilgi",
+                                        "Veri_Sinirli", "Yas_Kesinti") if c in d.columns])
+        d["Optima_Skor"] = 100.0
+        d = katman(d)
+        carpan, sinirli = {}, set()
+        for t, kat, sk, vs in zip(d["Ticker"], d["Kategori"],
+                                  pd.to_numeric(d["Optima_Skor"], errors="coerce"),
+                                  d["Veri_Sinirli"] if "Veri_Sinirli" in d.columns
+                                  else [False] * len(d)):
+            k = (kat, t)
+            if k not in anahtarlar:
+                continue
+            if sk == sk:  # NaN degil
+                carpan[k] = round(float(sk) / 100.0, 4)
+            if bool(vs):
+                sinirli.add(k)
+        return carpan, sinirli
+    except Exception as e:
+        print(f"[radar] katman carpanlari hesaplanamadi, HAM skorla devam: "
+              f"{type(e).__name__}: {str(e)[:200]}")
+        return {}, set()
+
+
+def _radar_tetikleyicileri(sonuc, onceki, ad_map, carpan=None, sinirli=None):
     """Esik kesisi ve sicrama alarmlari.
+
+    v2.0.7.419: `carpan`/`sinirli` verilirse (bkz. _katman_carpanlari) hem yeni hem
+    onceki (ham) skor ayni etkin carpanla carpilir - esik ve sicrama UYGULAMADA
+    GORUNEN skora gore degerlendirilir; SINIRLI VERI varliklar alarm uretmez.
+    Verilmezse eski (ham skor) davranisi aynen korunur.
 
     v2.0.5.9: BIST'te 'sicrama' alarmi yalnizca onceki olcum TAZE ise
     (SICRAMA_TAZELIK_SAAT'ten yeni) uretilir. Sabahin ilk seans taramasi
@@ -442,11 +504,22 @@ def _radar_tetikleyicileri(sonuc, onceki, ad_map):
     sadece BIST'e uygulanir."""
     simdi = _trt_simdi()
     tetik = []
+    carpan = carpan or {}
+    sinirli = sinirli or set()
     for t, v in sonuc.items():
+        _k = (str(v.get("kategori")), str(t))
+        if _k in sinirli:
+            continue  # SINIRLI VERI (kademe 0): uygulamada AL vermez, radar da alarm uretmez
         kayit = onceki.get(t)
         eski = kayit[0] if kayit else None
         eski_ts = kayit[1] if kayit else None
         yeni = v["skor"]
+        _c = carpan.get(_k, 1.0)
+        if _c != 1.0:
+            v = dict(v, ham_skor=yeni, carpan=_c)  # sonuc'taki (Supabase'e yazilan) kayit degismez
+            yeni = round(yeni * _c, 1)
+            if eski is not None:
+                eski = round(eski * _c, 1)
         if yeni >= RADAR_ESIK and (eski is None or eski < RADAR_ESIK):
             tetik.append((t, "esik", yeni, eski, v))
         elif (eski is not None and (yeni - eski) >= RADAR_SICRAMA
@@ -514,9 +587,12 @@ def _radar_maili_gonder(yeni_alarmlar, ad_map):
             eski_txt = f"{eski_s:.1f}" if eski_s is not None else "-"
             tur_txt = ("esik ustu (" + str(int(RADAR_ESIK)) + "+)" if tur == "esik"
                        else f"sicrama (+{RADAR_SICRAMA:.0f}+)")
+            # v2.0.7.419: yas/KAP carpani uygulandiysa ham skor bilgi olarak yaninda
+            _ham_txt = (f" <span style='color:#888'>(ham {v['ham_skor']:.1f}, x{v['carpan']:.2f})</span>"
+                        if v.get("carpan") not in (None, 1.0) else "")
             satirlar.append(
                 f"<tr><td>{t}</td><td>{ad[:40]}</td><td>{v['kategori']}</td>"
-                f"<td>{eski_txt} -> <b>{yeni_s:.1f}</b></td>"
+                f"<td>{eski_txt} -> <b>{yeni_s:.1f}</b>{_ham_txt}</td>"
                 f"<td>{v['fiyat']}</td><td>{tur_txt}</td></tr>")
 
         html = f"""
@@ -718,7 +794,11 @@ def main():
         print(f"[radar] KRITIK: onceki skorlar alinamadi: {type(e).__name__}: {str(e)[:200]}")
 
     try:
-        tetik = _radar_tetikleyicileri(sonuc, onceki, ad_map)
+        # v2.0.7.419: alarm skoru = uygulamada gorunen skor (yas/tedbir/KAP katmani)
+        _carpan, _sinirli = _katman_carpanlari(df_uni, sonuc)
+        print(f"[radar] katman: {sum(1 for c in _carpan.values() if c != 1.0)} varlikta "
+              f"carpan != 1, {len(_sinirli)} sinirli veri (alarm disi).")
+        tetik = _radar_tetikleyicileri(sonuc, onceki, ad_map, _carpan, _sinirli)
     except Exception as e:
         print(f"[radar] KRITIK: radar tetikleyicileri hesaplanamadi: {type(e).__name__}: {str(e)[:200]}")
 
