@@ -1074,6 +1074,17 @@ def _init_db_bir_kez():
         iptal_zamani TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )""")
 
+    # v2.0.7.417: uygulama gizli anahtarlari (simdilik yalniz anlik bildirim e-postasi "abonelikten cik" imza anahtari).
+    # Mail ureten GitHub workflow'u ile baglantiyi acan Streamlit uygulamasi AYNI veritabanina baglanir ama
+    # SUPABASE_DB_URL metinleri birebir ayni olmayabilir (v412'de imza o metinden turetildigi icin baglanti
+    # "gecersiz" cikti). Anahtar artik veritabaninda tutulur: ikisi de ayni satiri okur.
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS uygulama_anahtar (
+        ad        TEXT PRIMARY KEY,
+        deger     TEXT NOT NULL,
+        olusturma TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
+
     # v2.0.7.407 (11 Ekim 2026, Bahri'nin talebi): Getiri Kiyaslamasi'ndaki Mevduat/Tahvil/Repo oranlarinin GUNLUK
     # arsivi (faiz_arsiv.py yazar, app.py okur). Kamuya acik piyasa verisi, kullanici verisi degil.
     c.execute("""
@@ -1206,7 +1217,8 @@ def _init_db_bir_kez():
                        "haber_kaliplari", "haber_kalip_kelime", "haber_kalip_etki",
                        "ipo_valuations", "sayfa_ziyaretleri",
                        "ipo_xharz_degerler", "bildirim_eposta_olay",
-                       "bildirim_eposta_gonderim", "faiz_arsiv", "bildirim_eposta_iptal"):
+                       "bildirim_eposta_gonderim", "faiz_arsiv", "bildirim_eposta_iptal",
+                       "uygulama_anahtar"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -2442,6 +2454,30 @@ def faiz_arsiv_kayit_sayisi(seri: str) -> int:
     except Exception as e:
         print(f"[db] faiz_arsiv_kayit_sayisi hata: {e}", file=sys.stderr)
         return 0
+
+
+def uygulama_anahtari_al(ad: str):
+    """v2.0.7.417: veritabaninda tutulan gizli anahtar (yoksa rastgele uretilip YAZILIR; es zamanli iki cagri ayni
+    degeri gorur: INSERT ... ON CONFLICT DO NOTHING, sonra SELECT). Veritabanina ulasilamazsa None."""
+    import secrets
+    try:
+        conn = get_conn()
+        # init_db henuz calismadiysa (uygulama acilisinda bu cagri ondan once gelebilir) tablo yoksa olusturulur
+        # (CREATE TABLE IF NOT EXISTS mevcut tabloya kilit almaz); RLS'i init_db acar.
+        conn.execute("""CREATE TABLE IF NOT EXISTS uygulama_anahtar (
+            ad TEXT PRIMARY KEY, deger TEXT NOT NULL, olusturma TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+        conn.commit()
+        row = conn.execute("SELECT deger FROM uygulama_anahtar WHERE ad=?", (str(ad),)).fetchone()
+        if not row:
+            conn.execute("INSERT INTO uygulama_anahtar (ad, deger) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                         (str(ad), secrets.token_hex(32)))
+            conn.commit()
+            row = conn.execute("SELECT deger FROM uygulama_anahtar WHERE ad=?", (str(ad),)).fetchone()
+        conn.close()
+        return tuple(row.values())[0] if row else None
+    except Exception as e:
+        print(f"[db] uygulama_anahtari_al hata ({ad}): {type(e).__name__}: {e}", file=sys.stderr)
+        return None
 
 
 def bildirim_iptal_var(user_id: int) -> bool:

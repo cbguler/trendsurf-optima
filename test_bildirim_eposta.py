@@ -286,6 +286,15 @@ if DB_OK:
     _anh = ab.anahtar_al()
     kontrol("mail: her aliciya kendi cikis baglantisi", len(linkli) == 2 and all(
         ab.token_dogrula(u.split("abonelik_iptal=")[1], _anh) == {"a@x.com": 101, "b@x.com": 102}[to] for to, u, _, _ in linkli), linkli and [(x[0], x[1]) for x in linkli])
+    # v417: imza anahtari veritabanindan (iki taraf ayni satiri okur; SUPABASE_DB_URL metninden bagimsiz)
+    _satir = conn.execute("SELECT deger FROM uygulama_anahtar WHERE ad='abonelik-imza'").fetchall()
+    kontrol("abonelik v417: anahtar veritabaninda tek satir, 64 hex", len(_satir) == 1 and len(tuple(_satir[0].values())[0]) == 64, _satir)
+    _anh2 = ab.anahtar_al()
+    kontrol("abonelik v417: ikinci okuma ayni anahtari verir (workflow ve uygulama tarafi ayni)", _anh2 == _anh and len(_anh) == 32)
+    _tok = ab.token_uret(2, _anh)
+    kontrol("abonelik v417: bir taraf uretir, diger taraf (yeni okuma) dogrular", ab.token_dogrula(_tok, ab.anahtar_al()) == 2)
+    kontrol("abonelik v417: eski bicim (db_url verilirse) hala turetilir", ab.anahtar_al("postgresql://u:p@h/db") != _anh)
+    kontrol("db.py: uygulama_anahtar tablosu RLS listesinde", '"uygulama_anahtar"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
     kontrol("mail: baglanti govdede de var", all(("abonelik_iptal=" in h and "abonelik_iptal=" in t) for _, _, h, t in linkli))
     kontrol("db.py: iptal tablosu RLS listesinde", '"bildirim_eposta_iptal"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
 
