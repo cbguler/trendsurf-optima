@@ -295,6 +295,22 @@ if DB_OK:
     kontrol("abonelik v417: bir taraf uretir, diger taraf (yeni okuma) dogrular", ab.token_dogrula(_tok, ab.anahtar_al()) == 2)
     kontrol("abonelik v417: eski bicim (db_url verilirse) hala turetilir", ab.anahtar_al("postgresql://u:p@h/db") != _anh)
     kontrol("db.py: uygulama_anahtar tablosu RLS listesinde", '"uygulama_anahtar"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
+    # v418: --deneme test e-postasi
+    _once = conn.execute("SELECT (SELECT COUNT(*) FROM bildirim_eposta_gonderim) g, (SELECT COUNT(*) FROM bildirim_eposta_olay) o").fetchone()
+    _once = tuple(_once.values())
+    _den = []
+
+    def sahte_deneme(to, konu, html, txt, abonelik_url=None):
+        _den.append((to, konu, html, txt, abonelik_url))
+        return True
+    kontrol("deneme: kayitli kullaniciya (buyuk/kucuk harf fark etmez) gonderilir", be.deneme_gonder(conn, " A@X.com ", gonderici=sahte_deneme) is True and len(_den) == 1 and _den[0][0] == "a@x.com")
+    kontrol("deneme: konu TEST, govdede KAP adresi ve cikis baglantisi", "TEST" in _den[0][1] and "kap.org.tr" in _den[0][2] and "abonelik_iptal=" in _den[0][2] and "abonelik_iptal=" in _den[0][3])
+    kontrol("deneme: baglantidaki imza dogrulanir (kullanici 101)", ab.token_dogrula(_den[0][4].split("abonelik_iptal=")[1], ab.anahtar_al()) == 101)
+    kontrol("deneme: kayitsiz adrese mail gitmez", be.deneme_gonder(conn, "yok@x.com", gonderici=sahte_deneme) is False and len(_den) == 1)
+    kontrol("deneme: bos adres reddedilir", be.deneme_gonder(conn, "", gonderici=sahte_deneme) is False and len(_den) == 1)
+    _sonra = tuple(conn.execute("SELECT (SELECT COUNT(*) FROM bildirim_eposta_gonderim) g, (SELECT COUNT(*) FROM bildirim_eposta_olay) o").fetchone().values())
+    kontrol("deneme: gercek bildirim tablolarina dokunmaz", _once == _sonra, (_once, _sonra))
+    kontrol("deneme: gonderim basarisizsa False", be.deneme_gonder(conn, "a@x.com", gonderici=lambda *a, **k: False) is False)
     kontrol("mail: baglanti govdede de var", all(("abonelik_iptal=" in h and "abonelik_iptal=" in t) for _, _, h, t in linkli))
     kontrol("db.py: iptal tablosu RLS listesinde", '"bildirim_eposta_iptal"' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "db.py"), encoding="utf-8").read())
 
