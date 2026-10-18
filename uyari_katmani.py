@@ -118,6 +118,103 @@ def yas_kesinti_aciklama(row) -> str:
             f"2-3 yıl %{_yuzde(2)}, 3 yıl ve üzeri kesinti yok). Sinyal etiketi bu düşük skora göre verilir.")
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# v2.0.7.420 (18 Ekim 2026, Bahri'nin talebi): ERKEN UYARI - SPK'nin henuz duyurmadigi benzer vakalar icin.
+# Dayanak: repo gecmisindeki 113 gunluk gunluk CSV kayitlariyla geriye donuk test (bkz. PROJE_NOTLARI v2.0.7.420).
+# Hisse (BIST): PD/DD cok yuksek -> skor kademeli carpan. KTLEV/GUNDG/DSTKF cokusten once PD/DD 22-110 idi.
+#   Kademe 1: PD/DD >= 20                      -> x0,80 (30 gunde %50+ dusen orani baz oranin ~5 kati)
+#   Kademe 2: PD/DD >= 15 VE aylik getiri >= 15 -> x0,50 (baz oranin ~8 kati)
+#   Kesin hukum DEGIL, risk filtresi: isaretlenenlerin cogu cokmedi. Bu yuzden skor sifirlanmaz, kademeli azaltilir.
+# Fon (TEFAS): yalniz UYARI seridi (skora dokunmaz): son 1 aylik getiri, ayni 'Tur'deki fonlarin medyaninin 12+ puan ustunde.
+#   Dayanak zayif (kucuk orneklem, geri kalan 'bagli fon' bilgisi icin fon portfoy icerigi verisi YOK) - bu yuzden skor kesilmez.
+# ---------------------------------------------------------------------------------------------------------------
+DEGER_PDDD_ESIK_1 = 20.0
+DEGER_PDDD_ESIK_2 = 15.0
+DEGER_RET1M_ESIK_2 = 15.0
+DEGER_CARPANLARI = {1: 0.80, 2: 0.50}
+FON_GETIRI_FAZLA_ESIK = 12.0     # puan: fonun 1 aylik getirisi - ayni Tur'un medyani
+FON_TUR_MIN_ADET = 15            # medyan icin turde en az bu kadar fon
+FON_GETIRI_TAZELIK_GUN = 7       # Getiri_Tarihi en yeni tarihten en fazla bu kadar eski olabilir
+
+
+def _sayi(v):
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if x == x else None
+
+
+def deger_riski_kademesi(row) -> int:
+    """BIST hissesi icin 0 (yok), 1 ya da 2. PD/DD yoksa/sermaye degisikligi uyarisi varsa (PD/DD guvenilmez) 0;
+    tedbir/KAP etiketi olan varlikta 0 (zaten sinyali/skoru kapali)."""
+    try:
+        if str(row.get("Kategori")) != "BIST":
+            return 0
+        if str(row.get("Piyasa_Tedbiri") or "").strip():
+            return 0
+        tu = row.get("Temel_Uyari")
+        if isinstance(tu, str) and tu.strip():
+            return 0
+        pb = _sayi(row.get("PB"))
+        if pb is None or pb <= 0:
+            return 0
+        ret = _sayi(row.get("Ret1M"))
+        if pb >= DEGER_PDDD_ESIK_2 and ret is not None and ret >= DEGER_RET1M_ESIK_2:
+            return 2
+        if pb >= DEGER_PDDD_ESIK_1:
+            return 1
+    except Exception:
+        return 0
+    return 0
+
+
+def deger_riski_mi(row) -> bool:
+    try:
+        return int(float(row.get("Deger_Risk"))) in (1, 2)
+    except (TypeError, ValueError):
+        return False
+
+
+def deger_riski_aciklama(row) -> str:
+    try:
+        k = int(float(row.get("Deger_Risk")))
+    except (TypeError, ValueError):
+        return ""
+    if k not in (1, 2):
+        return ""
+    pb = _sayi(row.get("PB"))
+    pb_txt = f"{pb:.1f}".replace(".", ",") if pb is not None else "?"
+    kes = int(round((1.0 - DEGER_CARPANLARI[k]) * 100))
+    if k == 2:
+        ret = _sayi(row.get("Ret1M"))
+        ret_txt = f"%{ret:.0f}" if ret is not None else "yüksek"
+        return (f"Aşırı değerleme ve sert yükseliş: PD/DD {pb_txt} ve son 1 aylık getiri {ret_txt}. Bu birliktelik, "
+                f"geçmiş verilerde sonradan sert düşüşlerin önemli bir bölümünden önce görüldü; kesin bir hüküm değil, "
+                f"bir risk işaretidir. Optima Skor %{kes} düşürülmüştür.")
+    return (f"Çok yüksek değerleme: PD/DD {pb_txt} (eşik {DEGER_PDDD_ESIK_1:.0f}). Geçmiş verilerde bu seviyedeki "
+            f"hisselerde sonradan sert düşüş görülme oranı piyasa ortalamasının belirgin üzerindeydi; kesin bir hüküm "
+            f"değil, bir risk işaretidir. Optima Skor %{kes} düşürülmüştür.")
+
+
+def getiri_uyarisi_mi(row) -> bool:
+    try:
+        return bool(row.get("Getiri_Uyari"))
+    except Exception:
+        return False
+
+
+def getiri_uyarisi_aciklama(row) -> str:
+    r, m = _sayi(row.get("Ret1M")), _sayi(row.get("Tur_Medyan_Ret1M"))
+    if r is None or m is None:
+        return ""
+    f = lambda x: f"%{x:.1f}".replace(".", ",")
+    return (f"Aynı türdeki fonlara göre aşırı getiri: son 1 aylık getiri {f(r)}, aynı türdeki fonların medyanı {f(m)} "
+            f"(fark {FON_GETIRI_FAZLA_ESIK:.0f} puan ve üzeri). Geçmiş verilerde bu tür sapmalar kimi fonlarda bir risk "
+            "işareti oldu, ama sağlam fonlarda da (örn. sektör fonlarında) görülür. Bu bir uyarıdır; skor değişmedi.")
+
+
+
 def get_signal_row(row, score, rsi, trend):
     """get_signal() ile ayni donus (etiket, css sinifi); tedbirli varlikta tedbir etiketi,
     sinirli veride AL etiketleri TUT IZLE'ye indirilir."""
@@ -270,4 +367,41 @@ def uyari_katmanini_uygula(df):
             print(f"[yas-kademe] skor kesintisi uygulandi (kademe 0/1/2 satir sayisi): {_dag}.")
     except Exception as _yk_err:
         print(f"[yas-kademe] atlandi: {_yk_err}")
+
+    # v2.0.7.420: ERKEN UYARI (bkz. yukaridaki blok). Hisse: PD/DD kademeli skor carpani. Fon: yalniz uyari bayragi.
+    df["Deger_Risk"] = 0
+    df["Getiri_Uyari"] = False
+    df["Tur_Medyan_Ret1M"] = float("nan")
+    try:
+        _dk = pd.Series([deger_riski_kademesi(r) for r in df.to_dict("records")], index=df.index, dtype=int)
+        df["Deger_Risk"] = _dk
+        _m = _dk.isin([1, 2])
+        if _m.any():
+            if "Optima_Skor" not in df.columns:
+                df["Optima_Skor"] = pd.NA
+            _sk = pd.to_numeric(df["Optima_Skor"], errors="coerce")
+            _c = _dk.map(lambda k: DEGER_CARPANLARI.get(int(k), 1.0)).astype(float)
+            df["Optima_Skor"] = (_sk * _c.where(_m, 1.0)).round(1)
+            print(f"[deger-risk] PD/DD erken uyarisi: kademe 1 = {int((_dk == 1).sum())}, kademe 2 = {int((_dk == 2).sum())} hisse.")
+    except Exception as _dr_err:
+        print(f"[deger-risk] atlandi: {_dr_err}")
+    try:
+        if {"Tur", "Ret1M", "Getiri_Tarihi"} <= set(df.columns):
+            _t = (df["Kategori"].astype(str) == "TEFAS") & (df["Piyasa_Tedbiri"].astype(str) == "")
+            _r1 = pd.to_numeric(df["Ret1M"], errors="coerce")
+            _tarih = pd.to_datetime(df["Getiri_Tarihi"], errors="coerce")
+            if _tarih[_t].notna().any():
+                _taze = _tarih >= (_tarih[_t].max() - pd.Timedelta(days=FON_GETIRI_TAZELIK_GUN))
+                _uygun = _t & _r1.notna() & _taze
+                _g = df.loc[_uygun].groupby(df.loc[_uygun, "Tur"].astype(str))
+                _med = _g["Ret1M"].transform(lambda x: pd.to_numeric(x, errors="coerce").median())
+                _say = _g["Ret1M"].transform("count")
+                _med = _med.where(_say >= FON_TUR_MIN_ADET)
+                df.loc[_uygun, "Tur_Medyan_Ret1M"] = _med
+                _fark = _r1 - pd.to_numeric(df["Tur_Medyan_Ret1M"], errors="coerce")
+                df["Getiri_Uyari"] = (_uygun & (_fark >= FON_GETIRI_FAZLA_ESIK)).fillna(False).astype(bool)
+                if df["Getiri_Uyari"].any():
+                    print(f"[getiri-uyari] tur medyaninin {FON_GETIRI_FAZLA_ESIK:.0f}+ puan ustunde {int(df['Getiri_Uyari'].sum())} fon (yalniz uyari).")
+    except Exception as _gu_err:
+        print(f"[getiri-uyari] atlandi: {_gu_err}")
     return df
