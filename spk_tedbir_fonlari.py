@@ -28,6 +28,15 @@ cikarilmali - kap_bildirim_izleme.py / haber_izleme.py gelecekte bu
 tur SPK/KAP bultenlerini otomatik izleyip bu listeyi guncelleyecek
 sekilde genisletilebilir (Bahri'nin talebi, henuz YAPILMADI - bkz.
 PROJE_NOTLARI.md).
+
+v2.0.7.420 KAYNAK NOTU (18 Ekim 2026): SPK birincil metinleri okundu. (1) 2026/60 A.1.B: yedi sirketin TEFAS'ta islem
+goren TUM fonlari alim-satima kapatildi (sirket bazli esleme bu yuzden dogru); ayri bir alt kume tasfiye edilecek.
+(2) 2026/61 A.1.C: tasfiye listesi 131 fon olarak guncellendi (yalniz fon adi, kod YOK; Kurul Karar Organi 17.09.2026
+tarih ve 57/1707 sayili karar). (3) 2026/59 (16.09.2026) metninde KTLEV/GUNDG/DSTKF icin suc duyurusu ve 2 yil islem
+yasagi var; Pusula Portfoy'un KTLEV'de kendi hesabina islem yasagi gecer. Bu dosyadaki "Tera fonlarinin agirlikli
+pozisyonu" gibi fon-hisse baglantilari 2026/59 METNINDE DOGRULANMADI - kullaniciya gosterilen metinde yer almaz.
+(4) 18.10.2026 Fon Koordinasyon Kurulu haberi: tasfiyedeki fon sayisi 131'den 65'e dustu; bu, 66 fonda (A1, Bulls,
+Pardus) tasfiyenin TAMAMLANMASI demektir (Ziraat Bankasi odemeleri yapti), fonlarin yeniden acilmasi DEGIL.
 """
 
 TASFIYE_KAPSAMINDAKI_SIRKETLER = [

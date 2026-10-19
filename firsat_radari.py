@@ -462,7 +462,8 @@ def _katman_carpanlari(df_uni, sonuc, katman=None):
         d["Kategori"] = d["Kategori"].astype(str)
         # katman zaten uygulanmis df'e ikinci kez dokunmaz - CSV'de kalinti varsa temizle
         d = d.drop(columns=[c for c in ("Piyasa_Tedbiri", "Tedbir_Aciklama", "KAP_Bilgi",
-                                        "Veri_Sinirli", "Yas_Kesinti") if c in d.columns])
+                                        "Veri_Sinirli", "Yas_Kesinti", "Deger_Risk", "Getiri_Uyari",
+                                        "Tur_Medyan_Ret1M") if c in d.columns])
         d["Optima_Skor"] = 100.0
         d = katman(d)
         carpan, sinirli = {}, set()
