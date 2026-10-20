@@ -1391,6 +1391,33 @@ from uyari_katmani import (TEDBIR_SINIF as _TEDBIR_SINIF, tedbir_deger as _tedbi
                            get_signal_row)
 
 
+def _piyasa_rejimi_goster(sayfa):
+    """v2.0.7.426: Turkiye geneli piyasa rejimi bilgi seridi (ornegin MSCI dondurmasi). Skoru DEGISTIRMEZ.
+    Kayitlar piyasa_rejimi.REJIMLER'de; hata olursa sayfa etkilenmez."""
+    try:
+        import html as _html
+        from piyasa_rejimi import aktif_rejimler
+        for _r in aktif_rejimler(sayfa):
+            st.markdown(
+                '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #1f4e79;'
+                'border-left:10px solid #1f4e79;background:#dbeafe;padding:12px 16px;border-radius:8px;'
+                'margin:8px 0 6px 0;color:#0f2a4a;">'
+                '<div class="kap-rozet" style="background:#1f4e79;font-weight:800;font-size:13px;'
+                'letter-spacing:0.5px;padding:4px 10px;border-radius:6px;white-space:nowrap;">'
+                f'<span>{_html.escape(_r["rozet"])}</span></div>'
+                '<div style="font-size:15px;line-height:1.45;">'
+                f'<b>{_html.escape(_r["baslik"])}</b><br>{_html.escape(_r["ozet"])}'
+                '</div></div>',
+                unsafe_allow_html=True)
+            with st.expander("Ayrıntı ve kaynaklar"):
+                for _m in _r.get("ayrinti", []):
+                    st.markdown(f"- {_m}")
+                for _ad, _url in _r.get("kaynaklar", []):
+                    st.markdown(f"[{_ad}]({_url})")
+    except Exception as _e:
+        print(f"[piyasa-rejimi] serit gosterilemedi: {_e}", flush=True)
+
+
 def _tedbir_serit_goster(row):
     """Detay basliginin altinda tedbir/KAP seridi (hicbiri yoksa hicbir sey cizmez).
     v2.0.7.373: KAP etiketleri ayni seride; etiketsiz KAP bilgisi (geri alim, bedelsiz...) mavi bilgi seridi."""
@@ -6201,6 +6228,7 @@ if page=="Ana Sayfa":
     import time as _t_ana
     _t_ana_basla = _t_ana.perf_counter()
     st.title("Bütçe Optimizasyonu")
+    _piyasa_rejimi_goster("Ana Sayfa")
     if df_uni.empty:
         st.error("`python worker.py` ile veriyi oluşturun."); st.stop()
 
@@ -7976,6 +8004,8 @@ elif page=="Portföyüm":
 elif page in CAT:
     cat_code=CAT[page]
     st.title(page)
+    if cat_code in ("BIST", "TEFAS"):
+        _piyasa_rejimi_goster(page)    # v2.0.7.426: piyasa rejimi bilgi seridi (BIST/TEFAS)
     if df_uni.empty: st.error("`python worker.py` çalıştırın."); st.stop()
 
     # v2.0.7.74 - Bahri'nin talebi: Doviz fiyatlarinin SERBEST PIYASA
