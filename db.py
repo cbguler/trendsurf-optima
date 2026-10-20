@@ -836,6 +836,21 @@ def _init_db_bir_kez():
         bulten_no      TEXT PRIMARY KEY,
         islenme_zamani TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""")
+    # v2.0.7.429 (20 Ekim 2026, Bahri'nin talebi - "MSCI'in Turkiye'ye iliskin kararlarini gunluk
+    # takip etmek gerekiyor"): msci_izleme.py MSCI'in KENDI Index Announcements listesini tarar;
+    # Turkiye ile ilgili duyurular burada arsivlenir (baslik/tarih/alinti MSCI metninden AYNEN).
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS msci_duyuru (
+        pub_key       TEXT PRIMARY KEY,
+        tarih         DATE,
+        baslik        TEXT NOT NULL,
+        url           TEXT,
+        ilgili        BOOLEAN NOT NULL DEFAULT FALSE,
+        neden         TEXT,
+        alinti        TEXT,
+        bildirildi    BOOLEAN NOT NULL DEFAULT FALSE,
+        ilk_gorulme   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
     _piyasa_tedbir_tohumla(conn)
     _piyasa_tedbir_ek_kurallar(conn)
 
@@ -1248,7 +1263,7 @@ def _init_db_bir_kez():
     # eklenmeyi UNUTMA) burada TEKRARLANMAMASI icin.
     for _rls_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
                        "spk_bulten_islenmis", "tefas_fiyat_gecmisi",
-                       "kap_risk_uyari", "kap_risk_bildirim"):
+                       "kap_risk_uyari", "kap_risk_bildirim", "msci_duyuru"):
         try:
             c.execute(f"ALTER TABLE {_rls_tablo} ENABLE ROW LEVEL SECURITY")
         except Exception as _e:
@@ -1261,7 +1276,7 @@ def _init_db_bir_kez():
     # uzerinden "erisilemiyor" sorunu yasanmasin diye.
     for _grant_tablo in ("piyasa_tedbir_tespit", "piyasa_tedbir_listesi",
                          "spk_bulten_islenmis", "tefas_fiyat_gecmisi",
-                         "kap_risk_uyari", "kap_risk_bildirim"):
+                         "kap_risk_uyari", "kap_risk_bildirim", "msci_duyuru"):
         try:
             c.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON public.{_grant_tablo} "
                       f"TO anon, authenticated, service_role")
@@ -2150,6 +2165,89 @@ def get_aktif_piyasa_tedbirleri() -> list:
                  "tedbir_turu": r[3], "kaynak_aciklama": r[4]} for r in rows]
     except Exception as e:
         print(f"[db] get_aktif_piyasa_tedbirleri hata: {e}", file=sys.stderr)
+        return []
+
+
+def msci_tablosu_hazirla():
+    """msci_izleme.py (GitHub Actions) icin: tablo yoksa olusturur + RLS + grant (init_db'yi
+    cagirmadan). Uygulama tarafinda init_db ayni isi zaten yapar."""
+    conn = get_conn()
+    conn.execute("""CREATE TABLE IF NOT EXISTS msci_duyuru (
+        pub_key TEXT PRIMARY KEY, tarih DATE, baslik TEXT NOT NULL, url TEXT,
+        ilgili BOOLEAN NOT NULL DEFAULT FALSE, neden TEXT, alinti TEXT,
+        bildirildi BOOLEAN NOT NULL DEFAULT FALSE,
+        ilk_gorulme TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+    for _sql in ("ALTER TABLE msci_duyuru ENABLE ROW LEVEL SECURITY",
+                 "GRANT SELECT, INSERT, UPDATE, DELETE ON public.msci_duyuru "
+                 "TO anon, authenticated, service_role"):
+        try:
+            conn.execute(_sql)
+        except Exception as e:
+            print(f"[db] msci_duyuru hazirlama adimi atlandi: {e}", file=sys.stderr)
+    conn.commit()
+    conn.close()
+
+
+def msci_bilinen_anahtarlar() -> set:
+    conn = get_conn()
+    try:
+        return {r[0] for r in conn.execute("SELECT pub_key FROM msci_duyuru").fetchall()}
+    finally:
+        conn.close()
+
+
+def msci_duyuru_ekle(pub_key, tarih, baslik, url, ilgili, neden, alinti, bildirildi) -> bool:
+    """Yeni duyuru satiri; zaten varsa dokunmaz (False doner)."""
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "INSERT INTO msci_duyuru (pub_key, tarih, baslik, url, ilgili, neden, alinti, bildirildi) "
+            "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (pub_key) DO NOTHING",
+            (pub_key, tarih, baslik, url, bool(ilgili), neden, alinti, bool(bildirildi)))
+        conn.commit()
+        return (getattr(cur, "rowcount", 1) or 0) > 0
+    finally:
+        conn.close()
+
+
+def msci_bildirilmeyenler() -> list:
+    """ilgili=TRUE ve e-postasi henuz gonderilmemis duyurular (en eskiden yeniye)."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT pub_key, tarih, baslik, url, neden, alinti FROM msci_duyuru "
+            "WHERE ilgili=TRUE AND bildirildi=FALSE ORDER BY tarih, ilk_gorulme").fetchall()
+        return [{"pub_key": r[0], "tarih": r[1], "baslik": r[2], "url": r[3],
+                 "neden": r[4], "alinti": r[5]} for r in rows]
+    finally:
+        conn.close()
+
+
+def msci_bildirildi_isaretle(pub_key: str):
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE msci_duyuru SET bildirildi=TRUE WHERE pub_key=?", (pub_key,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_msci_duyurulari(gun: int = 45) -> list:
+    """Uygulama seridi icin: son `gun` gunun Turkiye ile ilgili MSCI duyurulari (yeniden eskiye).
+    Hata/tablo yoksa [] - sayfayi hic etkilemez."""
+    try:
+        conn = get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT pub_key, tarih, baslik, url, neden, alinti FROM msci_duyuru "
+                "WHERE ilgili=TRUE AND tarih >= CURRENT_DATE - ? ORDER BY tarih DESC, ilk_gorulme DESC",
+                (int(gun),)).fetchall()
+        finally:
+            conn.close()
+        return [{"pub_key": r[0], "tarih": str(r[1]) if r[1] else "", "baslik": r[2],
+                 "url": r[3], "neden": r[4], "alinti": r[5]} for r in rows]
+    except Exception as e:
+        print(f"[db] get_msci_duyurulari hata: {e}", file=sys.stderr)
         return []
 
 

@@ -46,6 +46,9 @@ REJIMLER = [
              "https://www.msci.com/downloads/documents/press-releases/media-room/Turkey_PR_Oct_26.pdf"),
         ],
         "kapsam": ("Ana Sayfa", "BIST", "TEFAS"),
+        # Bu kayit hangi MSCI duyurularini ZATEN ozetliyor (baslik, buyuk/kucuk harf farksiz): otomatik
+        # "MSCI DUYURUSU" seridi bunlari ayrica gostermez (msci_izleme.py, v2.0.7.429).
+        "kapsadigi_duyurular": ("MSCI IMPLEMENTS A FREEZE ON THE MSCI TURKEY INDEXES",),
         "baslangic": "2026-10-16",
         "bitis": None,
     },
@@ -69,4 +72,44 @@ def aktif_rejimler(sayfa, bugun=None):
         if bit and bugun >= bit:
             continue
         out.append(r)
+    return out
+
+
+OTOMATIK_KAPSAM = ("Ana Sayfa", "BIST", "TEFAS")
+
+
+def otomatik_rejimler(duyurular, sayfa, bugun=None, gun=30):
+    """msci_izleme.py'nin arsivledigi, Turkiye ile ilgili MSCI duyurularindan (db.get_msci_duyurulari)
+    otomatik 'MSCI DUYURUSU' seridi kayitlari uretir (v2.0.7.429). YORUM EKLEMEZ: baslik ve alinti MSCI'in
+    kendi metninden AYNEN; Optima'nin ozeti yoktur. REJIMLER'deki bir kaydin `kapsadigi_duyurular`inda
+    olan duyurular (zaten elle ozetlenmis) atlanir. Son `gun` gunun duyurulari, yeniden eskiye."""
+    if sayfa not in OTOMATIK_KAPSAM:
+        return []
+    bugun = bugun or date.today()
+    kapsanan = {t.strip().upper() for r in REJIMLER for t in r.get("kapsadigi_duyurular", ())}
+    out = []
+    for d in duyurular or []:
+        baslik = (d.get("baslik") or "").strip()
+        if not baslik or baslik.upper() in kapsanan:
+            continue
+        try:
+            tarih = date.fromisoformat(str(d.get("tarih") or "")[:10])
+        except ValueError:
+            continue
+        if (bugun - tarih).days > gun or tarih > bugun:
+            continue
+        alinti = (d.get("alinti") or "").strip()
+        ayrinti = [f"MSCI metninden aynen: \"{alinti}\""] if alinti else []
+        ayrinti.append("Bu serit otomatik uretilmistir: baslik ve alinti MSCI'in kendi duyurusundan alinmistir, "
+                       "Optima henuz bu duyuruyu ozetlememistir. Optima Skor'u DEGISTIRMEZ.")
+        out.append({
+            "id": "msci-duyuru-" + str(d.get("pub_key") or baslik),
+            "rozet": "MSCI DUYURUSU",
+            "baslik": f"{baslik} ({tarih.strftime('%d.%m.%Y')})",
+            "ozet": ("MSCI, Türkiye ile ilgili yeni bir duyuru yayımladı (otomatik tespit). "
+                     + (f"Duyuru metninden: {alinti}" if alinti else "Ayrıntı için duyurunun metnine bakın.")),
+            "ayrinti": ayrinti,
+            "kaynaklar": [("MSCI - " + baslik, d.get("url") or "https://www.msci.com")],
+            "kapsam": OTOMATIK_KAPSAM,
+        })
     return out
