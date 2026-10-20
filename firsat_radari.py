@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS intraday_scores (
     ret1m       double precision,
     updated_at  timestamptz DEFAULT now()
 );
+-- v2.0.7.427: trend kolonu radar tarafindan OTOMATIK eklenir (ADD COLUMN IF NOT EXISTS):
+-- ALTER TABLE intraday_scores ADD COLUMN IF NOT EXISTS trend text;
 ALTER TABLE intraday_scores ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS radar_alerts (
@@ -113,6 +115,18 @@ def _bist_seans_acik(simdi: datetime) -> bool:
 
 
 # ─── Skor formulleri (worker.py ile BIREBIR AYNI - senkron tutulmali) ──
+
+def _ma20_trendi(close):
+    """v2.0.7.427: fiyat >= 20 gunluk ortalama -> "YUKSELIS", degilse "DUSUS"; 20 gunden kisa seride None.
+    Uygulamadaki detay panelinin (app.enrich) trendiyle AYNI olcu: son kapanis vs son 20 kapanisin ortalamasi."""
+    try:
+        c = close.dropna()
+        if len(c) < 20:
+            return None
+        return "YUKSELIS" if float(c.iloc[-1]) >= float(c.tail(20).mean()) else "DUSUS"
+    except Exception:
+        return None
+
 
 def calc_rsi(s: pd.Series, p: int = 14) -> float:
     s = s.dropna()
@@ -245,7 +259,7 @@ def tara_bist(tickers, fund_map):
                 base = _bist_optima_score(rsi, ret1m, vol, True, pb, pe, dy)
                 skor = max(0.0, min(100.0, round(base + score_adj + dd_adj, 1)))
                 out[t] = {"kategori": "BIST", "skor": skor, "fiyat": p,
-                          "rsi": rsi, "ret1m": ret1m}
+                          "rsi": rsi, "ret1m": ret1m, "trend": _ma20_trendi(col)}
             except Exception:
                 continue
     print(f"[radar] BIST tarama sonucu: {len(out)} hisse degerlendirildi.")
@@ -328,7 +342,7 @@ def tara_fx_maden_kripto(df_uni):
         vol   = round(float(rets.std() * (252 ** 0.5) * 100), 1) if len(rets) > 10 else 30.0
         skor  = _bist_optima_score(rsi, ret1m, vol)  # has_fundamental=False
         out[t] = {"kategori": kategori, "skor": skor, "fiyat": p,
-                  "rsi": rsi, "ret1m": ret1m}
+                  "rsi": rsi, "ret1m": ret1m, "trend": _ma20_trendi(close)}
 
     def _close_from(h):
         if h is None or h.empty:
@@ -427,6 +441,40 @@ def _upsert(conn, sonuc):
     except Exception:
         pass
     print(f"[radar] Supabase intraday_scores: {n} satir guncellendi.")
+
+
+def _trend_yaz(conn, sonuc):
+    """v2.0.7.427: trend kolonunu (YUKSELIS/DUSUS) yazar. Ana upsert'ten AYRI ve kendi korumasinda:
+    kolon eklenemez/yazilamazsa skor yazimi ASLA etkilenmez. Tek UPDATE ... FROM (VALUES ...) ifadesi."""
+    try:
+        conn.execute("ALTER TABLE intraday_scores ADD COLUMN IF NOT EXISTS trend text")
+        conn.commit()
+    except Exception as e:
+        print(f"[radar] trend kolonu eklenemedi (atlandi): {type(e).__name__}: {str(e)[:150]}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
+    satirlar = [(str(t), v["trend"]) for t, v in sonuc.items() if v.get("trend") in ("YUKSELIS", "DUSUS")]
+    if not satirlar:
+        return 0
+    try:
+        yer = ", ".join(["(%s, %s)"] * len(satirlar))
+        params = tuple(x for s in satirlar for x in s)
+        conn.execute(
+            "UPDATE intraday_scores AS s SET trend = v.trend "
+            f"FROM (VALUES {yer}) AS v(ticker, trend) WHERE s.ticker = v.ticker", params)
+        conn.commit()
+        print(f"[radar] trend yazildi: {len(satirlar)} satir.")
+        return len(satirlar)
+    except Exception as e:
+        print(f"[radar] trend yazilamadi (atlandi): {type(e).__name__}: {str(e)[:150]}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
 
 
 SICRAMA_TAZELIK_SAAT = 6.0  # BIST'te sicrama kiyasi icin onceki olcumun azami yasi
@@ -807,6 +855,7 @@ def main():
         _upsert(conn, sonuc)
     except Exception as e:
         print(f"[radar] KRITIK: Supabase upsert basarisiz: {type(e).__name__}: {str(e)[:200]}")
+    _trend_yaz(conn, sonuc)     # v2.0.7.427: kendi korumasinda (hata skor yazimini etkilemez)
 
     try:
         yeni = _dedupe_ve_kaydet(conn, tetik)
