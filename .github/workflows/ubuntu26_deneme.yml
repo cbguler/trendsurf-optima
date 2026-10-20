@@ -1,0 +1,61 @@
+name: Ubuntu 26 Deneme (elle)
+
+# v2.0.7.421 (20 Ekim 2026): Uretim workflow'lari ubuntu-24.04'e sabit. Bu dosya SADECE
+# ubuntu-26.04 ile paket kurulumu + Python uyumunu denemek icindir.
+# - Yalnizca elle tetiklenir (workflow_dispatch); zamanlama YOK.
+# - Secret kullanmaz, commit/push yapmaz, e-posta/DB'ye dokunmaz.
+# - Tum workflow'larin pip paketlerinin BIRLESIMI + update_data.yml'deki tesseract kurulumu denenir.
+# Kaynak: GitHub changelog 2026-09-17 (etiket: ubuntu-26.04; ubuntu-latest 19 Ekim-19 Kasim 2026 arasi gecer).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu26_deneme:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Isletim sistemi ve Python surumu
+        run: |
+          cat /etc/os-release | head -4
+          python --version
+          pip --version
+
+      - name: Tesseract kur (update_data.yml ile ayni)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-tur
+          tesseract --version | head -1
+
+      - name: Bagimliliklari yukle (tum workflow'larin birlesimi)
+        run: |
+          pip install --upgrade pip --quiet
+          pip install pandas yfinance plotly streamlit requests pytefas bcrypt borsapy websockets==16.0 psycopg2-binary openpyxl pdfplumber pytesseract beautifulsoup4 evds feedparser deep-translator playwright --quiet
+          pip list 2>/dev/null | grep -i -E "^(pandas|numpy|yfinance|plotly|streamlit|requests|pytefas|bcrypt|borsapy|websockets|psycopg2-binary|openpyxl|pdfplumber|pytesseract|beautifulsoup4|evds|feedparser|deep-translator|playwright) "
+
+      - name: Paketleri iceri al
+        run: |
+          python -c "
+          import pandas, numpy, yfinance, plotly, streamlit, requests, pytefas, bcrypt, borsapy, websockets, psycopg2, openpyxl, pdfplumber, pytesseract, bs4, evds, feedparser, deep_translator, playwright
+          print('tum paketler iceri alindi; pandas', pandas.__version__, 'numpy', numpy.__version__, 'websockets', websockets.__version__)
+          "
+
+      - name: Tum .py dosyalarini derle
+        run: python -m compileall -q .
+
+      - name: Cevrimdisi testler (agsiz, secretsiz)
+        run: |
+          python test_erken_uyari.py
+          python test_firsat_radari_katman.py
