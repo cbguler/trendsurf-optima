@@ -66,7 +66,7 @@ ok(not at.exception, f"hata olmamali: {at.exception}")
 govde = " ".join(m.value for m in at.markdown)
 ok("PİYASA REJİMİ" in govde and "MSCI" in govde, "serit metni cizilmeli")
 ok(govde.count("PİYASA REJİMİ") == 1, "yalniz kapsamdaki sayfada (Doviz'de degil) cizilmeli")
-ok(any("bloomberght.com" in m.value for m in at.markdown), "kaynak baglantisi cizilmeli")
+ok(any("msci.com" in m.value for m in at.markdown), "kaynak baglantisi cizilmeli")
 ok(len(at.expander) == 1, "ayrinti kutusu bir kez cizilmeli")
 
 print(f"{_n['ok']} kontrol gecti")

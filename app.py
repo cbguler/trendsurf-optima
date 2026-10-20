@@ -9201,14 +9201,14 @@ elif page=="SonDakika Haberleri":
         st.divider()
         st.caption(
             "Kaynaklar: BBC World, Investing.com TR, "
-            "BloombergHT, Dünya Gazetesi, Sözcü Ekonomi, Euronews Türkçe, "
+            "Sözcü Ekonomi, Euronews Türkçe, "
             "Halk TV, NPR Business, Handelsblatt "
             "Finanzen (Almanya), Sky News, BBC Business, Sky News Business "
             "(İngiltere), ABC News Australia (Avustralya), Euronews "
             "(pan-Avrupa), ANSA (İtalya), Meduza (Rusya), CBC Business "
             "(Kanada), Yle News (Finlandiya), RTÉ Business (İrlanda), "
             "Africanews (pan-Afrika), Philippine Star Business "
-            "(Filipinler). "
+            "(Filipinler), TCMB Basın Duyuruları. "
             "Türkçe olmayan kaynaklar (İngilizce, Almanca, İtalyanca, "
             "Rusça) Türkçeye çevrilir; diğerleri zaten Türkçe yayın "
             "yapar. Çeviri günlük bir AI bütçesine tabidir — bütçe "

@@ -30,18 +30,20 @@ REJIMLER = [
             "serbest dolaşım oranı hesaplarının güvenilirliğini ve piyasa bütünlüğünü bozabileceğini vurguladı.",
             "MSCI'ın beklentileri: şirketlerin nihai pay sahiplerine ilişkin ayrıntılı bilgi paylaşımı, "
             "koordineli işlemlere karşı denetim ve yaptırım mekanizmaları, serbest dolaşımı bozulmuş "
-            "menkul kıymetlerin tespitine yönelik kurallara dayalı bir sistem. Haberde, Türk yetkililerin bazı "
-            "düzenlemeler yaptığı ancak bu adımların henüz başlangıç aşamasında olduğu belirtiliyor.",
-            "Takvim: Haziran 2027'ye kadar yeterli ilerleme sağlanamazsa ek tedbirler değerlendirilebilecek; "
-            "bu kapsamda Türkiye'nin 'Gelişmekte Olan Piyasa' statüsünden 'Sınır Piyasa' veya 'Bağımsız "
-            "Piyasa' statüsüne geçirilmesi ihtimali gündeme gelebilecek. Sınıflandırma 2027 Yıllık Piyasa "
+            "menkul kıymetlerin tespitine yönelik kurallara dayalı bir sistem. MSCI, Türk yetkililerin bazı ilk "
+            "adımlar attığını (nihai sahibi zaten hariç tutulan fon paylarının serbest dolaşımdan düşülmesi "
+            "gibi) ancak bunların yeterli olmadığını, güvenilir ve sürdürülebilir bir yaptırım uygulaması "
+            "gerektiğini belirtti.",
+            "Takvim: Haziran 2027'ye kadar yeterli ilerleme sağlanamazsa MSCI ek tedbirleri değerlendirecek; "
+            "bunlar arasında Türkiye endekslerinin yeniden sınıflandırılmasına (Sınır veya Bağımsız Piyasa "
+            "statüsü) ilişkin bir istişare başlatmak da var. Türkiye endekslerinin durumu 2027 Yıllık Piyasa "
             "Sınıflandırma İncelemesi kapsamında yeniden değerlendirilecek.",
             "Bu bilgi piyasa geneline aittir: Optima Skor'u DEĞİŞTİRMEZ ve belirli bir hisse ya da fon "
             "hakkında hüküm değildir.",
         ],
         "kaynaklar": [
-            ("Bloomberg HT - MSCI, Türkiye endekslerindeki değişiklikleri dondurdu (16.10.2026)",
-             "https://www.bloomberght.com/msci-turkiye-endekslerindeki-degisiklikleri-dondurdu-3791527"),
+            ("MSCI - MSCI Implements a Freeze on the MSCI Turkey Indexes (basın duyurusu, 15.10.2026)",
+             "https://www.msci.com/downloads/documents/press-releases/media-room/Turkey_PR_Oct_26.pdf"),
         ],
         "kapsam": ("Ana Sayfa", "BIST", "TEFAS"),
         "baslangic": "2026-10-16",
