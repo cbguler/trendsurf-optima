@@ -79,7 +79,10 @@ import feedparser
 _RSS_KAYNAKLARI = [
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Investing.com TR", "https://tr.investing.com/rss/news_25.rss"),
-    ("BloombergHT", "https://www.bloomberght.com/rss"),
+    # v2.0.7.428 (20 Ekim 2026, Bahri'nin karari - "BloombergHT hukumete yakin oldugu icin kullanmamaya
+    # karar vermistik"): KALDIRILDI. Not: 1 Eylul 2026 kaynak denetiminde (Ciner Holding sahipligi, dogrudan
+    # devlet ajansi degil) kaynak birakilmisti; bu karar o denetimin USTUNE gecer.
+    # ("BloombergHT", "https://www.bloomberght.com/rss"),
     # v2.0.7.180 (Bahri'nin talebi, 22 Ağustos 2026 — "başka kaynak
     # bulamıyor muyuz?"): Dünya Gazetesi eklendi. Canlı test edildi
     # (22 Ağustos 14:31 TRT) - genel bir akış (BBC/Al Jazeera gibi,
