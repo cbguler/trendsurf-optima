@@ -52,6 +52,19 @@ jobs:
           print('tum paketler iceri alindi; pandas', pandas.__version__, 'numpy', numpy.__version__, 'websockets', websockets.__version__)
           "
 
+      - name: Playwright Chromium kur ve ac (firsat_radari.yml ile ayni komut)
+        run: |
+          python -m playwright install --with-deps chromium
+          python -c "
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              b = p.chromium.launch()
+              pg = b.new_page()
+              pg.goto('about:blank')
+              print('chromium acildi, surum', b.version)
+              b.close()
+          "
+
       - name: Tum .py dosyalarini derle
         run: python -m compileall -q .
 
