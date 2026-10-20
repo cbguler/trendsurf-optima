@@ -1,0 +1,53 @@
+name: MSCI Izleme
+
+# v2.0.7.429 (20 Ekim 2026, Bahri'nin talebi - "MSCI'in Turkiye'ye iliskin kararlarini gunluk takip
+# etmek gerekiyor"): MSCI'in KENDI Index Announcements listesini (app2.msci.com, herkese acik) tarar;
+# Turkiye ile ilgili yeni duyurulari msci_duyuru tablosuna yazar, Admin'e e-posta atar ve uygulamada
+# "MSCI DUYURUSU" seridi olarak gosterir. Haber sitelerinden (ikincil kaynak) OKUNMAZ.
+# Liste "en son ~20 duyuru"yu verir; MSCI endeks degerlendirme gunlerinde cok duyuru yayimlar - bu yuzden
+# 3 saatte bir calisir (GitHub cron'u best-effort; gerekirse cron-job.org ile de tetiklenebilir).
+# Ilk calisma: mevcut duyurular baz cizgisi olarak kaydedilir, e-posta GONDERILMEZ.
+# "Run workflow" + `kuru` = veritabanina yazmaz, her duyurunun ilgili/ilgisiz kararini loga yazar.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kuru:
+        description: "Kuru calisma (veritabanina yazmaz, sadece loga yazar)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 */3 * * *"
+
+concurrency:
+  group: msci-izleme
+  cancel-in-progress: false
+
+jobs:
+  izle:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulum
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bagimliliklari yukle
+        run: |
+          pip install --upgrade pip --quiet
+          pip install requests psycopg2-binary --quiet
+
+      - name: MSCI izleme calistir
+        run: python -u msci_izleme.py ${{ github.event.inputs.kuru == 'true' && '--kuru' || '' }}
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}
+          SMTP_USER:  ${{ secrets.SMTP_USER }}
+          SMTP_PASS:  ${{ secrets.SMTP_PASS }}
+          SMTP_HOST:  ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:  ${{ secrets.SMTP_PORT }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          PYTHONUNBUFFERED: "1"

@@ -1419,13 +1419,30 @@ from uyari_katmani import (TEDBIR_SINIF as _TEDBIR_SINIF, tedbir_deger as _tedbi
                            get_signal_row, tablo_trendi as _tablo_trendi)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _msci_duyurulari_yukle():
+    """v2.0.7.429: msci_izleme.py'nin arsivledigi Turkiye ile ilgili MSCI duyurulari (10 dk onbellek).
+    Tablo/baglanti sorununda [] (serit yalniz elle ozetlenmis kayitlarla calisir)."""
+    try:
+        import db as _db
+        return _db.get_msci_duyurulari(45)
+    except Exception as _e:
+        print(f"[piyasa-rejimi] msci duyurulari okunamadi: {_e}", flush=True)
+        return []
+
+
 def _piyasa_rejimi_goster(sayfa):
     """v2.0.7.426: Turkiye geneli piyasa rejimi bilgi seridi (ornegin MSCI dondurmasi). Skoru DEGISTIRMEZ.
     Kayitlar piyasa_rejimi.REJIMLER'de; hata olursa sayfa etkilenmez."""
     try:
         import html as _html
-        from piyasa_rejimi import aktif_rejimler
-        for _r in aktif_rejimler(sayfa):
+        from piyasa_rejimi import aktif_rejimler, otomatik_rejimler
+        _kayitlar = list(aktif_rejimler(sayfa))
+        try:
+            _kayitlar += otomatik_rejimler(_msci_duyurulari_yukle(), sayfa)
+        except Exception as _e2:
+            print(f"[piyasa-rejimi] otomatik MSCI seridi atlandi: {_e2}", flush=True)
+        for _r in _kayitlar:
             st.markdown(
                 '<div style="display:flex;align-items:flex-start;gap:12px;border:2px solid #1f4e79;'
                 'border-left:10px solid #1f4e79;background:#dbeafe;padding:12px 16px;border-radius:8px;'
