@@ -2,6 +2,17 @@
 import streamlit as st, pandas as pd, numpy as np, os, json, base64, time
 import streamlit.components.v1 as components
 
+# v2.0.7.427 (20 Ekim 2026, Bahri'nin bulgusu - "[timing] satirlari loglarda yok"): Streamlit Cloud'da
+# stdout bir TTY degil; Python bu durumda stdout'u BLOK-TAMPONLAR (~8 KB dolana kadar yazmaz), stderr ise
+# aninda yazar. Bu yuzden print() ile basilan [timing]/[piyasa-tedbir]/[kap-risk] satirlari yeniden baslatma
+# sonrasi dakikalarca loga dusmuyor, [db] satirlari (stderr) ise hemen gorunuyordu (4 log dosyasinda olculdu:
+# yeniden baslatma sonrasi 3 logda stdout satiri 0, stderr satiri 15-135). Satir tamponu: her print hemen yazilir.
+try:
+    import sys as _sys_tampon
+    _sys_tampon.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 try:
     import plotly.graph_objects as go, plotly.express as px
     HAS_PLOTLY = True
@@ -939,6 +950,23 @@ def load_universe():
     except Exception as _rd_err:
         # Tablo henuz yoksa / baglanti sorunuysa sessizce CSV ile devam
         print(f"[radar-overlay] atlandi: {_rd_err}")
+    # v2.0.7.427: radarin fiyat-MA20 TRENDI (tablo sinyali detay paneliyle ayni olcuyle hesaplansin diye).
+    # Skor overlay'inden AYRI ve kendi korumasinda: `trend` kolonu henuz yoksa yalniz bu adim atlanir, skor
+    # overlay'i etkilenmez. 96 saat tazelik: BIST seans disinda fiyat degismedigi icin hafta sonu da gecerli.
+    try:
+        from db import get_intraday_trend
+        _tr_map = get_intraday_trend(96)
+        if _tr_map:
+            _tr_t = df["Ticker"].astype(str)
+            _tr_kat = _tr_t.map(lambda t: _tr_map.get(t, (None, None))[0])
+            _tr_val = _tr_t.map(lambda t: _tr_map.get(t, (None, None))[1])
+            _tr_mask = (_tr_kat == df["Kategori"]) & _tr_val.notna()
+            if _tr_mask.any():
+                if "Trend" not in df.columns:
+                    df["Trend"] = ""
+                df.loc[_tr_mask, "Trend"] = _tr_val[_tr_mask]
+    except Exception as _tr_err:
+        print(f"[radar-trend] atlandi: {_tr_err}")
     # v1.6: USD bazli emtialari evrenden cikar (Brent/WTI/Dogalgaz/tarim emtialari)
     df = _ld_filter_universe(df)
     # v1.6.1: Mevcut MADEN adlarini netlestir (ALTIN_TRY -> "Gram Altin")
@@ -1388,7 +1416,7 @@ from uyari_katmani import (TEDBIR_SINIF as _TEDBIR_SINIF, tedbir_deger as _tedbi
                            yas_kesinti_mi as _yas_kesinti_mi, yas_kesinti_aciklama as _yas_kesinti_aciklama,
                            deger_riski_mi as _deger_riski_mi, deger_riski_aciklama as _deger_riski_aciklama,
                            getiri_uyarisi_mi as _getiri_uyarisi_mi, getiri_uyarisi_aciklama as _getiri_uyarisi_aciklama,
-                           get_signal_row)
+                           get_signal_row, tablo_trendi as _tablo_trendi)
 
 
 def _piyasa_rejimi_goster(sayfa):
@@ -6512,6 +6540,8 @@ if page=="Ana Sayfa":
         # v2.0.7.380: tedbir/KAP etiketi ve sinirli-veri siniri get_signal_row'dan (tablo/detay/e-posta ile ayni)
         try:
             _vr = df_uni[(df_uni["Ticker"] == _s["ticker"]) & (df_uni["Kategori"] == _s["cat"])]
+            # v2.0.7.427: radarin fiyat-MA20 trendi varsa onu kullan (detay paneliyle ayni olcu)
+            trend_v = _tablo_trendi(_vr.iloc[0] if not _vr.empty else None, _s["ret1m"])
             sig_lbl, _ = get_signal_row(_vr.iloc[0] if not _vr.empty else None, _s["skor"], rsi_v, trend_v)
         except Exception:
             sig_lbl, _ = get_signal(_s["skor"], rsi_v, trend_v)
@@ -8149,7 +8179,7 @@ elif page in CAT:
     _sinyal_hizli_tum = df_cat.apply(
         lambda r: get_signal_row(
             r, float(r.get("Optima_Skor", 0) or 0), float(r.get("RSI", 50) or 50),
-            "YUKSELIS" if float(r.get("Ret1M", 0) or 0) >= 0 else "DUSUS")[0],
+            _tablo_trendi(r, float(r.get("Ret1M", 0) or 0)))[0],
         axis=1)
     df_page_show = df_cat[["Ticker","Ad","Son_Fiyat","RSI","Ret1M","Optima_Skor"]].copy()
     df_page_show.insert(5, "Sinyal", _sinyal_hizli_tum.values)

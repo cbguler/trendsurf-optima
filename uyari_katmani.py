@@ -215,6 +215,22 @@ def getiri_uyarisi_aciklama(row) -> str:
 
 
 
+def tablo_trendi(row, ret1m):
+    """v2.0.7.427: TABLO sinyali icin trend. Satirda radarin yazdigi `Trend` (YUKSELIS/DUSUS = fiyat >= MA20)
+    varsa onu kullanir - detay panelindeki enrich() ile ayni olcu; yoksa eski yontem (1A getiri isareti).
+    get_signal() skor<40'ta trende bakar: iki olcu ayrisinca tablo NET SAT / detay TUT IZLE gosteriyordu (BALAT)."""
+    try:
+        t = row.get("Trend") if row is not None else None
+    except Exception:
+        t = None
+    if t in ("YUKSELIS", "DUSUS"):
+        return t
+    try:
+        return "YUKSELIS" if float(ret1m) >= 0 else "DUSUS"
+    except Exception:
+        return "DUSUS"
+
+
 def get_signal_row(row, score, rsi, trend):
     """get_signal() ile ayni donus (etiket, css sinifi); tedbirli varlikta tedbir etiketi,
     sinirli veride AL etiketleri TUT IZLE'ye indirilir."""

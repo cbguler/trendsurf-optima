@@ -1359,6 +1359,30 @@ def get_intraday_overlay(freshness_minutes: int = 45) -> dict:
     return sonuc
 
 
+def get_intraday_trend(freshness_hours: int = 96) -> dict:
+    """v2.0.7.427: Firsat Radari'nin intraday_scores.trend kolonu (YUKSELIS/DUSUS = fiyat >= MA20).
+    {ticker: (kategori, trend)} doner. `trend` kolonu henuz yoksa / baglanti sorunu varsa SESSIZCE {} doner
+    (cagiran taraf Ret1M isaretine duser). Skor overlay'inden bilerek AYRI sorgu: kolon eksikligi o overlay'i bozmaz."""
+    try:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT ticker, kategori, trend FROM intraday_scores "
+            "WHERE trend IS NOT NULL AND updated_at > now() - "
+            f"interval '{int(freshness_hours)} hours'"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return {}
+    out = {}
+    for r in rows or []:
+        t = str(r["ticker"] if isinstance(r, dict) else r[0])
+        k = r["kategori"] if isinstance(r, dict) else r[1]
+        v = r["trend"] if isinstance(r, dict) else r[2]
+        if v in ("YUKSELIS", "DUSUS"):
+            out[t] = (k, v)
+    return out
+
+
 # ══════════════════════════════════════════════════════════════
 # Beklenti Modu — Otomatik Haber Tespiti (v2.0.7.154)
 # ══════════════════════════════════════════════════════════════
