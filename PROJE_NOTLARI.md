@@ -9147,3 +9147,8 @@ Riskli olmayan ornekler test edildi ve isaretlenmez: yalniz ek dosyali duyuru, u
 **Etki:** Yalniz secili 40 adayin "Son Fiyat"i/emir fiyati; skor hesabi degismez. Kismi sonuc da 5 dk onbellege girer (gelmeyen ticker 5 dk CSV fiyatinda kalir).
 **Test:** yeni `test_canli_fiyat_zaman_asimi.py` (11 kontrol, sahte borsapy); eski live_data.py ile BASARISIZ (3,00 sn), yenisiyle gecti. Onceki testler gecti.
 **Ikincil loglar (dokunulmadi):** `st.radio("")` bos etiket uyarisi (app.py ~3688); `st.components.v1.html` 2026-06-01 sonrasi kaldirilacak uyarisi; load_universe hemen her oturum acilisinda cache MISS (5-10 sn).
+
+### v2.0.7.423 (20 Ekim 2026) - enag_izleme.yml ubuntu-26.04'e gecirildi (ilk uretim workflow'u)
+**Dayanak:** v2.0.7.421 deneme workflow'u (elle) Ubuntu 26.04.1 LTS uzerinde YESIL: Python 3.12.15, 12 workflow'un tum pip paketleri (pandas 3.0.6, numpy 2.5.4, streamlit 1.66.0, playwright 1.64.0, websockets 16.0 vb.) kuruldu ve import edildi, tesseract 5.5.0 apt ile kuruldu, compileall + 2 cevrimdisi test (23 + 36 kontrol) gecti. Not: deneme yalniz kurulum + cevrimdisi testleri kapsar; DB/e-posta/canli veri adimlari denenmedi.
+**Yapilan:** yalniz `.github/workflows/enag_izleme.yml`: `runs-on: ubuntu-24.04` -> `ubuntu-26.04` (tek satir). Neden bu: en az bagimlilik (requests, psycopg2-binary), gunde 1 kez, idempotent (kayitli ay tekrar yazilirsa sessizce guncellenir).
+**Sonraki adim:** Bahri enag_izleme'yi Actions'tan elle calistirir, yesil ise kalan 10 workflow ubuntu-26.04'e gecirilir (son tarih 19 Kasim 2026, ubuntu-latest o zamana kadar kademeli 26.04'e gecer). Deneme dosyasi ubuntu26_deneme.yml gecis bitince silinebilir.
