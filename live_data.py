@@ -38,15 +38,23 @@ def _borsapy_zaman_asimili(fn, timeout=10):
     """fn (parametresiz bir callable) icin zaman asimi korumasi. Basarili
     olursa fn()'in sonucunu, zaman asimi/hata olursa None dondurur."""
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+    # v2.0.7.422 (20 Ekim 2026, Bahri'nin bulgusu - "Reddet cok uzun suruyor", loglarda
+    # refresh_bist_selective 81-233 sn): ESKI kod `with ThreadPoolExecutor(...)` kullaniyordu;
+    # with bloğundan cikarken executor takilan isin BITMESINI bekler (shutdown(wait=True)), yani
+    # `result(timeout=...)` None dondurse bile fonksiyon zaman asimina ragmen is bitene kadar
+    # donmuyordu (denendi: 2 sn asimi + 12 sn is = 12 sn). Artik wait=False: takilan is arka planda
+    # kalir, cagiran HEMEN doner.
+    _ex = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as _ex:
-            _gelecek = _ex.submit(fn)
-            try:
-                return _gelecek.result(timeout=timeout)
-            except _FutTimeout:
-                return None
+        _gelecek = _ex.submit(fn)
+        try:
+            return _gelecek.result(timeout=timeout)
+        except _FutTimeout:
+            return None
     except Exception:
         return None
+    finally:
+        _ex.shutdown(wait=False, cancel_futures=True)
 
 
 # ----------------------------------------------------------------------------
@@ -745,7 +753,7 @@ def _fetch_live_kripto(tickers_key: tuple) -> dict:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _fetch_live_bist(tickers_key: tuple) -> dict:
+def _fetch_live_bist(tickers_key: tuple, toplam_sn=None) -> dict:
     """borsapy.download ile BIST hisselerinin son kapanis fiyatlarini batch cek.
 
     5 dk cache. BIST regulatif olarak 15 dakika gecikmeli yayinlandigi icin
@@ -753,6 +761,10 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
 
     Args:
         tickers_key: BIST ticker'larin tuple'i (cache key icin hashable olmali)
+        toplam_sn: v2.0.7.422 - None (varsayilan) = eski davranis, sinirsiz bekler.
+            Sayi verilirse TOPLAM bekleme bu kadar saniyeyle sinirlanir: sure dolunca
+            takilan tickerlar BEKLENMEZ, gelen fiyatlar dondurulur (gelmeyenler icin
+            cagiran CSV fiyatini korur). Not: kismi sonuc da 5 dk onbellege girer.
 
     Returns:
         {ticker: son_fiyat} dict. Hata olursa bos dict.
@@ -772,7 +784,9 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
         try:
             tobj = bp.Ticker(ticker)
             # 1) En hizli: fast_info.last_price
-            try:
+            # v2.0.7.422: fast_info okumasinin (ozellikler tembel olarak ag cagrisi yapabilir)
+            # HIC zaman asimi yoktu; artik 8 sn ile korunuyor.
+            def _fast_oku():
                 fi = tobj.fast_info
                 # FastInfo objesi olarak veya dict olarak gelebilir
                 v = None
@@ -780,6 +794,9 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
                     v = fi.last_price
                 if v is None and hasattr(fi, "todict"):
                     v = fi.todict().get("last_price") or fi.todict().get("regularMarketPrice")
+                return v
+            try:
+                v = _borsapy_zaman_asimili(_fast_oku, timeout=8)
                 if v is not None and float(v) > 0:
                     return ticker, float(v)
             except Exception:
@@ -803,15 +820,37 @@ def _fetch_live_bist(tickers_key: tuple) -> dict:
         return ticker, None
 
     out: dict = {}
-    try:
-        # 30 paralel worker -> 770 ticker / 30 ~= 26 ticker per thread
-        with ThreadPoolExecutor(max_workers=30) as ex:
-            for ticker, price in ex.map(_fetch_one, tickers_key):
-                if price is not None and price > 0:
-                    out[ticker] = price
-    except Exception:
+    if toplam_sn is None:
+        try:
+            # 30 paralel worker -> 770 ticker / 30 ~= 26 ticker per thread
+            with ThreadPoolExecutor(max_workers=30) as ex:
+                for ticker, price in ex.map(_fetch_one, tickers_key):
+                    if price is not None and price > 0:
+                        out[ticker] = price
+        except Exception:
+            return out
         return out
 
+    # v2.0.7.422: SINIRLI MOD - toplam bekleme toplam_sn ile sinirli, takilanlar beklenmez.
+    from concurrent.futures import wait as _wait
+    ex = ThreadPoolExecutor(max_workers=min(30, max(1, len(tickers_key))))
+    try:
+        gelecekler = [ex.submit(_fetch_one, t) for t in tickers_key]
+        biten, _bitmeyen = _wait(gelecekler, timeout=toplam_sn)
+        for g in biten:
+            try:
+                ticker, price = g.result()
+            except Exception:
+                continue
+            if price is not None and price > 0:
+                out[ticker] = price
+        if _bitmeyen:
+            print(f"[live_data] BIST canli fiyat: {len(_bitmeyen)}/{len(tickers_key)} ticker "
+                  f"{toplam_sn} sn icinde gelmedi - CSV fiyati korunur.", flush=True)
+    except Exception:
+        pass
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
     return out
 
 
@@ -952,6 +991,12 @@ def refresh_fx_maden_kripto(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
+# v2.0.7.422: secili (az sayida) ticker'in canli yenilemesi icin TOPLAM bekleme ust siniri (sn).
+# Ana Sayfa her yeniden calismada (Onayla/Reddet dahil) 40 ticker yeniliyordu; borsapy takilinca
+# 81-233 sn bekleniyordu (Bahri'nin loglari, 20 Ekim 2026).
+_SECILI_CANLI_TOPLAM_SN = 20
+
+
 def refresh_bist_selective(df: pd.DataFrame, tickers: list) -> pd.DataFrame:
     """Sadece belirli BIST tickerlarini canli yenile (v1.9.7).
 
@@ -996,7 +1041,7 @@ def refresh_bist_selective(df: pd.DataFrame, tickers: list) -> pd.DataFrame:
             return df
 
         # _fetch_live_bist zaten paralel + cache_data ile sarmalanmis
-        prices = _fetch_live_bist(tuple(actual))
+        prices = _fetch_live_bist(tuple(actual), _SECILI_CANLI_TOPLAM_SN)
         if not prices:
             return df
 
