@@ -294,12 +294,18 @@ def uyari_katmanini_uygula(df):
         # KAP kapatma bildirimi 60 gun sonra dustugu icin tahtasi kapali kalan hisse (UMPAS) normal skorla
         # gorunuyordu. Baska tedbir/KAP etiketi zaten varsa o korunur (daha belirleyici).
         if "Islem_Yok_Gun" in df.columns:
-            from islem_gormuyor import isaretli_mi, aciklama as _iy_acik
+            from islem_gormuyor import isaretli_mi, aciklama as _iy_acik, paylar_yukle as _iy_paylar
             _iy = (df["Kategori"].astype(str) == "BIST") & df["Islem_Yok_Gun"].apply(isaretli_mi) \
                   & (df["Piyasa_Tedbiri"] == "")
             if _iy.any():
                 df.loc[_iy, "Piyasa_Tedbiri"] = _SK
-                df.loc[_iy, "Tedbir_Aciklama"] = df.loc[_iy, "Islem_Yok_Gun"].apply(_iy_acik)
+                # v2.0.7.434: ayni KAP sirketinin birden fazla kodu varsa (ISATR/ISCTR) aciklamaya islem goren
+                # kardes kod eklenir. "Islem goruyor" = Islem_Yok_Gun OLCULMUS ve esigin altinda (veri yoksa sayilmaz).
+                _pay = _iy_paylar()
+                _gor = set(df.loc[(df["Kategori"].astype(str) == "BIST") & df["Islem_Yok_Gun"].notna()
+                                  & ~df["Islem_Yok_Gun"].apply(isaretli_mi), "Ticker"].astype(str).str.upper())
+                df.loc[_iy, "Tedbir_Aciklama"] = [
+                    _iy_acik(g, t, _pay, _gor) for g, t in zip(df.loc[_iy, "Islem_Yok_Gun"], df.loc[_iy, "Ticker"])]
                 print(f"[islem-yok] {int(_iy.sum())} BIST hissesi fiilen islem gormuyor - Optima Skor 0.")
         _tum = df["Piyasa_Tedbiri"] != ""
         if _tum.any():

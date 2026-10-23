@@ -130,4 +130,57 @@ import worker as wk
 r = wk.batch_bist(["UMP", "AKT"])
 ok(r["UMP"]["islem_yok_gun"] == 67, f"worker: kapali hisse 67 seans (3 ay penceresi) ({r['UMP'].get('islem_yok_gun')})")
 ok(r["AKT"]["islem_yok_gun"] == 0, "worker: aktif hisse 0")
+# --- v2.0.7.434: ayni sirketin islem goren kodu aciklamaya eklenir (ISATR/ISCTR) ---
+import json
+import os
+import tempfile
+
+PAY = {"ISATR": {"ISATR": 1000.0, "ISBTR": 29000.0, "ISCTR": 24999970000.0, "ISKUR": 2458.0},
+       "KRDMA": {"KRDMA": 100.0, "KRDMD": 300.0}}
+a = IG.aciklama(280, "ISATR", PAY, {"ISCTR", "ISBTR"})
+ok("ISCTR (24.999.970.000 pay)" in a and "ISBTR (" not in a, "islem goren en buyuk kardes kod (ISCTR) secilir")
+ok("1.000 adettir (%0,000004)" in a and "25.000.002.458" in a, "kendi pay adedi, toplam ve yuzde dogru")
+ok("mali durumu hakkında değil" in a and "Optima Skor 0'a sabit" in a, "banka sagligi aciklamasi + eski metin korunur")
+b = IG.aciklama(280, "ISATR", PAY, set())
+ok("pay kodu:" not in b and "mali durumu hakkında değil" in b, "olcumle dogrulanan islem goren kardes yoksa kod ADI VERILMEZ")
+ok(IG.aciklama(66, "UMPAS", PAY, {"ISCTR"}) == IG.aciklama(66), "tek kodlu sirket: metin degismez")
+ok(IG.aciklama(66, "UMPAS") == IG.aciklama(66), "paylar verilmezse eski metin")
+ok(IG.aciklama(66, "UMPAS", None, None) == IG.aciklama(66), "paylar None guvenli")
+ok(IG.kardes_notu("ISATR", {"ISATR": {"ISATR": 1.0}}, {"X"}) == "", "tek elemanli grup: not yok")
+ok(IG.kardes_notu("XXX", PAY, {"ISCTR"}) == "", "tabloda olmayan kod: not yok")
+ok(IG.kardes_notu("ISATR", {"ISATR": {"ISATR": 0.0, "ISCTR": 0.0}}, {"ISCTR"}) == "", "toplam 0: patlamaz, not yok")
+ok(IG._tr_yuzde(0.5) == "%50" and IG._tr_yuzde(0.0123) == "%1,2" and IG._tr_yuzde(0.2111) == "%21,1", "yuzde bicimi")
+
+with tempfile.TemporaryDirectory() as td:
+    yol = os.path.join(td, "o.json")
+    ok(IG.paylar_yukle(yol) == {}, "dosya yok -> bos")
+    with open(yol, "w", encoding="utf-8") as f:
+        json.dump({"veri": {"ISATR": {"paylar": {"isatr": 1000, "ISCTR": 5000}}, "TEK": {"paylar": {"TEK": 5}}, "BOZ": None}}, f)
+    pp = IG.paylar_yukle(yol)
+    ok(set(pp) == {"ISATR"} and pp["ISATR"] == {"ISATR": 1000.0, "ISCTR": 5000.0}, "yalniz cok kodlu sirketler, kodlar buyuk harf")
+    with open(yol, "w") as f:
+        f.write("{bozuk")
+    os.utime(yol, (1, 1))
+    ok(IG.paylar_yukle(yol) == {}, "bozuk dosya -> bos")
+gercek = IG.paylar_yukle()
+ok({"ISATR", "ISCTR", "KRDMA"} <= set(gercek), "depodaki gercek KAP onbellegi okunur (ISATR/ISCTR/KRDMA)")
+
+def df1():
+    sat = lambda t, g: {"Ticker": t, "Ad": t, "Kategori": "BIST", "Son_Fiyat": 10.0, "RSI": 50.0, "Ret1M": 5.0,
+                        "Vol": 30.0, "Optima_Skor": 80.0, "Gecmis_Gun": 900.0, "Islem_Yok_Gun": g}
+    return pd.DataFrame([sat("ISATR", 280.0), sat("ISCTR", 0.0), sat("ISBTR", 0.0), sat("ISKUR", 120.0), sat("UMPAS", 66.0)])
+
+db.get_aktif_piyasa_tedbirleri = lambda: []
+db.get_aktif_kap_riskleri = lambda: {}
+try:
+    e = U.uyari_katmanini_uygula(df1()).set_index("Ticker")
+finally:
+    db.get_aktif_piyasa_tedbirleri, db.get_aktif_kap_riskleri = orj
+ok("ISCTR (" in e.loc["ISATR", "Tedbir_Aciklama"] and "ISKUR (" not in e.loc["ISATR", "Tedbir_Aciklama"],
+   "uyari katmani: ISATR aciklamasi ISCTR'yi gosterir, islem gormeyen ISKUR'u degil")
+ok("ISCTR" in e.loc["ISKUR", "Tedbir_Aciklama"], "ISKUR icin de ayni not")
+ok("pay tablosuna" not in e.loc["UMPAS", "Tedbir_Aciklama"], "tek kodlu UMPAS: ek not yok")
+ok(e.loc["ISCTR", "Piyasa_Tedbiri"] == "" and e.loc["ISCTR", "Optima_Skor"] == 80.0, "islem goren ISCTR etkilenmez")
+ok(e.loc["ISATR", "Optima_Skor"] == 0.0, "ISATR skoru yine 0")
+
 print(f"TUM TESTLER GECTI ({_n['ok']} kontrol)")
