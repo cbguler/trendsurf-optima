@@ -787,10 +787,13 @@ def fetch_bist_names_fast(tickers: list) -> dict:
 from scoring import optima_score as _bist_optima_score
 
 
-def batch_bist(tickers):
+def batch_bist(tickers, surecler=None):
     """Tüm BIST'i batch download ile indir — RSI + Ret1M + Vol + hacim
-    trendi + max drawdown dahil (Optima Skoru'nun TUM bilesenleri)."""
+    trendi + max drawdown dahil (Optima Skoru'nun TUM bilesenleri).
+    v2.0.7.430: `surecler` (ex_gun_duzeltme.surec_haritasi_yukle) verilirse hak kullanim (ex)
+    gunu mekanik dususu seriden cikarilir (firsat_radari.tara_bist ile birebir ayni). None -> eski."""
     import yfinance as yf
+    import ex_gun_duzeltme as _ex_gun
     print(f"  BIST batch download ({len(tickers)} hisse)...")
     result = {}
     chunk_size = 200
@@ -813,6 +816,7 @@ def batch_bist(tickers):
                         result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
                                      "score_adj": 0, "dd_adj": 0}
                         continue
+                    col = _ex_gun.uygula(t, col, surecler, "worker")
                     p = round(float(col.iloc[-1]), 4)
                     rsi = calc_rsi(col)
                     ret1m = round((col.iloc[-1] / col.iloc[-22] - 1) * 100, 2) if len(col) >= 22 else 0.0
@@ -1460,7 +1464,14 @@ def build():
 
     # ── 2. BIST ───────────────────────────────────────────────
     print(f"\n[2/4] {len(BIST_TICKERS)} BIST hissesi (batch)...")
-    bist_data = batch_bist(BIST_TICKERS)
+    try:
+        import ex_gun_duzeltme as _exg
+        _surecler = _exg.surec_haritasi_yukle()
+        print(f"  ex-gun duzeltmesi: {len(_surecler)} hissede KAP sermaye artirimi sureci var.")
+    except Exception as _e:
+        _surecler = None
+        print(f"  ex-gun duzeltmesi atlandi: {type(_e).__name__}: {str(_e)[:150]}")
+    bist_data = batch_bist(BIST_TICKERS, _surecler)
 
     # Sadece fiyat gelen hisseler için isim çek
     priced_tickers = [t for t in BIST_TICKERS if bist_data.get(t, {}).get("price", 0) > 0]

@@ -74,6 +74,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+import ex_gun_duzeltme as _ex_gun
+
 warnings.filterwarnings("ignore")
 
 CSV_PATH      = "optimized_universe.csv"
@@ -153,9 +155,12 @@ def _bist_optima_score(rsi, ret1m, vol=30.0, has_fundamental=False,
 
 # ─── BIST tam-evren taramasi ─────────────────────────────────
 
-def tara_bist(tickers, fund_map):
+def tara_bist(tickers, fund_map, surecler=None):
     """worker.py.batch_bist ile ayni mantik: batch download + RSI/Ret1M/Vol
-    + hacim trendi + Max DD duzeltmesi + (CSV'den gelen) temel analiz."""
+    + hacim trendi + Max DD duzeltmesi + (CSV'den gelen) temel analiz.
+    v2.0.7.430: `surecler` (ex_gun_duzeltme.surec_haritasi_yukle) verilirse, KAP'ta bedelli/
+    bedelsiz sureci olan hissenin hak kullanim gunu bosluğu seriden cikarilir (Yahoo bunu
+    duzeltmiyor -> sahte cokus). None -> eski davranis."""
     out = {}
     # v2.0.7.104 - KRITIK DUZELTME (Bahri'nin bulgusu, 27 Temmuz 2026: 14:35
     # TRT'de - yani BIST seansi ACIKKEN - "All jobs have failed" ile TUM
@@ -212,6 +217,8 @@ def tara_bist(tickers, fund_map):
                 # disinda kalir; onlari gece worker'inin CSV skoru tasir.)
                 if col.empty or len(col) < 22:
                     continue
+                # v2.0.7.430: hak kullanim (ex) gunu mekanik dususu sahte cokus olarak skora girmesin.
+                col   = _ex_gun.uygula(t, col, surecler, "radar")
                 p     = round(float(col.iloc[-1]), 4)
                 rsi   = calc_rsi(col)
                 ret1m = round((col.iloc[-1] / col.iloc[-22] - 1) * 100, 2) if len(col) >= 22 else 0.0
@@ -786,7 +793,7 @@ def main():
         try:
             bist_tickers = (df_uni[(df_uni["Kategori"] == "BIST")]["Ticker"]
                             .dropna().astype(str).tolist())
-            sonuc.update(tara_bist(bist_tickers, fund_map))
+            sonuc.update(tara_bist(bist_tickers, fund_map, _ex_gun.surec_haritasi_yukle()))
         except Exception as e:
             print(f"[radar] KRITIK: BIST taramasi coktu, atlandi: {type(e).__name__}: {str(e)[:200]}")
     else:
