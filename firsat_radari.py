@@ -178,31 +178,20 @@ def tara_bist(tickers, fund_map, surecler=None):
     # hata metni hala loglanmadi). Asagidaki import artik borsapy ile ayni
     # desende korunuyor: patlarsa sadece BIST bu kosuda atlanir, DOVIZ/
     # MADEN/KRIPTO/TEFAS etkilenmez.
-    try:
-        import yfinance as yf
-    except Exception as e:
-        print(f"[radar] KRITIK: yfinance import edilemedi, BIST atlandi: {type(e).__name__}: {str(e)[:200]}")
-        return out
+    # v2.0.7.432: fiyat gecmisi TEK kaynak katmanindan (fiyat_kaynagi: borsapy birincil, Yahoo yedek);
+    # import/hata korumasi orada (v2.0.7.104'un yfinance import korumasi yedek yol icinde de gecerli).
+    import fiyat_kaynagi as _fk
     print(f"[radar] BIST tam tarama: {len(tickers)} hisse...")
     chunk_size = 200
     import time as _time
+    veriler = _fk.bist_gecmis(tickers)
     for i in range(0, len(tickers), chunk_size):
-        if i > 0:
-            _time.sleep(3)  # v2.0.6: parcalar arasi nefes - hiz siniri baskisini azaltir
         chunk = tickers[i:i + chunk_size]
         syms = [f"{t}.IS" for t in chunk]
-        try:
-            raw = yf.download(syms, period="3mo", progress=False,
-                              auto_adjust=True, group_by="ticker")
-        except Exception as e:
-            print(f"[radar] chunk {i//chunk_size+1} indirme hatasi: {e}")
-            continue
         for t, sym in zip(chunk, syms):
             try:
-                if len(syms) == 1:
-                    sub = raw
-                else:
-                    sub = raw[sym] if sym in raw.columns.get_level_values(0) else pd.DataFrame()
+                _v = veriler.get(t) or _fk.Veri()
+                sub = _v.df if _v.df is not None else pd.DataFrame()
                 col = sub["Close"].dropna() if "Close" in sub.columns else pd.Series(dtype=float)
                 if hasattr(col, "squeeze"):
                     col = col.squeeze()

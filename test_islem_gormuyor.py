@@ -124,9 +124,10 @@ def _indir(syms, **kw):
 
 fake.download = _indir
 sys.modules["yfinance"] = fake
+sys.modules["borsapy"] = None      # v2.0.7.432: agsiz test - borsapy import edilemez -> Yahoo yedek yolu
 import worker as wk
 
 r = wk.batch_bist(["UMP", "AKT"])
-ok(r["UMP"]["islem_yok_gun"] == 70, f"worker: kapali hisse 70 seans ({r['UMP'].get('islem_yok_gun')})")
+ok(r["UMP"]["islem_yok_gun"] == 67, f"worker: kapali hisse 67 seans (3 ay penceresi) ({r['UMP'].get('islem_yok_gun')})")
 ok(r["AKT"]["islem_yok_gun"] == 0, "worker: aktif hisse 0")
 print(f"TUM TESTLER GECTI ({_n['ok']} kontrol)")
