@@ -333,9 +333,13 @@ def siniflandir(b: dict) -> list:
     elif konu == K_SPK_TEDBIR:
         ekle(ik + gk, "SPK_TEDBIR")
     elif konu == K_SIRA:
-        if "kapatıl" in ol or "kapatil" in ol:
+        _kp = min([i for i in (ol.find("kapatıl"), ol.find("kapatil")) if i >= 0], default=-1)
+        _ac = min([i for i in (ol.find("açıl"), ol.find("acil")) if i >= 0], default=-1)
+        if _kp >= 0 and _ac > _kp:
+            ekle(hedef3, "SIRA_ACIK")      # v2.0.7.431: "...Kapatılması ve Açılması" = kapatildi VE yeniden acildi
+        elif _kp >= 0:
             ekle(hedef3, "SIRA_KAPALI")
-        elif "açıl" in ol or "acil" in ol:
+        elif _ac >= 0:
             ekle(hedef3, "SIRA_ACIK")
     elif konu == K_UYARI:
         ekle(hedef3, "SIRKET_UYARI")
