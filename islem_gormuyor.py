@@ -124,3 +124,28 @@ def aciklama(gun, ticker=None, paylar=None, islem_gorenler=None) -> str:
             "çok düşük olabilir; alınıp satılamayabilir. Optima Skor 0'a sabitlenmiştir; "
             "alım/satım sinyali üretilmez. İşlem yeniden başlayınca uyarı kendiliğinden kalkar."
             + (kardes_notu(ticker, paylar, islem_gorenler) if ticker else ""))
+
+
+# v2.0.7.435: detay sayfasinda fiilen islem gormeyen BIST hissesinin PIYASA kaynakli (Yahoo) verileri ve fiyattan
+# hesaplanan teknik gostergeleri (RSI, trend, MACD, 52H, MaxDD) bayat 1 lotluk barlardan uretildigi icin anlamsizdir
+# (ISATR: RSI 100, 52H Yuksek = Dusuk, Temettu Dagitim Orani %1727). KAP kaynakli satirlar (bilanco) gecerlidir.
+GIZLENDI_NOTU = ("Bu hisse fiilen işlem görmediği için Yahoo kaynaklı piyasa verileri ve fiyattan hesaplanan "
+                 "teknik göstergeler (RSI, trend, MACD, 52H) gösterilmiyor; yalnızca KAP kaynaklı satırlar listelenir.")
+_KATEGORIK_SATIRLAR = ("Sektör", "Endüstri")
+
+
+def satir_kapali_mi(row) -> bool:
+    """Detay sayfasindaki satir (pandas Series/dict) BIST ve Islem_Yok_Gun esigi astiysa True. Etiketten bagimsiz:
+    10+ seans hic islem olmayan hissenin fiyat/hacim turevleri etiket ne olursa olsun bayattir."""
+    try:
+        if str(row.get("Kategori", "")) != "BIST":
+            return False
+        return bool(isaretli_mi(row.get("Islem_Yok_Gun")))
+    except Exception:
+        return False
+
+
+def yahoo_satirlarini_ayikla(disp: dict) -> dict:
+    """Temel Analiz tablosundan (etiket -> deger, sirali) KAP etiketli satirlari ve sektor/endustri bilgisini tutar;
+    kaynak etiketi 'KAP' icermeyen (Yahoo) satirlari atar. Sira korunur."""
+    return {k: v for k, v in (disp or {}).items() if "KAP" in str(k) or str(k) in _KATEGORIK_SATIRLAR}

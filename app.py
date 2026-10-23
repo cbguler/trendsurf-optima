@@ -3229,6 +3229,23 @@ def render_candle_interactive(hist, ticker, key: str, varsayilan_gun: int = 90):
     return fig, _zoom_araligi
 
 
+# v2.0.7.435: fiilen islem gormeyen BIST hissesinde Yahoo satirlari / teknik gostergeler gizlenir (bkz. islem_gormuyor)
+from islem_gormuyor import (satir_kapali_mi as _kapali_mi, yahoo_satirlarini_ayikla as _yahoo_ayikla,
+                            GIZLENDI_NOTU as _GIZLENDI_NOTU)
+
+
+def _skor_bilesim_ic_html(kapali, teknik, temel, temel_etiket="Temettü"):
+    """Skor Bilesimi kartinin Teknik/Temel satirlari. Islem gormeyen hissede (skor 0'a sabit) bu dokum bayat veriden
+    uretildigi icin gosterilmez."""
+    if kapali:
+        return ("<small style='color:#6c7a9c'>Optima Skor, hisse işlem görmediği için 0'a sabitlenmiştir; "
+                "teknik ve temel skor bileşimi gösterilmiyor.</small><br>")
+    return (f"<small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>"
+            f"<b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik,1)} / 75</b><br><br>"
+            f"<small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + {temel_etiket})</small><br>"
+            f"<b style='font-size:20px;color:#1b2a4a'>{fmt_tr(temel,1)} / 25</b><br>")
+
+
 def render_teknik_gostergeler(d, son_fiyat):
     """v2.0.3.2: Detay panelinde Teknik Gostergeler tablosu (expander icinde).
 
@@ -6864,12 +6881,13 @@ if page=="Ana Sayfa":
                         disp_score_ana = 0.0
                     sig_lbl, sig_cls = get_signal_row(sel_row_ana, disp_score_ana, d["rsi"], d["trend"])
 
+                _kpl_ana = _kapali_mi(sel_row_ana)      # v2.0.7.435
                 r1,r2,r3,r4,r5 = st.columns(5)
                 r1.metric("Son Fiyat",    fmt_tr(float(sel_row_ana['Son_Fiyat']),4))
                 r2.metric("Optima Skor",  fmt_tr(disp_score_ana,1))
-                r3.metric("RSI (14)",     fmt_tr(d['rsi'],1))
-                r4.metric("1A Getiri %",  fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
-                r5.metric("Yillik Vol %", fmt_tr(d['vol'],1)+"%")
+                r3.metric("RSI (14)",     "—" if _kpl_ana else fmt_tr(d['rsi'],1))
+                r4.metric("1A Getiri %",  "—" if _kpl_ana else fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
+                r5.metric("Yillik Vol %", "—" if _kpl_ana else fmt_tr(d['vol'],1)+"%")
 
                     # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
                     # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
@@ -6912,18 +6930,20 @@ if page=="Ana Sayfa":
                         f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
                     )
 
+                _trend_ana = "" if _kpl_ana else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;"
+                _macd_ana = "" if _kpl_ana else f" &nbsp;|&nbsp; MACD: <b>{fmt_tr(d['macd'],4)}</b>{_vol_html_ana}{_dd_html_ana}"
                 st.markdown(f"""
                 <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
                   <span class="ts-sig {sig_cls}">{sig_lbl}</span>
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-                    Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
-                    Optima Skor: <b>{disp_score_ana}/100</b> &nbsp;|&nbsp;
-                    MACD: <b>{fmt_tr(d['macd'],4)}</b>{_vol_html_ana}{_dd_html_ana}
+                    {_trend_ana}
+                    Optima Skor: <b>{disp_score_ana}/100</b>{_macd_ana}
                   </span>
                 </div>""", unsafe_allow_html=True)
 
-                # v2.0.3.2: Teknik Gostergeler expander
-                render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
+                # v2.0.3.2: Teknik Gostergeler expander (v2.0.7.435: islem gormeyen hissede gizli)
+                if not _kpl_ana:
+                    render_teknik_gostergeler(d, float(sel_row_ana["Son_Fiyat"]))
 
                 if not d["hist"].empty:
                     # v2.0.7.275/347/348: grafik artik "5y" degil, YUKARIDA
@@ -6963,6 +6983,7 @@ if page=="Ana Sayfa":
                 if cat_ana == "BIST":
                     st.divider()
                     st.subheader("Temel Analiz")
+                    _kpl_ana = _kapali_mi(sel_row_ana)      # v2.0.7.435
                     try:
                         from kap_client import (fetch_kap_fundamentals,
                                                 fundamentals_to_display,
@@ -6972,6 +6993,8 @@ if page=="Ana Sayfa":
                             raw  = fetch_kap_fundamentals(sel_ana)
                             _temel_k = temel_satiri(sel_row_ana)        # v2.0.7.381: Temel Skor girdileri (KAP oncelikli)
                             disp = fundamentals_to_display(raw, _temel_k)
+                            if _kpl_ana:
+                                disp = _yahoo_ayikla(disp)       # v2.0.7.435
                         pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio")
                         dy = raw.get("div_yield")
                         # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi): Skor
@@ -7039,6 +7062,8 @@ if page=="Ana Sayfa":
                         final_lbl, final_cls = get_signal_row(sel_row_ana, combined, d["rsi"], d["trend"])
                         from kap_client import kaynak_notu
                         st.caption(f"Kaynak: {kaynak_notu(raw, _temel_k)}")
+                        if _kpl_ana:
+                            st.caption(_GIZLENDI_NOTU)
                         if kap_url: st.caption(f"[KAP Finansal Bilgiler Sayfasi]({kap_url})")
                         ka, kb = st.columns([2, 1])
                         with ka:
@@ -7052,10 +7077,7 @@ if page=="Ana Sayfa":
                             st.markdown(f"""
                             <div class="ts-card">
                             <b>Skor Bilesimi</b><br><br>
-                            <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
-                            <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettu)</small><br>
-                            <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>
+                            {_skor_bilesim_ic_html(_kpl_ana, teknik_skor, fund_skor, 'Temettu')}
                             <hr style='border-color:#e0e8f4;margin:10px 0'>
                             <small style='color:#6c7a9c'>Master Skor</small><br>
                             <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>
@@ -7883,12 +7905,13 @@ elif page=="Portföyüm":
                 if _sr.get("_gecmis_veri_yok") == True:
                     disp_score_pf = 0.0
                 _sig_lbl, _sig_cls = get_signal_row(_sr, disp_score_pf, _d["rsi"], _d["trend"])
+            _kpl_pf = _kapali_mi(_sr)      # v2.0.7.435
             _m1,_m2,_m3,_m4,_m5 = st.columns(5)
             _m1.metric("Son Fiyat",   fmt_tr(float(_sr['Son_Fiyat']),4))
             _m2.metric("Optima Skor", fmt_tr(disp_score_pf,1))
-            _m3.metric("RSI (14)",    fmt_tr(_d['rsi'],1))
-            _m4.metric("1A Getiri %", fmt_tr_isaretli(_d['ret1m'],2,yuzde=True))
-            _m5.metric("Yıllık Vol %",fmt_tr(_d['vol'],1)+"%")
+            _m3.metric("RSI (14)",    "—" if _kpl_pf else fmt_tr(_d['rsi'],1))
+            _m4.metric("1A Getiri %", "—" if _kpl_pf else fmt_tr_isaretli(_d['ret1m'],2,yuzde=True))
+            _m5.metric("Yıllık Vol %","—" if _kpl_pf else fmt_tr(_d['vol'],1)+"%")
 
                 # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
                 # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
@@ -7922,14 +7945,17 @@ elif page=="Portföyüm":
                     f'<b style="color:{_dd_clr}">({_d["dd_adj"]:+d} skor)</b>'
                 )
 
+            _trend_pf = "" if _kpl_pf else f'Trend: <b>{_d["trend"]}</b> | '
+            _macd_pf = "" if _kpl_pf else f' | MACD: <b>{fmt_tr(_d["macd"],4)}</b>{_vol_html}{_dd_html}'
             st.markdown(f'''<div class="ts-card" style="border-left:5px solid {_sc};padding:12px 18px;">
       <span class="ts-sig {_sig_cls}">{_sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{_d["trend"]}</b> | Optima Skor: <b>{disp_score_pf}/100</b> | MACD: <b>{fmt_tr(_d["macd"],4)}</b>{_vol_html}{_dd_html}
+        {_trend_pf}Optima Skor: <b>{disp_score_pf}/100</b>{_macd_pf}
       </span></div>''', unsafe_allow_html=True)
 
-            # v2.0.3.2: Teknik Gostergeler expander
-            render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
+            # v2.0.3.2: Teknik Gostergeler expander (v2.0.7.435: islem gormeyen hissede gizli)
+            if not _kpl_pf:
+                render_teknik_gostergeler(_d, float(_sr["Son_Fiyat"]))
 
             if not _d["hist"].empty:
                 # v2.0.7.348: yukarida enrich() icin cekilen _hist_sel_pf
@@ -7967,6 +7993,7 @@ elif page=="Portföyüm":
             if _sel_cat == "BIST":
                 st.divider()
                 st.subheader("Temel Analiz")
+                _kpl_pf = _kapali_mi(_sr)      # v2.0.7.435
                 try:
                     from kap_client import (fetch_kap_fundamentals,
                                             fundamentals_to_display, get_kap_url, temel_satiri)
@@ -7975,6 +8002,8 @@ elif page=="Portföyüm":
                     with st.spinner("Temel veriler yükleniyor (KAP + yfinance)..."):
                         _raw  = fetch_kap_fundamentals(_sel_tkr)
                         _disp = fundamentals_to_display(_raw, temel_satiri(_sr))   # v2.0.7.381
+                        if _kpl_pf:
+                            _disp = _yahoo_ayikla(_disp)       # v2.0.7.435
 
                     _pb = _raw.get("pb_ratio"); _pe = _raw.get("pe_ratio"); _dy = _raw.get("div_yield")
                     # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz.
@@ -8016,6 +8045,8 @@ elif page=="Portföyüm":
                     # Kaynak bilgisi
                     from kap_client import kaynak_notu, temel_satiri as _ts_
                     st.caption(f"Kaynak: {kaynak_notu(_raw, _ts_(_sr))}")
+                    if _kpl_pf:
+                        st.caption(_GIZLENDI_NOTU)
 
                     if _kap_url:
                         st.caption(f"[KAP Finansal Bilgiler Sayfası]({_kap_url})")
@@ -8035,10 +8066,7 @@ elif page=="Portföyüm":
                         st.markdown(f"""
                         <div class="ts-card">
                         <b style='font-size:14px'>Skor Bileşimi</b><br><br>
-                        <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_teknik_skor,1)} / 75</b><br><br>
-                        <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
-                        <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(_fund_skor,1)} / 25</b><br>
+                        {_skor_bilesim_ic_html(_kpl_pf, _teknik_skor, _fund_skor, 'Temettü')}
                         <hr style='border-color:#e0e8f4;margin:10px 0'>
                         <small style='color:#6c7a9c'>Master Skor</small><br>
                         <b style='font-size:30px;color:{_clr}'>{_combined}</b> <small>/100</small><br><br>
@@ -8292,12 +8320,13 @@ elif page in CAT:
             disp_score_cat = 0.0
         sig_lbl,sig_cls=get_signal_row(sel_row,disp_score_cat,d["rsi"],d["trend"])
 
+    _kpl_cat = _kapali_mi(sel_row)      # v2.0.7.435
     r1,r2,r3,r4,r5=st.columns(5)
     r1.metric("Son Fiyat",fmt_tr(float(sel_row['Son_Fiyat']),4))
     r2.metric("Optima Skor",fmt_tr(disp_score_cat,1))
-    r3.metric("RSI (14)",fmt_tr(d['rsi'],1))
-    r4.metric("1A Getiri %",fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
-    r5.metric("Yıllık Vol %",fmt_tr(d['vol'],1)+"%")
+    r3.metric("RSI (14)","—" if _kpl_cat else fmt_tr(d['rsi'],1))
+    r4.metric("1A Getiri %","—" if _kpl_cat else fmt_tr_isaretli(d['ret1m'],2,yuzde=True))
+    r5.metric("Yıllık Vol %","—" if _kpl_cat else fmt_tr(d['vol'],1)+"%")
 
         # v2.0.7.153 (Bahri'nin talebi, 18 Agustos 2026): tekil varlik
         # skor bilesimi grafigi simdilik kaldirildi (fonksiyon tanimi
@@ -8330,18 +8359,20 @@ elif page in CAT:
             f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
         )
 
+    _trend_cat = "" if _kpl_cat else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;"
+    _macd_cat = "" if _kpl_cat else f" &nbsp;|&nbsp; MACD: <b>{fmt_tr(d['macd'],4)}</b>{vol_html}{dd_html}"
     st.markdown(f"""
     <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
       <span class="ts-sig {sig_cls}">{sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;
-        Optima Skor: <b>{disp_score_cat}/100</b> &nbsp;|&nbsp;
-        MACD: <b>{fmt_tr(d['macd'],4)}</b>{vol_html}{dd_html}
+        {_trend_cat}
+        Optima Skor: <b>{disp_score_cat}/100</b>{_macd_cat}
       </span>
     </div>""",unsafe_allow_html=True)
 
-    # v2.0.3.2: Teknik Gostergeler expander
-    render_teknik_gostergeler(d, float(sel_row["Son_Fiyat"]))
+    # v2.0.3.2: Teknik Gostergeler expander (v2.0.7.435: islem gormeyen hissede gizli)
+    if not _kpl_cat:
+        render_teknik_gostergeler(d, float(sel_row["Son_Fiyat"]))
 
     # Mum grafiği
     if not d["hist"].empty:
@@ -8377,6 +8408,7 @@ elif page in CAT:
     if cat_code=="BIST":
         st.divider()
         st.subheader("Temel Analiz")
+        _kpl_cat = _kapali_mi(sel_row)      # v2.0.7.435
         try:
             from kap_client import (fetch_kap_fundamentals, fundamentals_to_display,
                                     get_kap_url, temel_satiri)
@@ -8385,6 +8417,8 @@ elif page in CAT:
             with st.spinner("Temel veriler yükleniyor (KAP + yfinance)..."):
                 raw  = fetch_kap_fundamentals(sel)
                 disp = fundamentals_to_display(raw, temel_satiri(sel_row))   # v2.0.7.381
+                if _kpl_cat:
+                    disp = _yahoo_ayikla(disp)       # v2.0.7.435
 
             pb = raw.get("pb_ratio"); pe = raw.get("pe_ratio"); dy = raw.get("div_yield")
             # v2.0.7.79 (Bahri'nin talebi, YAYLA ornegi) - bkz. yukaridaki
@@ -8430,6 +8464,8 @@ elif page in CAT:
             # tekrarli bir metin oluyordu. Artik acik ve tek seferlik.
             from kap_client import kaynak_notu
             st.caption(f"Kaynak: {kaynak_notu(raw, temel_satiri(sel_row))}")
+            if _kpl_cat:
+                st.caption(_GIZLENDI_NOTU)
             if not raw.get("_kap_available"):
                 st.caption("Bu hisse için KAP bilanço verisi bulunamadı, sadece yfinance kullanıldı.")
 
@@ -8451,10 +8487,7 @@ elif page in CAT:
                 st.markdown(f"""
                 <div class="ts-card">
                 <b style='font-size:14px'>Skor Bileşimi</b><br><br>
-                <small style='color:#6c7a9c'>Teknik Skor (RSI + Momentum + Vol + Hacim/DD)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(teknik_skor,1)} / 75</b><br><br>
-                <small style='color:#6c7a9c'>Temel Skor (F/K + PD/DD + Temettü)</small><br>
-                <b style='font-size:20px;color:#1b2a4a'>{fmt_tr(fund_skor,1)} / 25</b><br>
+                {_skor_bilesim_ic_html(_kpl_cat, teknik_skor, fund_skor, 'Temettü')}
                 <hr style='border-color:#e0e8f4;margin:10px 0'>
                 <small style='color:#6c7a9c'>Master Skor</small><br>
                 <b style='font-size:30px;color:{clr}'>{combined}</b> <small>/100</small><br><br>

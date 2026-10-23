@@ -183,4 +183,43 @@ ok("pay tablosuna" not in e.loc["UMPAS", "Tedbir_Aciklama"], "tek kodlu UMPAS: e
 ok(e.loc["ISCTR", "Piyasa_Tedbiri"] == "" and e.loc["ISCTR", "Optima_Skor"] == 80.0, "islem goren ISCTR etkilenmez")
 ok(e.loc["ISATR", "Optima_Skor"] == 0.0, "ISATR skoru yine 0")
 
+# --- v2.0.7.435: detay sayfasinda islem gormeyen hissede Yahoo satirlari / teknik gostergeler gizlenir ---
+ok(IG.satir_kapali_mi({"Kategori": "BIST", "Islem_Yok_Gun": 280.0}) is True, "kapali BIST satiri")
+ok(IG.satir_kapali_mi({"Kategori": "BIST", "Islem_Yok_Gun": 9.0}) is False, "esik alti: gizleme yok")
+ok(IG.satir_kapali_mi({"Kategori": "BIST", "Islem_Yok_Gun": None}) is False, "bilinmeyen: gizleme yok")
+ok(IG.satir_kapali_mi({"Kategori": "BIST"}) is False, "kolon yok: gizleme yok")
+ok(IG.satir_kapali_mi({"Kategori": "KRIPTO", "Islem_Yok_Gun": 99.0}) is False, "yalniz BIST")
+ok(IG.satir_kapali_mi(pd.Series({"Kategori": "BIST", "Islem_Yok_Gun": 66.0})) is True, "pandas Series satiri")
+ok(IG.satir_kapali_mi(pd.Series({"Kategori": "BIST", "Islem_Yok_Gun": float("nan")})) is False, "NaN: gizleme yok")
+ok(IG.satir_kapali_mi(None) is False, "None patlatmaz")
+tablo = {"Piyasa Değeri (KAP pay adedi × fiyat)": "319.91 Milyar", "F/K Oranı (KAP, 2025/12 yıllık net kâr)": "4.71",
+         "PD/DD Oranı (KAP, 2026/06)": "0.59", "Hisse Başı Kazanç (yfinance)": "0.00", "Ciro (Yıllık, yfinance)": "420 Milyar",
+         "Temettü Dağıtım Oranı": "1727.09%", "Beta": "0.16", "52H Yüksek": "4950000", "52H Düşük": "4950000",
+         "Sektör": "Financial Services", "Endüstri": "Banks - Regional", "Net Kâr (KAP, 2026/06)": "41.95 Milyar",
+         "Ödenmiş Sermaye (KAP, 2026/06)": "25.00 Milyar", "Faaliyet Marjı": "12.96%", "F/K Oranı (iz. 12A, yfinance)": "9"}
+sade = IG.yahoo_satirlarini_ayikla(tablo)
+ok(list(sade) == ["Piyasa Değeri (KAP pay adedi × fiyat)", "F/K Oranı (KAP, 2025/12 yıllık net kâr)", "PD/DD Oranı (KAP, 2026/06)",
+                  "Sektör", "Endüstri", "Net Kâr (KAP, 2026/06)", "Ödenmiş Sermaye (KAP, 2026/06)"],
+   f"yalniz KAP etiketli + sektor/endustri, sira korunur ({list(sade)})")
+ok(IG.yahoo_satirlarini_ayikla({}) == {} and IG.yahoo_satirlarini_ayikla(None) == {}, "bos girdi guvenli")
+ok(len(tablo) == 15, "girdi sozlugu degistirilmez")
+ok("Yahoo" in IG.GIZLENDI_NOTU and "KAP" in IG.GIZLENDI_NOTU, "gizleme notu")
+
+# app.py'deki skor bilesimi yardimcisi (AST ile cikarilir) ve uc detay blogunun baglantilari
+import ast
+_src = open("app.py", encoding="utf-8").read()
+_tree = ast.parse(_src)
+_fn = [n for n in _tree.body if isinstance(n, ast.FunctionDef) and n.name == "_skor_bilesim_ic_html"]
+ok(len(_fn) == 1, "app.py'de _skor_bilesim_ic_html var")
+_ns = {"fmt_tr": lambda v, n=1: f"{float(v):.{n}f}".replace(".", ",")}
+exec(compile(ast.Module(body=_fn, type_ignores=[]), "app_parca", "exec"), _ns)
+_acik = _ns["_skor_bilesim_ic_html"](True, -18.0, 18.0)
+ok("0'a sabitlenmiştir" in _acik and "/ 75" not in _acik and "/ 25" not in _acik, "kapali: teknik/temel dokumu yok")
+_norm = _ns["_skor_bilesim_ic_html"](False, 42.5, 18.0, "Temettü")
+ok("42,5 / 75" in _norm and "18,0 / 25" in _norm and "Temettü" in _norm, "normal hisse: eski dokum aynen")
+ok(_src.count("_kapali_mi(") == 6 and _src.count("_yahoo_ayikla(") == 3 and _src.count("_skor_bilesim_ic_html(_kpl_") == 3,
+   "uc blokta da (ana, portfoy, kategori) baglanti var")
+ok(_src.count("if not _kpl_ana:") == 1 and _src.count("if not _kpl_pf:") == 1 and _src.count("if not _kpl_cat:") == 1,
+   "teknik gostergeler kutusu uc blokta da kosullu")
+
 print(f"TUM TESTLER GECTI ({_n['ok']} kontrol)")
