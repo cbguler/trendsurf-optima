@@ -166,3 +166,23 @@ def bist_gecmis(tickers, bugun=None, log=print) -> dict:
     for t in tickers:
         sonuc.setdefault(t, Veri())
     return sonuc
+
+
+# v2.0.7.433: borsapy `history(period=...)` TAKVIM penceresi DEGIL, BAR SAYISI uygular (olculdu, 23 Ekim 2026):
+# "1mo"=30 bar, "3mo"=90, "6mo"=180, "1y"=365, "5y"=1825. THYAO "1y" -> 528 takvim gunu (17 ay), "5y" -> 7,3 yil;
+# seyrek islem goren ISATR "3mo" -> 2021-03-17..2025-09-26 (4,5 yil, son islem 26.9.2025). Uygulama detay sayfasi bu
+# serileri "3 Ay"/"1 Yil" diye gosteriyordu. Bu yardimci seriyi gercek takvim penceresine kirpar.
+DONEM_AY = {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12, "2y": 24, "3y": 36, "5y": 60}
+
+
+def donem_kirp(df, period, bugun=None):
+    """df'i `period` takvim penceresine (bugunden geriye) kirpar. Bilinmeyen/`max` donem -> df aynen.
+    Indeks tz'li ya da tz'siz olabilir (orijinal indeks korunur)."""
+    ay = DONEM_AY.get(str(period))
+    if ay is None or df is None or len(df) == 0:
+        return df
+    esik = pd.Timestamp(bugun or _bugun()) - pd.DateOffset(months=ay)
+    ix = pd.to_datetime(df.index)
+    if getattr(ix, "tz", None) is not None:
+        ix = ix.tz_localize(None)
+    return df[ix.normalize() >= esik]
