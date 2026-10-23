@@ -794,6 +794,7 @@ def batch_bist(tickers, surecler=None):
     gunu mekanik dususu seriden cikarilir (firsat_radari.tara_bist ile birebir ayni). None -> eski."""
     import yfinance as yf
     import ex_gun_duzeltme as _ex_gun
+    import islem_gormuyor as _islem_g
     print(f"  BIST batch download ({len(tickers)} hisse)...")
     result = {}
     chunk_size = 200
@@ -816,6 +817,12 @@ def batch_bist(tickers, surecler=None):
                         result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
                                      "score_adj": 0, "dd_adj": 0}
                         continue
+                    # v2.0.7.431: hacim tam 0 + fiyat sabit ardisik seans sayisi (ex-gun duzeltmesinden ONCE:
+                    # ham seri). Uygulama >= islem_gormuyor.ESIK_GUN ise hisseyi "islem gormuyor" isaretler.
+                    try:
+                        _iyg = _islem_g.sifir_hacim_gun(col, sub["Volume"]) if "Volume" in sub.columns else None
+                    except Exception:
+                        _iyg = None
                     col = _ex_gun.uygula(t, col, surecler, "worker")
                     p = round(float(col.iloc[-1]), 4)
                     rsi = calc_rsi(col)
@@ -865,7 +872,7 @@ def batch_bist(tickers, surecler=None):
                         elif max_dd < -50: dd_adj = -3
 
                     result[t] = {"price": p, "rsi": rsi, "ret1m": ret1m, "vol": vol,
-                                 "score_adj": score_adj, "dd_adj": dd_adj}
+                                 "score_adj": score_adj, "dd_adj": dd_adj, "islem_yok_gun": _iyg}
                 except Exception:
                     result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
                                  "score_adj": 0, "dd_adj": 0}
@@ -1501,6 +1508,7 @@ def build():
             "YF_Symbol": f"{t}.IS",
             "_score_adj": d.get("score_adj", 0),
             "_dd_adj":    d.get("dd_adj", 0),
+            "Islem_Yok_Gun": d.get("islem_yok_gun"),
         })
     ok_bist = sum(1 for r in all_rows if r["Kategori"] == "BIST" and r["Son_Fiyat"] > 0)
     print(f"  {ok_bist}/{len(BIST_TICKERS)} fiyat alindi. "
@@ -1527,6 +1535,20 @@ def build():
                 print(f"  [cache] {bist_cache_ok} BIST fiyati son CSV'den tamamlandi.")
         except Exception as _ce:
             print(f"  [cache] BIST cache atlanıyor: {_ce}")
+
+    # v2.0.7.431: bu gece hacim/fiyat verisi alinamayan BIST hissesinde (Islem_Yok_Gun bos) onceki CSV degeri
+    # korunur: gecici bir indirme hatasi "islem gormuyor" uyarisini bir gece kaldirip geri getirmesin.
+    try:
+        if os.path.exists(CSV_PATH):
+            _dy = pd.read_csv(CSV_PATH)
+            if "Islem_Yok_Gun" in _dy.columns:
+                _onceki_iyg = {str(t): float(g) for t, g in zip(_dy["Ticker"], _dy["Islem_Yok_Gun"]) if pd.notna(g)}
+                for r in all_rows:
+                    if r.get("Kategori") == "BIST" and r.get("Islem_Yok_Gun") is None:
+                        if r["Ticker"] in _onceki_iyg:
+                            r["Islem_Yok_Gun"] = _onceki_iyg[r["Ticker"]]
+    except Exception as _iy_err:
+        print(f"  [islem-yok] onceki deger korunamadi: {type(_iy_err).__name__}: {_iy_err}")
 
     # v2.0.7.378: islem gunu sayisi (Gecmis_Gun) - uygulama 260 gunden azsa SINIRLI VERI uyarisi + AL siniri
     try:
