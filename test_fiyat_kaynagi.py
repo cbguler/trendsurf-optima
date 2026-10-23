@@ -111,3 +111,19 @@ yf.download = _indir0
 r3 = FK.bist_gecmis(["DON"], bugun=BUGUN, log=lambda m: None)
 ok(r3["DON"].kaynak == "yahoo" and r3["DON"].islem_yok_gun == 67, f"Yahoo yolu: hacim 0 + sabit fiyat 67 seans ({r3['DON'].islem_yok_gun})")
 print(f"TUM TESTLER GECTI ({_n['ok']} kontrol)")
+
+# --- v2.0.7.433: donem_kirp (borsapy period = BAR SAYISI; takvim penceresine kirpma) ---
+importlib.reload(FK)
+ix = pd.bdate_range(end=pd.Timestamp(BUGUN), periods=400)
+tum = pd.DataFrame({"Close": np.linspace(1, 2, 400)}, index=(ix + pd.Timedelta(hours=9)).tz_localize("Europe/Istanbul"))
+for per, ay in (("1mo", 1), ("3mo", 3), ("6mo", 6), ("1y", 12)):
+    k = FK.donem_kirp(tum, per, bugun=BUGUN)
+    ilk = k.index[0].tz_localize(None).normalize() if k.index.tz is not None else k.index[0]
+    ok(ilk >= pd.Timestamp(BUGUN) - pd.DateOffset(months=ay), f"{per}: pencereden eski bar yok")
+    ok(k.index.tz is not None, f"{per}: orijinal tz'li indeks korunur")
+ok(len(FK.donem_kirp(tum, "1y", bugun=BUGUN)) < 365, "1y artik 365 bar degil (~12 ay)")
+ok(len(FK.donem_kirp(tum, "max", bugun=BUGUN)) == 400 and len(FK.donem_kirp(tum, "bilinmeyen", bugun=BUGUN)) == 400, "max/bilinmeyen: aynen")
+eski = pd.DataFrame({"Close": [1.0] * 30}, index=pd.bdate_range(end="2025-09-26", periods=30))
+ok(len(FK.donem_kirp(eski, "3mo", bugun=BUGUN)) == 0, "seyrek/kapali hisse: pencerede bar yok -> bos (ISATR senaryosu)")
+ok(FK.donem_kirp(None, "3mo") is None and len(FK.donem_kirp(pd.DataFrame(), "3mo")) == 0, "None/bos guvenli")
+print(f"donem_kirp testleri tamam ({_n['ok']} kontrol toplam)")

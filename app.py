@@ -1337,6 +1337,7 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
     # test edildi: 11 Eylul'u EKSIKSIZ donduruyor (yfinance'in NaN
     # biraktigi TAM O GUN). Artik borsapy ONCE deneniyor, yfinance
     # SADECE yedek (borsapy basarisiz olursa).
+    _bp_donemde_islem_yok = False
     try:
         import borsapy as bp
         _bp_hist = bp.Ticker(ticker).history(period=period, interval="1d")
@@ -1345,10 +1346,23 @@ def _get_hist_cached(ticker, yf_symbol, category, period="1y"):
             if "Volume" in _bp_hist.columns:
                 _bp_cols.append("Volume")
             _bp_hist = _bp_hist[_bp_cols].dropna(subset=["Open","High","Low","Close"])
-            if not _bp_hist.empty:
+            # v2.0.7.433: borsapy period'u BAR SAYISI olarak uyguluyor ("1y"=365 bar=17 ay, seyrek islem goren
+            # hissede yillar oncesi) - seri gercek takvim penceresine kirpilir. Pencerede hic bar yoksa hisse o
+            # donemde islem gormemistir: Yahoo'ya DUSULMEZ (Yahoo bayat/sabit bar uretir), veri yok denir.
+            _bp_tam = _bp_hist
+            try:
+                from fiyat_kaynagi import donem_kirp as _donem_kirp
+                _bp_hist = _donem_kirp(_bp_hist, period)
+            except Exception:
+                _bp_hist = _bp_tam
+            if _bp_hist.empty and not _bp_tam.empty:
+                _bp_donemde_islem_yok = True       # asagida (try disinda) HistEmpty firlatilir
+            elif len(_bp_hist) >= 5:
                 return _bp_hist
     except Exception:
         pass
+    if _bp_donemde_islem_yok:
+        raise _HistEmptyError()
 
     # BIST - yfinance (borsapy basarisiz olursa yedek)
     from data_pipeline import _format_yf_symbol
