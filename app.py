@@ -6930,14 +6930,13 @@ if page=="Ana Sayfa":
                         f'<b style="color:{_dd_clr}">({d["dd_adj"]:+d} skor)</b>'
                     )
 
-                _trend_ana = "" if _kpl_ana else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;"
+                _trend_ana = "" if _kpl_ana else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp; "
                 _macd_ana = "" if _kpl_ana else f" &nbsp;|&nbsp; MACD: <b>{fmt_tr(d['macd'],4)}</b>{_vol_html_ana}{_dd_html_ana}"
                 st.markdown(f"""
                 <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
                   <span class="ts-sig {sig_cls}">{sig_lbl}</span>
                   <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-                    {_trend_ana}
-                    Optima Skor: <b>{disp_score_ana}/100</b>{_macd_ana}
+                    {_trend_ana}Optima Skor: <b>{disp_score_ana}/100</b>{_macd_ana}
                   </span>
                 </div>""", unsafe_allow_html=True)
 
@@ -8359,14 +8358,13 @@ elif page in CAT:
             f'<b style="color:#e74c3c">({d["dd_adj"]:+d} skor)</b>'
         )
 
-    _trend_cat = "" if _kpl_cat else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp;"
+    _trend_cat = "" if _kpl_cat else f"Trend: <b>{d['trend']}</b> &nbsp;|&nbsp; "
     _macd_cat = "" if _kpl_cat else f" &nbsp;|&nbsp; MACD: <b>{fmt_tr(d['macd'],4)}</b>{vol_html}{dd_html}"
     st.markdown(f"""
     <div class="ts-card" style="border-left:5px solid {sig_color};padding:12px 18px;">
       <span class="ts-sig {sig_cls}">{sig_lbl}</span>
       <span style="color:#6c7a9c;font-size:12px;margin-left:14px">
-        {_trend_cat}
-        Optima Skor: <b>{disp_score_cat}/100</b>{_macd_cat}
+        {_trend_cat}Optima Skor: <b>{disp_score_cat}/100</b>{_macd_cat}
       </span>
     </div>""",unsafe_allow_html=True)
 

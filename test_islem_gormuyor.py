@@ -222,4 +222,8 @@ ok(_src.count("_kapali_mi(") == 6 and _src.count("_yahoo_ayikla(") == 3 and _src
 ok(_src.count("if not _kpl_ana:") == 1 and _src.count("if not _kpl_pf:") == 1 and _src.count("if not _kpl_cat:") == 1,
    "teknik gostergeler kutusu uc blokta da kosullu")
 
+import re as _re
+ok(not _re.search(r"^[ \t]*\{_trend_\w+\}[ \t]*$", _src, _re.M),
+   "v436: ozet serit sablonunda tek basina {_trend_*} satiri yok (bos satir + girinti markdown'da kod blogu olur)")
+ok(len(_re.findall(r"\{_trend_(?:ana|pf|cat)\}Optima Skor:", _src)) == 3, "uc blokta da Optima Skor ayni satirda")
 print(f"TUM TESTLER GECTI ({_n['ok']} kontrol)")
