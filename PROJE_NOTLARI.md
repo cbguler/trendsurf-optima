@@ -41,11 +41,30 @@ fiyat × kur" türetmesini ilk tercih yapma, önce gerçek Türkiye kaynağı ar
 
 ---
 
+## 0A. KAYNAK ÖNCELİK KARARI (KALICI - 23 Ekim 2026, Bahri) - BİR DAHA AÇILMAZ
+
+**Bahri'nin talimatı:** "Birincil kaynak o muydu bu muydu tartışmasını yeterince yaptık; en mantıklı ve en doğru sonucu verecek şekilde karara bağla, proje notlarına yaz, bir daha açılmasın."
+
+**Karar (konuya göre, kalıcı):**
+1. **KAP** - temel analiz (F/K, PD/DD, bilanço, pay adedi) ve OLAY bilgisi (sermaye artırımı, tahta kapatma/açma, SPK tedbiri, temettü). KAP günlük fiyat/hacim serisi YAYIMLAMAZ; fiyat için kullanılamaz (doğrulandı).
+2. **borsapy** - BIST fiyat/hacim GEÇMİŞİ (RSI, Ret1M, volatilite, MaxDD, trend, hacim trendi). Radar (`firsat_radari.tara_bist`) ve gece worker'ı (`worker.batch_bist`) bunu `fiyat_kaynagi.bist_gecmis()` üzerinden alır.
+3. **Yahoo (yfinance)** - yalnızca YEDEK: borsapy'de o hisse için veri yok / hata / zaman aşımı varsa. Bir hissenin serisi TEK kaynaktan gelir, kaynaklar karıştırılmaz.
+
+**Gerekçe (ölçüldü, 23 Ekim 2026, 631 BIST hissesi):** borsapy 632/632 hissede veri verdi (8 paralel iş parçacığı, ~80 sn); son kapanışlar Yahoo ile uyumlu (17 hissede %1-3 fark, gün içi zamanlama); hak kullanım günü sahte çöküşleri YOK (KRTEK MaxDD Yahoo -%79,8 / borsapy -%33,5; CVKMD -%70,6 / -%31,0; SKBNK, DUNYH aynı yönde); hacim birimleri aynı (oran medyan 1,0). Yahoo bedelli artırımları düzeltmiyor (361 olayın 17'sinde düzeltme var) ve bedelsiz bölünmelerin ~%14'ünü kaçırıyor. Kapalı hissenin son bar tarihi borsapy'de açıkça görülüyor (UMPAS 30.9.2024, ISATR 26.9.2025).
+
+**Temettü kararı:** seri FİYAT GETİRİSİ esaslıdır (temettü düzeltmesi YOK). borsapy temettüyü düzeltmez; Yahoo yedeği bu yüzden `auto_adjust=False` (yalnız bölünme-düzeltmeli) çekilir -> iki kaynak AYNI anlamda. Gerekçe: (a) temettü zaten skorun ayrı bileşeni (DY, KAP kaynaklı) - getiriye de katmak aynı etkiyi İKİ KEZ saymak olur; (b) ekranda gösterilen fiyat/getiri ham fiyat getirisidir, skor girdisi onunla tutarlı kalır; (c) ek kaynak/karmaşıklık gerektirmez. Etki: temettü kesinti günü düşüşü RSI/Ret1M/MaxDD'ye girer (ölçülen farklar: BASCM %10, RGYAS %4, TUPRS %2).
+
+**Güvenlik ağları (kaldırılmadı):** `ex_gun_duzeltme.py` (v430; yalnız Yahoo yedek yolunda anlamlı, borsapy serisinde boşluk zaten yok) ve `islem_gormuyor.py` (v431; borsapy'de son bar tarihinden, Yahoo yedeğinde hacim 0 + sabit fiyattan).
+
+**Yeniden açma koşulu:** yalnızca ÖLÇÜLMÜŞ bir hata bulgusuyla (ör. borsapy'nin belirli hisselerde yanlış/eksik veri verdiği belgelenirse). "Hangisi birincil olsun" soruları bu kararla kapanmıştır.
+
+---
+
 ## 1. Veri Kaynağı Mimarisi (kategori bazlı, öncelik sırasıyla)
 
 ### BIST (772 hisse)
-1. yfinance toplu indirme (`batch_bist`) — fiyat + RSI/Ret1M/Vol AYNI
-   çağrıdan gelir, biri başarısız olursa ikisi de başarısız olur (atomik).
+1. **(v2.0.7.432 itibarıyla, bkz. bölüm 0A)** `fiyat_kaynagi.bist_gecmis`: borsapy birincil, Yahoo yedek —
+   fiyat + RSI/Ret1M/Vol AYNI seriden gelir. (Eski: yfinance toplu indirme `batch_bist` - artık yedek.)
 2. Fırsat Radarı (`firsat_radari.py`) — BIST seans saatlerinde (10:00-18:30)
    **15 dakikada bir TÜM 772 hisseyi** tekrar tarar, Supabase
    `intraday_scores` tablosuna yazar. `load_universe()` bunu 45 dakika
@@ -9228,3 +9247,14 @@ Riskli olmayan ornekler test edildi ve isaretlenmez: yalniz ek dosyali duyuru, u
 **Test:** `test_islem_gormuyor.py` (30 kontrol: sayac sinirlari/NaN/fiyat degisimi, esik, uyari katmani (tedbir onceligi, kategori, kolon yoksa eski davranis), KAP siniflandirmasi, sahte yfinance ile worker kablolamasi). Mevcut test_kap_risk (46), test_uyari_katmani (29), test_ex_gun_duzeltme (36), test_radar_trend, test_firsat_radari_katman, test_kap_temel (106) yesil.
 **Dagitim sirasi:** push -> Actions'ta "Update Data" (worker) elle calistir -> UMPAS (ve ISATR) icin Ana Sayfa/BIST'te "ISLEME KAPALI" ve skor 0 gorunmeli; kontrol: CSV'de `Islem_Yok_Gun`.
 **Sonraki adim:** 2) eski SPK bultenlerinin gecmise donuk taranmasi (onay icin aday listesi).
+
+### v2.0.7.432 (23 Ekim 2026) - Fiyat kaynağı katmanı: borsapy birincil, Yahoo yedek (KALICI KARAR: bölüm 0A)
+**Talep (Bahri):** "Hepsini sırayla yap; kaynak tartışmasını en doğru sonuçla karara bağla, notlara yaz, bir daha açılmasın."
+**Yapılan:**
+- Yeni `fiyat_kaynagi.py`: `bist_gecmis(tickers)` -> {ticker: Veri(df, kaynak, son_bar, islem_yok_gun)}. borsapy 8 paralel iş parçacığı, toplu zaman aşımı 240 sn (ölçüm: 632 hisse ~80 sn); gelmeyen/boş/hatalı hisseler Yahoo'ya (`auto_adjust=False`) düşer; borsapy'de bar var ama 3 aylık pencerede yoksa (kapalı hisse) Yahoo'ya DÜŞMEZ, `df=None` + büyük `islem_yok_gun`. Pencere: Yahoo "3mo" ile aynı takvim penceresi (borsapy 90 bar verir; MaxDD penceresini değiştirmemek için kırpılır).
+- `worker.batch_bist` ve `firsat_radari.tara_bist` bu katmandan okur (radardaki parçalar arası 3 sn bekleme ve yfinance import koruması kalktı; koruma katmanın içinde). `islem_yok_gun`: borsapy'de max(son bar tarihinden iş günü farkı, hacim 0 sayacı); Yahoo yedeğinde hacim 0 + sabit fiyat sayacı (v431).
+**Gerçek veriyle uçtan uca (10 hisse):** CVKMD ret1m -17,45 / dd_adj 0; KRTEK -33,28 / 0; DUNYH -71,11 / -7; SKBNK -25,76 / -3; UMPAS islem_yok_gun 539 (fiyat son CSV'den); ISATR 280; THYAO, GARAN, POLHO, YYAPI normal. Radar skorları üretildi (UMPAS/ISATR fiyatsız olduğu için radar dışı, v431 katmanı onları worker CSV'sinden işaretler).
+**Test:** `test_fiyat_kaynagi.py` (18 kontrol: borsapy birincil, tz-siz indeks, pencere kırpma, kapalı hisse Yahoo'ya düşmez, boş/hata -> Yahoo, hiçbirinde yok, Yahoo `auto_adjust=False`, borsapy yoksa hepsi Yahoo, Yahoo hacim sayacı). test_ex_gun_duzeltme (36), test_islem_gormuyor (30; borsapy ağsız testlerde devre dışı), test_radar_trend, test_firsat_radari_katman (36), test_uyari_katmani (29), test_kap_risk (46) yeşil.
+**BİLİNEN SINIRLAR / DOĞRULANMAYANLAR:** (1) Actions'taki gerçek süre/hız sınırı ilk koşuda izlenmeli (radar logunda `[fiyat-kaynagi] BIST gecmisi: N borsapy, M Yahoo`). (2) borsapy lisansı "kişisel ve eğitim amaçlı" (live_data.py notu); uygulama özel kullanımda. (3) Uygulama içi detay sayfası/enrich() geçmişi bu sürümde DEĞİŞMEDİ. (4) DUNYH'nin -%71'i borsapy'nin düzeltilmiş serisinden geliyor; gerçek günlük düşüşleri (tavan-taban serisi) ayrıca doğrulanmadı.
+**Dağıtım sırası:** push -> sonraki radar turunun logunda `[fiyat-kaynagi]` satırı ve `[radar] BIST tarama sonucu: ~630 hisse` kontrolü -> Update Data (worker) elle çalıştır -> UMPAS/ISATR "İŞLEME KAPALI".
+**Sıradaki:** 2) SPK eski bültenleri geçmişe dönük tarama, 3) D (bedelli sonrası PD/DD ve F/K işareti).

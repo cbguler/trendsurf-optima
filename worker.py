@@ -792,37 +792,31 @@ def batch_bist(tickers, surecler=None):
     trendi + max drawdown dahil (Optima Skoru'nun TUM bilesenleri).
     v2.0.7.430: `surecler` (ex_gun_duzeltme.surec_haritasi_yukle) verilirse hak kullanim (ex)
     gunu mekanik dususu seriden cikarilir (firsat_radari.tara_bist ile birebir ayni). None -> eski."""
-    import yfinance as yf
     import ex_gun_duzeltme as _ex_gun
-    import islem_gormuyor as _islem_g
-    print(f"  BIST batch download ({len(tickers)} hisse)...")
+    import fiyat_kaynagi as _fk
+    print(f"  BIST gecmis veri ({len(tickers)} hisse): borsapy birincil, Yahoo yedek...")
     result = {}
     chunk_size = 200
+    # v2.0.7.432: TEK kaynak katmani (karar kaydi: fiyat_kaynagi.py ust aciklamasi ve PROJE_NOTLARI v432).
+    veriler = _fk.bist_gecmis(tickers)
     for i in range(0, len(tickers), chunk_size):
         chunk = tickers[i:i + chunk_size]
         syms = [f"{t}.IS" for t in chunk]
         try:
-            raw = yf.download(syms, period="3mo", progress=False,
-                              auto_adjust=True, group_by="ticker")
             for t, sym in zip(chunk, syms):
                 try:
-                    if len(syms) == 1:
-                        sub = raw
-                    else:
-                        sub = raw[sym] if sym in raw.columns.get_level_values(0) else pd.DataFrame()
-                    col = sub["Close"].dropna() if "Close" in sub.columns else pd.Series()
+                    _v = veriler.get(t) or _fk.Veri()
+                    sub = _v.df if _v.df is not None else pd.DataFrame()
+                    col = sub["Close"].dropna() if "Close" in sub.columns else pd.Series(dtype=float)
                     if hasattr(col, "squeeze"):
                         col = col.squeeze()
+                    # v2.0.7.431/432: ardisik islem yapilmayan is gunu (borsapy: son bar tarihinden; Yahoo: hacim 0 +
+                    # fiyat sabit). Uygulama >= islem_gormuyor.ESIK_GUN ise hisseyi "islem gormuyor" isaretler.
+                    _iyg = _v.islem_yok_gun
                     if col.empty:
                         result[t] = {"price": 0.0, "rsi": 50.0, "ret1m": 0.0, "vol": 30.0,
-                                     "score_adj": 0, "dd_adj": 0}
+                                     "score_adj": 0, "dd_adj": 0, "islem_yok_gun": _iyg}
                         continue
-                    # v2.0.7.431: hacim tam 0 + fiyat sabit ardisik seans sayisi (ex-gun duzeltmesinden ONCE:
-                    # ham seri). Uygulama >= islem_gormuyor.ESIK_GUN ise hisseyi "islem gormuyor" isaretler.
-                    try:
-                        _iyg = _islem_g.sifir_hacim_gun(col, sub["Volume"]) if "Volume" in sub.columns else None
-                    except Exception:
-                        _iyg = None
                     col = _ex_gun.uygula(t, col, surecler, "worker")
                     p = round(float(col.iloc[-1]), 4)
                     rsi = calc_rsi(col)

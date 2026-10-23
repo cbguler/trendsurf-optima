@@ -131,6 +131,7 @@ def _indir(syms, **kw):
 
 fake.download = _indir
 sys.modules["yfinance"] = fake
+sys.modules["borsapy"] = None      # v2.0.7.432: agsiz test - borsapy import edilemez -> Yahoo yedek yolu
 import firsat_radari as fr
 
 t0 = fr.tara_bist(["AAA", "BBB"], {})
