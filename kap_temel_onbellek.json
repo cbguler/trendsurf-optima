@@ -4558,6 +4558,12 @@
 "tarih": "2026-10-23",
 "yok": null
 },
+"DMLKT": {
+"genel_ok": true,
+"notlar": [],
+"tarih": "2026-10-28",
+"yok": "KAP'ta ozkaynak satiri bulunamadi"
+},
 "DMRGD": {
 "donem": "2026/06",
 "genel_ok": true,
