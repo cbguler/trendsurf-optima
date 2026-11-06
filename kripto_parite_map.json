@@ -190,5 +190,8 @@
   "RE": "RETRY",
   "GRVT": "GRVTTRY",
   "PHA": "PHATRY",
-  "GRASS": "GRASSTRY"
+  "GRASS": "GRASSTRY",
+  "ALT": "ALTTRY",
+  "NIL": "NILTRY",
+  "PLUME": "PLUMETRY"
 }
