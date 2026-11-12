@@ -828,6 +828,9 @@ def _init_db_bir_kez():
         kaldirilma_tarihi TIMESTAMP,
         UNIQUE(eslesme_turu, deger)
     )""")
+    # v2.0.7.437: gecici kurallar (kisilere islem yasagi, SPK 6 ay) icin bitis tarihi. NULL = kalici kural.
+    # Sure dolunca get_aktif_piyasa_tedbirleri() kurali artik DONDURMEZ -> skor kendiliginden geri doner.
+    c.execute("ALTER TABLE piyasa_tedbir_listesi ADD COLUMN IF NOT EXISTS bitis_tarihi DATE")
     # spk_bulten_islenmis: hangi SPK bulten numaralarinin ZATEN tarandigi
     # (tekrar indirip AI'ye tekrar sormamak icin) - haber_islenmis ile
     # AYNI desen.
@@ -2102,7 +2105,8 @@ def piyasa_tedbir_onayla(tespit_id: int, kullanici_id: int) -> bool:
             "VALUES (?,?,?,?,?,?) "
             "ON CONFLICT (eslesme_turu, deger) DO UPDATE SET "
             "aktif=TRUE, kaldirilma_tarihi=NULL, tedbir_turu=EXCLUDED.tedbir_turu, "
-            "kaynak_aciklama=EXCLUDED.kaynak_aciklama, tespit_id=EXCLUDED.tespit_id",
+            "kaynak_aciklama=EXCLUDED.kaynak_aciklama, tespit_id=EXCLUDED.tespit_id, "
+            "bitis_tarihi=NULL",     # v2.0.7.437: onayla = KALICI kural (eski gecici bitis tarihi temizlenir)
             (eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id))
         conn.execute(
             "UPDATE piyasa_tedbir_tespit SET onay_durumu='onaylandi', "
@@ -2152,20 +2156,92 @@ def get_aktif_piyasa_tedbirleri() -> list:
     """app.py'nin load_universe()'i HER YUKLEMEDE bunu okur - onaylanmis
     ve hala aktif olan tum kurallar. Kucuk bir liste (onlarca satir)
     oldugu icin 5 dk'lik Streamlit cache'i (load_universe'in kendi
-    cache'i) yeterli, ayrica bir cache katmani eklenmedi."""
+    cache'i) yeterli, ayrica bir cache katmani eklenmedi.
+
+    v2.0.7.437: bitis_tarihi dolmus gecici kurallar (kisilere islem yasagi, 6 ay) DONMEZ. Kolon henuz
+    yoksa (init_db calismadan ONCE bu fonksiyon cagrilirsa) eski sorguya dusulur."""
+    for sorgu, yeni_kolon in (
+            ("SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, bitis_tarihi "
+             "FROM piyasa_tedbir_listesi WHERE aktif=TRUE AND (bitis_tarihi IS NULL OR bitis_tarihi > CURRENT_DATE)", True),
+            ("SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama "
+             "FROM piyasa_tedbir_listesi WHERE aktif=TRUE", False)):
+        try:
+            conn = get_conn()
+            rows = conn.execute(sorgu).fetchall()
+            conn.close()
+            # v2.0.7.371: tedbir_turu + kaynak_aciklama da donuyor (sinyal etiketi tedbir TURUNE gore)
+            return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2],
+                     "tedbir_turu": r[3], "kaynak_aciklama": r[4],
+                     "bitis_tarihi": (r[5] if yeni_kolon else None)} for r in rows]
+        except Exception as e:
+            print(f"[db] get_aktif_piyasa_tedbirleri hata ({'bitis_tarihi' if yeni_kolon else 'son'}): {e}", file=sys.stderr)
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return []
+
+
+def piyasa_tedbir_ticker_kurallari() -> dict:
+    """v2.0.7.437: TUM TICKER kurallari (aktif OLMAYANLAR dahil) - otomatik uygulayicinin karari icin.
+    {TICKER: {'aktif','tedbir_turu','bitis_tarihi','kaldirilma_tarihi'}}. Hata olursa None (uygulama YAPILMAZ)."""
     try:
         conn = get_conn()
+        conn.execute("ALTER TABLE piyasa_tedbir_listesi ADD COLUMN IF NOT EXISTS bitis_tarihi DATE")
+        conn.commit()
         rows = conn.execute(
-            "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama "
-            "FROM piyasa_tedbir_listesi WHERE aktif=TRUE"
-        ).fetchall()
+            "SELECT deger, aktif, tedbir_turu, bitis_tarihi, kaldirilma_tarihi "
+            "FROM piyasa_tedbir_listesi WHERE eslesme_turu='TICKER'").fetchall()
         conn.close()
-        # v2.0.7.371: tedbir_turu + kaynak_aciklama da donuyor (sinyal etiketi tedbir TURUNE gore)
-        return [{"eslesme_turu": r[0], "deger": r[1], "kategori": r[2],
-                 "tedbir_turu": r[3], "kaynak_aciklama": r[4]} for r in rows]
+        return {str(r[0]).upper(): {"aktif": bool(r[1]), "tedbir_turu": r[2], "bitis_tarihi": r[3],
+                                    "kaldirilma_tarihi": r[4]} for r in rows}
     except Exception as e:
-        print(f"[db] get_aktif_piyasa_tedbirleri hata: {e}", file=sys.stderr)
-        return []
+        print(f"[db] piyasa_tedbir_ticker_kurallari hata: {e}", file=sys.stderr)
+        return None
+
+
+def piyasa_tedbir_otomatik_yaz(deger: str, kategori: str, tedbir_turu: str, kaynak_turu: str,
+                               kaynak_referans: str, kaynak_url: str, kaynak_tarihi, gerekce: str,
+                               ozet: str, kaynak_aciklama: str, bitis_tarihi=None) -> bool:
+    """v2.0.7.437 (Bahri'nin karari - "otomatik olarak 0'lansin, bana tekrar sorulmasin"): bir hisse tedbirini
+    ONAY BEKLEMEDEN piyasa_tedbir_listesi'ne AKTIF kural olarak yazar. Denetim izi icin ayni olay
+    piyasa_tedbir_tespit'e onay_durumu='otomatik' olarak da kaydedilir (onay penceresi yalniz 'bekliyor'
+    gosterir, bu kayit pencereye DUSMEZ). Tek baglanti/transaction: ya ikisi birden ya hicbiri."""
+    try:
+        conn = get_conn()
+        conn.execute("ALTER TABLE piyasa_tedbir_listesi ADD COLUMN IF NOT EXISTS bitis_tarihi DATE")
+        conn.execute(
+            "INSERT INTO piyasa_tedbir_tespit "
+            "(kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, eslesme_turu, deger, kategori, "
+            "tedbir_turu, ai_gerekce, ai_ozet, onay_durumu, onay_zamani) "
+            "VALUES (?,?,?,?,'TICKER',?,?,?,?,?,'otomatik', now())",
+            (kaynak_turu, kaynak_referans, kaynak_url, kaynak_tarihi, deger, kategori, tedbir_turu,
+             gerekce, ozet))
+        satir = conn.execute(
+            "SELECT id FROM piyasa_tedbir_tespit WHERE eslesme_turu='TICKER' AND deger=? AND tedbir_turu=? "
+            "AND kaynak_referans=? AND onay_durumu='otomatik' ORDER BY id DESC LIMIT 1",
+            (deger, tedbir_turu, kaynak_referans)).fetchone()
+        tespit_id = satir[0] if satir else None
+        conn.execute(
+            "INSERT INTO piyasa_tedbir_listesi "
+            "(eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id, bitis_tarihi) "
+            "VALUES ('TICKER',?,?,?,?,?,?) "
+            "ON CONFLICT (eslesme_turu, deger) DO UPDATE SET "
+            "aktif=TRUE, kaldirilma_tarihi=NULL, tedbir_turu=EXCLUDED.tedbir_turu, "
+            "kaynak_aciklama=EXCLUDED.kaynak_aciklama, tespit_id=EXCLUDED.tespit_id, "
+            "bitis_tarihi=EXCLUDED.bitis_tarihi",
+            (deger, kategori, tedbir_turu, kaynak_aciklama, tespit_id, bitis_tarihi))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[db] piyasa_tedbir_otomatik_yaz hata ({deger}): {e}", file=sys.stderr)
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
+        return False
 
 
 def msci_tablosu_hazirla():
