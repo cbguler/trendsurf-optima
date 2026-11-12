@@ -26,9 +26,12 @@ name: ENAG Enflasyon Izleme
 # KEZ (ornegin her gun saat 09:00), workflow adi
 # "enag_izleme.yml" olacak sekilde.
 
+# v2.0.7.439 (12 Kasim 2026, Bahri'nin karari): HALK TV bir daha kaynak olarak KULLANILMAZ (el konuldu, kayyim atandi).
+# ENAG artik yalniz coklu haber kaynagi onayiyla (Bing Haber + Google Haberler, en az 2 bagimsiz site) alinir.
+#
 # v2.0.7.438 (12 Kasim 2026): Halk TV bu calistiriciya 23 Ekim'den beri ulasilamaz (once SSL hatasi, 6 Kasim'dan
 # beri Cloudflare 403) ve Ekim ENAG orani hic kaydedilmedi; is "basarili" gorundugu icin 20 gun fark edilmedi.
-# Artik betik yedek kaynak (Bing Haber, en az 2 bagimsiz site) kullanir ve onceki ayin orani ayin 10'undan sonra
+# Artik betik haber kaynaklarini (en az 2 bagimsiz site) kullanir ve onceki ayin orani ayin 10'undan sonra
 # hala yoksa is KIRMIZI biter (cikis kodu 1 -> GitHub bildirimi). Zamanlama degismedi (cron-job.org, gunde 1).
 
 on:
@@ -55,7 +58,7 @@ jobs:
       - name: Bagimliliklari yukle
         run: |
           pip install --upgrade pip --quiet
-          # requests: Halk TV'ye HTTP istekleri icin.
+          # requests: Bing Haber / Google Haberler RSS istekleri icin.
           # psycopg2-binary: db.py'nin Supabase baglantisi icin.
           pip install requests psycopg2-binary --quiet
 

@@ -115,12 +115,10 @@ _RSS_KAYNAKLARI = [
     # onayıyla eklendi:
     ("Sözcü Ekonomi", "https://www.sozcu.com.tr/feeds-rss-category-ekonomi"),
     ("Euronews Türkçe", "https://tr.euronews.com/rss"),
-    # Halk TV: teknik olarak çalışıyor ama akışın büyük kısmı magazin/
-    # asayiş/spor - ekonomi içerik oranı düşük, ayrıca CHP'ye tarihsel
-    # bağı olan muhalif çizgide bir yayın organı (Bahri'ye bu şekilde
-    # bildirildi, kararı onun). Anahtar kelime filtresi zaten alakasız
-    # içeriği eleyecek.
-    ("Halk TV", "https://www.halktv.com.tr/service/rss.php"),
+    # v2.0.7.439 (Bahri'nin kararı, 12 Kasım 2026 — "Halk TV'ye devlet tarafından el konuldu ve kayyım atandı,
+    # bir daha kaynak olarak kullanılmamalıdır"): HALK TV KALDIRILDI. Aynı gerekçeyle (devlet kontrolü) ve
+    # ENAG izlemede de kullanılmaz (bkz. enag_izleme.py _YASAKLI_KAYNAKLAR).
+    # ("Halk TV", "https://www.halktv.com.tr/service/rss.php"),
     # v2.0.7.204 (Bahri'nin talebi, 27 Ağustos 2026 — "haber kaynaklarımızı
     # özellikle yurtdışı ABD, Almanya, İngiltere, Fransa, Japonya,
     # Avustralya gibi ülkelerdeki güvenilir haber kaynakları ile

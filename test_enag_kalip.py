@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""v2.0.7.400: ENAG izleme - Halk TV metin kalibi degisimine dayanikli ayiklama + grafikte Eylul katkisi.
+"""ENAG izleme (v2.0.7.439: Halk TV kaynak olarak KALDIRILDI; yalniz coklu haber kaynagi onayi) + grafikte ay katkisi.
 Calistir: python3 test_enag_kalip.py. Ag/veritabani KULLANILMAZ (sahte requests ve sahte db)."""
 import ast
 import datetime as dt
@@ -17,74 +17,9 @@ def ok(k, m):
     _n["ok"] += 1
 
 
-def test_eski_ve_yeni_kalip():
-    eski = ("Son dakika... ENAG Ağustos 2026 enflasyonunu açıkladı. Buna göre aylık enflasyon yüzde 2,24 artarken "
-            "yıllık yüzde 49,03 oldu.")
-    yeni = ("Son dakika verisi geldi... ENAG Eylül 2026 enflasyonunu açıkladı. ENAG&#039;a göre eylülde fiyatlar "
-            "yüzde 2,10 artarken, yıllık artış yüzde 46,61 oldu.")
-    ok(E.metinden_oran_cikar(eski) == (8, 2026, 2.24), "eski kalip: Agustos 2,24")
-    ok(E.metinden_oran_cikar(yeni) == (9, 2026, 2.10), "yeni kalip (HTML varlikli): Eylul 2,10, yillik 46,61 degil")
-
-
-def test_reddedilenler():
-    ok(E.metinden_oran_cikar("")[0] is None and E.metinden_oran_cikar(None)[0] is None, "bos metin")
-    ok(E.metinden_oran_cikar("ENAG Eylül 2026 enflasyonunu açıkladı. Yıllık yüzde 46,61 oldu.")[0] is None,
-       "yalniz yillik oran varsa aylik UYDURULMAZ")
-    ok(E.metinden_oran_cikar("ENAG Eylül 2026 enflasyonunu açıkladı. Fiyatlar yüzde 2,10 ve yüzde 3,00 arttı, yıllık yüzde 40 oldu.")[0] is None,
-       "aylik parcada iki oran: belirsiz, reddedilir")
-    ok(E.metinden_oran_cikar("ENAG Eylül 2026 enflasyonunu açıkladı. Fiyatlar yüzde 45 artarken yıllık yüzde 46 oldu.")[0] is None,
-       "makul aralik disi (>=30) reddedilir")
-    ok(E.metinden_oran_cikar("ENAG Fooay 2026 enflasyonunu açıkladı. Fiyatlar yüzde 2,1 artarken yıllık yüzde 46 oldu.")[0] is None,
-       "taninmayan ay adi reddedilir")
-    ok(E.metinden_oran_cikar("TÜİK Eylül 2026 enflasyonunu açıkladı. Fiyatlar yüzde 2,1 arttı, yıllık yüzde 30 oldu.")[0] is None,
-       "ENAG olmayan haber reddedilir")
-
-
 class _Cevap:
     def __init__(self, metin, kod=200):
         self.text, self.status_code = metin, kod
-
-
-def _sahte_requests(sayfalar):
-    def get(url, **kw):
-        return _Cevap(sayfalar.get(url, ""), 200 if url in sayfalar else 404)
-    return get
-
-
-def test_akis_ve_idempotans():
-    kok = "https://halktv.com.tr"
-    etiket = kok + "/enflasyon"
-    a_ey = kok + "/ekonomi/son-dakika-enag-eylul-ayi-enflasyonunu-acikladi-1059437h"
-    a_ag = kok + "/ekonomi/son-dakika-enag-acikladi-ilk-enflasyon-verisi-geldi-1052768h"
-    sayfalar = {
-        etiket: f'<a href="{a_ey}">x</a><a href="{a_ey}">y</a><a href="{a_ag}">z</a>',
-        a_ey: '<meta name="description" content="Son dakika... ENAG Eylül 2026 enflasyonunu açıkladı. ENAG&#039;a göre eylülde fiyatlar yüzde 2,10 artarken, yıllık artış yüzde 46,61 oldu.">',
-        a_ag: '<meta name="description" content="Son dakika... ENAG Ağustos 2026 enflasyonunu açıkladı. Buna göre aylık enflasyon yüzde 2,24 artarken yıllık yüzde 49,03 oldu.">',
-    }
-    ok(E._enag_haberini_bul.__doc__ is not None, "dokuman")
-    orj_get, orj_db = E.requests.get, E.db
-    kayit = {"2026-08": 2.24}
-    yazilan = []
-
-    class SahteDb:
-        @staticmethod
-        def init_db(): pass
-        @staticmethod
-        def enag_oranlari_getir(): return dict(kayit)
-        @staticmethod
-        def enag_oran_kaydet(k, o):
-            kayit[k] = o; yazilan.append((k, o)); return True
-
-    E.requests.get, E.db = _sahte_requests(sayfalar), SahteDb
-    try:
-        ok(E._enag_haberini_bul(etiket, kok) == [a_ey, a_ag], "adaylar sirali ve tekil")
-        E.calistir()
-        ok(yazilan == [("2026-09", 2.10)], f"yalniz eksik Eylul yazilir, Agustos zaten var (yazilan: {yazilan})")
-        yazilan.clear()
-        E.calistir()
-        ok(yazilan == [], "ikinci calistirma hicbir sey yazmaz (idempotent)")
-    finally:
-        E.requests.get, E.db = orj_get, orj_db
 
 
 def _seri_fonksiyonu():
@@ -152,19 +87,19 @@ def _oge(host, metin, pub=dt.date(2026, 11, 3)):
 def test_coklu_kaynak_karari():
     b = dt.date(2026, 11, 12)
     m = "ENAG ekim ayında enflasyon aylık bazda yüzde 2,68 artarken yıllık yüzde 45,12 oldu."
-    g = E.yedek_gozlemler([_oge("www.sozcu.com.tr", m), _oge("t24.com.tr", m), _oge("sozcu.com.tr", m)], b)
+    g = E.haber_gozlemleri([_oge("www.sozcu.com.tr", m), _oge("t24.com.tr", m), _oge("sozcu.com.tr", m)], b)
     ok(E.kaynaklar_arasi_karar(g) == {"2026-10": 2.68}, "2 bagimsiz site (www. soyulur, ayni site tekrari sayilmaz)")
-    ok(E.kaynaklar_arasi_karar(E.yedek_gozlemler([_oge("sozcu.com.tr", m), _oge("sozcu.com.tr", m)], b)) == {},
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri([_oge("sozcu.com.tr", m), _oge("sozcu.com.tr", m)], b)) == {},
        "tek site (tekrar etse de) YETERSIZ")
-    ok(E.kaynaklar_arasi_karar(E.yedek_gozlemler([_oge("a.com", m), _oge("b.com", m.replace("2,68", "2,86"))], b)) == {},
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri([_oge("a.com", m), _oge("b.com", m.replace("2,68", "2,86"))], b)) == {},
        "celiskili 1-1: yazilmaz")
-    ok(E.kaynaklar_arasi_karar(E.yedek_gozlemler(
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri(
         [_oge("a.com", m), _oge("b.com", m), _oge("c.com", m.replace("2,68", "2,86")),
          _oge("d.com", m.replace("2,68", "2,86"))], b)) == {}, "2'ye 2: yazilmaz")
-    ok(E.kaynaklar_arasi_karar(E.yedek_gozlemler(
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri(
         [_oge("a.com", m), _oge("b.com", m), _oge("c.com", m.replace("2,68", "2,86"))], b)) == {"2026-10": 2.68},
        "2'ye 1: kabul (tek sapan kaynak onayi bozmaz, kazanan 2x desteklenir)")
-    ok(E.yedek_gozlemler([_oge("a.com", m, dt.date(2026, 8, 1))], b) == [], "75 gunden eski haber yok sayilir")
+    ok(E.haber_gozlemleri([_oge("a.com", m, dt.date(2026, 8, 1))], b) == [], "75 gunden eski haber yok sayilir")
 
 
 def test_eksik_aylar():
@@ -185,7 +120,7 @@ _RSS = ('<?xml version="1.0"?><rss><channel>' + "".join(
     ])) + "</channel></rss>")
 
 
-def _akis(sayfalar, kayit0, bugun):
+def _akis(sayfalar, kayit0, bugun, istekler=None):
     orj_get, orj_db = E.requests.get, E.db
     kayit, yazilan = dict(kayit0), []
 
@@ -199,6 +134,8 @@ def _akis(sayfalar, kayit0, bugun):
             kayit[k] = o; yazilan.append((k, o)); return True
 
     def get(url, **kw):
+        if istekler is not None:
+            istekler.append(url)
         if "bing.com/news" in url:
             return _Cevap(sayfalar.get("bing", ""), 200 if "bing" in sayfalar else 503)
         return _Cevap("", 403)                      # Halk TV: Cloudflare 403 (gercek durum)
@@ -212,7 +149,7 @@ def _akis(sayfalar, kayit0, bugun):
 
 def test_halktv_engelli_yedek_ekimi_yazar():
     kod, yz, kayit = _akis({"bing": _RSS}, {"2026-08": 2.24, "2026-09": 2.10}, dt.date(2026, 11, 12))
-    ok(yz == [("2026-10", 2.68)], f"Halk TV 403 iken yedek Ekim'i yazar (yazilan: {yz})")
+    ok(yz == [("2026-10", 2.68)], f"yalniz haber kaynaklariyla Ekim yazilir (yazilan: {yz})")
     ok(kod == 0, "yazildi: is yesil")
     kod2, yz2, _ = _akis({"bing": _RSS}, kayit, dt.date(2026, 11, 13))
     ok(yz2 == [] and kod2 == 0, "ikinci calisma idempotent")
@@ -231,6 +168,21 @@ def test_hicbir_kaynak_yoksa_alarm():
     tek = _RSS.replace("t24.com.tr", "sozcu.com.tr").replace("www.sozcu", "sozcu")
     kod, yz, _ = _akis({"bing": tek}, {"2026-08": 2.24, "2026-09": 2.10}, dt.date(2026, 11, 12))
     ok(yz == [] and kod == 1, "tek bagimsiz site: yazilmaz, alarm")
+
+
+def test_halktv_kaynak_degil():
+    b = dt.date(2026, 11, 12)
+    m = "ENAG ekim ayında enflasyon aylık bazda yüzde 2,68 artarken yıllık yüzde 45,12 oldu."
+    ok(E.haber_gozlemleri([_oge("halktv.com.tr", m), _oge("www.halktv.com.tr", m)], b) == [], "Halk TV haberleri yok sayilir")
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri([_oge("halktv.com.tr", m), _oge("sozcu.com.tr", m)], b)) == {},
+       "Halk TV + 1 site: onay SAYILMAZ (tek gecerli kaynak)")
+    ok(E.kaynaklar_arasi_karar(E.haber_gozlemleri([_oge("halktv.com.tr", m), _oge("a.com", m), _oge("b.com", m)], b))
+       == {"2026-10": 2.68}, "diger iki site yine yeterli")
+    ist = []
+    _akis({"bing": _RSS}, {"2026-08": 2.24, "2026-09": 2.10}, dt.date(2026, 11, 12), ist)
+    ok(ist and not any("halktv" in u for u in ist), "Halk TV'ye HIC istek atilmaz")
+    kaynak = open("enag_izleme.py", encoding="utf-8").read()
+    ok("halktv.com.tr/enflasyon" not in kaynak and "_enag_haberini_bul" not in kaynak, "Halk TV'ye ozgu kod kalmadi")
 
 
 def test_workflow_kirmizi_biter_ve_not():
