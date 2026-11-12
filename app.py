@@ -5854,8 +5854,8 @@ def _kiyaslama_gunluk_serileri(portfolio):
     # kendisi de silindi (bkz. aşağıda `_evds_referans_oranlari_cek`'in
     # hemen üstü).
 
-    # 5) ENAG - artık TAM OTOMATİK (v2.0.7.317, enag_izleme.py'nin
-    # Halk TV'den tespit ettiği veriler) - elle giriş YOK.
+    # 5) ENAG - TAM OTOMATİK (enag_izleme.py: çoklu haber kaynağı onayı, v2.0.7.439'dan itibaren Halk TV YOK)
+    # - elle giriş YOK.
     _enag_oranlari = enag_oranlari_getir()
     if _enag_oranlari:
         _enag_seri, _enag_eksik_aylar = _enflasyon_gunluk_seri(
@@ -9264,7 +9264,7 @@ elif page=="SonDakika Haberleri":
         st.caption(
             "Kaynaklar: BBC World, Investing.com TR, "
             "Sözcü Ekonomi, Euronews Türkçe, "
-            "Halk TV, NPR Business, Handelsblatt "
+            "NPR Business, Handelsblatt "
             "Finanzen (Almanya), Sky News, BBC Business, Sky News Business "
             "(İngiltere), ABC News Australia (Avustralya), Euronews "
             "(pan-Avrupa), ANSA (İtalya), Meduza (Rusya), CBC Business "
