@@ -124,9 +124,12 @@ def _risk_kap_linkleri(conn, rows) -> dict:
 
 def tedbir_olaylari(conn):
     try:
+        # v2.0.7.437: SPK GECMIS taramasiyla (2022-2026) toplu yazilan kurallar e-posta YAGDIRMASIN
+        # (kaynak_turu='SPK_BULTEN_GECMIS'); canli izleyicinin yazdiklari eskisi gibi bildirilir.
         rows = conn.execute(
-            "SELECT eslesme_turu, deger, kategori, tedbir_turu, kaynak_aciklama, eklenme_tarihi "
-            "FROM piyasa_tedbir_listesi WHERE aktif = TRUE").fetchall()
+            "SELECT l.eslesme_turu, l.deger, l.kategori, l.tedbir_turu, l.kaynak_aciklama, l.eklenme_tarihi "
+            "FROM piyasa_tedbir_listesi l LEFT JOIN piyasa_tedbir_tespit t ON t.id = l.tespit_id "
+            "WHERE l.aktif = TRUE AND COALESCE(t.kaynak_turu, '') <> 'SPK_BULTEN_GECMIS'").fetchall()
         rows = _demetler(rows)
     except Exception as e:
         print(f"[bildirim_eposta] tedbir okunamadi: {e}")

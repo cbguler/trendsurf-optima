@@ -3,7 +3,12 @@ name: SPK Bulten Izleme
 # v2.0.7.366 (4 Ekim 2026, Bahri'nin talebi - "resmi kaynaklari devreye sok, pop-up onay
 # penceresi ile onaylayayim"): SPK Kurul Bultenlerini otomatik tarar; fon/hisse tedbirlerini
 # (islem kapatma, tasfiye, suc duyurusu, tedbirin kaldirilmasi) tespit edip uygulamada
-# ADMIN'in pop-up onayina sunar. ONAYLANMADAN HICBIR SEY UYGULANMAZ.
+# ADMIN'in pop-up onayina sunar. FON/diger tedbirler ONAYLANMADAN UYGULANMAZ.
+#
+# v2.0.7.437 (12 Kasim 2026, Bahri'nin karari - "otomatik olarak 0'lansin, bana tekrar sorulmasin"):
+# HISSE suc duyurusu (kalici skor 0) ve kisilere gecici islem yasagi (yasak suresince skor 0, sure dolunca
+# kendiliginden kalkar) ONAYSIZ otomatik uygulanir. Ilk calismada 2022'den beri TUM bultenler bir kez taranir
+# (gecmis dolgu, ~5 dk, e-posta gondermez). Kapatmak icin ortam degiskeni SPK_HISSE_OTOMATIK=0.
 #
 # Tetikleme: asagidaki `schedule` GitHub'in "best-effort" cron'udur (bazen gecikir). Haber
 # izleme gibi GUVENILIR zamanlama icin cron-job.org'a da bir is eklenebilir:
@@ -22,6 +27,10 @@ on:
     inputs:
       kuru:
         description: "Kuru calisma (veritabanina yazmaz, sadece loga yazar)"
+        type: boolean
+        default: false
+      gecmis:
+        description: "2022'den beri TUM bultenlerde hisse tedbirlerini yeniden tara/uygula (normalde ilk calismada otomatik, bir kez)"
         type: boolean
         default: false
       groq_test:
@@ -54,7 +63,7 @@ jobs:
           pip install requests beautifulsoup4 pdfplumber pandas psycopg2-binary --quiet
 
       - name: SPK bulten izleme calistir
-        run: python -u spk_bulten_izleme.py ${{ github.event.inputs.groq_test == 'true' && '--groq-test' || '' }} ${{ github.event.inputs.kuru == 'true' && '--kuru' || '' }}
+        run: python -u spk_bulten_izleme.py ${{ github.event.inputs.groq_test == 'true' && '--groq-test' || '' }} ${{ github.event.inputs.kuru == 'true' && '--kuru' || '' }} ${{ github.event.inputs.gecmis == 'true' && '--gecmis' || '' }}
         env:
           # haber_izleme.yml ile AYNI (batch betikler Session pooler kullanir, bkz. v2.0.7.312)
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_SESSION }}

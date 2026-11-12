@@ -2,7 +2,11 @@
 """
 spk_bulten_izleme.py - SPK Kurul Bultenlerini otomatik tarar; fonlarin/hisselerin
 islem kapatma, tasfiye, piyasa dolandiriciligi suc duyurusu gibi KARARLARINI tespit edip
-Admin onayina sunar (piyasa_tedbir_tespit tablosu). ONAYLANMADAN HICBIR SEY UYGULANMAZ.
+Admin onayina sunar (piyasa_tedbir_tespit tablosu). FON/diger tedbirler ONAYLANMADAN UYGULANMAZ.
+
+v2.0.7.437 (12 Kasim 2026, Bahri'nin karari): HISSE suc duyurusu (kalici skor 0) ve kisilere gecici
+islem yasagi (yasak suresince skor 0) ONAYSIZ otomatik uygulanir (spk_hisse_tedbir.py). Ilk calismada
+2022'den beri tum bultenler bir kez taranir (gecmis_dolgu). Kapatma: SPK_HISSE_OTOMATIK=0.
 
 v2.0.7.366 (4 Ekim 2026, Bahri'nin talebi - "resmi kaynaklari devreye sok, pop-up onay
 penceresi ile onaylayayim"). Tasarim gercek bultenlerden (2026/39-68) cikarildi:
@@ -40,8 +44,16 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from piyasa_tedbir import (GENIS_ETKI_ESIGI, TEDBIR_ETIKET, esleyen_maske, etki_ozeti,  # noqa: E402
                            kapsanan_maske, sirket_anahtari, sirket_degeri, tr_harf_norm, tr_norm)
+import spk_hisse_tedbir as _ht  # noqa: E402
 
 LISTE_URL = "https://spk.gov.tr/spk-bultenleri/{yil}-yili-spk-bultenleri"
+# v2.0.7.437: 2024 ve oncesi yillar SPK sitesinde "gecmis yillara ait bultenler" altinda (ana yil sayfasi bos doner)
+LISTE_URL_GECMIS = "https://spk.gov.tr/spk-bultenleri/gecmis-yillara-ait-bultenler/{yil}-yili-spk-bultenleri"
+
+
+def _liste_url(yil: int) -> str:
+    bu_yil = datetime.now(timezone(timedelta(hours=3))).year
+    return (LISTE_URL if int(yil) >= bu_yil - 1 else LISTE_URL_GECMIS).format(yil=yil)
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 AYLAR = {"OCAK": 1, "SUBAT": 2, "MART": 3, "NISAN": 4, "MAYIS": 5, "HAZIRAN": 6, "TEMMUZ": 7,
@@ -56,6 +68,11 @@ SIRKET_ORANI_ESIGI = 0.8        # sirketin evrendeki fonlarinin >=%80'i listedey
 SIRKET_MIN_FON = 3
 MAKS_FON_ADAYI = 25             # bir bultende en fazla bu kadar tekil-fon adayi
 REDDEDILEN_SKIP_GUN = 30
+# v2.0.7.437: hisse suc duyurusu + kisilere islem yasagi ONAYSIZ otomatik uygulanir. "0" -> eski davranis
+# (aday olarak onay penceresine duser; yeni yasak tespiti de uygulanmaz).
+HISSE_OTOMATIK = os.environ.get("SPK_HISSE_OTOMATIK", "1").strip() != "0"
+GECMIS_ISARET = "__GECMIS_HISSE_DOLGU_v1__"        # spk_bulten_islenmis'te: gecmis taramasi BIR KEZ yapildi
+GECMIS_ILK_YIL = 2022
 
 # --- tetikleyiciler (tr_harf_norm uzerinde) -------------------------------------------------
 KAPATMA_RX = re.compile(r"ISLEME KAPAT(?:ILMASINA|ILDI|ILMISTIR)")
@@ -80,15 +97,18 @@ def log(msg):
 _BULTEN_RX = re.compile(r"BULTEN NO\s*:\s*(\d{4}/\d+)\s*YAYIMLANMA\s*:\s*(\d{1,2})\s+([A-Z]+)\s+(\d{4})")
 
 
-def bulten_listesi_cek(yil: int, get=None, deneme: int = 3) -> list:
-    """[{'no': '2026/68', 'tarih': date, 'url': ...}, ...] YENIDEN ESKIYE."""
+def bulten_listesi_cek(yil: int, get=None, deneme: int = 3, sayfa: int = 1) -> list:
+    """[{'no': '2026/68', 'tarih': date, 'url': ...}, ...] YENIDEN ESKIYE.
+    v2.0.7.437: `sayfa` (SPK listesi sayfa basina 30 bulten, `?s=N`); varsayilan 1. sayfa = canli izleyicinin
+    eski davranisi. Tum yili okumak icin bulten_listesi_tum_yil()."""
     import requests
     from bs4 import BeautifulSoup
     get = get or requests.get
     r, son_hata = None, None
+    url = _liste_url(yil) + (f"?s={int(sayfa)}" if sayfa and int(sayfa) > 1 else "")
     for n in range(1, deneme + 1):
         try:
-            r = get(LISTE_URL.format(yil=yil), headers=HEADERS, timeout=30)
+            r = get(url, headers=HEADERS, timeout=30)
             r.raise_for_status()
             break
         except Exception as e:
@@ -113,6 +133,20 @@ def bulten_listesi_cek(yil: int, get=None, deneme: int = 3) -> list:
         sonuc.append({"no": m.group(1), "tarih": date(int(m.group(4)), ay, int(m.group(2))), "url": href})
     sonuc.sort(key=lambda b: b["tarih"], reverse=True)
     return sonuc
+
+
+def bulten_listesi_tum_yil(yil: int, get=None, deneme: int = 3, maks_sayfa: int = 12) -> list:
+    """Bir yilin TUM bultenleri (sayfalari gezer; yeni bulten gelmeyen sayfada durur). v2.0.7.437."""
+    tum, gorulen = [], set()
+    for sayfa in range(1, maks_sayfa + 1):
+        yeni = [b for b in bulten_listesi_cek(yil, get=get, deneme=deneme, sayfa=sayfa) if b["no"] not in gorulen]
+        if not yeni:
+            break
+        for b in yeni:
+            gorulen.add(b["no"])
+        tum += yeni
+    tum.sort(key=lambda b: b["tarih"], reverse=True)
+    return tum
 
 
 def pdf_metni_cek(url: str, get=None) -> str:
@@ -678,10 +712,97 @@ def bulten_adaylari(metin: str, evren: dict, aktif: list, ai_fn=None) -> list:
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════
+# 5b) Hisse tedbirlerinin ONAYSIZ otomatik uygulanmasi (v2.0.7.437)
+# ════════════════════════════════════════════════════════════════════════════════════════
+def hisse_kayitlari_uygula(kayitlar: list, df_uni, db_mod, bugun: date, kaynak_turu: str, kuru: bool = False) -> dict:
+    """Cikarilan hisse kayitlarini (suc duyurusu / kisilere islem yasagi) onay beklemeden uygular.
+    Dondurur: {'yazilan': n, 'atlanan': n, 'hata': n}. Karar mantigi spk_hisse_tedbir.plan_olustur'da (saf, testli)."""
+    ozet = {"yazilan": 0, "atlanan": 0, "hata": 0}
+    if not kayitlar:
+        return ozet
+    _, baska = _ht.evren_bist(df_uni)
+    mevcut = db_mod.piyasa_tedbir_ticker_kurallari()
+    if mevcut is None:
+        log("Hisse tedbirleri: mevcut kurallar okunamadi - bu turda UYGULANMADI (sonraki calismada tekrar denenecek).")
+        ozet["hata"] += 1
+        return ozet
+    for e in _ht.plan_olustur(kayitlar, mevcut, bugun, baska):
+        k = e["kayit"]
+        etiket = (f"{e['ticker']} [{e['tur']}] {k['bulten']}"
+                  + (f" bitis {e['bitis']}" if e["bitis"] else "") + (" (TAHMINI tarih)" if k.get("tahmini") else ""))
+        if e["islem"] != "YAZ":
+            ozet["atlanan"] += 1
+            log(f"   - atlandi: {etiket} -> {e['neden']}")
+            continue
+        log(f"   + otomatik kural: {etiket} -> {e['neden']}" + (" [kuru calisma: yazilmadi]" if kuru else ""))
+        if kuru:
+            ozet["yazilan"] += 1
+            continue
+        etiket_t = TEDBIR_ETIKET.get(e["tedbir_turu"], e["tedbir_turu"])
+        gerekce = (f"{etiket_t}. {k['ticker']} hissesi. [onaysız otomatik uygulama - bültenden] \"{k['alinti']}\"")[:900]
+        ozet_m = ("Otomatik uygulandı: Optima Skor 0'a sabitlendi"
+                  + (f" ({e['bitis'].strftime('%d.%m.%Y')} tarihine kadar)." if e["bitis"] else " (kalıcı)."))
+        if db_mod.piyasa_tedbir_otomatik_yaz(e["ticker"], "BIST", e["tedbir_turu"], kaynak_turu, k["bulten"], k.get("url"),
+                                             k["bulten_tarihi"], gerekce, ozet_m, e["kaynak_aciklama"], e["bitis"]):
+            ozet["yazilan"] += 1
+        else:
+            ozet["hata"] += 1
+    return ozet
+
+
+def gecmis_dolgu(db_mod, df_uni, bugun: date, liste_fn=None, metin_fn=None, kuru: bool = False,
+                 ilk_yil: int = GECMIS_ILK_YIL, is_parcacigi: int = 6) -> dict:
+    """2022'den bugune TUM bultenleri tarar (sayfalayarak) ve hisse tedbirlerini otomatik uygular.
+    Idempotent: kural zaten varsa yazilmaz. Tum bultenler okunamazsa uygulama YAPILIR (okunanlar icin), ama
+    'tamamlandi' isareti konmaz; sonraki calismada eksikler tekrar denenir."""
+    from concurrent.futures import ThreadPoolExecutor
+    liste_fn = liste_fn or bulten_listesi_tum_yil
+    metin_fn = metin_fn or pdf_metni_cek
+    bist, _ = _ht.evren_bist(df_uni)
+    liste = []
+    for yil in range(ilk_yil, bugun.year + 1):
+        try:
+            liste += list(liste_fn(yil))
+        except Exception as e:
+            log(f"Gecmis dolgu: {yil} bulten listesi alinamadi ({type(e).__name__}: {str(e)[:120]})")
+            return {"tamam": False, "bulten": 0, "kayit": 0, "yazilan": 0, "atlanan": 0, "hata": 1}
+    log(f"Gecmis dolgu: {len(liste)} bulten taranacak ({ilk_yil}-{bugun.year}).")
+
+    def al(b):
+        for _ in range(3):
+            try:
+                t = metin_fn(b["url"])
+                if t and len(t) >= 150:
+                    return b, t
+            except Exception:
+                pass
+        return b, None
+
+    kayitlar, okunamayan = [], []
+    with ThreadPoolExecutor(max(1, int(is_parcacigi))) as ex:
+        for b, t in ex.map(al, liste):
+            if t is None:
+                okunamayan.append(b["no"])
+                continue
+            kayitlar += _ht.kayitlari_cikar(t, bist, b["no"], b["tarih"], b["url"])
+    suc = len({k["ticker"] for k in kayitlar if k["tur"] == _ht.TUR_SUC})
+    yasak = len({k["ticker"] for k in kayitlar if k["tur"] == _ht.TUR_YASAK})
+    log(f"Gecmis dolgu: {len(liste) - len(okunamayan)} bulten okundu; evrende {suc} hisse suc duyurulu, "
+        f"{yasak} hisse yasakli (gecmis dahil). Okunamayan: {okunamayan or 'yok'}.")
+    s = hisse_kayitlari_uygula(kayitlar, df_uni, db_mod, bugun, _ht.KAYNAK_GECMIS, kuru)
+    tamam = not okunamayan and s["hata"] == 0
+    if tamam and not kuru:
+        db_mod.spk_bulten_islendi_isaretle(GECMIS_ISARET)
+    log(f"Gecmis dolgu BITTI: {s['yazilan']} kural {'yazilacak' if kuru else 'yazildi'}, {s['atlanan']} atlandi, "
+        f"{s['hata']} hata" + ("" if tamam else " [TAMAMLANDI ISARETI KONMADI - tekrar denenecek]") + ".")
+    return {"tamam": tamam, "bulten": len(liste), "kayit": len(kayitlar), **s}
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════
 # 6) Ana akis
 # ════════════════════════════════════════════════════════════════════════════════════════
 def calistir(yil=None, kuru=False, bugun=None, ilk_gun=ILK_CALISMA_GUN, maks_bulten=MAKS_BULTEN,
-             liste_fn=None, metin_fn=None, ai_fn="varsayilan", df_uni=None, db_mod=None) -> dict:
+             liste_fn=None, metin_fn=None, ai_fn="varsayilan", df_uni=None, db_mod=None, gecmis=False) -> dict:
     bugun = bugun or datetime.now(timezone(timedelta(hours=3))).date()
     yil = yil or bugun.year
     if db_mod is None:
@@ -703,8 +824,15 @@ def calistir(yil=None, kuru=False, bugun=None, ilk_gun=ILK_CALISMA_GUN, maks_bul
     liste.sort(key=lambda b: b["tarih"], reverse=True)
     log(f"{len(liste)} bulten listede (en yeni: {liste[0]['no'] if liste else '-'}).")
 
-    aktif = db_mod.get_aktif_piyasa_tedbirleri()
     evren = evren_hazirla(df_uni)
+    # v2.0.7.437: gecmis (2022-) hisse tedbirleri BIR KEZ otomatik uygulanir; sonra canli akis bunu surdurur.
+    if HISSE_OTOMATIK and (gecmis or GECMIS_ISARET not in (
+            db_mod.spk_islenmis_bultenler() if hasattr(db_mod, "spk_islenmis_bultenler") else set())):
+        try:
+            gecmis_dolgu(db_mod, df_uni, bugun, metin_fn=metin_fn, kuru=kuru)
+        except Exception as e:
+            log(f"Gecmis dolgu HATA {type(e).__name__}: {str(e)[:160]} - canli tarama devam ediyor.")
+    aktif = db_mod.get_aktif_piyasa_tedbirleri()
     # v2.0.7.367: tek sorguyla islenmis bultenler (eskiden bulten basina ayri baglanti: 30 baglanti ~35 sn)
     if hasattr(db_mod, "spk_islenmis_bultenler"):
         islenmis = db_mod.spk_islenmis_bultenler()
@@ -737,6 +865,15 @@ def calistir(yil=None, kuru=False, bugun=None, ilk_gun=ILK_CALISMA_GUN, maks_bul
                 log(f"{b['no']}: metin cikarilamadi (taranmis PDF olabilir) - sonraki calismada tekrar denenecek.")
                 ozet["hata"] += 1
                 continue
+            if HISSE_OTOMATIK:
+                try:                                   # v2.0.7.437: hisse suc duyurusu / kisilere yasak -> ONAYSIZ kural
+                    hk = _ht.kayitlari_cikar(metin, evren["bist"], b["no"], b["tarih"], b["url"])
+                    if hk:
+                        log(f"{b['no']}: {len(hk)} hisse tedbir kaydi (otomatik uygulanacak).")
+                        hisse_kayitlari_uygula(hk, df_uni, db_mod, bugun, _ht.KAYNAK_CANLI, kuru)
+                        aktif = db_mod.get_aktif_piyasa_tedbirleri()
+                except Exception as e:
+                    log(f"{b['no']}: otomatik hisse tedbiri atlandi ({type(e).__name__}: {str(e)[:120]})")
             adaylar = bulten_adaylari(metin, evren, aktif, ai_fn)
             yeni = adaylari_suz(adaylar, evren, aktif, getattr(db_mod, "piyasa_tedbir_tespit_durumlari"), bugun)
             log(f"{b['no']} ({b['tarih']}): {len(adaylar)} ham aday -> {len(yeni)} yeni tespit.")
@@ -772,11 +909,12 @@ if __name__ == "__main__":
     ap.add_argument("--yil", type=int)
     ap.add_argument("--bugun", help="YYYY-MM-DD (test)")
     ap.add_argument("--groq-test", action="store_true", help="yalniz Groq 400 teshisi (DB'ye yazmaz)")
+    ap.add_argument("--gecmis", action="store_true", help="2022'den beri TUM bultenlerde hisse tedbirlerini yeniden tara/uygula")
     a = ap.parse_args()
     if a.groq_test:
         sys.exit(groq_teshis())
     try:
-        s = calistir(yil=a.yil, kuru=a.kuru, bugun=date.fromisoformat(a.bugun) if a.bugun else None)
+        s = calistir(yil=a.yil, kuru=a.kuru, bugun=date.fromisoformat(a.bugun) if a.bugun else None, gecmis=a.gecmis)
     except Exception as e:
         log(f"KRITIK HATA: {type(e).__name__}: {e}")
         sys.exit(1)

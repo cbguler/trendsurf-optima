@@ -26,6 +26,7 @@ TEDBIR_ETIKET = {
     "TASFIYE_IZNI": "Gönüllü tasfiye izni",
     "MANIPULASYON_SUPHESI": "Piyasa dolandırıcılığı suç duyurusu",
     "SUC_DUYURUSU": "Suç duyurusu",
+    "ISLEM_YASAGI_SUPHESI": "Piyasa dolandırıcılığı şüphesiyle kişilere geçici işlem yasağı",
     "YUKSEK_MINIMUM_TUTAR": "Aracı kurum minimum tutar şartı",
     "KALDIRMA": "Tedbirin kaldırılması",
     "KISMI_KALDIRMA": "Tedbir kısmen kaldırılıyor (bazı fonlar yeniden açılıyor)",
@@ -129,6 +130,10 @@ def tedbir_aciklamasi(sinyal: str, tur=None, kaynak=None) -> str:
         bas = "Bu varlık alım-satıma kapalı veya tasfiye sürecinde"
     elif sinyal == SINYAL_KISITLI:
         bas = "Bu varlık için yatırım kısıtı var"
+    elif str(tur or "").upper().strip() == "ISLEM_YASAGI_SUPHESI":
+        # v2.0.7.437: yasak HISSEYE degil, hissede islem yapan belirli KISILERE; hisse islem gormeye devam eder
+        bas = ("Bu hissede SPK piyasa dolandırıcılığı şüphesiyle bazı kişilere geçici işlem yasağı getirdi "
+               "(hisse işlem görmeye devam eder, ancak manipülasyon riski yüksek; yasak süresince geçerli)")
     else:
         bas = "Bu varlık için SPK tedbiri/suç duyurusu var (işlem yasağı olmayabilir, ancak risk çok yüksek)"
     ek = f" — {etiket}" if etiket else ""
